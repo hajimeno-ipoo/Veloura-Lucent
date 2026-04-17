@@ -27,6 +27,8 @@ enum ProcessingStep: String, CaseIterable, Hashable {
 final class ProcessingJob {
     var inputFile: URL?
     var outputFile: URL?
+    var inputMetrics: AudioMetricSnapshot?
+    var outputMetrics: AudioMetricSnapshot?
     var logText = ""
     var statusMessage = "待機中"
     var isProcessing = false
@@ -34,6 +36,7 @@ final class ProcessingJob {
     var hasExistingOutput = false
     var activeStep: ProcessingStep?
     var completedSteps: Set<ProcessingStep> = []
+    var isAnalyzingMetrics = false
 
     var statusColor: Color {
         if isProcessing {
@@ -65,6 +68,8 @@ final class ProcessingJob {
     func prepareForSelection(_ inputURL: URL) {
         inputFile = inputURL
         outputFile = AudioProcessingService.defaultOutputURL(for: inputURL)
+        inputMetrics = nil
+        outputMetrics = nil
         logText = ""
         statusMessage = "処理待ち"
         lastError = nil
@@ -80,6 +85,24 @@ final class ProcessingJob {
         statusMessage = "処理中"
         activeStep = nil
         completedSteps = []
+    }
+
+    func beginMetricAnalysis() {
+        isAnalyzingMetrics = true
+    }
+
+    func finishInputMetricAnalysis(_ metrics: AudioMetricSnapshot) {
+        inputMetrics = metrics
+        isAnalyzingMetrics = false
+    }
+
+    func finishOutputMetricAnalysis(_ metrics: AudioMetricSnapshot) {
+        outputMetrics = metrics
+        isAnalyzingMetrics = false
+    }
+
+    func failMetricAnalysis() {
+        isAnalyzingMetrics = false
     }
 
     func appendLog(_ message: String) {

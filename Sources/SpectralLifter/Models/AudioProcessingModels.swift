@@ -36,3 +36,20 @@ struct AnalysisData: Sendable {
     let brightnessRatio: Float
     let transientAmount: Float
 }
+
+struct AudioMetricSnapshot: Sendable {
+    let peakDBFS: Double
+    let rmsDBFS: Double
+    let centroidHz: Double
+    let hf12Ratio: Double
+    let hf16Ratio: Double
+    let hf18Ratio: Double
+    let bandEnergies: [BandEnergyMetric]
+}
+
+struct BandEnergyMetric: Sendable, Identifiable {
+    let id: String
+    let label: String
+    let rangeDescription: String
+    let levelDB: Double
+}
