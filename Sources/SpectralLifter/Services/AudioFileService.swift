@@ -53,4 +53,25 @@ enum AudioFileService {
         }
         return AudioSignal(channels: channels, sampleRate: targetRate)
     }
+
+    static func makePreviewSnapshot(for url: URL, bucketCount: Int = 96) throws -> AudioPreviewSnapshot {
+        let signal = try loadAudio(from: url)
+        let mono = signal.monoMixdown()
+        guard !mono.isEmpty else {
+            return AudioPreviewSnapshot(waveform: Array(repeating: 0, count: bucketCount), duration: 0)
+        }
+
+        let chunkSize = max(1, mono.count / bucketCount)
+        let waveform = stride(from: 0, to: mono.count, by: chunkSize).prefix(bucketCount).map { index in
+            let end = min(index + chunkSize, mono.count)
+            let slice = mono[index..<end]
+            let peak = slice.map { abs($0) }.max() ?? 0
+            return min(1, peak)
+        }
+
+        return AudioPreviewSnapshot(
+            waveform: Array(waveform),
+            duration: Double(mono.count) / signal.sampleRate
+        )
+    }
 }

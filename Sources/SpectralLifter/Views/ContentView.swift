@@ -66,6 +66,7 @@ struct ContentView: View {
                     if let url = FilePanelService.chooseAudioFile() {
                         job.prepareForSelection(url)
                         preview.stopPlayback()
+                        preparePreviewCards()
                         analyzeMetrics(for: url, target: .input)
                     }
                 }
@@ -109,12 +110,21 @@ struct ContentView: View {
     }
 
     private func previewCard(title: String, target: AudioPreviewTarget, fileURL: URL?, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let snapshot = preview.snapshot(for: target)
+        let liveBands = preview.liveBandLevels[target] ?? [
+            LiveBandSample(id: "low", label: "低域", level: 0),
+            LiveBandSample(id: "mid", label: "中域", level: 0),
+            LiveBandSample(id: "high", label: "高域", level: 0),
+            LiveBandSample(id: "air", label: "超高域", level: 0)
+        ]
+        let isActive = preview.activeTarget == target
+
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(title)
                     .font(.headline)
                 Spacer()
-                Text(preview.durationText(for: fileURL))
+                Text(preview.durationText(for: target))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -122,6 +132,30 @@ struct ContentView: View {
             Text(fileURL?.lastPathComponent ?? "まだ確認できません")
                 .lineLimit(2)
                 .foregroundStyle(fileURL == nil ? .secondary : .primary)
+
+            waveformPreview(snapshot: snapshot, tint: tint, progress: isActive ? preview.playbackProgress : 0)
+
+            VStack(spacing: 6) {
+                ForEach(liveBands) { band in
+                    HStack(spacing: 8) {
+                        Text(band.label)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 34, alignment: .leading)
+                        GeometryReader { proxy in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.secondary.opacity(0.12))
+                                Capsule()
+                                    .fill(tint.opacity(isActive ? 0.95 : 0.45))
+                                    .frame(width: proxy.size.width * band.level)
+                            }
+                        }
+                        .frame(height: 6)
+                    }
+                    .frame(height: 10)
+                }
+            }
 
             HStack(spacing: 8) {
                 Button(preview.activeTarget == target ? "停止" : "再生") {
@@ -146,6 +180,50 @@ struct ContentView: View {
                         .stroke(tint.opacity(0.25), lineWidth: 1)
                 )
         )
+    }
+
+    private func waveformPreview(snapshot: AudioPreviewSnapshot, tint: Color, progress: Double) -> some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let points = snapshot.waveform
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.secondary.opacity(0.08))
+
+                if !points.isEmpty {
+                    Canvas { context, size in
+                        let step = size.width / CGFloat(max(points.count - 1, 1))
+                        var path = Path()
+                        path.move(to: CGPoint(x: 0, y: size.height / 2))
+
+                        for (index, sample) in points.enumerated() {
+                            let x = CGFloat(index) * step
+                            let amplitude = CGFloat(sample) * size.height * 0.42
+                            let y = size.height / 2 - amplitude
+                            path.addLine(to: CGPoint(x: x, y: y))
+                        }
+
+                        for (index, sample) in points.enumerated().reversed() {
+                            let x = CGFloat(index) * step
+                            let amplitude = CGFloat(sample) * size.height * 0.42
+                            let y = size.height / 2 + amplitude
+                            path.addLine(to: CGPoint(x: x, y: y))
+                        }
+
+                        path.closeSubpath()
+                        context.fill(path, with: .color(tint.opacity(0.28)))
+                    }
+                }
+
+                Rectangle()
+                    .fill(tint)
+                    .frame(width: 2)
+                    .offset(x: width * progress)
+                    .opacity(progress > 0 ? 1 : 0)
+            }
+        }
+        .frame(height: 54)
     }
 
     private var actionSection: some View {
@@ -375,6 +453,7 @@ struct ContentView: View {
                 }
                 await MainActor.run {
                     job.finishSuccess(outputFile)
+                    preparePreviewCards()
                 }
                 analyzeMetrics(for: outputFile, target: .output)
             } catch {
@@ -421,6 +500,12 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private func preparePreviewCards() {
+        preview.preparePreview(for: job.inputFile, target: .input)
+        let outputURL = job.hasExistingOutput ? job.outputFile : nil
+        preview.preparePreview(for: outputURL, target: .output)
     }
 
     private func formattedValue(_ value: Double, format: MetricFormat) -> String {

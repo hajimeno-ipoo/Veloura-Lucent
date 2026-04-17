@@ -53,3 +53,14 @@ struct BandEnergyMetric: Sendable, Identifiable {
     let rangeDescription: String
     let levelDB: Double
 }
+
+struct AudioPreviewSnapshot: Sendable {
+    let waveform: [Float]
+    let duration: TimeInterval
+}
+
+struct LiveBandSample: Sendable, Identifiable {
+    let id: String
+    let label: String
+    let level: Double
+}
