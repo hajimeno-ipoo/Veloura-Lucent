@@ -143,7 +143,7 @@ private struct SpectralGateDenoiser {
             let averageNoise = noiseSums[binIndex] / sourceCount
             let minimumNoise = noiseMinimums[binIndex].isFinite ? noiseMinimums[binIndex] : averageNoise
             let baseNoise = averageNoise * 0.85 + minimumNoise * 0.15
-            let highBandBias: Float = binIndex > binCount / 2 ? 1.15 : 1.0
+            let highBandBias: Float = binIndex > (binCount * 3 / 5) ? 1.03 : 1.0
             noiseProfile[binIndex] = baseNoise * highBandBias
         }
 
@@ -151,7 +151,7 @@ private struct SpectralGateDenoiser {
             for binIndex in 0..<spectrogram.binCount {
                 let magnitude = hypotf(spectrogram.real[frameIndex][binIndex], spectrogram.imag[frameIndex][binIndex])
                 let threshold = noiseProfile[binIndex] * thresholdMultiplier
-                let floor: Float = binIndex > spectrogram.binCount / 2 ? 0.18 : 0.12
+                let floor: Float = binIndex > spectrogram.binCount / 2 ? 0.28 : 0.12
                 let mask = max(floor, min(1.0, (magnitude - threshold) / max(magnitude, 1e-6)))
                 spectrogram.real[frameIndex][binIndex] *= mask
                 spectrogram.imag[frameIndex][binIndex] *= mask
@@ -165,8 +165,8 @@ private struct SpectralGateDenoiser {
 private struct MultibandDynamicsProcessor {
     let bands: [(ClosedRange<Double>, Float, Float)] = [
         (5_000...8_000, 3.0, 80),
-        (10_000...14_000, 6.0, 60),
-        (18_000...24_000, 12.0, 50)
+        (10_000...14_000, 3.2, 68),
+        (18_000...24_000, 2.8, 82)
     ]
 
     func process(signal: AudioSignal) -> AudioSignal {
@@ -212,14 +212,15 @@ private struct HarmonicUpscaler {
         let harmonicWeight = min(1.2, 0.6 + Float(analysis.dominantHarmonics.count) * 0.08)
         let shimmerControl = analysis.hasShimmer ? max(0.65, 1 - analysis.shimmerRatio * 1.4) : 1.0
         let deficiency = Float(max(0, 16_000 - analysis.cutoffFrequency) / 4_000)
-        let baseGain = max(0.08, min(0.32, (0.14 + deficiency * 0.18) * harmonicWeight * shimmerControl))
-        let airGain = max(0.02, min(0.16, 0.04 + deficiency * 0.10 - analysis.shimmerRatio * 0.08))
-        let transientBoost = max(0.12, min(0.40, 0.18 + analysis.transientAmount * 0.12))
+        let brightnessBoost = max(0.9, min(1.2, 1.02 + (0.55 - analysis.brightnessRatio) * 0.35))
+        let baseGain = max(0.05, min(0.18, (0.08 + deficiency * 0.08) * harmonicWeight * shimmerControl))
+        let airGain = max(0.10, min(0.42, (0.12 + deficiency * 0.24) * brightnessBoost - analysis.shimmerRatio * 0.03))
+        let transientBoost = max(0.10, min(0.30, 0.14 + analysis.transientAmount * 0.08))
 
         let channels = signal.channels.map { channel in
             let excited = channel.map { tanhf($0 * 2.8) - tanhf($0 * 1.1) }
-            let presence = SpectralDSP.lowPass(SpectralDSP.highPass(excited, cutoff: cutoff, sampleRate: signal.sampleRate), cutoff: 16_000, sampleRate: signal.sampleRate)
-            let air = SpectralDSP.highPass(excited, cutoff: 16_000, sampleRate: signal.sampleRate)
+            let presence = SpectralDSP.lowPass(SpectralDSP.highPass(excited, cutoff: cutoff, sampleRate: signal.sampleRate), cutoff: 13_500, sampleRate: signal.sampleRate)
+            let air = SpectralDSP.highPass(excited, cutoff: 13_500, sampleRate: signal.sampleRate)
             let body = SpectralDSP.lowPass(channel, cutoff: 4_000, sampleRate: signal.sampleRate)
             let transient = SpectralDSP.highPass(zip(channel, body).map(-), cutoff: 2_500, sampleRate: signal.sampleRate)
             return channel.indices.map {
