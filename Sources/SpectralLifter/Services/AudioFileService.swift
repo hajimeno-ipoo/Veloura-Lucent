@@ -1,4 +1,5 @@
 import AVFoundation
+import Accelerate
 import Foundation
 
 enum AudioFileService {
@@ -58,7 +59,12 @@ enum AudioFileService {
         let signal = try loadAudio(from: url)
         let mono = signal.monoMixdown()
         guard !mono.isEmpty else {
-            return AudioPreviewSnapshot(waveform: Array(repeating: 0, count: bucketCount), duration: 0)
+            return AudioPreviewSnapshot(
+                waveform: Array(repeating: 0, count: bucketCount),
+                duration: 0,
+                bandLevels: emptyBandLevels(bucketCount: bucketCount),
+                bandLevelDBs: emptyBandLevels(bucketCount: bucketCount, fill: -120)
+            )
         }
 
         let chunkSize = max(1, mono.count / bucketCount)
@@ -69,9 +75,78 @@ enum AudioFileService {
             return min(1, peak)
         }
 
+        let (bandLevels, bandLevelDBs) = makeBandLevels(from: mono, sampleRate: signal.sampleRate, bucketCount: bucketCount)
+
         return AudioPreviewSnapshot(
             waveform: Array(waveform),
-            duration: Double(mono.count) / signal.sampleRate
+            duration: Double(mono.count) / signal.sampleRate,
+            bandLevels: bandLevels,
+            bandLevelDBs: bandLevelDBs
         )
+    }
+
+    private static func makeBandLevels(from mono: [Float], sampleRate: Double, bucketCount: Int) -> ([String: [Float]], [String: [Float]]) {
+        let spectrogram = SpectralDSP.stft(mono)
+        guard spectrogram.frameCount > 0 else {
+            return (
+                emptyBandLevels(bucketCount: bucketCount),
+                emptyBandLevels(bucketCount: bucketCount, fill: -120)
+            )
+        }
+
+        let magnitudes = spectrogram.magnitudes()
+        let frequencyStep = sampleRate / Double(spectrogram.fftSize)
+        let bandBinRanges = AudioBandCatalog.previewBands.map { band -> (String, ClosedRange<Int>) in
+            let lower = max(0, min(Int(floor(band.lowerBound / frequencyStep)), spectrogram.binCount - 1))
+            let upper = max(lower, min(Int(floor(band.upperBound / frequencyStep)), spectrogram.binCount - 1))
+            return (band.id, lower...upper)
+        }
+
+        var frameBandLevels: [String: [Float]] = Dictionary(uniqueKeysWithValues: bandBinRanges.map {
+            ($0.0, Array(repeating: 0, count: spectrogram.frameCount))
+        })
+
+        for frameIndex in 0..<spectrogram.frameCount {
+            let frameMagnitudes = magnitudes[frameIndex]
+            for (bandID, range) in bandBinRanges {
+                let values = frameMagnitudes[range]
+                let meanSquare = values.reduce(0.0) { partial, value in
+                    partial + value * value
+                } / Float(max(values.count, 1))
+                let rms = sqrtf(max(meanSquare, 1e-12))
+                frameBandLevels[bandID]?[frameIndex] = 20 * log10f(rms)
+            }
+        }
+
+        var bucketLevels: [String: [Float]] = Dictionary(uniqueKeysWithValues: bandBinRanges.map {
+            ($0.0, Array(repeating: 0, count: bucketCount))
+        })
+        var bucketLevelDBs: [String: [Float]] = Dictionary(uniqueKeysWithValues: bandBinRanges.map {
+            ($0.0, Array(repeating: Float(-120), count: bucketCount))
+        })
+        let framesPerBucket = max(Double(spectrogram.frameCount) / Double(bucketCount), 1)
+
+        for (bandID, levels) in frameBandLevels {
+            let peakLevel = levels.max() ?? -120
+            let floorLevel = max(-84, peakLevel - 42)
+            for bucketIndex in 0..<bucketCount {
+                let start = Int(floor(Double(bucketIndex) * framesPerBucket))
+                let end = min(levels.count, Int(ceil(Double(bucketIndex + 1) * framesPerBucket)))
+                guard start < end else { continue }
+                let bucketSlice = levels[start..<end]
+                let bucketPeak = bucketSlice.max() ?? floorLevel
+                let normalized = max(0, min(1, (bucketPeak - floorLevel) / max(peakLevel - floorLevel, 1)))
+                bucketLevels[bandID]?[bucketIndex] = powf(normalized, 0.72)
+                bucketLevelDBs[bandID]?[bucketIndex] = bucketPeak
+            }
+        }
+
+        return (bucketLevels, bucketLevelDBs)
+    }
+
+    private static func emptyBandLevels(bucketCount: Int, fill: Float = 0) -> [String: [Float]] {
+        Dictionary(uniqueKeysWithValues: AudioBandCatalog.previewBands.map { band in
+            (band.id, Array(repeating: fill, count: bucketCount))
+        })
     }
 }

@@ -111,13 +111,11 @@ struct ContentView: View {
 
     private func previewCard(title: String, target: AudioPreviewTarget, fileURL: URL?, tint: Color) -> some View {
         let snapshot = preview.snapshot(for: target)
-        let liveBands = preview.liveBandLevels[target] ?? [
-            LiveBandSample(id: "low", label: "低域", level: 0),
-            LiveBandSample(id: "mid", label: "中域", level: 0),
-            LiveBandSample(id: "high", label: "高域", level: 0),
-            LiveBandSample(id: "air", label: "超高域", level: 0)
-        ]
+        let liveBands = preview.liveBandLevels[target] ?? AudioBandCatalog.previewBands.map {
+            LiveBandSample(id: $0.id, label: $0.label, level: 0)
+        }
         let isActive = preview.activeTarget == target
+        let previewBandDeltas = previewBandDeltas(for: target, isActive: isActive)
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -146,9 +144,14 @@ struct ContentView: View {
                             ZStack(alignment: .leading) {
                                 Capsule()
                                     .fill(Color.secondary.opacity(0.12))
-                                Capsule()
-                                    .fill(tint.opacity(isActive ? 0.95 : 0.45))
-                                    .frame(width: proxy.size.width * band.level)
+                                previewLevelBar(
+                                    band: band,
+                                    target: target,
+                                    deltaValue: previewBandDeltas[band.id],
+                                    tint: tint,
+                                    isActive: isActive,
+                                    totalWidth: proxy.size.width
+                                )
                             }
                         }
                         .frame(height: 6)
@@ -370,6 +373,7 @@ struct ContentView: View {
                 .font(.headline)
 
             ForEach(pairs, id: \.0.id) { inputMetric, outputMetric in
+                let delta = outputMetric.map { $0.levelDB - inputMetric.levelDB }
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(inputMetric.label)
@@ -378,9 +382,12 @@ struct ContentView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Text(outputMetric.map { "差分  \(formattedDelta($0.levelDB - inputMetric.levelDB, format: .dBFS))" } ?? "差分  --")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Text(delta.map { "差分  \(formattedDelta($0, format: .dBFS))" } ?? "差分  --")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(deltaChipColor(for: delta))
+                            deltaChip(delta: delta)
+                        }
                     }
 
                     HStack(spacing: 10) {
@@ -420,6 +427,77 @@ struct ContentView: View {
             .frame(height: 10)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func previewBandDeltas(for target: AudioPreviewTarget, isActive: Bool) -> [String: Double] {
+        guard target == .output, isActive else { return [:] }
+        let inputLevels = Dictionary(uniqueKeysWithValues: (job.inputMetrics?.bandEnergies ?? []).map {
+            ($0.id, $0.levelDB)
+        })
+        let deltaPairs = (job.outputMetrics?.bandEnergies ?? []).compactMap { output -> (String, Double)? in
+            guard let input = inputLevels[output.id] else { return nil }
+            return (output.id, output.levelDB - input)
+        }
+        return Dictionary(uniqueKeysWithValues: deltaPairs)
+    }
+
+    @ViewBuilder
+    private func previewLevelBar(
+        band: LiveBandSample,
+        target: AudioPreviewTarget,
+        deltaValue: Double?,
+        tint: Color,
+        isActive: Bool,
+        totalWidth: CGFloat
+    ) -> some View {
+        let liveWidth = totalWidth * band.level
+
+        if target == .output, isActive, let deltaValue, abs(deltaValue) >= 0.12 {
+            let deltaWidth = min(totalWidth, totalWidth * abs(deltaValue) / 5.0)
+            let diffColor = deltaValue >= 0 ? Color.yellow : Color.red
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(tint.opacity(isActive ? 0.95 : 0.45))
+                    .frame(width: liveWidth)
+
+                if deltaWidth > 1 {
+                    Capsule()
+                        .fill(diffColor.opacity(isActive ? 0.95 : 0.85))
+                        .frame(width: deltaWidth)
+                        .offset(x: deltaValue >= 0 ? max(0, liveWidth - deltaWidth) : liveWidth)
+                }
+            }
+        } else {
+            Capsule()
+                .fill(tint.opacity(isActive ? 0.95 : 0.45))
+                .frame(width: liveWidth)
+        }
+    }
+
+    private func deltaChip(delta: Double?) -> some View {
+        Capsule()
+            .fill(deltaChipColor(for: delta).opacity(delta == nil ? 0.18 : 0.9))
+            .frame(width: deltaChipWidth(for: delta), height: 8)
+            .overlay {
+                Capsule()
+                    .stroke(Color.white.opacity(0.35), lineWidth: delta == nil ? 0 : 0.6)
+            }
+    }
+
+    private func deltaChipColor(for delta: Double?) -> Color {
+        guard let delta else { return .secondary }
+        let magnitude = abs(delta)
+        if magnitude < 0.15 {
+            return .secondary
+        }
+        return delta >= 0 ? .green : .red
+    }
+
+    private func deltaChipWidth(for delta: Double?) -> CGFloat {
+        guard let delta else { return 18 }
+        let magnitude = min(abs(delta), 3)
+        return 18 + CGFloat(magnitude / 3) * 34
     }
 
     private var logSection: some View {

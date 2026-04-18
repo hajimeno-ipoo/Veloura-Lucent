@@ -94,12 +94,9 @@ enum AudioComparisonService {
         )
     }
 
-    private static let bandTemplate: [(id: String, label: String, range: String, lower: Double, upper: Double)] = [
-        ("low", "低域", "0-5kHz", 0, 5_000),
-        ("presence", "存在感", "5-10kHz", 5_000, 10_000),
-        ("high", "高域", "10-16kHz", 10_000, 16_000),
-        ("air", "超高域", "16-24kHz", 16_000, 24_000)
-    ]
+    private static let bandTemplate: [(id: String, label: String, range: String, lower: Double, upper: Double)] = AudioBandCatalog.previewBands.map {
+        ($0.id, $0.label, $0.rangeDescription, $0.lowerBound, $0.upperBound)
+    }
 
     private static func accumulateMetrics(
         frame: [Float],

@@ -19,6 +19,8 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
     private var meterTimer: Timer?
     private var previewSourceURLs: [AudioPreviewTarget: URL] = [:]
     private var previewTasks: [AudioPreviewTarget: Task<Void, Never>] = [:]
+    private let meterInterval: TimeInterval = 0.05
+    private let smoothingFactor = 0.20
 
     func togglePlayback(for url: URL?, target: AudioPreviewTarget) {
         guard let url else { return }
@@ -99,7 +101,12 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
     }
 
     func snapshot(for target: AudioPreviewTarget) -> AudioPreviewSnapshot {
-        previewSnapshots[target] ?? AudioPreviewSnapshot(waveform: Array(repeating: 0, count: 96), duration: 0)
+        previewSnapshots[target] ?? AudioPreviewSnapshot(
+            waveform: Array(repeating: 0, count: 96),
+            duration: 0,
+            bandLevels: Dictionary(uniqueKeysWithValues: AudioBandCatalog.previewBands.map { ($0.id, Array(repeating: 0, count: 96)) }),
+            bandLevelDBs: Dictionary(uniqueKeysWithValues: AudioBandCatalog.previewBands.map { ($0.id, Array(repeating: Float(-120), count: 96)) })
+        )
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -109,7 +116,7 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
     }
     private func startMetering(target: AudioPreviewTarget) {
         meterTimer?.invalidate()
-        meterTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+        meterTimer = Timer.scheduledTimer(withTimeInterval: meterInterval, repeats: true) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
                 self.updateMeters(target: target)
@@ -125,14 +132,18 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
             playbackProgress = max(0, min(1, player.currentTime / player.duration))
         }
 
-        let averagePower = player.averagePower(forChannel: 0)
-        let normalized = Double(max(0, min(1, (averagePower + 60) / 60)))
-        liveBandLevels[target] = [
-            LiveBandSample(id: "low", label: "低域", level: normalized * 0.55),
-            LiveBandSample(id: "mid", label: "中域", level: normalized * 0.72),
-            LiveBandSample(id: "high", label: "高域", level: normalized * 0.88),
-            LiveBandSample(id: "air", label: "超高域", level: normalized)
-        ]
+        let snapshot = snapshot(for: target)
+        let bucketIndex = min(
+            max(Int(round(playbackProgress * Double(max(snapshot.waveform.count - 1, 0)))), 0),
+            max(snapshot.waveform.count - 1, 0)
+        )
+        let previousLevels = Dictionary(uniqueKeysWithValues: (liveBandLevels[target] ?? []).map { ($0.id, $0.level) })
+        liveBandLevels[target] = AudioBandCatalog.previewBands.map { band in
+            let targetLevel = Double(snapshot.bandLevels[band.id]?[bucketIndex] ?? 0)
+            let previousLevel = previousLevels[band.id] ?? targetLevel
+            let smoothedLevel = previousLevel + (targetLevel - previousLevel) * smoothingFactor
+            return LiveBandSample(id: band.id, label: band.label, level: smoothedLevel)
+        }
     }
 
     private func format(duration: TimeInterval) -> String {
