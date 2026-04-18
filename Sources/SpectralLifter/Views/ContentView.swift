@@ -12,42 +12,29 @@ struct ContentView: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            topSection
-            Divider()
-            bottomSection
-        }
-        .padding(24)
-        .frame(minWidth: 920, minHeight: 780)
-    }
-
-    private var topSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
-            inputSection
-            outputSection
-            previewSection
-            actionSection
-            progressSection
-        }
-    }
-
-    private var bottomSection: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                inputSection
+                outputSection
+                masteringSection
+                previewSection
+                correctionActionSection
+                masteringActionSection
+                progressSection
                 metricsSection
                 logSection
             }
-            .padding(.trailing, 4)
+            .padding(24)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(minWidth: 1_060, minHeight: 860)
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Spectral Lifter")
                 .font(.largeTitle.bold())
-            Text("AI音源の高域補完とシマーノイズ低減を、Macアプリから直接実行します。")
+            Text("補正で荒れを整えたあと、別機能のマスタリングで仕上げまで行います。")
                 .foregroundStyle(.secondary)
         }
     }
@@ -75,36 +62,63 @@ struct ContentView: View {
     }
 
     private var outputSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("出力ファイル")
+        VStack(alignment: .leading, spacing: 10) {
+            Text("書き出し先")
                 .font(.headline)
 
-            Text(job.outputFile?.path(percentEncoded: false) ?? "入力ファイルを選ぶと自動で決まります")
+            outputPathRow(title: "補正後", fileURL: job.outputFile, placeholder: "入力ファイルを選ぶと自動で決まります")
+            outputPathRow(title: "最終版", fileURL: job.masteredOutputFile, placeholder: "補正後ファイルを元に自動で決まります")
+        }
+    }
+
+    private func outputPathRow(title: String, fileURL: URL?, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Text(fileURL?.path(percentEncoded: false) ?? placeholder)
                 .textSelection(.enabled)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
     }
 
+    private var masteringSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("マスタリング")
+                .font(.headline)
+
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("仕上がり")
+                        .font(.subheadline.weight(.semibold))
+                    Picker("仕上がり", selection: $job.selectedMasteringProfile) {
+                        ForEach(MasteringProfile.allCases) { profile in
+                            Text(profile.title).tag(profile)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("説明")
+                        .font(.subheadline.weight(.semibold))
+                    Text(job.selectedMasteringProfile.summary)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
     private var previewSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("ビフォーアフター確認")
+            Text("試聴比較")
                 .font(.headline)
 
             HStack(spacing: 14) {
-                previewCard(
-                    title: "入力音声",
-                    target: .input,
-                    fileURL: job.inputFile,
-                    tint: .blue
-                )
-
-                previewCard(
-                    title: "出力音声",
-                    target: .output,
-                    fileURL: job.hasExistingOutput ? job.outputFile : nil,
-                    tint: .green
-                )
+                previewCard(title: "入力音声", target: .input, fileURL: job.inputFile, tint: .blue)
+                previewCard(title: "補正後", target: .corrected, fileURL: job.hasExistingOutput ? job.outputFile : nil, tint: .green)
+                previewCard(title: "最終版", target: .mastered, fileURL: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil, tint: .orange)
             }
         }
     }
@@ -144,12 +158,9 @@ struct ContentView: View {
                             ZStack(alignment: .leading) {
                                 Capsule()
                                     .fill(Color.secondary.opacity(0.12))
-                                previewLevelBar(
-                                    band: band,
-                                    tint: tint,
-                                    isActive: isActive,
-                                    totalWidth: proxy.size.width
-                                )
+                                Capsule()
+                                    .fill(tint.opacity(isActive ? 0.95 : 0.45))
+                                    .frame(width: proxy.size.width * band.level)
                             }
                         }
                         .frame(height: 6)
@@ -221,15 +232,13 @@ struct ContentView: View {
                         for (index, sample) in points.enumerated() {
                             let x = CGFloat(index) * step
                             let amplitude = CGFloat(sample) * size.height * 0.42
-                            let y = size.height / 2 - amplitude
-                            path.addLine(to: CGPoint(x: x, y: y))
+                            path.addLine(to: CGPoint(x: x, y: size.height / 2 - amplitude))
                         }
 
                         for (index, sample) in points.enumerated().reversed() {
                             let x = CGFloat(index) * step
                             let amplitude = CGFloat(sample) * size.height * 0.42
-                            let y = size.height / 2 + amplitude
-                            path.addLine(to: CGPoint(x: x, y: y))
+                            path.addLine(to: CGPoint(x: x, y: size.height / 2 + amplitude))
                         }
 
                         path.closeSubpath()
@@ -247,68 +256,160 @@ struct ContentView: View {
         .frame(height: 54)
     }
 
-    private var actionSection: some View {
-        HStack(spacing: 12) {
-            Button(job.isProcessing ? "処理中..." : "処理を開始") {
-                startProcessing()
-            }
-            .keyboardShortcut(.defaultAction)
-            .disabled(job.inputFile == nil || job.isProcessing)
-
-            Button("結果を開く") {
-                guard let outputFile = job.outputFile else { return }
-                NSWorkspace.shared.open(outputFile)
-            }
-            .disabled(!job.hasExistingOutput || job.isProcessing)
-
-            Button("Finderで表示") {
-                guard let outputFile = job.outputFile else { return }
-                NSWorkspace.shared.activateFileViewerSelecting([outputFile])
-            }
-            .disabled(!job.hasExistingOutput || job.isProcessing)
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(job.statusMessage)
-                    .foregroundStyle(job.statusColor)
-                Text(job.isAnalyzingMetrics ? "比較を更新中" : preview.playbackLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var progressSection: some View {
+    private var correctionActionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("進行状況")
-                    .font(.headline)
+            Text("補正")
+                .font(.headline)
+
+            HStack(spacing: 12) {
+                Button(job.isProcessing ? "補正中..." : "補正を実行") {
+                    startCorrectionProcessing()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(job.inputFile == nil || job.isProcessing || job.isMastering)
+
+                Button("補正後を開く") {
+                    guard let outputFile = job.outputFile else { return }
+                    NSWorkspace.shared.open(outputFile)
+                }
+                .disabled(!job.hasExistingOutput || job.isProcessing)
+
+                Button("補正後をFinderで表示") {
+                    guard let outputFile = job.outputFile else { return }
+                    NSWorkspace.shared.activateFileViewerSelecting([outputFile])
+                }
+                .disabled(!job.hasExistingOutput || job.isProcessing)
+
                 Spacer()
-                Text(job.progressLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
 
-            ProgressView(value: job.progressValue)
-                .tint(job.statusColor)
-
-            HStack(spacing: 8) {
-                ForEach(ProcessingStep.allCases, id: \.self) { step in
-                    progressBadge(for: step)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(job.statusMessage)
+                        .foregroundStyle(correctionStatusColor)
+                    Text(job.isAnalyzingMetrics ? "比較を更新中" : preview.playbackLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
     }
 
-    private func progressBadge(for step: ProcessingStep) -> some View {
-        let isCompleted = job.completedSteps.contains(step)
-        let isActive = job.activeStep == step
+    private var masteringActionSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("独立マスタリング")
+                .font(.headline)
 
-        return HStack(spacing: 6) {
+            HStack(spacing: 12) {
+                Button(job.isMastering ? "マスタリング中..." : "マスタリングを実行") {
+                    startMasteringProcessing()
+                }
+                .disabled(!job.hasExistingOutput || job.isMastering || job.isProcessing)
+
+                Button("最終版を開く") {
+                    guard let outputFile = job.masteredOutputFile else { return }
+                    NSWorkspace.shared.open(outputFile)
+                }
+                .disabled(!job.hasExistingMasteredOutput || job.isMastering)
+
+                Button("最終版をFinderで表示") {
+                    guard let outputFile = job.masteredOutputFile else { return }
+                    NSWorkspace.shared.activateFileViewerSelecting([outputFile])
+                }
+                .disabled(!job.hasExistingMasteredOutput || job.isMastering)
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(job.masteringStatusMessage)
+                        .foregroundStyle(masteringStatusColor)
+                    Text(job.selectedMasteringProfile.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var progressSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            progressBlock(
+                title: "補正の進行状況",
+                status: job.progressLabel,
+                tint: correctionStatusColor,
+                value: job.progressValue,
+                steps: ProcessingStep.allCases,
+                activeStep: job.activeStep,
+                completedSteps: job.completedSteps
+            )
+
+            masteringProgressBlock
+        }
+    }
+
+    private func progressBlock(
+        title: String,
+        status: String,
+        tint: Color,
+        value: Double,
+        steps: [ProcessingStep],
+        activeStep: ProcessingStep?,
+        completedSteps: Set<ProcessingStep>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title)
+                    .font(.headline)
+                Spacer()
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ProgressView(value: value)
+                .tint(tint)
+
+            HStack(spacing: 8) {
+                ForEach(steps, id: \.self) { step in
+                    progressBadge(
+                        title: step.title,
+                        isCompleted: completedSteps.contains(step),
+                        isActive: activeStep == step
+                    )
+                }
+            }
+        }
+    }
+
+    private var masteringProgressBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("マスタリングの進行状況")
+                    .font(.headline)
+                Spacer()
+                Text(masteringProgressLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ProgressView(value: masteringProgressValue)
+                .tint(masteringStatusColor)
+
+            HStack(spacing: 8) {
+                ForEach(MasteringStep.allCases, id: \.self) { step in
+                    progressBadge(
+                        title: step.title,
+                        isCompleted: job.completedMasteringSteps.contains(step),
+                        isActive: job.masteringActiveStep == step
+                    )
+                }
+            }
+        }
+    }
+
+    private func progressBadge(title: String, isCompleted: Bool, isActive: Bool) -> some View {
+        HStack(spacing: 6) {
             Image(systemName: isCompleted ? "checkmark.circle.fill" : isActive ? "dot.circle.fill" : "circle")
                 .foregroundStyle(isCompleted ? Color.green : isActive ? Color.orange : Color.secondary)
-            Text(step.title)
+            Text(title)
                 .font(.caption)
         }
         .padding(.horizontal, 10)
@@ -320,7 +421,7 @@ struct ContentView: View {
     }
 
     private var metricsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("数値と視覚比較")
                     .font(.headline)
@@ -331,8 +432,33 @@ struct ContentView: View {
                 }
             }
 
-            if let inputMetrics = job.inputMetrics {
-                let outputMetrics = job.outputMetrics
+            comparisonSection(
+                title: "入力 -> 補正後",
+                inputMetrics: job.inputMetrics,
+                outputMetrics: job.outputMetrics,
+                emptyMessage: "補正後の比較は、補正を実行すると表示されます。"
+            )
+
+            comparisonSection(
+                title: "補正後 -> 最終版",
+                inputMetrics: job.outputMetrics,
+                outputMetrics: job.masteredMetrics,
+                emptyMessage: "最終版の比較は、マスタリングを実行すると表示されます。"
+            )
+        }
+    }
+
+    private func comparisonSection(
+        title: String,
+        inputMetrics: AudioMetricSnapshot?,
+        outputMetrics: AudioMetricSnapshot?,
+        emptyMessage: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+
+            if let inputMetrics {
                 VStack(spacing: 12) {
                     LazyVGrid(columns: metricColumns, alignment: .leading, spacing: 12) {
                         metricCard(title: "Peak", input: inputMetrics.peakDBFS, output: outputMetrics?.peakDBFS, format: .dBFS, positiveIsBetter: false)
@@ -346,7 +472,7 @@ struct ContentView: View {
                     bandChart(input: inputMetrics.bandEnergies, output: outputMetrics?.bandEnergies ?? [])
                 }
             } else {
-                Text("音声を選ぶと、ここに比較結果が表示されます。")
+                Text(emptyMessage)
                     .foregroundStyle(.secondary)
             }
         }
@@ -424,7 +550,13 @@ struct ContentView: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(deltaChipColor(for: delta))
 
-            deltaChip(delta: delta)
+            Capsule()
+                .fill(deltaChipColor(for: delta).opacity(delta == nil ? 0.18 : 0.9))
+                .frame(width: deltaChipWidth(for: delta), height: 8)
+                .overlay {
+                    Capsule()
+                        .stroke(Color.white.opacity(0.35), lineWidth: delta == nil ? 0 : 0.6)
+                }
         }
         .frame(width: 94, alignment: .trailing)
     }
@@ -457,30 +589,6 @@ struct ContentView: View {
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder
-    private func previewLevelBar(
-        band: LiveBandSample,
-        tint: Color,
-        isActive: Bool,
-        totalWidth: CGFloat
-    ) -> some View {
-        let liveWidth = totalWidth * band.level
-
-        Capsule()
-            .fill(tint.opacity(isActive ? 0.95 : 0.45))
-            .frame(width: liveWidth)
-    }
-
-    private func deltaChip(delta: Double?) -> some View {
-        Capsule()
-            .fill(deltaChipColor(for: delta).opacity(delta == nil ? 0.18 : 0.9))
-            .frame(width: deltaChipWidth(for: delta), height: 8)
-            .overlay {
-                Capsule()
-                    .stroke(Color.white.opacity(0.35), lineWidth: delta == nil ? 0 : 0.6)
-            }
-    }
-
     private func deltaChipColor(for delta: Double?) -> Color {
         guard let delta else { return .secondary }
         let magnitude = abs(delta)
@@ -497,23 +605,70 @@ struct ContentView: View {
     }
 
     private var logSection: some View {
+        HStack(alignment: .top, spacing: 14) {
+            logCard(title: "補正ログ", text: job.logText, placeholder: "ここに補正ログが表示されます。")
+            logCard(title: "マスタリングログ", text: job.masteringLogText, placeholder: "ここにマスタリングログが表示されます。")
+        }
+    }
+
+    private func logCard(title: String, text: String, placeholder: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("処理ログ")
+            Text(title)
                 .font(.headline)
 
             ScrollView {
-                Text(job.logText.isEmpty ? "ここに処理ログが表示されます。" : job.logText)
+                Text(text.isEmpty ? placeholder : text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                     .padding(12)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 180)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-            .frame(minHeight: 180)
         }
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
-    private func startProcessing() {
+    private var correctionStatusColor: Color {
+        if job.isProcessing {
+            return .orange
+        }
+        if job.lastError != nil {
+            return .red
+        }
+        return .secondary
+    }
+
+    private var masteringStatusColor: Color {
+        if job.isMastering {
+            return .orange
+        }
+        if job.masteringLastError != nil {
+            return .red
+        }
+        if job.hasExistingMasteredOutput {
+            return .green
+        }
+        return .secondary
+    }
+
+    private var masteringProgressValue: Double {
+        if !job.isMastering && job.masteringStatusMessage == "完了" {
+            return 1
+        }
+        let total = Double(MasteringStep.allCases.count)
+        let completed = Double(job.completedMasteringSteps.count)
+        let activeBoost = job.masteringActiveStep == nil ? 0 : 0.5
+        return min(0.98, (completed + activeBoost) / total)
+    }
+
+    private var masteringProgressLabel: String {
+        if let step = job.masteringActiveStep {
+            return "\(step.title) を実行中"
+        }
+        return job.masteringStatusMessage
+    }
+
+    private func startCorrectionProcessing() {
         guard let inputFile = job.inputFile else { return }
 
         Task {
@@ -530,21 +685,22 @@ struct ContentView: View {
                     job.beginMetricAnalysis()
                 }
 
-                async let outputSnapshotTask: AudioPreviewSnapshot = Task.detached(priority: .utility) {
+                async let correctedSnapshotTask: AudioPreviewSnapshot = Task.detached(priority: .utility) {
                     try AudioFileService.makePreviewSnapshot(for: outputFile)
                 }.value
-                async let outputMetricsTask: AudioMetricSnapshot = Task.detached(priority: .utility) {
+                async let correctedMetricsTask: AudioMetricSnapshot = Task.detached(priority: .utility) {
                     try AudioComparisonService.analyze(fileURL: outputFile)
                 }.value
 
-                let outputSnapshot = try await outputSnapshotTask
-                let outputMetrics = try await outputMetricsTask
+                let correctedSnapshot = try await correctedSnapshotTask
+                let correctedMetrics = try await correctedMetricsTask
 
                 await MainActor.run {
                     job.finishSuccess(outputFile)
                     preview.preparePreview(for: job.inputFile, target: .input)
-                    preview.setPreviewSnapshot(outputSnapshot, for: .output, sourceURL: outputFile)
-                    job.finishOutputMetricAnalysis(outputMetrics)
+                    preview.setPreviewSnapshot(correctedSnapshot, for: .corrected, sourceURL: outputFile)
+                    preview.preparePreview(for: nil, target: .mastered)
+                    job.finishOutputMetricAnalysis(correctedMetrics)
                 }
             } catch {
                 await MainActor.run {
@@ -555,9 +711,54 @@ struct ContentView: View {
         }
     }
 
+    private func startMasteringProcessing() {
+        guard let correctedFile = job.outputFile else { return }
+
+        Task {
+            job.beginMastering()
+
+            do {
+                let masteredFile = try await MasteringService().process(
+                    inputFile: correctedFile,
+                    profile: job.selectedMasteringProfile
+                ) { message in
+                    Task { @MainActor in
+                        job.appendMasteringLog(message)
+                    }
+                }
+
+                await MainActor.run {
+                    job.beginMetricAnalysis()
+                }
+
+                async let masteredSnapshotTask: AudioPreviewSnapshot = Task.detached(priority: .utility) {
+                    try AudioFileService.makePreviewSnapshot(for: masteredFile)
+                }.value
+                async let masteredMetricsTask: AudioMetricSnapshot = Task.detached(priority: .utility) {
+                    try AudioComparisonService.analyze(fileURL: masteredFile)
+                }.value
+
+                let masteredSnapshot = try await masteredSnapshotTask
+                let masteredMetrics = try await masteredMetricsTask
+
+                await MainActor.run {
+                    job.finishMasteringSuccess(masteredFile)
+                    preview.setPreviewSnapshot(masteredSnapshot, for: .mastered, sourceURL: masteredFile)
+                    job.finishMasteredMetricAnalysis(masteredMetrics)
+                }
+            } catch {
+                await MainActor.run {
+                    job.failMetricAnalysis()
+                    job.finishMasteringFailure(error.localizedDescription)
+                }
+            }
+        }
+    }
+
     private enum MetricTarget {
         case input
-        case output
+        case corrected
+        case mastered
     }
 
     private enum MetricFormat {
@@ -581,8 +782,10 @@ struct ContentView: View {
                     switch target {
                     case .input:
                         job.finishInputMetricAnalysis(metrics)
-                    case .output:
+                    case .corrected:
                         job.finishOutputMetricAnalysis(metrics)
+                    case .mastered:
+                        job.finishMasteredMetricAnalysis(metrics)
                     }
                 }
             } catch {
@@ -595,8 +798,8 @@ struct ContentView: View {
 
     private func preparePreviewCards() {
         preview.preparePreview(for: job.inputFile, target: .input)
-        let outputURL = job.hasExistingOutput ? job.outputFile : nil
-        preview.preparePreview(for: outputURL, target: .output)
+        preview.preparePreview(for: job.hasExistingOutput ? job.outputFile : nil, target: .corrected)
+        preview.preparePreview(for: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil, target: .mastered)
     }
 
     private func formattedValue(_ value: Double, format: MetricFormat) -> String {

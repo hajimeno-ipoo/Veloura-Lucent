@@ -3,7 +3,8 @@ import Foundation
 
 enum AudioPreviewTarget: String {
     case input = "入力"
-    case output = "出力"
+    case corrected = "補正後"
+    case mastered = "最終版"
 }
 
 enum AudioPlaybackState {
@@ -228,7 +229,15 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
     }
 
     private func sharedComparisonLevels(for target: AudioPreviewTarget, bucketIndex: Int) -> [LiveBandSample]? {
-        let comparisonTarget: AudioPreviewTarget = target == .input ? .output : .input
+        let comparisonTarget: AudioPreviewTarget
+        switch target {
+        case .input:
+            comparisonTarget = .corrected
+        case .corrected:
+            comparisonTarget = .input
+        case .mastered:
+            comparisonTarget = .corrected
+        }
         let targetSnapshot = previewSnapshots[target]
         let comparisonSnapshot = previewSnapshots[comparisonTarget]
         guard

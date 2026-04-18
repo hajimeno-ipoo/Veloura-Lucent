@@ -27,16 +27,26 @@ enum ProcessingStep: String, CaseIterable, Hashable {
 final class ProcessingJob {
     var inputFile: URL?
     var outputFile: URL?
+    var masteredOutputFile: URL?
     var inputMetrics: AudioMetricSnapshot?
     var outputMetrics: AudioMetricSnapshot?
+    var masteredMetrics: AudioMetricSnapshot?
     var logText = ""
+    var masteringLogText = ""
     var statusMessage = "待機中"
+    var masteringStatusMessage = "待機中"
     var isProcessing = false
+    var isMastering = false
     var lastError: String?
+    var masteringLastError: String?
     var hasExistingOutput = false
+    var hasExistingMasteredOutput = false
     var activeStep: ProcessingStep?
     var completedSteps: Set<ProcessingStep> = []
+    var masteringActiveStep: MasteringStep?
+    var completedMasteringSteps: Set<MasteringStep> = []
     var isAnalyzingMetrics = false
+    var selectedMasteringProfile: MasteringProfile = .streaming
 
     var statusColor: Color {
         if isProcessing {
@@ -68,14 +78,23 @@ final class ProcessingJob {
     func prepareForSelection(_ inputURL: URL) {
         inputFile = inputURL
         outputFile = AudioProcessingService.defaultOutputURL(for: inputURL)
+        masteredOutputFile = outputFile.map { MasteringService.defaultOutputURL(for: $0) }
         inputMetrics = nil
         outputMetrics = nil
+        masteredMetrics = nil
         logText = ""
+        masteringLogText = ""
         statusMessage = "処理待ち"
+        masteringStatusMessage = "補正後に実行できます"
         lastError = nil
-        hasExistingOutput = outputFile.map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
+        masteringLastError = nil
+        // Selecting a source file should not surface old outputs from prior runs.
+        hasExistingOutput = false
+        hasExistingMasteredOutput = false
         activeStep = nil
         completedSteps = []
+        masteringActiveStep = nil
+        completedMasteringSteps = []
     }
 
     func beginProcessing() {
@@ -85,6 +104,24 @@ final class ProcessingJob {
         statusMessage = "処理中"
         activeStep = nil
         completedSteps = []
+        masteredOutputFile = outputFile.map { MasteringService.defaultOutputURL(for: $0) }
+        masteredMetrics = nil
+        masteringLogText = ""
+        masteringStatusMessage = "補正後に実行できます"
+        masteringLastError = nil
+        hasExistingMasteredOutput = false
+        masteringActiveStep = nil
+        completedMasteringSteps = []
+    }
+
+    func beginMastering() {
+        guard outputFile != nil else { return }
+        isMastering = true
+        masteringLastError = nil
+        masteringLogText = ""
+        masteringStatusMessage = "マスタリング中"
+        masteringActiveStep = nil
+        completedMasteringSteps = []
     }
 
     func beginMetricAnalysis() {
@@ -98,6 +135,11 @@ final class ProcessingJob {
 
     func finishOutputMetricAnalysis(_ metrics: AudioMetricSnapshot) {
         outputMetrics = metrics
+        isAnalyzingMetrics = false
+    }
+
+    func finishMasteredMetricAnalysis(_ metrics: AudioMetricSnapshot) {
+        masteredMetrics = metrics
         isAnalyzingMetrics = false
     }
 
@@ -117,13 +159,36 @@ final class ProcessingJob {
         }
     }
 
+    func appendMasteringLog(_ message: String) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        updateMasteringProgress(for: trimmed)
+
+        if masteringLogText.isEmpty {
+            masteringLogText = trimmed
+        } else {
+            masteringLogText += "\n\(trimmed)"
+        }
+    }
+
     func finishSuccess(_ outputURL: URL) {
         isProcessing = false
         outputFile = outputURL
+        masteredOutputFile = MasteringService.defaultOutputURL(for: outputURL)
         statusMessage = "完了"
         hasExistingOutput = FileManager.default.fileExists(atPath: outputURL.path(percentEncoded: false))
         completedSteps = Set(ProcessingStep.allCases)
         activeStep = nil
+        masteringStatusMessage = hasExistingOutput ? "実行できます" : "補正後に実行できます"
+    }
+
+    func finishMasteringSuccess(_ outputURL: URL) {
+        isMastering = false
+        masteredOutputFile = outputURL
+        masteringStatusMessage = "完了"
+        hasExistingMasteredOutput = FileManager.default.fileExists(atPath: outputURL.path(percentEncoded: false))
+        completedMasteringSteps = Set(MasteringStep.allCases)
+        masteringActiveStep = nil
     }
 
     func finishFailure(_ message: String) {
@@ -135,11 +200,28 @@ final class ProcessingJob {
         appendLog(message)
     }
 
+    func finishMasteringFailure(_ message: String) {
+        isMastering = false
+        masteringLastError = message
+        masteringStatusMessage = "失敗"
+        hasExistingMasteredOutput = masteredOutputFile.map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
+        masteringActiveStep = nil
+        appendMasteringLog(message)
+    }
+
     private func updateProgress(for message: String) {
         guard let nextStep = ProcessingStep(rawValue: message) else { return }
         if let activeStep {
             completedSteps.insert(activeStep)
         }
         activeStep = nextStep
+    }
+
+    private func updateMasteringProgress(for message: String) {
+        guard let nextStep = MasteringStep(rawValue: message) else { return }
+        if let masteringActiveStep {
+            completedMasteringSteps.insert(masteringActiveStep)
+        }
+        masteringActiveStep = nextStep
     }
 }

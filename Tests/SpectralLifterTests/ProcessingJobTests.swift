@@ -5,6 +5,17 @@ import Testing
 @MainActor
 struct ProcessingJobTests {
     @Test
+    func selectingInputDoesNotExposeOldOutputs() {
+        let job = ProcessingJob()
+        let input = URL(fileURLWithPath: "/tmp/song.wav")
+
+        job.prepareForSelection(input)
+
+        #expect(job.hasExistingOutput == false)
+        #expect(job.hasExistingMasteredOutput == false)
+    }
+
+    @Test
     func progressMovesForwardWhenLogsArrive() {
         let job = ProcessingJob()
         let input = URL(fileURLWithPath: "/tmp/input.wav")
@@ -29,5 +40,31 @@ struct ProcessingJobTests {
         #expect(job.progressValue == 1)
         #expect(job.completedSteps.count == ProcessingStep.allCases.count)
         #expect(job.activeStep == nil)
+    }
+
+    @Test
+    func masteringProgressMovesForwardWhenLogsArrive() {
+        let job = ProcessingJob()
+        let input = URL(fileURLWithPath: "/tmp/input.wav")
+
+        job.prepareForSelection(input)
+        job.beginMastering()
+        job.appendMasteringLog("補正済み音源を解析します")
+        job.appendMasteringLog("トーンを整えます")
+
+        #expect(job.masteringActiveStep == .tone)
+        #expect(job.completedMasteringSteps.contains(.analyze))
+    }
+
+    @Test
+    func masteringSuccessMarksAllStepsComplete() {
+        let job = ProcessingJob()
+        let output = URL(fileURLWithPath: "/tmp/output_mastered.wav")
+
+        job.finishMasteringSuccess(output)
+
+        #expect(job.completedMasteringSteps.count == MasteringStep.allCases.count)
+        #expect(job.masteringActiveStep == nil)
+        #expect(job.masteredOutputFile == output)
     }
 }
