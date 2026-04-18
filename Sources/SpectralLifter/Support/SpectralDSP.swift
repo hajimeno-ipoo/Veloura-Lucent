@@ -50,6 +50,7 @@ struct Spectrogram {
 enum SpectralDSP {
     static let fftSize = 2048
     static let hopSize = 512
+    private static let resourceCache = FFTResourceCache()
 
     static func stft(_ signal: [Float], fftSize: Int = fftSize, hopSize: Int = hopSize) -> Spectrogram {
         let source = signal.isEmpty ? [Float.zero] : signal
@@ -59,13 +60,9 @@ enum SpectralDSP {
         let trailingPadding = remainder == 0 ? 0 : (hopSize - remainder)
         let workingSource = trailingPadding > 0 ? paddedSource + Array(repeating: Float.zero, count: trailingPadding) : paddedSource
         let frameCount = max(1, Int(ceil(Double(max(workingSource.count - fftSize, 0)) / Double(hopSize))) + 1)
-        let window = sqrtWindow(count: fftSize)
-        let dft = try! vDSP.DiscreteFourierTransform<Float>(
-            count: fftSize,
-            direction: .forward,
-            transformType: .complexComplex,
-            ofType: Float.self
-        )
+        let resources = resourceCache.resources(for: fftSize)
+        let window = resources.window
+        let dft = resources.forward
 
         var realFrames: [[Float]] = []
         var imagFrames: [[Float]] = []
@@ -108,13 +105,9 @@ enum SpectralDSP {
             spectrogram.originalLength + spectrogram.leadingPadding + spectrogram.trailingPadding,
             fftSize + max(0, spectrogram.frameCount - 1) * hopSize
         )
-        let window = sqrtWindow(count: fftSize)
-        let dft = try! vDSP.DiscreteFourierTransform<Float>(
-            count: fftSize,
-            direction: .inverse,
-            transformType: .complexComplex,
-            ofType: Float.self
-        )
+        let resources = resourceCache.resources(for: fftSize)
+        let window = resources.window
+        let dft = resources.inverse
 
         var output = Array(repeating: Float.zero, count: outputLength)
         var windowSums = Array(repeating: Float.zero, count: outputLength)
@@ -230,7 +223,7 @@ enum SpectralDSP {
         return output
     }
 
-    private static func sqrtWindow(count: Int) -> [Float] {
+    fileprivate static func sqrtWindow(count: Int) -> [Float] {
         let hann = vDSP.window(ofType: Float.self, usingSequence: .hanningDenormalized, count: count, isHalfWindow: false)
         return hann.map { sqrtf(max($0, 0)) }
     }
@@ -244,5 +237,43 @@ enum SpectralDSP {
             signal[max(0, signal.count - 2 - index)]
         }
         return prefix + signal + suffix.reversed()
+    }
+}
+
+private struct FFTResources {
+    let forward: vDSP.DiscreteFourierTransform<Float>
+    let inverse: vDSP.DiscreteFourierTransform<Float>
+    let window: [Float]
+}
+
+private final class FFTResourceCache: @unchecked Sendable {
+    private var cache: [Int: FFTResources] = [:]
+    private let lock = NSLock()
+
+    func resources(for fftSize: Int) -> FFTResources {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if let cached = cache[fftSize] {
+            return cached
+        }
+
+        let resources = FFTResources(
+            forward: try! vDSP.DiscreteFourierTransform<Float>(
+                count: fftSize,
+                direction: .forward,
+                transformType: .complexComplex,
+                ofType: Float.self
+            ),
+            inverse: try! vDSP.DiscreteFourierTransform<Float>(
+                count: fftSize,
+                direction: .inverse,
+                transformType: .complexComplex,
+                ofType: Float.self
+            ),
+            window: SpectralDSP.sqrtWindow(count: fftSize)
+        )
+        cache[fftSize] = resources
+        return resources
     }
 }

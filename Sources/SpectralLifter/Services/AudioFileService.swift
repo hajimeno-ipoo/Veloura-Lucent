@@ -4,6 +4,8 @@ import Foundation
 
 enum AudioFileService {
     static let targetSampleRate = 48_000.0
+    private static let previewFFTSize = 1024
+    private static let previewHopSize = 1024
 
     static func loadAudio(from url: URL) throws -> AudioSignal {
         let file = try AVAudioFile(forReading: url)
@@ -86,7 +88,7 @@ enum AudioFileService {
     }
 
     private static func makeBandLevels(from mono: [Float], sampleRate: Double, bucketCount: Int) -> ([String: [Float]], [String: [Float]]) {
-        let spectrogram = SpectralDSP.stft(mono)
+        let spectrogram = SpectralDSP.stft(mono, fftSize: previewFFTSize, hopSize: previewHopSize)
         guard spectrogram.frameCount > 0 else {
             return (
                 emptyBandLevels(bucketCount: bucketCount),
