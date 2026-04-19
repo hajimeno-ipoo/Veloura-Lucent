@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @State private var job = ProcessingJob()
     @State private var preview = AudioPreviewController()
+    @State private var inputSelectionID = UUID()
 
     private let metricColumns = [
         GridItem(.flexible(minimum: 180), spacing: 12),
@@ -69,12 +70,11 @@ struct ContentView: View {
                 Spacer()
                 Button("音声を選ぶ") {
                     if let url = FilePanelService.chooseAudioFile() {
-                        job.prepareForSelection(url)
-                        preview.stopPlayback()
-                        preparePreviewCards()
-                        analyzeMetrics(for: url, target: .input)
+                        let selectionID = beginInputSelection(for: url)
+                        analyzeMetrics(for: url, target: .input, selectionID: selectionID)
                     }
                 }
+                .disabled(job.isProcessing || job.isMastering || job.isAnalyzingMetrics)
             }
         }
     }
@@ -359,244 +359,6 @@ struct ContentView: View {
                 }
             }
         }
-    }
-
-    private var previewSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("試聴比較")
-                    .font(.headline)
-                Spacer()
-                Text(preview.playbackLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            comparisonControlSection
-
-            HStack(spacing: 14) {
-                previewCard(title: "入力音声", target: .input, fileURL: job.inputFile, tint: .blue)
-                previewCard(title: "補正後", target: .corrected, fileURL: job.hasExistingOutput ? job.outputFile : nil, tint: .green)
-                previewCard(title: "最終版", target: .mastered, fileURL: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil, tint: .orange)
-            }
-        }
-    }
-
-    private var comparisonControlSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Picker("比較対象", selection: binding(
-                    get: { preview.comparisonPair },
-                    set: { preview.setComparisonPair($0) }
-                )) {
-                    ForEach(AudioComparisonPair.allCases) { pair in
-                        Text(pair.title).tag(pair)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Spacer()
-            }
-
-            HStack(spacing: 10) {
-                Text(preview.comparisonPair.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                HStack(spacing: 8) {
-                    Text("vol.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Slider(
-                        value: binding(
-                            get: { Double(preview.playbackVolume) },
-                            set: { preview.setPlaybackVolume(Float($0)) }
-                        ),
-                        in: 0 ... 1,
-                        step: 0.01
-                    )
-                    .frame(width: 120)
-                    Text("\(Int((preview.playbackVolume * 100).rounded()))%")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 42, alignment: .trailing)
-                }
-
-                Toggle(
-                    "ラウドネス合わせ比較",
-                    isOn: binding(
-                        get: { preview.isLoudnessMatchedComparisonEnabled },
-                        set: { preview.setLoudnessMatchedComparisonEnabled($0) }
-                    )
-                )
-                .toggleStyle(.switch)
-                .controlSize(.small)
-
-                Text("現在: \(preview.comparisonPair.title(for: preview.activeComparisonSide))")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 10) {
-                Button("Aを再生") {
-                    preview.playComparisonSide(.a)
-                }
-                .disabled(comparisonFileURL(for: .a) == nil)
-
-                Button("Bを再生") {
-                    preview.playComparisonSide(.b)
-                }
-                .disabled(comparisonFileURL(for: .b) == nil)
-
-                Button("A/B切替") {
-                    preview.toggleComparisonSide()
-                }
-                .disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)
-            }
-        }
-    }
-
-    private func previewCard(title: String, target: AudioPreviewTarget, fileURL: URL?, tint: Color) -> some View {
-        let snapshot = preview.snapshot(for: target)
-        let liveBands = preview.liveBandLevels[target] ?? AudioBandCatalog.previewBands.map {
-            LiveBandSample(id: $0.id, label: $0.label, level: 0)
-        }
-        let isActive = preview.activeTarget == target
-        let comparisonSide = preview.comparisonSide(for: target)
-        let playbackState = preview.playbackState(for: target)
-
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(title)
-                    .font(.headline)
-                if let comparisonSide, preview.isInComparisonPair(target) {
-                    Text(preview.comparisonPair.title(for: comparisonSide))
-                        .font(.caption.bold())
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(isActive ? tint.opacity(0.22) : Color.secondary.opacity(0.12)))
-                }
-                Spacer()
-                Text(preview.playbackTimeText(for: target))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-
-            Text(fileURL?.lastPathComponent ?? "まだ確認できません")
-                .lineLimit(2)
-                .foregroundStyle(fileURL == nil ? .secondary : .primary)
-
-            waveformPreview(snapshot: snapshot, tint: tint, progress: preview.playbackProgress(for: target))
-
-            VStack(spacing: 6) {
-                ForEach(liveBands) { band in
-                    HStack(spacing: 8) {
-                        Text(band.label)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 34, alignment: .leading)
-                        GeometryReader { proxy in
-                            ZStack(alignment: .leading) {
-                                Capsule()
-                                    .fill(Color.secondary.opacity(0.12))
-                                Capsule()
-                                    .fill(tint.opacity(isActive ? 0.95 : 0.45))
-                                    .frame(width: proxy.size.width * band.level)
-                            }
-                        }
-                        .frame(height: 6)
-                    }
-                    .frame(height: 10)
-                }
-            }
-
-            HStack(spacing: 8) {
-                Button(primaryPlaybackButtonTitle(for: target)) {
-                    preview.startPlayback(for: fileURL, target: target)
-                }
-                .disabled(fileURL == nil || playbackState == .playing)
-
-                Button("一時停止") {
-                    preview.pausePlayback(target: target)
-                }
-                .disabled(playbackState != .playing)
-
-                Button("停止") {
-                    preview.stopPlayback(target: target)
-                }
-                .disabled(fileURL == nil || playbackState == .stopped)
-
-                if let fileURL {
-                    Button("Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-                    }
-                }
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(.regularMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(tint.opacity(0.25), lineWidth: 1)
-                )
-        )
-    }
-
-    private func primaryPlaybackButtonTitle(for target: AudioPreviewTarget) -> String {
-        switch preview.playbackState(for: target) {
-        case .paused:
-            return "再開"
-        case .playing, .stopped:
-            return "再生"
-        }
-    }
-
-    private func waveformPreview(snapshot: AudioPreviewSnapshot, tint: Color, progress: Double) -> some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let points = snapshot.waveform
-            let clampedProgress = max(0, min(1, progress))
-
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.secondary.opacity(0.08))
-
-                if !points.isEmpty {
-                    Canvas { context, size in
-                        let step = size.width / CGFloat(max(points.count - 1, 1))
-                        var path = Path()
-                        path.move(to: CGPoint(x: 0, y: size.height / 2))
-
-                        for (index, sample) in points.enumerated() {
-                            let x = CGFloat(index) * step
-                            let amplitude = CGFloat(sample) * size.height * 0.42
-                            path.addLine(to: CGPoint(x: x, y: size.height / 2 - amplitude))
-                        }
-
-                        for (index, sample) in points.enumerated().reversed() {
-                            let x = CGFloat(index) * step
-                            let amplitude = CGFloat(sample) * size.height * 0.42
-                            path.addLine(to: CGPoint(x: x, y: size.height / 2 + amplitude))
-                        }
-
-                        path.closeSubpath()
-                        context.fill(path, with: .color(tint.opacity(0.28)))
-                    }
-                }
-
-                Rectangle()
-                    .fill(tint)
-                    .frame(width: 2)
-                    .offset(x: width * clampedProgress)
-                    .opacity(snapshot.duration > 0 ? 1 : 0)
-            }
-        }
-        .frame(height: 54)
     }
 
     private var correctionActionSection: some View {
@@ -1832,10 +1594,10 @@ struct ContentView: View {
 
     private func startCorrectionProcessing() {
         guard let inputFile = job.inputFile else { return }
+        let selectionID = inputSelectionID
+        job.beginProcessing()
 
         Task {
-            job.beginProcessing()
-
             do {
                 let outputFile = try await AudioProcessingService().process(
                     inputFile: inputFile,
@@ -1844,10 +1606,6 @@ struct ContentView: View {
                     Task { @MainActor in
                         job.appendLog(message)
                     }
-                }
-
-                await MainActor.run {
-                    job.beginMetricAnalysis()
                 }
 
                 async let correctedSnapshotTask: AudioPreviewSnapshot = Task.detached(priority: .utility) {
@@ -1865,6 +1623,7 @@ struct ContentView: View {
                 let correctedSpectrogram = try await correctedSpectrogramTask
 
                 await MainActor.run {
+                    guard isCurrentInputSelection(selectionID, inputFile: inputFile) else { return }
                     job.finishSuccess(outputFile)
                     preview.preparePreview(for: job.inputFile, target: .input)
                     preview.setPreviewSnapshot(correctedSnapshot, for: .corrected, sourceURL: outputFile)
@@ -1874,6 +1633,7 @@ struct ContentView: View {
                 }
             } catch {
                 await MainActor.run {
+                    guard isCurrentInputSelection(selectionID, inputFile: inputFile) else { return }
                     job.failMetricAnalysis()
                     job.finishFailure(error.localizedDescription)
                 }
@@ -1883,10 +1643,10 @@ struct ContentView: View {
 
     private func startMasteringProcessing() {
         guard let correctedFile = job.outputFile else { return }
+        let selectionID = inputSelectionID
+        job.beginMastering()
 
         Task {
-            job.beginMastering()
-
             do {
                 let masteredFile = try await MasteringService().process(
                     inputFile: correctedFile,
@@ -1895,10 +1655,6 @@ struct ContentView: View {
                     Task { @MainActor in
                         job.appendMasteringLog(message)
                     }
-                }
-
-                await MainActor.run {
-                    job.beginMetricAnalysis()
                 }
 
                 async let masteredSnapshotTask: AudioPreviewSnapshot = Task.detached(priority: .utility) {
@@ -1916,6 +1672,7 @@ struct ContentView: View {
                 let masteredSpectrogram = try await masteredSpectrogramTask
 
                 await MainActor.run {
+                    guard isCurrentMasteringSelection(selectionID, correctedFile: correctedFile) else { return }
                     job.finishMasteringSuccess(masteredFile)
                     preview.setPreviewSnapshot(masteredSnapshot, for: .mastered, sourceURL: masteredFile)
                     job.finishMasteredMetricAnalysis(masteredMetrics)
@@ -1923,6 +1680,7 @@ struct ContentView: View {
                 }
             } catch {
                 await MainActor.run {
+                    guard isCurrentMasteringSelection(selectionID, correctedFile: correctedFile) else { return }
                     job.failMetricAnalysis()
                     job.finishMasteringFailure(error.localizedDescription)
                 }
@@ -1944,12 +1702,10 @@ struct ContentView: View {
         case score(Int)
     }
 
-    private func analyzeMetrics(for url: URL, target: MetricTarget) {
-        Task {
-            await MainActor.run {
-                job.beginMetricAnalysis()
-            }
+    private func analyzeMetrics(for url: URL, target: MetricTarget, selectionID: UUID) {
+        job.beginMetricAnalysis()
 
+        Task {
             do {
                 let metrics = try await Task.detached(priority: .utility) {
                     try AudioComparisonService.analyze(fileURL: url)
@@ -1959,6 +1715,7 @@ struct ContentView: View {
                 }.value
 
                 await MainActor.run {
+                    guard isCurrentMetricSelection(target: target, selectionID: selectionID, fileURL: url) else { return }
                     switch target {
                     case .input:
                         job.finishInputMetricAnalysis(metrics)
@@ -1973,6 +1730,7 @@ struct ContentView: View {
                 }
             } catch {
                 await MainActor.run {
+                    guard isCurrentMetricSelection(target: target, selectionID: selectionID, fileURL: url) else { return }
                     job.failMetricAnalysis()
                 }
             }
@@ -1983,6 +1741,16 @@ struct ContentView: View {
         preview.preparePreview(for: job.inputFile, target: .input)
         preview.preparePreview(for: job.hasExistingOutput ? job.outputFile : nil, target: .corrected)
         preview.preparePreview(for: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil, target: .mastered)
+    }
+
+    @discardableResult
+    private func beginInputSelection(for url: URL) -> UUID {
+        let selectionID = UUID()
+        inputSelectionID = selectionID
+        job.prepareForSelection(url)
+        preview.stopPlayback()
+        preparePreviewCards()
+        return selectionID
     }
 
     private func exportCorrectedAudio() {
@@ -2062,14 +1830,24 @@ struct ContentView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func comparisonFileURL(for side: AudioComparisonSide) -> URL? {
-        switch preview.comparisonTarget(for: side) {
+    private func isCurrentInputSelection(_ selectionID: UUID, inputFile: URL) -> Bool {
+        inputSelectionID == selectionID && job.inputFile == inputFile
+    }
+
+    private func isCurrentMasteringSelection(_ selectionID: UUID, correctedFile: URL) -> Bool {
+        inputSelectionID == selectionID && job.outputFile == correctedFile
+    }
+
+    private func isCurrentMetricSelection(target: MetricTarget, selectionID: UUID, fileURL: URL) -> Bool {
+        guard inputSelectionID == selectionID else { return false }
+
+        switch target {
         case .input:
-            return job.inputFile
+            return job.inputFile == fileURL
         case .corrected:
-            return job.hasExistingOutput ? job.outputFile : nil
+            return job.outputFile == fileURL
         case .mastered:
-            return job.hasExistingMasteredOutput ? job.masteredOutputFile : nil
+            return job.masteredOutputFile == fileURL
         }
     }
 

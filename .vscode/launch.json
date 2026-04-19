@@ -19,6 +19,26 @@
             "target": "SpectralLifter",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release SpectralLifter"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Veloura Lucent}",
+            "name": "Debug VelouraLucent",
+            "target": "VelouraLucent",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug VelouraLucent"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Veloura Lucent}",
+            "name": "Release VelouraLucent",
+            "target": "VelouraLucent",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release VelouraLucent"
         }
     ]
 }
