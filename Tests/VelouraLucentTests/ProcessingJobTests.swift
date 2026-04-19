@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import SpectralLifter
+@testable import VelouraLucent
 
 @MainActor
 struct ProcessingJobTests {

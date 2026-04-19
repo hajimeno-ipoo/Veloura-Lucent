@@ -37,7 +37,7 @@ struct AudioProcessingService {
         let fileName = inputFile.deletingPathExtension().lastPathComponent
         let ext = inputFile.pathExtension
         let tempDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SpectralLifterPreview", isDirectory: true)
+            .appendingPathComponent("VelouraLucentPreview", isDirectory: true)
         try? FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
         let sanitizedName = shortPreviewBaseName(from: fileName)
         let shortID = String(UUID().uuidString.prefix(6)).lowercased()

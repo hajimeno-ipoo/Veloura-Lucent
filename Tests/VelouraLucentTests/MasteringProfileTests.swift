@@ -1,5 +1,5 @@
 import Testing
-@testable import SpectralLifter
+@testable import VelouraLucent
 
 struct MasteringProfileTests {
     @Test

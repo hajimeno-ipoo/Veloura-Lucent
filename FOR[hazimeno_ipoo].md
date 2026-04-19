@@ -1,4 +1,4 @@
-# Spectral Lifter Plus の概要
+# Veloura Lucent の概要
 
 ## これは何をするアプリか
 - 音声ファイルを読み込みます。
@@ -37,17 +37,17 @@ Macアプリ(SwiftUI)
 ```
 
 ## コードベースの構造
-- `Sources/SpectralLifter/App/`
+- `Sources/VelouraLucent/App/`
   - アプリの起動です。
-- `Sources/SpectralLifter/Views/`
+- `Sources/VelouraLucent/Views/`
   - 画面です。差分サマリー、スペクトログラム、比較表示もここです。
-- `Sources/SpectralLifter/Models/`
+- `Sources/VelouraLucent/Models/`
   - 画面の状態、ノイズ除去の強さ、マスタリング設定です。
-- `Sources/SpectralLifter/Services/`
+- `Sources/VelouraLucent/Services/`
   - 補正処理、ノイズ除去、マスタリング処理、比較用メトリクス計算、音声ファイルの読み書き、ファイル選択などです。
-- `Sources/SpectralLifter/Support/`
+- `Sources/VelouraLucent/Support/`
   - FFT まわりなどの共通処理です。
-- `Tests/SpectralLifterTests/`
+- `Tests/VelouraLucentTests/`
   - 動作確認用のテストです。
 - `script/build_and_run.sh`
   - ビルドしてアプリを起動するスクリプトです。

@@ -44,7 +44,7 @@ struct MasteringService {
         let baseName = fileName.hasSuffix("_mastered") ? fileName : "\(fileName)_mastered"
         let ext = inputFile.pathExtension
         let tempDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SpectralLifterPreview", isDirectory: true)
+            .appendingPathComponent("VelouraLucentPreview", isDirectory: true)
         try? FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
         let sanitizedName = shortPreviewBaseName(from: baseName)
         let shortID = String(UUID().uuidString.prefix(6)).lowercased()

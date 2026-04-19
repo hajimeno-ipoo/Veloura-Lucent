@@ -50,7 +50,7 @@ struct ContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Spectral Lifter")
+            Text("Veloura Lucent")
                 .font(.largeTitle.bold())
             Text("補正で荒れを整えたあと、別機能のマスタリングで仕上げまで行います。")
                 .foregroundStyle(.secondary)

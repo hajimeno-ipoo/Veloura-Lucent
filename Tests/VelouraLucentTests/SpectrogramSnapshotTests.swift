@@ -1,29 +1,22 @@
 import AVFoundation
 import Foundation
 import Testing
-@testable import SpectralLifter
+@testable import VelouraLucent
 
-struct AudioComparisonServiceTests {
+struct SpectrogramSnapshotTests {
     @Test
-    func comparisonMetricsAreComputed() throws {
+    func spectrogramSnapshotContainsCells() throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
-        let fileURL = tempDirectory.appending(path: "analysis.wav")
+        let fileURL = tempDirectory.appending(path: "spectrogram.wav")
 
         try makeTestTone(at: fileURL)
 
-        let metrics = try AudioComparisonService.analyze(fileURL: fileURL)
+        let snapshot = try AudioFileService.makeSpectrogramSnapshot(for: fileURL)
 
-        #expect(metrics.peakDBFS.isFinite)
-        #expect(metrics.rmsDBFS.isFinite)
-        #expect(metrics.integratedLoudnessLUFS.isFinite)
-        #expect(metrics.truePeakDBFS.isFinite)
-        #expect(metrics.stereoWidth >= 0)
-        #expect(metrics.harshnessScore >= 0)
-        #expect(metrics.centroidHz > 0)
-        #expect(metrics.hf12Ratio >= 0)
-        #expect(metrics.bandEnergies.count == 4)
-        #expect(metrics.masteringBandEnergies.count == 4)
+        #expect(snapshot.cells.isEmpty == false)
+        #expect(snapshot.timeBucketCount > 0)
+        #expect(snapshot.frequencyBucketCount > 0)
     }
 
     private func makeTestTone(at url: URL) throws {
@@ -34,7 +27,8 @@ struct AudioComparisonServiceTests {
         buffer.frameLength = AVAudioFrameCount(frameCount)
         let channel = buffer.floatChannelData![0]
         for index in 0..<frameCount {
-            channel[index] = Float(sin(2 * Double.pi * 440 * Double(index) / sampleRate) * 0.1)
+            let t = Double(index) / sampleRate
+            channel[index] = Float(sin(2 * Double.pi * 440 * t) * 0.1 + sin(2 * Double.pi * 4000 * t) * 0.03)
         }
         let file = try AVAudioFile(
             forWriting: url,

@@ -9,11 +9,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct SpectralLifterApp: App {
+struct VelouraLucentApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("Veloura Lucent") {
             ContentView()
         }
         .defaultSize(width: 760, height: 520)

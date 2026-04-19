@@ -2,22 +2,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "SpectralLifter",
+    name: "VelouraLucent",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "SpectralLifter", targets: ["SpectralLifter"])
+        .executable(name: "VelouraLucent", targets: ["VelouraLucent"])
     ],
     targets: [
         .executableTarget(
-            name: "SpectralLifter",
-            path: "Sources/SpectralLifter"
+            name: "VelouraLucent",
+            path: "Sources/VelouraLucent"
         ),
         .testTarget(
-            name: "SpectralLifterTests",
-            dependencies: ["SpectralLifter"],
-            path: "Tests/SpectralLifterTests"
+            name: "VelouraLucentTests",
+            dependencies: ["VelouraLucent"],
+            path: "Tests/VelouraLucentTests"
         )
     ]
 )
