@@ -930,7 +930,7 @@ struct ContentView: View {
 
             Chart(points) { point in
                 LineMark(
-                    x: .value("帯域", point.label),
+                    x: .value("帯域順", point.order),
                     y: .value("レベル", point.value)
                 )
                 .foregroundStyle(by: .value("系列", point.series))
@@ -938,7 +938,7 @@ struct ContentView: View {
                 .lineStyle(.init(lineWidth: 3))
 
                 PointMark(
-                    x: .value("帯域", point.label),
+                    x: .value("帯域順", point.order),
                     y: .value("レベル", point.value)
                 )
                 .foregroundStyle(by: .value("系列", point.series))
@@ -950,12 +950,17 @@ struct ContentView: View {
                 "補正後": Color.green,
                 "最終版": Color.orange
             ])
+            .chartXScale(domain: -0.2 ... Double(AudioBandCatalog.comparisonBands.count - 1) + 0.35)
             .chartYScale(domain: minValue ... maxValue)
             .chartXAxis {
-                AxisMarks(values: AudioBandCatalog.masteringBands.map(\.label)) { value in
+                AxisMarks(values: Array(0..<AudioBandCatalog.comparisonBands.count)) { value in
                     AxisGridLine()
                     AxisTick()
-                    AxisValueLabel()
+                    AxisValueLabel {
+                        if let index = value.as(Int.self), AudioBandCatalog.comparisonBands.indices.contains(index) {
+                            Text(AudioBandCatalog.comparisonBands[index].label)
+                        }
+                    }
                 }
             }
             .chartYAxis {
@@ -1065,7 +1070,9 @@ struct ContentView: View {
         corrected: AudioMetricSnapshot?,
         mastered: AudioMetricSnapshot?
     ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let rows = comparisonMetricRows(input: input, corrected: corrected, mastered: mastered)
+
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("主な数値")
                     .font(.title3.weight(.bold))
@@ -1077,31 +1084,30 @@ struct ContentView: View {
                 )
             }
 
-            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 14) {
-                GridRow {
-                    Text("項目")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text("入力")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text("補正後")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text("最終版")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
+            GeometryReader { proxy in
+                let layout = metricTableLayout(for: proxy.size.width)
+                let rowCount = rows.count + 1
+                let dividerTotal = CGFloat(rowCount - 1)
+                let usableHeight = max(proxy.size.height - dividerTotal, 0)
+                let rowHeight = max(42, usableHeight / CGFloat(rowCount))
 
-                metricsTableRow(item: mainMetricDefinitions[0], input: input.integratedLoudnessLUFS, corrected: corrected?.integratedLoudnessLUFS, mastered: mastered?.integratedLoudnessLUFS, format: .lufs)
-                metricsTableRow(item: mainMetricDefinitions[1], input: input.truePeakDBFS, corrected: corrected?.truePeakDBFS, mastered: mastered?.truePeakDBFS, format: .dBFS)
-                metricsTableRow(item: mainMetricDefinitions[2], input: input.stereoWidth, corrected: corrected?.stereoWidth, mastered: mastered?.stereoWidth, format: .ratio(2))
-                metricsTableRow(item: mainMetricDefinitions[3], input: input.harshnessScore, corrected: corrected?.harshnessScore, mastered: mastered?.harshnessScore, format: .score(2))
-                metricsTableRow(item: bandTermDefinitions[0], input: inputBandValue(input, id: "low"), corrected: corrected.flatMap { inputBandValue($0, id: "low") }, mastered: mastered.flatMap { inputBandValue($0, id: "low") }, format: .dBFS)
-                metricsTableRow(item: bandTermDefinitions[1], input: inputBandValue(input, id: "lowMid"), corrected: corrected.flatMap { inputBandValue($0, id: "lowMid") }, mastered: mastered.flatMap { inputBandValue($0, id: "lowMid") }, format: .dBFS)
-                metricsTableRow(item: bandTermDefinitions[2], input: inputBandValue(input, id: "presence"), corrected: corrected.flatMap { inputBandValue($0, id: "presence") }, mastered: mastered.flatMap { inputBandValue($0, id: "presence") }, format: .dBFS)
-                metricsTableRow(item: bandTermDefinitions[3], input: inputBandValue(input, id: "air"), corrected: corrected.flatMap { inputBandValue($0, id: "air") }, mastered: mastered.flatMap { inputBandValue($0, id: "air") }, format: .dBFS)
+                VStack(spacing: 0) {
+                    metricTableHeader(layout: layout)
+                        .frame(height: rowHeight, alignment: .center)
+                    Divider()
+
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        metricTableValueRow(row, layout: layout)
+                            .frame(height: rowHeight, alignment: .center)
+
+                        if index < rows.count - 1 {
+                            Divider()
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 470, alignment: .topLeading)
@@ -1225,12 +1231,37 @@ struct ContentView: View {
         }
     }
 
-    private func metricsTableRow(item: TermDefinition, input: Double?, corrected: Double?, mastered: Double?, format: MetricFormat) -> GridRow<some View> {
-        GridRow {
-            termLabel(item: item)
-            metricsTableValue(input, format: format, tint: .blue)
-            metricsTableValue(corrected, format: format, tint: .green)
-            metricsTableValue(mastered, format: format, tint: .orange)
+    private func metricTableHeader(layout: MetricTableLayout) -> some View {
+        HStack(spacing: 0) {
+            Text("項目")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: layout.labelWidth, alignment: .leading)
+            Text("入力")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: layout.valueWidth, alignment: .leading)
+            Text("補正後")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: layout.valueWidth, alignment: .leading)
+            Text("最終版")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: layout.valueWidth, alignment: .leading)
+        }
+    }
+
+    private func metricTableValueRow(_ row: MetricTableRow, layout: MetricTableLayout) -> some View {
+        HStack(spacing: 0) {
+            termLabel(item: row.item)
+                .frame(width: layout.labelWidth, alignment: .leading)
+            metricsTableValue(row.input, format: row.format, tint: .blue)
+                .frame(width: layout.valueWidth, alignment: .leading)
+            metricsTableValue(row.corrected, format: row.format, tint: .green)
+                .frame(width: layout.valueWidth, alignment: .leading)
+            metricsTableValue(row.mastered, format: row.format, tint: .orange)
+                .frame(width: layout.valueWidth, alignment: .leading)
         }
     }
 
@@ -1238,6 +1269,29 @@ struct ContentView: View {
         Text(value.map { formattedValue($0, format: format) } ?? "--")
             .font(.title3.monospacedDigit().weight(.semibold))
             .foregroundStyle(value == nil ? .secondary : tint)
+    }
+
+    private func comparisonMetricRows(
+        input: AudioMetricSnapshot,
+        corrected: AudioMetricSnapshot?,
+        mastered: AudioMetricSnapshot?
+    ) -> [MetricTableRow] {
+        [
+            MetricTableRow(item: mainMetricDefinitions[0], input: input.integratedLoudnessLUFS, corrected: corrected?.integratedLoudnessLUFS, mastered: mastered?.integratedLoudnessLUFS, format: .lufs),
+            MetricTableRow(item: mainMetricDefinitions[1], input: input.truePeakDBFS, corrected: corrected?.truePeakDBFS, mastered: mastered?.truePeakDBFS, format: .dBFS),
+            MetricTableRow(item: mainMetricDefinitions[2], input: input.stereoWidth, corrected: corrected?.stereoWidth, mastered: mastered?.stereoWidth, format: .ratio(2)),
+            MetricTableRow(item: mainMetricDefinitions[3], input: input.harshnessScore, corrected: corrected?.harshnessScore, mastered: mastered?.harshnessScore, format: .score(2)),
+            MetricTableRow(item: bandTermDefinitions[0], input: inputBandValue(input, id: "low"), corrected: corrected.flatMap { inputBandValue($0, id: "low") }, mastered: mastered.flatMap { inputBandValue($0, id: "low") }, format: .dBFS),
+            MetricTableRow(item: bandTermDefinitions[1], input: inputBandValue(input, id: "lowMid"), corrected: corrected.flatMap { inputBandValue($0, id: "lowMid") }, mastered: mastered.flatMap { inputBandValue($0, id: "lowMid") }, format: .dBFS),
+            MetricTableRow(item: bandTermDefinitions[2], input: inputBandValue(input, id: "presence"), corrected: corrected.flatMap { inputBandValue($0, id: "presence") }, mastered: mastered.flatMap { inputBandValue($0, id: "presence") }, format: .dBFS),
+            MetricTableRow(item: bandTermDefinitions[3], input: inputBandValue(input, id: "air"), corrected: corrected.flatMap { inputBandValue($0, id: "air") }, mastered: mastered.flatMap { inputBandValue($0, id: "air") }, format: .dBFS)
+        ]
+    }
+
+    private func metricTableLayout(for width: CGFloat) -> MetricTableLayout {
+        let labelWidth = max(165, width * 0.30)
+        let valueWidth = max(110, (width - labelWidth) / 3)
+        return MetricTableLayout(labelWidth: labelWidth, valueWidth: valueWidth)
     }
 
     private func inputBandValue(_ metrics: AudioMetricSnapshot, id: String) -> Double? {
@@ -1410,6 +1464,20 @@ struct ContentView: View {
         let label: String
         let series: String
         let value: Double
+    }
+
+    private struct MetricTableLayout {
+        let labelWidth: CGFloat
+        let valueWidth: CGFloat
+    }
+
+    private struct MetricTableRow: Identifiable {
+        let id = UUID()
+        let item: TermDefinition
+        let input: Double?
+        let corrected: Double?
+        let mastered: Double?
+        let format: MetricFormat
     }
 
     private struct TermHelpButton: View {
