@@ -4,6 +4,7 @@
 
 - `Veloura Lucent` は、元プロジェクト `relationsuno/Spectral-Lifter` の処理思想を概ね引き継いでいます。
 - 特に、解析、ノイズ除去、高域補完、帯域抑制、LUFS / True Peak の流れはかなり近いです。
+- 現在は、倍音抽出を少し強化し、高域補完に foldover 系の経路を足し、高域ノイズでは粒子感を意識した抑え方に更新しています。
 - 違いは、Python + Librosa / PyTorch 実装ではなく、Swift + 自前DSP 実装に置き換えている点です。
 - さらに、現在のアプリには元プロジェクトにない追加マスタリング段があります。
 
@@ -61,11 +62,11 @@ Veloura Lucent
 | Target Analysis | `core/analysis.py` | `Sources/VelouraLucent/Services/NativeAudioProcessor.swift` | ほぼ対応 |
 | 12k-16kHz ロールオフ検出 | `core/analysis.py` | `AudioAnalyzer.analyze()` | 対応 |
 | シマー成分の確認 | `core/analysis.py` | `AudioAnalyzer.analyze()` | 対応 |
-| 倍音分析 | `core/analysis.py` | `AudioAnalyzer.analyze()` | 対応 |
+| 倍音分析 | `core/analysis.py` | `AudioAnalyzer.analyze()` | 強化して対応 |
 | Digital Denoising | `core/denoising.py` | `SpectralGateDenoiser` | 対応 |
 | Spectral Gate | `core/denoising.py` | `SpectralGateDenoiser.processPass()` | 対応 |
-| Spectral Upscaling | `core/upscaling.py` | `HarmonicUpscaler` | 近い形で対応 |
-| 16kHz以上の再構築 | `core/upscaling.py` | `HarmonicUpscaler.process()` | 対応 |
+| Spectral Upscaling | `core/upscaling.py` | `HarmonicUpscaler` | より近い形で対応 |
+| 16kHz以上の再構築 | `core/upscaling.py` | `HarmonicUpscaler.process()` | foldover系を追加して対応 |
 | トランジェント補強 | `core/upscaling.py` | `AudioAnalyzer.estimateTransientAmount()` + `HarmonicUpscaler.process()` | 対応 |
 | Neural foldover | `core/upscaling.py` | なし | 元も実質ダミー |
 | Dynamics Control | `core/dynamics.py` | `MultibandDynamicsProcessor` | ほぼ対応 |
@@ -109,6 +110,7 @@ Veloura Lucent
 
 - `12kHz-16kHz` のロールオフ位置を見る
 - `300Hz-800Hz` の倍音ピークを見る
+- 倍音寄り成分と打音寄り成分をざっくり分けて、倍音信頼度も作る
 - `10kHz-14kHz` のシマー傾向を見る
 - トランジェント量をざっくり見る
 
@@ -122,6 +124,7 @@ Veloura Lucent
 - STFT ベースの Spectral Gate
 - 静かなフレームからノイズ床を推定
 - 高域寄りで少し強めに効くよう調整
+- 高域の粒子感は、フレーム差分を見て少し強めに抑える
 
 ### 3. 高域補完
 
@@ -132,6 +135,7 @@ Veloura Lucent
 
 - 欠けた高域を埋める方向の補完
 - トランジェントを少し持ち上げる
+- 倍音信頼度に応じて foldover 系の補完を混ぜる
 - 元の Python 版と同じく、実体はヒューリスティック寄り
 
 ### 4. 帯域抑制
@@ -206,6 +210,7 @@ Veloura Lucent
 - README では Neural と見えますが、
 - `core/upscaling.py` の実体は、学習済み重みを使った本格推論ではありません。
 - 実際はヒューリスティックな補完が主です。
+- 現在の Swift 側も同じ方針ですが、foldover 系の経路を追加して、元の狙いへ少し寄せています。
 
 そのため、現在の Swift 実装も「元仕様から大きく外れた」のではなく、
 「元の軽量実装をローカルアプリに置き換えた」と考えるほうが近いです。
@@ -233,6 +238,7 @@ Veloura Lucent
 - 特に、帯域設計と処理順は近いです。
 - いちばん大きな違いは、技術スタックと UI です。
 - さらに、現在のアプリは元プロジェクトより後段のマスタリング機能が増えています。
+- 補正段については、最近の更新で倍音分析、高域補完、高域ノイズ抑制が一段だけ元の意図に近づいています。
 
 要するに、
 
