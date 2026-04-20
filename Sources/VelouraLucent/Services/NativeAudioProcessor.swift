@@ -40,10 +40,16 @@ private struct AudioAnalyzer {
         let mono = signal.monoMixdown()
         let spectrogram = SpectralDSP.stft(mono)
         guard spectrogram.frameCount > 0 else {
-            return AnalysisData(cutoffFrequency: 16_000, dominantHarmonics: [], hasShimmer: false, shimmerRatio: 0, brightnessRatio: 0, transientAmount: 0)
+            return AnalysisData(cutoffFrequency: 16_000, dominantHarmonics: [], harmonicConfidence: 0, hasShimmer: false, shimmerRatio: 0, brightnessRatio: 0, transientAmount: 0)
         }
 
-        let meanSpectrum = SpectralDSP.medianFilter(spectrogram.meanMagnitudes(), windowSize: 5)
+        let magnitudes = spectrogram.magnitudes()
+        let separated = separateHarmonicAndPercussive(magnitudes: magnitudes)
+        let harmonicSpectrum = SpectralDSP.medianFilter(meanSpectrum(of: separated.harmonic), windowSize: 7)
+        let percussiveSpectrum = SpectralDSP.medianFilter(meanSpectrum(of: separated.percussive), windowSize: 5)
+        let meanSpectrum = zip(harmonicSpectrum, percussiveSpectrum).map { harmonic, percussive in
+            harmonic * 0.78 + percussive * 0.22
+        }
 
         let frequencyStep = signal.sampleRate / Double(spectrogram.fftSize)
         let decibels = SpectralDSP.amplitudeToDecibels(meanSpectrum)
@@ -64,11 +70,14 @@ private struct AudioAnalyzer {
         let harmonicStart = Int(300 / frequencyStep)
         let harmonicEnd = min(Int(800 / frequencyStep), meanSpectrum.count - 1)
         var peaks: [HarmonicPeak] = []
+        var harmonicSupport: Float = 0
         if harmonicEnd > harmonicStart + 1 {
             for index in (harmonicStart + 1)..<harmonicEnd {
-                let value = meanSpectrum[index]
-                if value > meanSpectrum[index - 1], value >= meanSpectrum[index + 1], value > 0.1 {
+                let value = harmonicSpectrum[index]
+                let localFloor = max(0.015, (harmonicSpectrum[max(harmonicStart, index - 4)...min(harmonicEnd, index + 4)].reduce(0, +) / Float(min(harmonicEnd, index + 4) - max(harmonicStart, index - 4) + 1)) * 1.08)
+                if value > harmonicSpectrum[index - 1], value >= harmonicSpectrum[index + 1], value > localFloor {
                     peaks.append(HarmonicPeak(frequency: Double(index) * frequencyStep, magnitude: value))
+                    harmonicSupport += value
                 }
             }
         }
@@ -83,15 +92,68 @@ private struct AudioAnalyzer {
         let brightnessRatio = Float(centroid / max(signal.sampleRate * 0.5, 1))
         let transientAmount = estimateTransientAmount(mono)
         let shimmerRatio = shimmerEnergy / max(bodyEnergy + upperBandEnergy, 1e-6)
+        let harmonicConfidence = min(1.2, harmonicSupport / max(harmonicSupport + percussiveSpectrum[harmonicStart...harmonicEnd].reduce(0, +), 1e-6))
 
         return AnalysisData(
             cutoffFrequency: cutoff,
             dominantHarmonics: peaks.sorted { $0.magnitude > $1.magnitude }.prefix(8).map { $0 },
+            harmonicConfidence: harmonicConfidence,
             hasShimmer: shimmerEnergy > bodyEnergy * 0.05 || steepestDrop < -4,
             shimmerRatio: shimmerRatio,
             brightnessRatio: brightnessRatio,
             transientAmount: transientAmount
         )
+    }
+
+    private func separateHarmonicAndPercussive(magnitudes: [[Float]]) -> (harmonic: [[Float]], percussive: [[Float]]) {
+        guard let firstFrame = magnitudes.first, !firstFrame.isEmpty else {
+            return (magnitudes, magnitudes)
+        }
+
+        let frameCount = magnitudes.count
+        let binCount = firstFrame.count
+        var temporalMedian = Array(repeating: Array(repeating: Float.zero, count: binCount), count: frameCount)
+        var spectralMedian = Array(repeating: Array(repeating: Float.zero, count: binCount), count: frameCount)
+
+        for binIndex in 0..<binCount {
+            let history = magnitudes.map { $0[binIndex] }
+            let filtered = SpectralDSP.medianFilter(history, windowSize: 17)
+            for frameIndex in 0..<frameCount {
+                temporalMedian[frameIndex][binIndex] = filtered[frameIndex]
+            }
+        }
+
+        for frameIndex in 0..<frameCount {
+            spectralMedian[frameIndex] = SpectralDSP.medianFilter(magnitudes[frameIndex], windowSize: 9)
+        }
+
+        var harmonic = Array(repeating: Array(repeating: Float.zero, count: binCount), count: frameCount)
+        var percussive = Array(repeating: Array(repeating: Float.zero, count: binCount), count: frameCount)
+
+        for frameIndex in 0..<frameCount {
+            for binIndex in 0..<binCount {
+                let harmonicWeight = temporalMedian[frameIndex][binIndex]
+                let percussiveWeight = spectralMedian[frameIndex][binIndex]
+                let total = max(harmonicWeight + percussiveWeight, 1e-6)
+                let magnitude = magnitudes[frameIndex][binIndex]
+                harmonic[frameIndex][binIndex] = magnitude * harmonicWeight / total
+                percussive[frameIndex][binIndex] = magnitude * percussiveWeight / total
+            }
+        }
+
+        return (harmonic, percussive)
+    }
+
+    private func meanSpectrum(of magnitudes: [[Float]]) -> [Float] {
+        guard let firstFrame = magnitudes.first else { return [] }
+        var means = Array(repeating: Float.zero, count: firstFrame.count)
+        for frame in magnitudes {
+            for binIndex in frame.indices {
+                means[binIndex] += frame[binIndex]
+            }
+        }
+        let scale = 1 / Float(max(magnitudes.count, 1))
+        return means.map { $0 * scale }
     }
 
     private func estimateTransientAmount(_ signal: [Float]) -> Float {
@@ -112,11 +174,11 @@ private struct SpectralGateDenoiser {
     private var tuning: DenoiseTuning {
         switch strength {
         case .gentle:
-            return DenoiseTuning(passes: 1, thresholdMultiplier: 1.28, lowBandFloor: 0.22, highBandFloor: 0.33, quietPercentile: 16, transientProtection: 0.28)
+            return DenoiseTuning(passes: 1, thresholdMultiplier: 1.28, lowBandFloor: 0.22, highBandFloor: 0.33, quietPercentile: 16, transientProtection: 0.28, granularReduction: 0.18)
         case .balanced:
-            return DenoiseTuning(passes: 2, thresholdMultiplier: 1.46, lowBandFloor: 0.16, highBandFloor: 0.28, quietPercentile: 20, transientProtection: 0.22)
+            return DenoiseTuning(passes: 2, thresholdMultiplier: 1.46, lowBandFloor: 0.16, highBandFloor: 0.28, quietPercentile: 20, transientProtection: 0.22, granularReduction: 0.26)
         case .strong:
-            return DenoiseTuning(passes: 3, thresholdMultiplier: 1.68, lowBandFloor: 0.11, highBandFloor: 0.22, quietPercentile: 26, transientProtection: 0.16)
+            return DenoiseTuning(passes: 3, thresholdMultiplier: 1.68, lowBandFloor: 0.11, highBandFloor: 0.22, quietPercentile: 26, transientProtection: 0.16, granularReduction: 0.34)
         }
     }
 
@@ -136,6 +198,7 @@ private struct SpectralGateDenoiser {
         guard spectrogram.frameCount > 0 else { return channel }
         let binCount = spectrogram.binCount
         var noiseProfile = Array(repeating: Float.zero, count: binCount)
+        var granularProfile = Array(repeating: Float.zero, count: binCount)
         let frameEnergy = spectrogram.frameAverageMagnitudes()
         let quietThreshold = SpectralDSP.percentile(frameEnergy, tuning.quietPercentile)
         let quietFrameIndices = frameEnergy.enumerated().compactMap { index, value in
@@ -144,6 +207,7 @@ private struct SpectralGateDenoiser {
         let sourceFrameIndices = quietFrameIndices.isEmpty ? Array(0..<spectrogram.frameCount) : quietFrameIndices
         var noiseSums = Array(repeating: Float.zero, count: binCount)
         var noiseMinimums = Array(repeating: Float.greatestFiniteMagnitude, count: binCount)
+        var granularSums = Array(repeating: Float.zero, count: binCount)
         let smoothedFrameEnergy = SpectralDSP.movingAverage(frameEnergy, windowSize: 7)
 
         for frameIndex in sourceFrameIndices {
@@ -151,6 +215,10 @@ private struct SpectralGateDenoiser {
                 let magnitude = spectrogram.magnitude(frameIndex: frameIndex, binIndex: binIndex)
                 noiseSums[binIndex] += magnitude
                 noiseMinimums[binIndex] = min(noiseMinimums[binIndex], magnitude)
+                if frameIndex > 0 {
+                    let previous = spectrogram.magnitude(frameIndex: frameIndex - 1, binIndex: binIndex)
+                    granularSums[binIndex] += abs(magnitude - previous)
+                }
             }
         }
 
@@ -162,6 +230,8 @@ private struct SpectralGateDenoiser {
             let normalizedBand = Float(binIndex) / Float(max(binCount - 1, 1))
             let highBandBias: Float = 0.94 + powf(normalizedBand, 1.25) * 0.18
             noiseProfile[binIndex] = baseNoise * highBandBias
+            let granularAverage = granularSums[binIndex] / sourceCount
+            granularProfile[binIndex] = granularAverage * max(0, (normalizedBand - 0.42) / 0.58)
         }
 
         for frameIndex in 0..<spectrogram.frameCount {
@@ -173,7 +243,20 @@ private struct SpectralGateDenoiser {
                 let threshold = noiseProfile[binIndex] * tuning.thresholdMultiplier * (0.92 + powf(normalizedBand, 1.1) * 0.24)
                 let floor = tuning.lowBandFloor + (tuning.highBandFloor - tuning.lowBandFloor) * powf(normalizedBand, 1.25)
                 let rawMask = max(floor, min(1.0, (magnitude - threshold) / max(magnitude, 1e-6)))
-                let mask = min(1.0, rawMask + transientLift)
+                let granularActivity: Float
+                if frameIndex > 0 {
+                    let previous = spectrogram.magnitude(frameIndex: frameIndex - 1, binIndex: binIndex)
+                    granularActivity = abs(magnitude - previous)
+                } else {
+                    granularActivity = 0
+                }
+                let granularThreshold = granularProfile[binIndex] * (1.1 + normalizedBand * 0.6)
+                let granularExcess = max(0, granularActivity - granularThreshold)
+                let granularMask = max(
+                    floor,
+                    1 - min(0.72, granularExcess / max(magnitude + granularThreshold, 1e-6)) * tuning.granularReduction
+                )
+                let mask = min(1.0, max(rawMask, granularMask) + transientLift)
                 spectrogram.real[frameIndex][binIndex] *= mask
                 spectrogram.imag[frameIndex][binIndex] *= mask
             }
@@ -190,6 +273,7 @@ private struct DenoiseTuning {
     let highBandFloor: Float
     let quietPercentile: Float
     let transientProtection: Float
+    let granularReduction: Float
 }
 
 private struct MultibandDynamicsProcessor {
@@ -239,26 +323,70 @@ private struct MultibandDynamicsProcessor {
 private struct HarmonicUpscaler {
     func process(signal: AudioSignal, analysis: AnalysisData) -> AudioSignal {
         let cutoff = max(analysis.cutoffFrequency - 1_000, 12_000)
-        let harmonicWeight = min(1.2, 0.6 + Float(analysis.dominantHarmonics.count) * 0.08)
+        let harmonicWeight = min(1.25, 0.55 + Float(analysis.dominantHarmonics.count) * 0.08 + analysis.harmonicConfidence * 0.26)
         let shimmerControl = analysis.hasShimmer ? max(0.65, 1 - analysis.shimmerRatio * 1.4) : 1.0
         let deficiency = Float(max(0, 16_000 - analysis.cutoffFrequency) / 4_000)
         let brightnessBoost = max(0.9, min(1.2, 1.02 + (0.55 - analysis.brightnessRatio) * 0.35))
-        let baseGain = max(0.05, min(0.18, (0.08 + deficiency * 0.08) * harmonicWeight * shimmerControl))
-        let airGain = max(0.10, min(0.42, (0.12 + deficiency * 0.24) * brightnessBoost - analysis.shimmerRatio * 0.03))
-        let transientBoost = max(0.10, min(0.30, 0.14 + analysis.transientAmount * 0.08))
+        let baseGain = max(0.05, min(0.22, (0.08 + deficiency * 0.08) * harmonicWeight * shimmerControl))
+        let airGain = max(0.08, min(0.34, (0.10 + deficiency * 0.18) * brightnessBoost - analysis.shimmerRatio * 0.03))
+        let transientBoost = max(0.08, min(0.24, 0.12 + analysis.transientAmount * 0.06))
+        let foldoverMix = max(0.06, min(0.30, 0.08 + deficiency * 0.16 + analysis.harmonicConfidence * 0.08 - analysis.shimmerRatio * 0.04))
 
         let channels = signal.channels.map { channel in
+            let folded = foldover(channel: channel, sampleRate: signal.sampleRate, cutoff: cutoff, mix: foldoverMix)
             let excited = channel.map { tanhf($0 * 2.8) - tanhf($0 * 1.1) }
             let presence = SpectralDSP.lowPass(SpectralDSP.highPass(excited, cutoff: cutoff, sampleRate: signal.sampleRate), cutoff: 13_500, sampleRate: signal.sampleRate)
             let air = SpectralDSP.highPass(excited, cutoff: 13_500, sampleRate: signal.sampleRate)
             let body = SpectralDSP.lowPass(channel, cutoff: 4_000, sampleRate: signal.sampleRate)
             let transient = SpectralDSP.highPass(zip(channel, body).map(-), cutoff: 2_500, sampleRate: signal.sampleRate)
             return channel.indices.map {
-                let mixed = channel[$0] + presence[$0] * baseGain + air[$0] * airGain + transient[$0] * transientBoost
+                let mixed = channel[$0]
+                    + folded[$0]
+                    + presence[$0] * baseGain
+                    + air[$0] * airGain
+                    + transient[$0] * transientBoost
                 return tanhf(mixed * 0.98)
             }
         }
         return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+    }
+
+    private func foldover(channel: [Float], sampleRate: Double, cutoff: Double, mix: Float) -> [Float] {
+        let spectrogram = SpectralDSP.stft(channel)
+        guard spectrogram.frameCount > 0 else { return Array(repeating: 0, count: channel.count) }
+
+        let frequencyStep = sampleRate / Double(spectrogram.fftSize)
+        let sourceStart = max(1, min(Int(max(cutoff * 0.5, 5_500) / frequencyStep), spectrogram.binCount - 1))
+        let sourceEnd = max(sourceStart, min(Int(min(cutoff * 0.95, 12_000) / frequencyStep), spectrogram.binCount - 1))
+        let targetStart = max(sourceStart + 1, min(Int(16_000 / frequencyStep), spectrogram.binCount - 1))
+        guard sourceEnd > sourceStart, targetStart < spectrogram.binCount else {
+            return Array(repeating: 0, count: channel.count)
+        }
+
+        var foldReal = Array(repeating: Array(repeating: Float.zero, count: spectrogram.binCount), count: spectrogram.frameCount)
+        var foldImag = Array(repeating: Array(repeating: Float.zero, count: spectrogram.binCount), count: spectrogram.frameCount)
+
+        for frameIndex in 0..<spectrogram.frameCount {
+            for sourceBin in sourceStart...sourceEnd {
+                let targetBin = min(spectrogram.binCount - 1, sourceBin * 2)
+                guard targetBin >= targetStart else { continue }
+                let normalizedPosition = Float(targetBin - targetStart) / Float(max(spectrogram.binCount - targetStart - 1, 1))
+                let lift = mix * (1 - normalizedPosition * 0.45)
+                foldReal[frameIndex][targetBin] += spectrogram.real[frameIndex][sourceBin] * lift
+                foldImag[frameIndex][targetBin] += spectrogram.imag[frameIndex][sourceBin] * lift
+            }
+        }
+
+        let folded = Spectrogram(
+            real: foldReal,
+            imag: foldImag,
+            fftSize: spectrogram.fftSize,
+            hopSize: spectrogram.hopSize,
+            originalLength: spectrogram.originalLength,
+            leadingPadding: spectrogram.leadingPadding,
+            trailingPadding: spectrogram.trailingPadding
+        )
+        return SpectralDSP.istft(folded)
     }
 }
 

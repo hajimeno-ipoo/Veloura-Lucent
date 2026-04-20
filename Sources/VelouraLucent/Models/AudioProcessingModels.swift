@@ -66,6 +66,7 @@ struct HarmonicPeak: Sendable {
 struct AnalysisData: Sendable {
     let cutoffFrequency: Double
     let dominantHarmonics: [HarmonicPeak]
+    let harmonicConfidence: Float
     let hasShimmer: Bool
     let shimmerRatio: Float
     let brightnessRatio: Float
