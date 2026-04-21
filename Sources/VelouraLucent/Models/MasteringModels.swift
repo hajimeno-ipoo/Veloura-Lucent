@@ -47,7 +47,9 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
                 deEsserAmount: 0.18,
                 deEsserThresholdDB: -24,
                 stereoWidth: 1.00,
-                saturationAmount: 0.08
+                saturationAmount: 0.08,
+                dynamicsRetention: 0.82,
+                finishingIntensity: 0.35
             )
         case .streaming:
             return MasteringSettings(
@@ -65,7 +67,9 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
                 deEsserAmount: 0.24,
                 deEsserThresholdDB: -24.5,
                 stereoWidth: 1.03,
-                saturationAmount: 0.09
+                saturationAmount: 0.09,
+                dynamicsRetention: 0.68,
+                finishingIntensity: 0.55
             )
         case .forward:
             return MasteringSettings(
@@ -83,7 +87,9 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
                 deEsserAmount: 0.28,
                 deEsserThresholdDB: -25,
                 stereoWidth: 1.05,
-                saturationAmount: 0.11
+                saturationAmount: 0.11,
+                dynamicsRetention: 0.52,
+                finishingIntensity: 0.75
             )
         }
     }
@@ -101,6 +107,8 @@ struct MasteringSettings: Sendable, Equatable {
     var deEsserThresholdDB: Float
     var stereoWidth: Float
     var saturationAmount: Float
+    var dynamicsRetention: Float
+    var finishingIntensity: Float
 }
 
 struct MultibandCompressionSettings: Sendable, Equatable {

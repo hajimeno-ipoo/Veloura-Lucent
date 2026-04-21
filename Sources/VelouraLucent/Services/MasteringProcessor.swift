@@ -2,35 +2,49 @@ import Foundation
 
 struct MasteringProcessor {
     func process(signal: AudioSignal, analysis: MasteringAnalysis, settings: MasteringSettings, logger: AudioProcessingLogger? = nil) -> AudioSignal {
+        let dynamicsRetention = clamped(settings.dynamicsRetention, min: 0, max: 1)
+        let finishingIntensity = clamped(settings.finishingIntensity, min: 0, max: 1)
+
         logger?.log(MasteringStep.tone.rawValue)
-        var current = applyTone(signal: signal, analysis: analysis, settings: settings)
+        var current = applyTone(signal: signal, analysis: analysis, settings: settings, finishingIntensity: finishingIntensity)
 
         logger?.log(MasteringStep.deEss.rawValue)
         current = applyDeEsser(signal: current, analysis: analysis, settings: settings)
 
         logger?.log(MasteringStep.dynamics.rawValue)
-        current = applyMultibandCompression(signal: current, analysis: analysis, settings: settings.multibandCompression)
+        current = applyMultibandCompression(
+            signal: current,
+            analysis: analysis,
+            settings: settings.multibandCompression,
+            dynamicsRetention: dynamicsRetention,
+            finishingIntensity: finishingIntensity
+        )
 
         logger?.log(MasteringStep.saturate.rawValue)
-        current = applySaturation(signal: current, amount: settings.saturationAmount)
+        current = applySaturation(signal: current, amount: effectiveSaturation(settings.saturationAmount, dynamicsRetention: dynamicsRetention, finishingIntensity: finishingIntensity))
 
         logger?.log(MasteringStep.stereo.rawValue)
         current = applyStereoWidth(signal: current, targetWidth: settings.stereoWidth)
 
         logger?.log(MasteringStep.loudness.rawValue)
-        return applyLoudness(signal: current, targetLKFS: settings.targetLoudness, peakCeilingDB: settings.peakCeilingDB)
+        return applyLoudness(
+            signal: current,
+            targetLKFS: effectiveTargetLoudness(settings.targetLoudness, dynamicsRetention: dynamicsRetention, finishingIntensity: finishingIntensity),
+            peakCeilingDB: settings.peakCeilingDB
+        )
     }
 
-    private func applyTone(signal: AudioSignal, analysis: MasteringAnalysis, settings: MasteringSettings) -> AudioSignal {
+    private func applyTone(signal: AudioSignal, analysis: MasteringAnalysis, settings: MasteringSettings, finishingIntensity: Float) -> AudioSignal {
         let lowAdjustmentDB = settings.lowShelfGain + clamped(Float((analysis.midBandLevelDB - analysis.lowBandLevelDB) / 18), min: -0.25, max: 1.2)
         let lowMidAdjustmentDB = settings.lowMidGain - clamped(Float((analysis.lowBandLevelDB - analysis.midBandLevelDB) / 16), min: -0.2, max: 0.7)
         let presenceAdjustmentDB = settings.presenceGain + clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 16), min: -0.2, max: 0.8) - analysis.harshnessScore * 0.32
         let highAdjustmentDB = settings.highShelfGain + clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 18), min: -0.25, max: 0.9) - analysis.harshnessScore * 0.55
+        let toneScale = 0.72 + finishingIntensity * 0.46
 
-        let lowDelta = gainDelta(forDB: lowAdjustmentDB)
-        let lowMidDelta = gainDelta(forDB: lowMidAdjustmentDB)
-        let presenceDelta = gainDelta(forDB: presenceAdjustmentDB)
-        let highDelta = gainDelta(forDB: highAdjustmentDB)
+        let lowDelta = gainDelta(forDB: lowAdjustmentDB) * toneScale
+        let lowMidDelta = gainDelta(forDB: lowMidAdjustmentDB) * toneScale
+        let presenceDelta = gainDelta(forDB: presenceAdjustmentDB) * toneScale
+        let highDelta = gainDelta(forDB: highAdjustmentDB) * toneScale
 
         let channels = signal.channels.map { channel in
             let low = SpectralDSP.lowPass(channel, cutoff: 120, sampleRate: signal.sampleRate)
@@ -98,8 +112,19 @@ struct MasteringProcessor {
         return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
     }
 
-    private func applyMultibandCompression(signal: AudioSignal, analysis: MasteringAnalysis, settings: MultibandCompressionSettings) -> AudioSignal {
-        let adjustedSettings = tunedCompressionSettings(base: settings, analysis: analysis)
+    private func applyMultibandCompression(
+        signal: AudioSignal,
+        analysis: MasteringAnalysis,
+        settings: MultibandCompressionSettings,
+        dynamicsRetention: Float,
+        finishingIntensity: Float
+    ) -> AudioSignal {
+        let adjustedSettings = tunedCompressionSettings(
+            base: settings,
+            analysis: analysis,
+            dynamicsRetention: dynamicsRetention,
+            finishingIntensity: finishingIntensity
+        )
         let channels = signal.channels.map { channel in
             let low = SpectralDSP.lowPass(channel, cutoff: 160, sampleRate: signal.sampleRate)
             let mid = SpectralDSP.lowPass(
@@ -125,30 +150,38 @@ struct MasteringProcessor {
         return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
     }
 
-    private func tunedCompressionSettings(base: MultibandCompressionSettings, analysis: MasteringAnalysis) -> MultibandCompressionSettings {
-        let lowMakeup = base.low.makeupGainDB + clamped(Float((analysis.midBandLevelDB - analysis.lowBandLevelDB) / 20), min: -0.15, max: 0.25)
-        let midMakeup = base.mid.makeupGainDB + clamped(Float((analysis.highBandLevelDB - analysis.midBandLevelDB) / 24), min: -0.10, max: 0.12)
+    private func tunedCompressionSettings(
+        base: MultibandCompressionSettings,
+        analysis: MasteringAnalysis,
+        dynamicsRetention: Float,
+        finishingIntensity: Float
+    ) -> MultibandCompressionSettings {
+        let compressionScale = clamped(0.56 + finishingIntensity * 0.58 - dynamicsRetention * 0.24, min: 0.35, max: 1.10)
+        let makeupScale = clamped(0.62 + finishingIntensity * 0.46 - dynamicsRetention * 0.22, min: 0.35, max: 1.00)
+        let thresholdOffset = dynamicsRetention * 1.4 - finishingIntensity * 0.45
+        let lowMakeup = (base.low.makeupGainDB + clamped(Float((analysis.midBandLevelDB - analysis.lowBandLevelDB) / 20), min: -0.15, max: 0.25)) * makeupScale
+        let midMakeup = (base.mid.makeupGainDB + clamped(Float((analysis.highBandLevelDB - analysis.midBandLevelDB) / 24), min: -0.10, max: 0.12)) * makeupScale
         let highThreshold = base.high.thresholdDB - analysis.harshnessScore * 1.2
-        let highRatio = base.high.ratio + analysis.harshnessScore * 0.18
-        let highMakeup = max(-0.2, base.high.makeupGainDB - analysis.harshnessScore * 0.14)
+        let highRatio = scaledRatio(base.high.ratio + analysis.harshnessScore * 0.18, scale: compressionScale)
+        let highMakeup = max(-0.2, (base.high.makeupGainDB - analysis.harshnessScore * 0.14) * makeupScale)
 
         return MultibandCompressionSettings(
             low: BandCompressorSettings(
-                thresholdDB: base.low.thresholdDB,
-                ratio: base.low.ratio,
+                thresholdDB: base.low.thresholdDB + thresholdOffset,
+                ratio: scaledRatio(base.low.ratio, scale: compressionScale),
                 attackMs: base.low.attackMs,
                 releaseMs: base.low.releaseMs,
                 makeupGainDB: lowMakeup
             ),
             mid: BandCompressorSettings(
-                thresholdDB: base.mid.thresholdDB,
-                ratio: base.mid.ratio,
+                thresholdDB: base.mid.thresholdDB + thresholdOffset,
+                ratio: scaledRatio(base.mid.ratio, scale: compressionScale),
                 attackMs: base.mid.attackMs,
                 releaseMs: base.mid.releaseMs,
                 makeupGainDB: midMakeup
             ),
             high: BandCompressorSettings(
-                thresholdDB: highThreshold,
+                thresholdDB: highThreshold + thresholdOffset,
                 ratio: highRatio,
                 attackMs: base.high.attackMs,
                 releaseMs: base.high.releaseMs,
@@ -281,6 +314,18 @@ struct MasteringProcessor {
         }
 
         return limited
+    }
+
+    private func effectiveSaturation(_ amount: Float, dynamicsRetention: Float, finishingIntensity: Float) -> Float {
+        amount * clamped(0.64 + finishingIntensity * 0.52 - dynamicsRetention * 0.24, min: 0.35, max: 1.10)
+    }
+
+    private func effectiveTargetLoudness(_ target: Float, dynamicsRetention: Float, finishingIntensity: Float) -> Float {
+        target + (finishingIntensity - 0.5) * 0.9 - dynamicsRetention * 0.45
+    }
+
+    private func scaledRatio(_ ratio: Float, scale: Float) -> Float {
+        1 + (max(ratio, 1) - 1) * scale
     }
 
     private func compressionGainReductionDB(envelopeDB: Float, thresholdDB: Float, ratio: Float, kneeWidthDB: Float) -> Float {
