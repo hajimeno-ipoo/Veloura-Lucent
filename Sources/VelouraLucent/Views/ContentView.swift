@@ -706,10 +706,10 @@ struct ContentView: View {
     private var masteringDifferenceSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("マスタリング差分")
+                Text("音源変化の比較")
                     .font(.headline)
                 Spacer()
-                Text("補正後 -> 最終版")
+                Text("入力 -> 補正後 -> 最終版")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -720,10 +720,16 @@ struct ContentView: View {
                     corrected: corrected,
                     mastered: mastered
                 )
-
                 HStack(alignment: .top, spacing: 14) {
                     comparisonRadarCard(stages: stages)
                     comparisonBalanceCurveCard(stages: stages)
+                }
+
+                LazyVGrid(columns: comparisonCardColumns, alignment: .leading, spacing: 14) {
+                    shortTermLoudnessCard(stages: stages)
+                    spectrumComparisonCard(input: job.inputMetrics, corrected: corrected, mastered: mastered)
+                    dynamicsTrendCard(stages: stages)
+                    correlationMeterCard(input: job.inputMetrics, corrected: corrected, mastered: mastered)
                 }
 
                 Text("左で仕上がりの方向、右で帯域の触り方を見比べられます。")
@@ -808,6 +814,191 @@ struct ContentView: View {
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 500, alignment: .topLeading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func shortTermLoudnessCard(stages: [ComparisonStageMetrics]) -> some View {
+        let points = timelinePoints(stages: stages, values: { $0.shortTermLoudness.map { ($0.time, $0.levelDB) } })
+        let values = points.map(\.value)
+        let minValue = floor((values.min() ?? -36) / 2) * 2 - 1
+        let maxValue = ceil((values.max() ?? -12) / 2) * 2 + 1
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("短期ラウドネス")
+                    .font(.headline)
+                Spacer()
+                termHelpButton(
+                    title: "短期ラウドネス",
+                    reading: "たんきらうどねす",
+                    description: "場面ごとの音量感です。線が近づきすぎると、抑揚が少なくなっている可能性があります。"
+                )
+            }
+
+            timelineLineChart(points: points, yTitle: "LUFS", yDomain: minValue ... maxValue)
+                .frame(height: 260)
+
+            chartLegend(stages: stages)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 360, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func dynamicsTrendCard(stages: [ComparisonStageMetrics]) -> some View {
+        let points = timelinePoints(stages: stages, values: { $0.dynamics.map { ($0.time, $0.crestFactorDB) } })
+        let values = points.map(\.value)
+        let minValue = max(0, floor((values.min() ?? 0) / 2) * 2 - 1)
+        let maxValue = ceil((values.max() ?? 12) / 2) * 2 + 1
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("ダイナミクス推移")
+                    .font(.headline)
+                Spacer()
+                termHelpButton(
+                    title: "ダイナミクス推移",
+                    reading: "だいなみくすすいい",
+                    description: "音の山と平均の差です。小さくなりすぎると、音が押し固められている可能性があります。"
+                )
+            }
+
+            timelineLineChart(points: points, yTitle: "Peak - RMS", yDomain: minValue ... maxValue)
+                .frame(height: 260)
+
+            chartLegend(stages: stages)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 360, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func spectrumComparisonCard(input: AudioMetricSnapshot?, corrected: AudioMetricSnapshot, mastered: AudioMetricSnapshot) -> some View {
+        let spectrumPoints = spectrumComparisonPoints(input: input, corrected: corrected, mastered: mastered)
+        let diffPoints = spectrumDeltaPoints(input: input, corrected: corrected, mastered: mastered)
+        let spectrumValues = spectrumPoints.map(\.levelDB)
+        let diffValues = diffPoints.map(\.deltaDB)
+        let spectrumMin = floor((spectrumValues.min() ?? -60) / 3) * 3 - 2
+        let spectrumMax = ceil((spectrumValues.max() ?? -18) / 3) * 3 + 2
+        let diffMin = min(floor((diffValues.min() ?? -3) / 1.5) * 1.5 - 0.5, -0.5)
+        let diffMax = max(ceil((diffValues.max() ?? 3) / 1.5) * 1.5 + 0.5, 0.5)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("平均スペクトル比較")
+                    .font(.headline)
+                Spacer()
+                termHelpButton(
+                    title: "平均スペクトル比較",
+                    reading: "へいきんすぺくとるひかく",
+                    description: "入力、補正後、最終版の周波数ごとの量を重ね、下段で補正と仕上げの差分を見ます。"
+                )
+            }
+
+            averageSpectrumChart(points: spectrumPoints, yDomain: spectrumMin ... spectrumMax)
+                .frame(height: 210)
+
+            spectrumDeltaChart(points: diffPoints, yDomain: diffMin ... diffMax)
+                .frame(height: 150)
+
+            HStack(spacing: 14) {
+                if input != nil {
+                    legendChip(color: .blue, label: "入力", dashed: true)
+                }
+                legendChip(color: .green, label: "補正後", dashed: false)
+                legendChip(color: .orange, label: "最終版", dashed: false)
+                if input != nil {
+                    legendChip(color: .green, label: "差分: 補正後 - 入力", dashed: true)
+                }
+                legendChip(color: .orange, label: "差分: 最終版 - 補正後", dashed: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 500, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func correlationMeterCard(input: AudioMetricSnapshot?, corrected: AudioMetricSnapshot, mastered: AudioMetricSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("相関メーター")
+                    .font(.headline)
+                Spacer()
+                termHelpButton(
+                    title: "相関メーター",
+                    reading: "そうかんめーたー",
+                    description: "左右の音がどれくらい同じ向きで鳴っているかを見る指標です。0より左へ寄るほど、モノラル再生で音が痩せる可能性があります。"
+                )
+            }
+
+            if let input {
+                correlationMeterRow(title: "入力", value: input.stereoCorrelation, tint: .blue)
+            }
+            correlationMeterRow(title: "補正後", value: corrected.stereoCorrelation, tint: .green)
+            correlationMeterRow(title: "最終版", value: mastered.stereoCorrelation, tint: .orange)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("-1")
+                    Spacer()
+                    Text("0")
+                    Spacer()
+                    Text("+1")
+                }
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+
+                Text("右側にあるほどモノラル互換性が高く、左側に入ると位相打ち消しに注意です。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 360, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func correlationMeterRow(title: String, value: Double, tint: Color) -> some View {
+        let clampedValue = max(-1, min(1, value))
+        let normalized = (clampedValue + 1) * 0.5
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(String(format: "%+.2f", clampedValue))
+                    .font(.title3.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(correlationColor(for: clampedValue, tint: tint))
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.secondary.opacity(0.12))
+
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.35))
+                        .frame(width: 1)
+                        .offset(x: proxy.size.width * 0.5)
+
+                    Capsule()
+                        .fill(correlationColor(for: clampedValue, tint: tint))
+                        .frame(width: 12, height: 24)
+                        .offset(x: max(0, min(proxy.size.width - 12, proxy.size.width * normalized - 6)))
+                }
+            }
+            .frame(height: 24)
+        }
+    }
+
+    private func correlationColor(for value: Double, tint: Color) -> Color {
+        if value < 0 {
+            return .red
+        }
+        if value < 0.25 {
+            return .orange
+        }
+        return tint
     }
 
     private func comparisonBalanceCurveCard(stages: [ComparisonStageMetrics]) -> some View {
@@ -965,6 +1156,219 @@ struct ContentView: View {
         }
     }
 
+    private func timelinePoints(
+        stages: [ComparisonStageMetrics],
+        values: (AudioMetricSnapshot) -> [(time: Double, value: Double)]
+    ) -> [TimelineCurvePoint] {
+        stages.flatMap { stage in
+            values(stage.metrics).enumerated().map { index, point in
+                TimelineCurvePoint(
+                    id: "\(stage.id)-\(index)",
+                    time: point.time,
+                    series: stage.label,
+                    value: point.value
+                )
+            }
+        }
+    }
+
+    private func timelineLineChart(points: [TimelineCurvePoint], yTitle: String, yDomain: ClosedRange<Double>) -> some View {
+        Chart(points) { point in
+            LineMark(
+                x: .value("時間", point.time),
+                y: .value(yTitle, point.value)
+            )
+            .foregroundStyle(by: .value("系列", point.series))
+            .interpolationMethod(.catmullRom)
+            .lineStyle(.init(lineWidth: 3))
+        }
+        .chartLegend(.hidden)
+        .chartForegroundStyleScale([
+            "入力": Color.blue,
+            "補正後": Color.green,
+            "最終版": Color.orange
+        ])
+        .chartYScale(domain: yDomain)
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 5)) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    if let seconds = value.as(Double.self) {
+                        Text(String(format: "%.0fs", seconds))
+                    }
+                }
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    if let number = value.as(Double.self) {
+                        Text(String(format: "%.0f", number))
+                    }
+                }
+            }
+        }
+    }
+
+    private func averageSpectrumChart(points: [SpectrumCurvePoint], yDomain: ClosedRange<Double>) -> some View {
+        Chart {
+            RectangleMark(
+                xStart: .value("注目帯域開始", 6_000),
+                xEnd: .value("注目帯域終了", 10_000),
+                yStart: .value("下限", yDomain.lowerBound),
+                yEnd: .value("上限", yDomain.upperBound)
+            )
+            .foregroundStyle(Color.orange.opacity(0.08))
+
+            ForEach(points) { point in
+                LineMark(
+                    x: .value("周波数", point.frequencyHz),
+                    y: .value("レベル", point.levelDB)
+                )
+                .foregroundStyle(by: .value("系列", point.series))
+                .interpolationMethod(.catmullRom)
+                .lineStyle(.init(lineWidth: 3))
+            }
+        }
+        .chartLegend(.hidden)
+        .chartForegroundStyleScale([
+            "入力": Color.blue,
+            "補正後": Color.green,
+            "最終版": Color.orange
+        ])
+        .chartXScale(domain: 80 ... 20_000, type: .log)
+        .chartYScale(domain: yDomain)
+        .chartXAxis {
+            spectrumAxisMarks()
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    if let number = value.as(Double.self) {
+                        Text(String(format: "%.0f dB", number))
+                    }
+                }
+            }
+        }
+    }
+
+    private func spectrumDeltaChart(points: [SpectrumDeltaPoint], yDomain: ClosedRange<Double>) -> some View {
+        Chart {
+            RectangleMark(
+                xStart: .value("注目帯域開始", 6_000),
+                xEnd: .value("注目帯域終了", 10_000),
+                yStart: .value("下限", yDomain.lowerBound),
+                yEnd: .value("上限", yDomain.upperBound)
+            )
+            .foregroundStyle(Color.orange.opacity(0.08))
+
+            RuleMark(y: .value("基準", 0))
+                .foregroundStyle(Color.secondary.opacity(0.35))
+
+            ForEach(points) { point in
+                LineMark(
+                    x: .value("周波数", point.frequencyHz),
+                    y: .value("差分", point.deltaDB)
+                )
+                .foregroundStyle(by: .value("系列", point.series))
+                .interpolationMethod(.catmullRom)
+                .lineStyle(.init(lineWidth: 2.6, dash: [7, 4]))
+            }
+        }
+        .chartLegend(.hidden)
+        .chartForegroundStyleScale([
+            "補正後 - 入力": Color.green,
+            "最終版 - 補正後": Color.orange
+        ])
+        .chartXScale(domain: 80 ... 20_000, type: .log)
+        .chartYScale(domain: yDomain)
+        .chartXAxis {
+            spectrumAxisMarks()
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    if let number = value.as(Double.self) {
+                        Text(String(format: "%+.0f dB", number))
+                    }
+                }
+            }
+        }
+    }
+
+    private func spectrumAxisMarks() -> some AxisContent {
+        AxisMarks(values: [100, 1_000, 4_000, 6_000, 10_000, 20_000]) { value in
+            AxisGridLine()
+            AxisTick()
+            AxisValueLabel {
+                if let frequency = value.as(Double.self) {
+                    Text(frequency >= 1000 ? "\(Int(frequency / 1000))k" : "\(Int(frequency))")
+                }
+            }
+        }
+    }
+
+    private func spectrumComparisonPoints(input: AudioMetricSnapshot?, corrected: AudioMetricSnapshot, mastered: AudioMetricSnapshot) -> [SpectrumCurvePoint] {
+        let inputPoints = input?.averageSpectrum.map {
+            SpectrumCurvePoint(
+                id: "input-\($0.id)",
+                frequencyHz: $0.frequencyHz,
+                series: "入力",
+                levelDB: $0.levelDB
+            )
+        } ?? []
+
+        return inputPoints + corrected.averageSpectrum.map {
+            SpectrumCurvePoint(
+                id: "corrected-\($0.id)",
+                frequencyHz: $0.frequencyHz,
+                series: "補正後",
+                levelDB: $0.levelDB
+            )
+        } + mastered.averageSpectrum.map {
+            SpectrumCurvePoint(
+                id: "mastered-\($0.id)",
+                frequencyHz: $0.frequencyHz,
+                series: "最終版",
+                levelDB: $0.levelDB
+            )
+        }
+    }
+
+    private func spectrumDeltaPoints(input: AudioMetricSnapshot?, corrected: AudioMetricSnapshot, mastered: AudioMetricSnapshot) -> [SpectrumDeltaPoint] {
+        let correctedMap = Dictionary(uniqueKeysWithValues: corrected.averageSpectrum.map { ($0.id, $0) })
+        let masteredMap = Dictionary(uniqueKeysWithValues: mastered.averageSpectrum.map { ($0.id, $0) })
+
+        let correctionDelta = input?.averageSpectrum.compactMap { inputPoint -> SpectrumDeltaPoint? in
+            guard let correctedPoint = correctedMap[inputPoint.id] else { return nil }
+            return SpectrumDeltaPoint(
+                id: "corrected-input-\(inputPoint.id)",
+                frequencyHz: inputPoint.frequencyHz,
+                series: "補正後 - 入力",
+                deltaDB: correctedPoint.levelDB - inputPoint.levelDB
+            )
+        } ?? []
+
+        let masteringDelta = corrected.averageSpectrum.compactMap { correctedPoint -> SpectrumDeltaPoint? in
+            guard let masteredPoint = masteredMap[correctedPoint.id] else { return nil }
+            return SpectrumDeltaPoint(
+                id: "mastered-corrected-\(correctedPoint.id)",
+                frequencyHz: correctedPoint.frequencyHz,
+                series: "最終版 - 補正後",
+                deltaDB: masteredPoint.levelDB - correctedPoint.levelDB
+            )
+        }
+
+        return correctionDelta + masteringDelta
+    }
+
     private func comparisonMetricsTable(
         input: AudioMetricSnapshot,
         corrected: AudioMetricSnapshot?,
@@ -1010,7 +1414,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 470, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 560, alignment: .topLeading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
@@ -1055,7 +1459,7 @@ struct ContentView: View {
             }
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 470, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 560, alignment: .topLeading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
@@ -1368,6 +1772,27 @@ struct ContentView: View {
         let label: String
         let series: String
         let value: Double
+    }
+
+    private struct TimelineCurvePoint: Identifiable {
+        let id: String
+        let time: Double
+        let series: String
+        let value: Double
+    }
+
+    private struct SpectrumCurvePoint: Identifiable {
+        let id: String
+        let frequencyHz: Double
+        let series: String
+        let levelDB: Double
+    }
+
+    private struct SpectrumDeltaPoint: Identifiable {
+        let id: String
+        let frequencyHz: Double
+        let series: String
+        let deltaDB: Double
     }
 
     private struct MetricTableLayout {

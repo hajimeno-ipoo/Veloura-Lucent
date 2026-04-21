@@ -128,6 +128,7 @@ struct AudioMetricSnapshot: Sendable {
     let integratedLoudnessLUFS: Double
     let truePeakDBFS: Double
     let stereoWidth: Double
+    let stereoCorrelation: Double
     let harshnessScore: Double
     let centroidHz: Double
     let hf12Ratio: Double
@@ -135,12 +136,35 @@ struct AudioMetricSnapshot: Sendable {
     let hf18Ratio: Double
     let bandEnergies: [BandEnergyMetric]
     let masteringBandEnergies: [BandEnergyMetric]
+    let shortTermLoudness: [TimedLevelMetric]
+    let dynamics: [DynamicsMetric]
+    let averageSpectrum: [SpectrumMetric]
 }
 
 struct BandEnergyMetric: Sendable, Identifiable {
     let id: String
     let label: String
     let rangeDescription: String
+    let levelDB: Double
+}
+
+struct TimedLevelMetric: Sendable, Identifiable {
+    let id: String
+    let time: Double
+    let levelDB: Double
+}
+
+struct DynamicsMetric: Sendable, Identifiable {
+    let id: String
+    let time: Double
+    let peakDBFS: Double
+    let rmsDBFS: Double
+    let crestFactorDB: Double
+}
+
+struct SpectrumMetric: Sendable, Identifiable {
+    let id: String
+    let frequencyHz: Double
     let levelDB: Double
 }
 

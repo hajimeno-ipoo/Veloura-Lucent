@@ -23,11 +23,19 @@ struct AudioComparisonServiceTests {
         #expect(metrics.crestFactorDB >= 0)
         #expect(metrics.loudnessRangeLU >= 0)
         #expect(metrics.stereoWidth >= 0)
+        #expect(metrics.stereoCorrelation >= -1)
+        #expect(metrics.stereoCorrelation <= 1)
         #expect(metrics.harshnessScore >= 0)
         #expect(metrics.centroidHz > 0)
         #expect(metrics.hf12Ratio >= 0)
         #expect(metrics.bandEnergies.count == 4)
         #expect(metrics.masteringBandEnergies.count == 4)
+        #expect(metrics.shortTermLoudness.isEmpty == false)
+        #expect(metrics.shortTermLoudness.allSatisfy { $0.levelDB.isFinite })
+        #expect(metrics.dynamics.isEmpty == false)
+        #expect(metrics.dynamics.allSatisfy { $0.crestFactorDB.isFinite })
+        #expect(metrics.averageSpectrum.count == 32)
+        #expect(metrics.averageSpectrum.allSatisfy { $0.levelDB.isFinite })
     }
 
     private func makeTestTone(at url: URL) throws {
