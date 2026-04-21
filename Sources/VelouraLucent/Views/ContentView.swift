@@ -2297,7 +2297,7 @@ struct ContentView: View {
         try await Task.detached(priority: .utility) {
             let signal = try AudioFileService.loadAudio(from: url)
             async let previewSnapshot = AudioFileService.makePreviewSnapshot(from: signal)
-            async let metrics = try AudioComparisonService.analyze(signal: signal)
+            async let metrics = try await AudioComparisonService.analyzeConcurrently(signal: signal)
             async let spectrogram = AudioFileService.makeSpectrogramSnapshot(from: signal)
             return try await AudioAnalysisArtifacts(
                 previewSnapshot: previewSnapshot,
@@ -2310,7 +2310,7 @@ struct ContentView: View {
     private func makeMetricAnalysisArtifacts(for url: URL) async throws -> MetricAnalysisArtifacts {
         try await Task.detached(priority: .utility) {
             let signal = try AudioFileService.loadAudio(from: url)
-            async let metrics = try AudioComparisonService.analyze(signal: signal)
+            async let metrics = try await AudioComparisonService.analyzeConcurrently(signal: signal)
             async let spectrogram = AudioFileService.makeSpectrogramSnapshot(from: signal)
             return try await MetricAnalysisArtifacts(metrics: metrics, spectrogram: spectrogram)
         }.value

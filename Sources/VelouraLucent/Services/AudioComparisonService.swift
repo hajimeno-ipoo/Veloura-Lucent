@@ -10,45 +10,104 @@ enum AudioComparisonService {
     static func analyze(signal: AudioSignal) throws -> AudioMetricSnapshot {
         let mono = signal.monoMixdown()
         guard !mono.isEmpty else {
-            return AudioMetricSnapshot(
-                peakDBFS: -120,
-                rmsDBFS: -120,
-                crestFactorDB: 0,
-                loudnessRangeLU: 0,
-                integratedLoudnessLUFS: -70,
-                truePeakDBFS: -120,
-                stereoWidth: 0,
-                stereoCorrelation: 1,
-                harshnessScore: 0,
-                centroidHz: 0,
-                hf12Ratio: 0,
-                hf16Ratio: 0,
-                hf18Ratio: 0,
-                bandEnergies: bandTemplate.map {
-                    BandEnergyMetric(id: $0.id, label: $0.label, rangeDescription: $0.range, levelDB: -120)
-                },
-                masteringBandEnergies: masteringBandTemplate.map {
-                    BandEnergyMetric(id: $0.id, label: $0.label, rangeDescription: $0.range, levelDB: -120)
-                },
-                shortTermLoudness: [],
-                dynamics: [],
-                averageSpectrum: []
-            )
+            return emptySnapshot()
         }
 
-        let waveformSummary = waveformSummary(for: mono, sampleRate: signal.sampleRate)
-        let monoEnergyPrefix = energyPrefix(for: mono)
-        let weighted = kWeighted(mono, sampleRate: signal.sampleRate)
-        let weightedEnergyPrefix = energyPrefix(for: weighted)
-        let peakDBFS = 20 * log10(max(Double(waveformSummary.peak), 1e-12))
-        let rmsDBFS = 20 * log10(max(Double(waveformSummary.rms), 1e-12))
-        let integratedLoudness = integratedLoudness(forEnergyPrefix: weightedEnergyPrefix, sampleRate: signal.sampleRate)
-        let truePeakDBFS = 20 * log10(max(Double(MasteringAnalysisService.approximateTruePeak(signal.channels)), 1e-12))
-        let stereoWidth = MasteringAnalysisService.stereoWidth(for: signal)
+        let waveformMetrics = waveformMetrics(for: mono, sampleRate: signal.sampleRate)
+        let channelMetrics = channelMetrics(for: signal)
+        let frequencyMetrics = try frequencyMetrics(for: mono, sampleRate: signal.sampleRate)
+        return snapshot(
+            waveformMetrics: waveformMetrics,
+            channelMetrics: channelMetrics,
+            frequencyMetrics: frequencyMetrics
+        )
+    }
+
+    static func analyzeConcurrently(signal: AudioSignal) async throws -> AudioMetricSnapshot {
+        let mono = signal.monoMixdown()
+        guard !mono.isEmpty else {
+            return emptySnapshot()
+        }
+
+        let waveformTask = Task.detached(priority: .utility) {
+            Self.waveformMetrics(for: mono, sampleRate: signal.sampleRate)
+        }
+        let channelTask = Task.detached(priority: .utility) {
+            Self.channelMetrics(for: signal)
+        }
+        let frequencyTask = Task.detached(priority: .utility) {
+            try Self.frequencyMetrics(for: mono, sampleRate: signal.sampleRate)
+        }
+
+        let waveformResult = await waveformTask.value
+        let channelResult = await channelTask.value
+        let frequencyResult = try await frequencyTask.value
+        return snapshot(
+            waveformMetrics: waveformResult,
+            channelMetrics: channelResult,
+            frequencyMetrics: frequencyResult
+        )
+    }
+
+    private static func emptySnapshot() -> AudioMetricSnapshot {
+        AudioMetricSnapshot(
+            peakDBFS: -120,
+            rmsDBFS: -120,
+            crestFactorDB: 0,
+            loudnessRangeLU: 0,
+            integratedLoudnessLUFS: -70,
+            truePeakDBFS: -120,
+            stereoWidth: 0,
+            stereoCorrelation: 1,
+            harshnessScore: 0,
+            centroidHz: 0,
+            hf12Ratio: 0,
+            hf16Ratio: 0,
+            hf18Ratio: 0,
+            bandEnergies: bandTemplate.map {
+                BandEnergyMetric(id: $0.id, label: $0.label, rangeDescription: $0.range, levelDB: -120)
+            },
+            masteringBandEnergies: masteringBandTemplate.map {
+                BandEnergyMetric(id: $0.id, label: $0.label, rangeDescription: $0.range, levelDB: -120)
+            },
+            shortTermLoudness: [],
+            dynamics: [],
+            averageSpectrum: []
+        )
+    }
+
+    private static func snapshot(
+        waveformMetrics: WaveformMetrics,
+        channelMetrics: ChannelMetrics,
+        frequencyMetrics: FrequencyMetrics
+    ) -> AudioMetricSnapshot {
+        AudioMetricSnapshot(
+            peakDBFS: waveformMetrics.peakDBFS,
+            rmsDBFS: waveformMetrics.rmsDBFS,
+            crestFactorDB: waveformMetrics.peakDBFS - waveformMetrics.rmsDBFS,
+            loudnessRangeLU: waveformMetrics.loudnessRangeLU,
+            integratedLoudnessLUFS: waveformMetrics.integratedLoudnessLUFS,
+            truePeakDBFS: channelMetrics.truePeakDBFS,
+            stereoWidth: channelMetrics.stereoWidth,
+            stereoCorrelation: channelMetrics.stereoCorrelation,
+            harshnessScore: frequencyMetrics.harshnessScore,
+            centroidHz: frequencyMetrics.centroidHz,
+            hf12Ratio: frequencyMetrics.hf12Ratio,
+            hf16Ratio: frequencyMetrics.hf16Ratio,
+            hf18Ratio: frequencyMetrics.hf18Ratio,
+            bandEnergies: frequencyMetrics.bandEnergies,
+            masteringBandEnergies: frequencyMetrics.masteringBandEnergies,
+            shortTermLoudness: waveformMetrics.shortTermLoudness,
+            dynamics: waveformMetrics.dynamics,
+            averageSpectrum: frequencyMetrics.averageSpectrum
+        )
+    }
+
+    private static func frequencyMetrics(for mono: [Float], sampleRate: Double) throws -> FrequencyMetrics {
         let frameSize = 16_384
         let hopSize = 8_192
         let window = vDSP.window(ofType: Float.self, usingSequence: .hanningDenormalized, count: frameSize, isHalfWindow: false)
-        let frequencyStep = signal.sampleRate / Double(frameSize)
+        let frequencyStep = sampleRate / Double(frameSize)
         let dft = try vDSP.DiscreteFourierTransform<Float>(
             count: frameSize,
             direction: .forward,
@@ -57,7 +116,7 @@ enum AudioComparisonService {
         )
         let bandRanges = frequencyBandRanges(for: bandTemplate, frequencyStep: frequencyStep, maxBin: frameSize / 2)
         let masteringBandRanges = frequencyBandRanges(for: masteringBandTemplate, frequencyStep: frequencyStep, maxBin: frameSize / 2)
-        let spectrumBands = spectrumBandTemplate(sampleRate: signal.sampleRate, frameSize: frameSize)
+        let spectrumBands = spectrumBandTemplate(sampleRate: sampleRate, frameSize: frameSize)
         let hf12Start = lowerBin(for: 12_000, frequencyStep: frequencyStep, maxBin: frameSize / 2)
         let hf16Start = lowerBin(for: 16_000, frequencyStep: frequencyStep, maxBin: frameSize / 2)
         let hf18Start = lowerBin(for: 18_000, frequencyStep: frequencyStep, maxBin: frameSize / 2)
@@ -165,15 +224,7 @@ enum AudioComparisonService {
         }
         let harshnessScore = min(1.0, harshnessUpperMidSum / max(harshnessUpperMidSum + harshnessAirSum, 1e-9))
 
-        return AudioMetricSnapshot(
-            peakDBFS: peakDBFS,
-            rmsDBFS: rmsDBFS,
-            crestFactorDB: peakDBFS - rmsDBFS,
-            loudnessRangeLU: loudnessRange(forEnergyPrefix: monoEnergyPrefix, sampleRate: signal.sampleRate),
-            integratedLoudnessLUFS: integratedLoudness,
-            truePeakDBFS: truePeakDBFS,
-            stereoWidth: Double(stereoWidth),
-            stereoCorrelation: stereoCorrelation(for: signal),
+        return FrequencyMetrics(
             harshnessScore: harshnessScore,
             centroidHz: centroidSum / safeFrameCount,
             hf12Ratio: hf12Sum / safeFrameCount,
@@ -181,8 +232,6 @@ enum AudioComparisonService {
             hf18Ratio: hf18Sum / safeFrameCount,
             bandEnergies: bandMetrics,
             masteringBandEnergies: masteringBandMetrics,
-            shortTermLoudness: shortTermLoudnessTimeline(forEnergyPrefix: weightedEnergyPrefix, sampleRate: signal.sampleRate),
-            dynamics: waveformSummary.dynamics,
             averageSpectrum: spectrumMetrics
         )
     }
@@ -198,6 +247,32 @@ enum AudioComparisonService {
     private struct FrequencyBandRange {
         let lower: Int
         let upperExclusive: Int
+    }
+
+    private struct WaveformMetrics: Sendable {
+        let peakDBFS: Double
+        let rmsDBFS: Double
+        let loudnessRangeLU: Double
+        let integratedLoudnessLUFS: Double
+        let shortTermLoudness: [TimedLevelMetric]
+        let dynamics: [DynamicsMetric]
+    }
+
+    private struct ChannelMetrics: Sendable {
+        let truePeakDBFS: Double
+        let stereoWidth: Double
+        let stereoCorrelation: Double
+    }
+
+    private struct FrequencyMetrics: Sendable {
+        let harshnessScore: Double
+        let centroidHz: Double
+        let hf12Ratio: Double
+        let hf16Ratio: Double
+        let hf18Ratio: Double
+        let bandEnergies: [BandEnergyMetric]
+        let masteringBandEnergies: [BandEnergyMetric]
+        let averageSpectrum: [SpectrumMetric]
     }
 
     private static func frequencyBandRanges(
@@ -243,6 +318,32 @@ enum AudioComparisonService {
         let peak: Float
         let rms: Float
         let dynamics: [DynamicsMetric]
+    }
+
+    private static func waveformMetrics(for mono: [Float], sampleRate: Double) -> WaveformMetrics {
+        let summary = waveformSummary(for: mono, sampleRate: sampleRate)
+        let monoEnergyPrefix = energyPrefix(for: mono)
+        let weighted = kWeighted(mono, sampleRate: sampleRate)
+        let weightedEnergyPrefix = energyPrefix(for: weighted)
+        let peakDBFS = 20 * log10(max(Double(summary.peak), 1e-12))
+        let rmsDBFS = 20 * log10(max(Double(summary.rms), 1e-12))
+
+        return WaveformMetrics(
+            peakDBFS: peakDBFS,
+            rmsDBFS: rmsDBFS,
+            loudnessRangeLU: loudnessRange(forEnergyPrefix: monoEnergyPrefix, sampleRate: sampleRate),
+            integratedLoudnessLUFS: integratedLoudness(forEnergyPrefix: weightedEnergyPrefix, sampleRate: sampleRate),
+            shortTermLoudness: shortTermLoudnessTimeline(forEnergyPrefix: weightedEnergyPrefix, sampleRate: sampleRate),
+            dynamics: summary.dynamics
+        )
+    }
+
+    private static func channelMetrics(for signal: AudioSignal) -> ChannelMetrics {
+        ChannelMetrics(
+            truePeakDBFS: 20 * log10(max(Double(MasteringAnalysisService.approximateTruePeak(signal.channels)), 1e-12)),
+            stereoWidth: Double(MasteringAnalysisService.stereoWidth(for: signal)),
+            stereoCorrelation: stereoCorrelation(for: signal)
+        )
     }
 
     private static func waveformSummary(for mono: [Float], sampleRate: Double) -> WaveformSummary {

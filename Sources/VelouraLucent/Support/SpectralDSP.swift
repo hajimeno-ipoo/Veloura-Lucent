@@ -68,23 +68,21 @@ enum SpectralDSP {
         var imagFrames: [[Float]] = []
         realFrames.reserveCapacity(frameCount)
         imagFrames.reserveCapacity(frameCount)
+        let binCount = fftSize / 2 + 1
+        let inputImag = Array(repeating: Float.zero, count: fftSize)
+        var frame = Array(repeating: Float.zero, count: fftSize)
+        var outputReal = Array(repeating: Float.zero, count: fftSize)
+        var outputImag = Array(repeating: Float.zero, count: fftSize)
 
         for frameIndex in 0..<frameCount {
             let start = frameIndex * hopSize
-            var frame = Array(repeating: Float.zero, count: fftSize)
-            if start < workingSource.count {
-                let available = min(fftSize, workingSource.count - start)
-                frame[0..<available] = workingSource[start..<(start + available)]
-            }
+            frame[0..<fftSize] = workingSource[start..<(start + fftSize)]
             vDSP.multiply(frame, window, result: &frame)
 
-            let inputImag = Array(repeating: Float.zero, count: fftSize)
-            var outputReal = Array(repeating: Float.zero, count: fftSize)
-            var outputImag = Array(repeating: Float.zero, count: fftSize)
             dft.transform(inputReal: frame, inputImaginary: inputImag, outputReal: &outputReal, outputImaginary: &outputImag)
 
-            realFrames.append(Array(outputReal[0...(fftSize / 2)]))
-            imagFrames.append(Array(outputImag[0...(fftSize / 2)]))
+            realFrames.append(Array(outputReal[0..<binCount]))
+            imagFrames.append(Array(outputImag[0..<binCount]))
         }
 
         return Spectrogram(
