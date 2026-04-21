@@ -134,13 +134,28 @@ enum MasteringAnalysisService {
         guard channel.count > 1 else { return channel.map { abs($0) }.max() ?? 0 }
         var peak: Float = 0
         for index in 0..<(channel.count - 1) {
-            let a = channel[index]
-            let b = channel[index + 1]
-            for step in 0...3 {
-                let t = Float(step) / 4
-                peak = max(peak, abs(a * (1 - t) + b * t))
+            let p0 = index > 0 ? channel[index - 1] : channel[index]
+            let p1 = channel[index]
+            let p2 = channel[index + 1]
+            let p3 = index + 2 < channel.count ? channel[index + 2] : p2
+            peak = max(peak, abs(p1))
+            for step in 1...7 {
+                let t = Float(step) / 8
+                peak = max(peak, abs(catmullRom(p0: p0, p1: p1, p2: p2, p3: p3, t: t)))
             }
         }
+        peak = max(peak, abs(channel[channel.count - 1]))
         return peak
+    }
+
+    private static func catmullRom(p0: Float, p1: Float, p2: Float, p3: Float, t: Float) -> Float {
+        let t2 = t * t
+        let t3 = t2 * t
+        return 0.5 * (
+            (2 * p1)
+                + (-p0 + p2) * t
+                + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
+                + (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+        )
     }
 }

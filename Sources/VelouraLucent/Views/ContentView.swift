@@ -237,7 +237,7 @@ struct ContentView: View {
                                 }
                             }
                         ),
-                        in: 0 ... 1.2,
+                        in: -1.2 ... 1.2,
                         step: 0.05
                     )
                 }
@@ -284,6 +284,29 @@ struct ContentView: View {
                         ),
                         in: 0 ... 1,
                         step: 0.01
+                    )
+                }
+
+                sliderCard(
+                    item: TermDefinition(
+                        id: "deEssThreshold",
+                        label: "ハーシュネス検出しきい値",
+                        reading: "はーしゅねすけんしゅつしきいち",
+                        description: "ハーシュネス抑制が動き始める強さです。下げるほど早めに反応します。"
+                    ),
+                    valueText: String(format: "%.1f dB", job.editableMasteringSettings.deEsserThresholdDB)
+                ) {
+                    Slider(
+                        value: binding(
+                            get: { Double(job.editableMasteringSettings.deEsserThresholdDB) },
+                            set: { newValue in
+                                job.updateMasteringSettings { settings in
+                                    settings.deEsserThresholdDB = Float(newValue)
+                                }
+                            }
+                        ),
+                        in: -36 ... -18,
+                        step: 0.5
                     )
                 }
 
@@ -1043,6 +1066,8 @@ struct ContentView: View {
             MetricTableRow(item: mainMetricDefinitions[1], input: input.truePeakDBFS, corrected: corrected?.truePeakDBFS, mastered: mastered?.truePeakDBFS, format: .dBFS),
             MetricTableRow(item: mainMetricDefinitions[2], input: input.stereoWidth, corrected: corrected?.stereoWidth, mastered: mastered?.stereoWidth, format: .ratio(2)),
             MetricTableRow(item: mainMetricDefinitions[3], input: input.harshnessScore, corrected: corrected?.harshnessScore, mastered: mastered?.harshnessScore, format: .score(2)),
+            MetricTableRow(item: mainMetricDefinitions[4], input: input.crestFactorDB, corrected: corrected?.crestFactorDB, mastered: mastered?.crestFactorDB, format: .dB),
+            MetricTableRow(item: mainMetricDefinitions[5], input: input.loudnessRangeLU, corrected: corrected?.loudnessRangeLU, mastered: mastered?.loudnessRangeLU, format: .lu),
             MetricTableRow(item: bandTermDefinitions[0], input: inputBandValue(input, id: "low"), corrected: corrected.flatMap { inputBandValue($0, id: "low") }, mastered: mastered.flatMap { inputBandValue($0, id: "low") }, format: .dBFS),
             MetricTableRow(item: bandTermDefinitions[1], input: inputBandValue(input, id: "lowMid"), corrected: corrected.flatMap { inputBandValue($0, id: "lowMid") }, mastered: mastered.flatMap { inputBandValue($0, id: "lowMid") }, format: .dBFS),
             MetricTableRow(item: bandTermDefinitions[2], input: inputBandValue(input, id: "presence"), corrected: corrected.flatMap { inputBandValue($0, id: "presence") }, mastered: mastered.flatMap { inputBandValue($0, id: "presence") }, format: .dBFS),
@@ -1122,7 +1147,9 @@ struct ContentView: View {
             radarTermDefinitions[0],
             radarTermDefinitions[1],
             radarTermDefinitions[3],
-            TermDefinition(id: "harshness", label: "ハーシュネス", reading: "はーしゅねす", description: "高域の耳障りさの指標です。数値が高いほど刺さりやすい傾向があります。")
+            TermDefinition(id: "harshness", label: "ハーシュネス", reading: "はーしゅねす", description: "高域の耳障りさの指標です。数値が高いほど刺さりやすい傾向があります。"),
+            TermDefinition(id: "crest", label: "Crest", reading: "くれすと", description: "瞬間的なピークと平均音量の差です。小さくなりすぎると平坦に聞こえやすいです。"),
+            TermDefinition(id: "lra", label: "LRA", reading: "えるあーるえー", description: "音量変化の幅です。小さくなりすぎるとサビの開放感が弱くなりやすいです。")
         ]
     }
 
@@ -1133,7 +1160,7 @@ struct ContentView: View {
             bandTermDefinitions[2],
             bandTermDefinitions[3],
             TermDefinition(id: "deEss", label: "ハーシュネス抑制", reading: "はーしゅねすよくせい", description: "歯擦音や耳に痛い高域だけを抑える処理です。強くしすぎると抜けも弱くなります。"),
-            TermDefinition(id: "stereoWidth", label: "ステレオ幅", reading: "すてれおはば", description: "左右への広がり具合です。広げすぎると中心のまとまりが弱くなることがあります。")
+            TermDefinition(id: "stereoWidth", label: "ステレオ幅", reading: "すてれおはば", description: "左右への広がり具合です。今の実装では低域は広げず、中高域だけを広げます。")
         ]
     }
 
@@ -1696,6 +1723,8 @@ struct ContentView: View {
 
     private enum MetricFormat {
         case dBFS
+        case dB
+        case lu
         case lufs
         case hertz
         case ratio(Int)
@@ -1862,6 +1891,10 @@ struct ContentView: View {
         switch format {
         case .dBFS:
             return String(format: "%.2f dB", value)
+        case .dB:
+            return String(format: "%.2f dB", value)
+        case .lu:
+            return String(format: "%.2f LU", value)
         case .lufs:
             return String(format: "%.1f LUFS", value)
         case .hertz:
@@ -1877,6 +1910,10 @@ struct ContentView: View {
         switch format {
         case .dBFS:
             return String(format: value >= 0 ? "+%.2f dB" : "%.2f dB", value)
+        case .dB:
+            return String(format: value >= 0 ? "+%.2f dB" : "%.2f dB", value)
+        case .lu:
+            return String(format: value >= 0 ? "+%.2f LU" : "%.2f LU", value)
         case .lufs:
             return String(format: value >= 0 ? "+%.1f LUFS" : "%.1f LUFS", value)
         case .hertz:

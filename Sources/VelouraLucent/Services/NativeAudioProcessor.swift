@@ -426,19 +426,12 @@ private struct HarmonicUpscaler {
 }
 
 private struct LoudnessProcessor {
-    let targetLKFS: Float = -14
     let peakLimitDB: Float = -1
     let limiterReleaseMs: Float = 120
 
     func process(signal: AudioSignal) -> AudioSignal {
-        let loudness = integratedLoudness(signal)
-        let gain = powf(10, (targetLKFS - loudness) / 20)
         let peakLimit = powf(10, peakLimitDB / 20)
-
-        let gainedChannels = signal.channels.map { channel in
-            channel.map { $0 * gain }
-        }
-        var channels = applyLinkedLimiter(gainedChannels, peakLimit: peakLimit, sampleRate: signal.sampleRate)
+        var channels = applyLinkedLimiter(signal.channels, peakLimit: peakLimit, sampleRate: signal.sampleRate)
 
         let peak = approximateTruePeak(channels: channels)
         if peak > peakLimit {
@@ -475,40 +468,6 @@ private struct LoudnessProcessor {
         }
 
         return limited
-    }
-
-    private func integratedLoudness(_ signal: AudioSignal) -> Float {
-        let weighted = kWeight(signal.monoMixdown(), sampleRate: signal.sampleRate)
-        let windowSize = max(Int(signal.sampleRate * 0.4), 1)
-        let hopSize = max(Int(signal.sampleRate * 0.1), 1)
-        var blockLoudness: [Float] = []
-        var start = 0
-        while start < weighted.count {
-            let end = min(weighted.count, start + windowSize)
-            let block = Array(weighted[start..<end])
-            let rms = sqrt(max(block.reduce(0) { $0 + $1 * $1 } / Float(max(block.count, 1)), 1e-9))
-            let loudness = 20 * log10f(rms)
-            blockLoudness.append(loudness)
-            start += hopSize
-        }
-
-        let absoluteGated = blockLoudness.filter { $0 > -70 }
-        guard !absoluteGated.isEmpty else { return -70 }
-        let preliminary = energyAverage(absoluteGated)
-        let relativeGate = preliminary - 10
-        let relativeGated = absoluteGated.filter { $0 >= relativeGate }
-        return energyAverage(relativeGated.isEmpty ? absoluteGated : relativeGated)
-    }
-
-    private func energyAverage(_ loudnessValues: [Float]) -> Float {
-        let meanEnergy = loudnessValues.map { powf(10, $0 / 10) }.reduce(0, +) / Float(max(loudnessValues.count, 1))
-        return 10 * log10f(max(meanEnergy, 1e-9))
-    }
-
-    private func kWeight(_ signal: [Float], sampleRate: Double) -> [Float] {
-        let highPassed = SpectralDSP.highPass(signal, cutoff: 60, sampleRate: sampleRate)
-        let shelfBase = SpectralDSP.highPass(signal, cutoff: 1_500, sampleRate: sampleRate)
-        return zip(highPassed, shelfBase).map { $0 + $1 * 0.25 }
     }
 
     private func approximateTruePeak(channels: [[Float]]) -> Float {

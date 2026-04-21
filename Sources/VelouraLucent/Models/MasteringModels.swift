@@ -12,9 +12,9 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
         case .natural:
             return "自然"
         case .streaming:
-            return "配信向け"
+            return "聴きやすく整える"
         case .forward:
-            return "前に出す"
+            return "押し出し強め"
         }
     }
 
@@ -23,9 +23,9 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
         case .natural:
             return "原音の雰囲気を残しながら整えます"
         case .streaming:
-            return "ラウドネスとトゥルーピークを配信向けに整えます"
+            return "ラウドネスと帯域のバランスを、聞きやすさ重視で整えます"
         case .forward:
-            return "プレゼンス帯域とラウドネスを前に出して仕上げます"
+            return "密度とプレゼンスを少し積極的に持ち上げて仕上げます"
         }
     }
 
@@ -33,57 +33,57 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .natural:
             return MasteringSettings(
-                targetLoudness: -15.5,
+                targetLoudness: -16.0,
                 peakCeilingDB: -1.2,
-                lowShelfGain: 0.8,
-                lowMidGain: 0.18,
-                presenceGain: 0.18,
-                highShelfGain: 0.52,
+                lowShelfGain: 0.55,
+                lowMidGain: -0.18,
+                presenceGain: 0.22,
+                highShelfGain: 0.32,
                 multibandCompression: MultibandCompressionSettings(
-                    low: BandCompressorSettings(thresholdDB: -23, ratio: 1.7, attackMs: 30, releaseMs: 180, makeupGainDB: 0.4),
-                    mid: BandCompressorSettings(thresholdDB: -22, ratio: 1.5, attackMs: 18, releaseMs: 140, makeupGainDB: 0.2),
-                    high: BandCompressorSettings(thresholdDB: -24, ratio: 1.8, attackMs: 8, releaseMs: 110, makeupGainDB: 0.1)
+                    low: BandCompressorSettings(thresholdDB: -22, ratio: 1.6, attackMs: 34, releaseMs: 210, makeupGainDB: 0.2),
+                    mid: BandCompressorSettings(thresholdDB: -21, ratio: 1.4, attackMs: 22, releaseMs: 170, makeupGainDB: 0.1),
+                    high: BandCompressorSettings(thresholdDB: -24, ratio: 1.55, attackMs: 10, releaseMs: 130, makeupGainDB: 0.0)
                 ),
-                deEsserAmount: 0.22,
-                deEsserThresholdDB: -26,
-                stereoWidth: 1.04,
-                saturationAmount: 0.10
+                deEsserAmount: 0.18,
+                deEsserThresholdDB: -24,
+                stereoWidth: 1.00,
+                saturationAmount: 0.08
             )
         case .streaming:
             return MasteringSettings(
-                targetLoudness: -14.0,
+                targetLoudness: -14.5,
                 peakCeilingDB: -1.0,
-                lowShelfGain: 1.12,
-                lowMidGain: 0.26,
-                presenceGain: 0.26,
-                highShelfGain: 0.72,
+                lowShelfGain: 0.85,
+                lowMidGain: -0.28,
+                presenceGain: 0.38,
+                highShelfGain: 0.48,
                 multibandCompression: MultibandCompressionSettings(
-                    low: BandCompressorSettings(thresholdDB: -25, ratio: 2.2, attackMs: 26, releaseMs: 170, makeupGainDB: 0.7),
-                    mid: BandCompressorSettings(thresholdDB: -23, ratio: 1.9, attackMs: 14, releaseMs: 130, makeupGainDB: 0.4),
-                    high: BandCompressorSettings(thresholdDB: -25, ratio: 2.1, attackMs: 6, releaseMs: 90, makeupGainDB: 0.2)
+                    low: BandCompressorSettings(thresholdDB: -23, ratio: 1.75, attackMs: 30, releaseMs: 205, makeupGainDB: 0.22),
+                    mid: BandCompressorSettings(thresholdDB: -21.5, ratio: 1.55, attackMs: 18, releaseMs: 160, makeupGainDB: 0.12),
+                    high: BandCompressorSettings(thresholdDB: -23.5, ratio: 1.55, attackMs: 9, releaseMs: 125, makeupGainDB: 0.0)
                 ),
-                deEsserAmount: 0.34,
-                deEsserThresholdDB: -27,
-                stereoWidth: 1.08,
-                saturationAmount: 0.16
+                deEsserAmount: 0.24,
+                deEsserThresholdDB: -24.5,
+                stereoWidth: 1.03,
+                saturationAmount: 0.09
             )
         case .forward:
             return MasteringSettings(
-                targetLoudness: -12.8,
+                targetLoudness: -13.8,
                 peakCeilingDB: -0.9,
-                lowShelfGain: 1.45,
-                lowMidGain: 0.34,
-                presenceGain: 0.34,
-                highShelfGain: 0.94,
+                lowShelfGain: 0.95,
+                lowMidGain: -0.16,
+                presenceGain: 0.52,
+                highShelfGain: 0.58,
                 multibandCompression: MultibandCompressionSettings(
-                    low: BandCompressorSettings(thresholdDB: -27, ratio: 2.6, attackMs: 22, releaseMs: 160, makeupGainDB: 1.0),
-                    mid: BandCompressorSettings(thresholdDB: -24, ratio: 2.2, attackMs: 10, releaseMs: 110, makeupGainDB: 0.7),
-                    high: BandCompressorSettings(thresholdDB: -26, ratio: 2.4, attackMs: 4, releaseMs: 80, makeupGainDB: 0.4)
+                    low: BandCompressorSettings(thresholdDB: -24, ratio: 1.9, attackMs: 26, releaseMs: 195, makeupGainDB: 0.32),
+                    mid: BandCompressorSettings(thresholdDB: -22, ratio: 1.75, attackMs: 14, releaseMs: 140, makeupGainDB: 0.18),
+                    high: BandCompressorSettings(thresholdDB: -24, ratio: 1.7, attackMs: 8, releaseMs: 110, makeupGainDB: 0.02)
                 ),
-                deEsserAmount: 0.40,
-                deEsserThresholdDB: -28,
-                stereoWidth: 1.12,
-                saturationAmount: 0.22
+                deEsserAmount: 0.28,
+                deEsserThresholdDB: -25,
+                stereoWidth: 1.05,
+                saturationAmount: 0.11
             )
         }
     }

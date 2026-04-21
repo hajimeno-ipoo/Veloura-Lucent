@@ -4,17 +4,27 @@ import Testing
 struct MasteringProfileTests {
     @Test
     func profilesExposeDifferentSettings() {
-        let natural = MasteringProfile.natural.settings
-        let streaming = MasteringProfile.streaming.settings
-        let forward = MasteringProfile.forward.settings
+        let naturalProfile = MasteringProfile.natural
+        let streamingProfile = MasteringProfile.streaming
+        let forwardProfile = MasteringProfile.forward
+
+        let natural = naturalProfile.settings
+        let streaming = streamingProfile.settings
+        let forward = forwardProfile.settings
 
         #expect(natural.targetLoudness < streaming.targetLoudness)
         #expect(streaming.targetLoudness < forward.targetLoudness)
+        #expect(streaming.targetLoudness == -14.5)
+        #expect(forward.targetLoudness <= -13.8)
         #expect(natural.saturationAmount < forward.saturationAmount)
+        #expect(forward.saturationAmount <= 0.12)
         #expect(streaming.stereoWidth >= natural.stereoWidth)
         #expect(natural.multibandCompression.low.ratio < forward.multibandCompression.low.ratio)
         #expect(streaming.multibandCompression.high.attackMs < natural.multibandCompression.high.attackMs)
         #expect(natural.deEsserAmount < forward.deEsserAmount)
-        #expect(streaming.lowMidGain >= natural.lowMidGain)
+        #expect(streaming.lowMidGain <= natural.lowMidGain)
+        #expect(naturalProfile.title == "自然")
+        #expect(streamingProfile.title == "聴きやすく整える")
+        #expect(forwardProfile.title == "押し出し強め")
     }
 }

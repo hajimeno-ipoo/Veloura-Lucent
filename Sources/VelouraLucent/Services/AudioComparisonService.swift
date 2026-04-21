@@ -9,6 +9,8 @@ enum AudioComparisonService {
             return AudioMetricSnapshot(
                 peakDBFS: -120,
                 rmsDBFS: -120,
+                crestFactorDB: 0,
+                loudnessRangeLU: 0,
                 integratedLoudnessLUFS: -70,
                 truePeakDBFS: -120,
                 stereoWidth: 0,
@@ -29,6 +31,8 @@ enum AudioComparisonService {
         let masteringAnalysis = MasteringAnalysisService.analyze(signal: signal)
         let peak = mono.map { abs($0) }.max() ?? 0
         let rms = sqrt(max(mono.reduce(0) { $0 + $1 * $1 } / Float(mono.count), 1e-12))
+        let peakDBFS = 20 * log10(max(Double(peak), 1e-12))
+        let rmsDBFS = 20 * log10(max(Double(rms), 1e-12))
         let frameSize = 16_384
         let hopSize = 8_192
         let window = vDSP.window(ofType: Float.self, usingSequence: .hanningDenormalized, count: frameSize, isHalfWindow: false)
@@ -103,8 +107,10 @@ enum AudioComparisonService {
         }
 
         return AudioMetricSnapshot(
-            peakDBFS: 20 * log10(max(Double(peak), 1e-12)),
-            rmsDBFS: 20 * log10(max(Double(rms), 1e-12)),
+            peakDBFS: peakDBFS,
+            rmsDBFS: rmsDBFS,
+            crestFactorDB: peakDBFS - rmsDBFS,
+            loudnessRangeLU: loudnessRange(for: mono, sampleRate: signal.sampleRate),
             integratedLoudnessLUFS: Double(masteringAnalysis.integratedLoudness),
             truePeakDBFS: masteringAnalysis.truePeakDBFS,
             stereoWidth: Double(masteringAnalysis.stereoWidth),
@@ -124,6 +130,30 @@ enum AudioComparisonService {
 
     private static let masteringBandTemplate: [(id: String, label: String, range: String, lower: Double, upper: Double)] = AudioBandCatalog.masteringBands.map {
         ($0.id, $0.label, $0.rangeDescription, $0.lowerBound, $0.upperBound)
+    }
+
+    private static func loudnessRange(for mono: [Float], sampleRate: Double) -> Double {
+        let windowSize = max(Int(sampleRate * 0.4), 1)
+        let hopSize = max(Int(sampleRate * 0.1), 1)
+        var blockLevels: [Double] = []
+        var start = 0
+
+        while start < mono.count {
+            let end = min(mono.count, start + windowSize)
+            let block = mono[start..<end]
+            let rms = sqrt(max(block.reduce(Float.zero) { $0 + $1 * $1 } / Float(max(block.count, 1)), 1e-12))
+            blockLevels.append(20 * log10(max(Double(rms), 1e-12)))
+            start += hopSize
+        }
+
+        let gated = blockLevels.filter { $0 > -70 }.sorted()
+        guard gated.count > 5 else { return 0 }
+        return percentile(gated, 0.95) - percentile(gated, 0.10)
+    }
+
+    private static func percentile(_ values: [Double], _ percentile: Double) -> Double {
+        let index = max(0, min(values.count - 1, Int(round(Double(values.count - 1) * percentile))))
+        return values[index]
     }
 
     private static func accumulateMetrics(

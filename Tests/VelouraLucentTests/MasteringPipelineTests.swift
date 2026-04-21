@@ -47,6 +47,36 @@ struct MasteringPipelineTests {
     }
 
     @Test
+    func masteringKeepsTruePeakNearCeiling() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let inputURL = tempDirectory.appending(path: "ceiling-check.wav")
+
+        try makeHotTransientTone(at: inputURL)
+
+        let output = try await MasteringService().process(inputFile: inputURL, profile: .forward) { _ in }
+        let mastered = try MasteringAnalysisService.analyze(fileURL: output)
+
+        #expect(mastered.truePeakDBFS <= -0.4)
+    }
+
+    @Test
+    func forwardMasteringPreservesUsefulDynamics() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let inputURL = tempDirectory.appending(path: "dynamic-check.wav")
+
+        try makeHotTransientTone(at: inputURL)
+
+        let before = try AudioComparisonService.analyze(fileURL: inputURL)
+        let output = try await MasteringService().process(inputFile: inputURL, profile: .forward) { _ in }
+        let after = try AudioComparisonService.analyze(fileURL: output)
+
+        #expect(after.loudnessRangeLU >= before.loudnessRangeLU * 0.60)
+        #expect(after.crestFactorDB >= before.crestFactorDB * 0.60)
+    }
+
+    @Test
     func masteredOutputURLsStayWav() {
         let inputURL = URL(fileURLWithPath: "/tmp/song_lifter.mp3")
 
@@ -70,6 +100,31 @@ struct MasteringPipelineTests {
             let t = Double(index) / sampleRate
             left[index] = Float(sin(2 * Double.pi * 220 * t) * 0.08 + sin(2 * Double.pi * 8_000 * t) * 0.02)
             right[index] = Float(sin(2 * Double.pi * 220 * t + 0.12) * 0.08 + sin(2 * Double.pi * 7_600 * t) * 0.018)
+        }
+
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 2)
+        )
+        try file.write(from: buffer)
+    }
+
+    private func makeHotTransientTone(at url: URL) throws {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 2.5)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        let left = buffer.floatChannelData![0]
+        let right = buffer.floatChannelData![1]
+
+        for index in 0..<frameCount {
+            let t = Double(index) / sampleRate
+            let body = sin(2 * Double.pi * 180 * t) * 0.32
+            let bright = sin(2 * Double.pi * 6_400 * t) * 0.10
+            let transient = index % 7_200 < 120 ? 0.55 : 0
+            left[index] = Float(body + bright + transient)
+            right[index] = Float(body * 0.96 + sin(2 * Double.pi * 7_100 * t) * 0.09 + transient * 0.92)
         }
 
         let file = try AVAudioFile(
