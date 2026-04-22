@@ -319,12 +319,40 @@ enum SpectralDSP {
 
     static func medianFilter(_ values: [Float], windowSize: Int) -> [Float] {
         guard windowSize > 1, !values.isEmpty else { return values }
+        if windowSize <= 17 {
+            return smallWindowMedianFilter(values, windowSize: windowSize)
+        }
+
         let radius = windowSize / 2
         return values.indices.map { index in
             let lower = max(0, index - radius)
             let upper = min(values.count - 1, index + radius)
             return Array(values[lower...upper]).sorted()[((upper - lower) / 2)]
         }
+    }
+
+    private static func smallWindowMedianFilter(_ values: [Float], windowSize: Int) -> [Float] {
+        let radius = windowSize / 2
+        var output = Array(repeating: Float.zero, count: values.count)
+        var windowValues = Array(repeating: Float.zero, count: min(windowSize, values.count))
+
+        for index in values.indices {
+            let lower = max(0, index - radius)
+            let upper = min(values.count - 1, index + radius)
+            let count = upper - lower + 1
+
+            if windowValues.count != count {
+                windowValues = Array(repeating: Float.zero, count: count)
+            }
+
+            for offset in 0..<count {
+                windowValues[offset] = values[lower + offset]
+            }
+            windowValues.sort()
+            output[index] = windowValues[(upper - lower) / 2]
+        }
+
+        return output
     }
 
     static func spectralCentroid(_ spectrum: [Float], sampleRate: Double, fftSize: Int) -> Double {
