@@ -40,6 +40,51 @@ struct NativeAudioProcessorBenchmarkTests {
         try report.write(to: reportURL, atomically: true, encoding: .utf8)
     }
 
+    @Test
+    func recordsRealAudioCPUAndExperimentalMetalBenchmark() throws {
+        guard ProcessInfo.processInfo.environment["VELOURA_RUN_REAL_AUDIO_BENCHMARK"] == "1" else {
+            return
+        }
+
+        let projectDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let inputURL = projectDirectory.appending(path: "violin #002 睡眠.wav")
+        guard FileManager.default.fileExists(atPath: inputURL.path(percentEncoded: false)) else {
+            Issue.record("Real audio fixture is missing: \(inputURL.path(percentEncoded: false))")
+            return
+        }
+
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let cpuOutputURL = tempDirectory.appending(path: "real-audio-cpu.wav")
+        let metalOutputURL = tempDirectory.appending(path: "real-audio-metal.wav")
+
+        let processor = NativeAudioProcessor()
+        let cpu = try processor.benchmark(
+            inputFile: inputURL,
+            outputFile: cpuOutputURL,
+            denoiseStrength: .balanced,
+            analysisMode: .cpu
+        )
+        let metal = try processor.benchmark(
+            inputFile: inputURL,
+            outputFile: metalOutputURL,
+            denoiseStrength: .balanced,
+            analysisMode: .experimentalMetal
+        )
+
+        #expect(FileManager.default.fileExists(atPath: cpuOutputURL.path()))
+        #expect(FileManager.default.fileExists(atPath: metalOutputURL.path()))
+
+        let report = realAudioBenchmarkReport(
+            inputURL: inputURL,
+            cpu: cpu,
+            metal: metal,
+            outputsMatch: try Data(contentsOf: cpuOutputURL) == Data(contentsOf: metalOutputURL)
+        )
+        let reportURL = FileManager.default.temporaryDirectory.appending(path: "VelouraLucentRealAudioBenchmark.txt")
+        try report.write(to: reportURL, atomically: true, encoding: .utf8)
+    }
+
     private func benchmarkReport(for benchmark: NativeAudioProcessingBenchmark) -> String {
         var lines = ["NativeAudioProcessor benchmark"]
         for stage in benchmark.stages {
@@ -47,6 +92,36 @@ struct NativeAudioProcessorBenchmarkTests {
         }
         lines.append("total: \(String(format: "%.6f", benchmark.totalDurationSeconds))s")
         return lines.joined(separator: "\n")
+    }
+
+    private func realAudioBenchmarkReport(
+        inputURL: URL,
+        cpu: NativeAudioProcessingBenchmark,
+        metal: NativeAudioProcessingBenchmark,
+        outputsMatch: Bool
+    ) -> String {
+        var lines = [
+            "Veloura Lucent real audio benchmark",
+            "input: \(inputURL.path(percentEncoded: false))",
+            "outputsMatch: \(outputsMatch)",
+            "cpu.total: \(String(format: "%.6f", cpu.totalDurationSeconds))s",
+            "experimentalMetal.total: \(String(format: "%.6f", metal.totalDurationSeconds))s",
+            "speedup.total.cpu_over_experimentalMetal: \(String(format: "%.3f", speedRatio(cpu.totalDurationSeconds, metal.totalDurationSeconds)))x"
+        ]
+
+        let stageNames = cpu.stages.map(\.name)
+        for stageName in stageNames {
+            let cpuDuration = cpu.duration(for: stageName) ?? 0
+            let metalDuration = metal.duration(for: stageName) ?? 0
+            lines.append(
+                "\(stageName): cpu=\(String(format: "%.6f", cpuDuration))s experimentalMetal=\(String(format: "%.6f", metalDuration))s speedup=\(String(format: "%.3f", speedRatio(cpuDuration, metalDuration)))x"
+            )
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func speedRatio(_ cpu: Double, _ metal: Double) -> Double {
+        metal > 0 ? cpu / metal : 0
     }
 
     private func makeTestTone(at url: URL, duration: Double) throws {
