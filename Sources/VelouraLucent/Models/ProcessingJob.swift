@@ -56,7 +56,7 @@ final class ProcessingJob {
     var isUsingCustomMasteringSettings = false
     var showAdvancedMasteringSettings = false
     var selectedDenoiseStrength: DenoiseStrength = .balanced
-    var selectedAnalysisMode: AudioAnalysisMode = .cpu
+    var selectedAnalysisMode: AudioAnalysisMode = .auto
 
     var statusColor: Color {
         if isProcessing {

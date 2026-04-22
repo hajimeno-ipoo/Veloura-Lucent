@@ -134,6 +134,9 @@ struct ContentView: View {
                         .font(.subheadline.weight(.semibold))
                     Text(job.selectedAnalysisMode.summary)
                         .foregroundStyle(job.selectedAnalysisMode == .experimentalMetal ? .orange : .secondary)
+                    Text(job.selectedAnalysisMode.resolvedSummary)
+                        .font(.caption)
+                        .foregroundStyle(job.selectedAnalysisMode.resolvedMode == .experimentalMetal ? .orange : .secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

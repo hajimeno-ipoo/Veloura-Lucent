@@ -16,10 +16,18 @@ struct ProcessingJobTests {
     }
 
     @Test
-    func analysisModeDefaultsToCPU() {
+    func analysisModeDefaultsToAuto() {
         let job = ProcessingJob()
 
-        #expect(job.selectedAnalysisMode == .cpu)
+        #expect(job.selectedAnalysisMode == .auto)
+    }
+
+    @Test
+    func autoAnalysisModeReportsResolvedMode() {
+        let expected = MetalAudioAnalysisProcessor().isAvailable ? AudioAnalysisMode.experimentalMetal : .cpu
+
+        #expect(AudioAnalysisMode.auto.resolvedMode == expected)
+        #expect(AudioAnalysisMode.auto.resolvedSummary.contains(expected.title))
     }
 
     @Test

@@ -40,7 +40,7 @@
 - `STFT/ISTFT` の往復削減は音質リスクが高いため、先に `Docs/STFTISTFTRoundTripReductionDesign.md` で設計を固定しています。
 - 解析のMetal/GPU化は、先に `Docs/AudioAnalysisMetalGPUDesign.md` で実験モード前提の設計を固定しています。
 - `temporal median` のMetal化は、先に `Docs/TemporalMedianMetalDesign.md` で一致条件と採用条件を固定しています。
-- 解析には `安定CPU` と `実験Metal` の入口があり、UIから選べます。初期値は安定CPUです。
+- 解析には `自動`、`安定CPU`、`実験Metal` の入口があり、UIから選べます。初期値は自動です。
 - 実験Metalでは、magnitude計算と `temporal median 17` をMetalで試作しています。
 - 用語は正式名称へ寄せて、`?` ボタンから読み方と意味を確認できます。
 - ブラウザではなく、Mac の普通のアプリとして動きます。

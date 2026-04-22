@@ -22,6 +22,7 @@ struct NativeAudioProcessingBenchmark: Equatable, Sendable {
 }
 
 enum AudioAnalysisMode: String, CaseIterable, Identifiable, Equatable, Sendable {
+    case auto
     case cpu
     case experimentalMetal
 
@@ -29,6 +30,8 @@ enum AudioAnalysisMode: String, CaseIterable, Identifiable, Equatable, Sendable 
 
     var title: String {
         switch self {
+        case .auto:
+            return "自動"
         case .cpu:
             return "安定CPU"
         case .experimentalMetal:
@@ -38,6 +41,10 @@ enum AudioAnalysisMode: String, CaseIterable, Identifiable, Equatable, Sendable 
 
     var summary: String {
         switch self {
+        case .auto:
+            return MetalAudioAnalysisProcessor().isAvailable
+                ? "このMacでは高速なMetal解析を使います"
+                : "Metal解析を使えないためCPU解析を使います"
         case .cpu:
             return "安定した解析を使います"
         case .experimentalMetal:
@@ -45,6 +52,33 @@ enum AudioAnalysisMode: String, CaseIterable, Identifiable, Equatable, Sendable 
                 ? "解析の一部をMetalで高速化します"
                 : "このMacではMetal解析を使えないためCPUへ戻ります"
         }
+    }
+
+    var resolvedMode: AudioAnalysisMode {
+        switch self {
+        case .auto:
+            return MetalAudioAnalysisProcessor().isAvailable ? .experimentalMetal : .cpu
+        case .experimentalMetal:
+            return MetalAudioAnalysisProcessor().isAvailable ? .experimentalMetal : .cpu
+        case .cpu:
+            return .cpu
+        }
+    }
+
+    var resolvedSummary: String {
+        let resolved = resolvedMode
+        if self == resolved {
+            return "使用中: \(resolved.title)"
+        }
+        return "使用中: \(resolved.title)（\(title)から自動切替）"
+    }
+
+    var logDescription: String {
+        let resolved = resolvedMode
+        if self == resolved {
+            return "解析モード: \(resolved.title)"
+        }
+        return "解析モード: \(title) -> \(resolved.title)"
     }
 }
 
@@ -58,7 +92,7 @@ struct NativeAudioProcessor {
         inputFile: URL,
         outputFile: URL,
         denoiseStrength: DenoiseStrength = .balanced,
-        analysisMode: AudioAnalysisMode = .cpu,
+        analysisMode: AudioAnalysisMode = .auto,
         logger: AudioProcessingLogger? = nil
     ) throws {
         _ = try run(
@@ -75,7 +109,7 @@ struct NativeAudioProcessor {
         inputFile: URL,
         outputFile: URL,
         denoiseStrength: DenoiseStrength = .balanced,
-        analysisMode: AudioAnalysisMode = .cpu,
+        analysisMode: AudioAnalysisMode = .auto,
         logger: AudioProcessingLogger? = nil
     ) throws -> NativeAudioProcessingBenchmark {
         try run(
@@ -103,9 +137,11 @@ struct NativeAudioProcessor {
             try AudioFileService.loadAudio(from: inputFile)
         }
 
+        let resolvedAnalysisMode = analysisMode.resolvedMode
         logger?.log("音声を解析します")
+        logger?.log(analysisMode.logDescription)
         let analysis = measure("analyze", recorder: benchmarkRecorder) {
-            AudioAnalyzer(mode: analysisMode).analyze(signal: signal)
+            AudioAnalyzer(mode: resolvedAnalysisMode).analyze(signal: signal)
         }
         let neuralPrediction = measure("neuralPrediction", recorder: benchmarkRecorder) {
             NeuralFoldoverEstimator().predict(

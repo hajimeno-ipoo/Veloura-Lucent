@@ -63,6 +63,27 @@ struct AudioProcessingPipelineTests {
     }
 
     @Test
+    func pipelineAcceptsAutoAnalysisMode() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let inputURL = tempDirectory.appending(path: "auto-analysis.wav")
+
+        try makeTestTone(at: inputURL)
+        let logs = LogCollector()
+
+        let output = try await AudioProcessingService().process(
+            inputFile: inputURL,
+            denoiseStrength: .balanced,
+            analysisMode: .auto
+        ) { message in
+            logs.append(message)
+        }
+
+        #expect(FileManager.default.fileExists(atPath: output.path()))
+        #expect(logs.values.contains("解析モード: 自動 -> \(AudioAnalysisMode.auto.resolvedMode.title)"))
+    }
+
+    @Test
     func outputURLsUseWavEvenWhenInputExtensionIsCompressed() {
         let inputURL = URL(fileURLWithPath: "/tmp/demo-track.mp3")
 
@@ -88,5 +109,22 @@ struct AudioProcessingPipelineTests {
             settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 1)
         )
         try file.write(from: buffer)
+    }
+}
+
+private final class LogCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    var values: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ value: String) {
+        lock.lock()
+        storage.append(value)
+        lock.unlock()
     }
 }

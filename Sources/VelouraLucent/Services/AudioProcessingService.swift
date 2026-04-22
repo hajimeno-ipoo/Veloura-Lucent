@@ -4,7 +4,7 @@ struct AudioProcessingService {
     func process(
         inputFile: URL,
         denoiseStrength: DenoiseStrength = .balanced,
-        analysisMode: AudioAnalysisMode = .cpu,
+        analysisMode: AudioAnalysisMode = .auto,
         logHandler: @escaping @Sendable (String) -> Void
     ) async throws -> URL {
         let outputURL = Self.temporaryOutputURL(for: inputFile)
