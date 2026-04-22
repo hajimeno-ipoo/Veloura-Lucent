@@ -5,7 +5,7 @@ import Testing
 
 struct AudioAnalysisModeTests {
     @Test
-    func experimentalMetalAnalysisFallsBackToCPUOutput() throws {
+    func experimentalMetalAnalysisMatchesCPUOutput() throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
         let inputURL = tempDirectory.appending(path: "analysis-mode-input.wav")
@@ -31,6 +31,25 @@ struct AudioAnalysisModeTests {
         let cpuData = try Data(contentsOf: cpuOutputURL)
         let metalData = try Data(contentsOf: metalOutputURL)
         #expect(cpuData == metalData)
+    }
+
+    @Test
+    func metalAnalysisProcessorProducesSeparatedSpectraWhenAvailable() {
+        let processor = MetalAudioAnalysisProcessor()
+        guard processor.isAvailable else { return }
+
+        let sampleRate = 48_000.0
+        let samples = (0..<16_384).map { index in
+            let time = Double(index) / sampleRate
+            return Float(sin(2 * Double.pi * 440 * time) * 0.1)
+        }
+        let spectrogram = SpectralDSP.stft(samples)
+
+        let separated = processor.separatedMeanSpectra(spectrogram: spectrogram)
+
+        #expect(separated != nil)
+        #expect(separated?.harmonic.count == spectrogram.binCount)
+        #expect(separated?.percussive.count == spectrogram.binCount)
     }
 
     private func makeTestTone(at url: URL, duration: Double) throws {
