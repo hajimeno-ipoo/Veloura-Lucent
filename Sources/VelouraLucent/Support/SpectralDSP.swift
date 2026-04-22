@@ -192,6 +192,43 @@ enum SpectralDSP {
         }
     }
 
+    static func istftSparseHalfSpectrum(
+        frameCount: Int,
+        fftSize: Int,
+        hopSize: Int,
+        originalLength: Int,
+        leadingPadding: Int,
+        trailingPadding: Int,
+        activeBins: [Int],
+        fillActiveBins: (_ frameIndex: Int, _ real: inout [Float], _ imag: inout [Float]) -> Void
+    ) -> [Float] {
+        let binCount = fftSize / 2 + 1
+        return inverseTransform(
+            frameCount: frameCount,
+            fftSize: fftSize,
+            hopSize: hopSize,
+            originalLength: originalLength,
+            leadingPadding: leadingPadding,
+            trailingPadding: trailingPadding
+        ) { frameIndex, fullReal, fullImag in
+            fillActiveBins(frameIndex, &fullReal, &fullImag)
+            for binIndex in activeBins where binIndex > 0 && binIndex < binCount - 1 {
+                fullReal[fftSize - binIndex] = fullReal[binIndex]
+                fullImag[fftSize - binIndex] = -fullImag[binIndex]
+            }
+        } cleanupFrame: { fullReal, fullImag in
+            for binIndex in activeBins {
+                fullReal[binIndex] = .zero
+                fullImag[binIndex] = .zero
+                if binIndex > 0 && binIndex < binCount - 1 {
+                    let mirrorIndex = fftSize - binIndex
+                    fullReal[mirrorIndex] = .zero
+                    fullImag[mirrorIndex] = .zero
+                }
+            }
+        }
+    }
+
     private static func inverseTransform(
         frameCount: Int,
         fftSize: Int,
@@ -199,7 +236,8 @@ enum SpectralDSP {
         originalLength: Int,
         leadingPadding: Int,
         trailingPadding: Int,
-        prepareFrame: (_ frameIndex: Int, _ fullReal: inout [Float], _ fullImag: inout [Float]) -> Void
+        prepareFrame: (_ frameIndex: Int, _ fullReal: inout [Float], _ fullImag: inout [Float]) -> Void,
+        cleanupFrame: ((_ fullReal: inout [Float], _ fullImag: inout [Float]) -> Void)? = nil
     ) -> [Float] {
         let outputLength = max(
             originalLength + leadingPadding + trailingPadding,
@@ -222,6 +260,7 @@ enum SpectralDSP {
             prepareFrame(frameIndex, &fullReal, &fullImag)
 
             dft.transform(inputReal: fullReal, inputImaginary: fullImag, outputReal: &outputReal, outputImaginary: &outputImag)
+            cleanupFrame?(&fullReal, &fullImag)
 
             vDSP.multiply(inverseScale, outputReal, result: &frame)
             vDSP.multiply(frame, window, result: &frame)

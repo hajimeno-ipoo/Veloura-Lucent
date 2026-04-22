@@ -571,14 +571,23 @@ private struct HarmonicUpscaler: Sendable {
             return Array(repeating: 0, count: channel.count)
         }
 
-        return SpectralDSP.istft(
+        var activeBins: [Int] = []
+        var seenBins = Set<Int>()
+        for sourceBin in sourceStart...sourceEnd {
+            let targetBin = min(spectrogram.binCount - 1, sourceBin * 2)
+            guard targetBin >= targetStart, seenBins.insert(targetBin).inserted else { continue }
+            activeBins.append(targetBin)
+        }
+
+        return SpectralDSP.istftSparseHalfSpectrum(
             frameCount: spectrogram.frameCount,
             fftSize: spectrogram.fftSize,
             hopSize: spectrogram.hopSize,
             originalLength: spectrogram.originalLength,
             leadingPadding: spectrogram.leadingPadding,
-            trailingPadding: spectrogram.trailingPadding
-        ) { frameIndex, _, realFrame, imagFrame in
+            trailingPadding: spectrogram.trailingPadding,
+            activeBins: activeBins
+        ) { frameIndex, realFrame, imagFrame in
             for sourceBin in sourceStart...sourceEnd {
                 let targetBin = min(spectrogram.binCount - 1, sourceBin * 2)
                 guard targetBin >= targetStart else { continue }
