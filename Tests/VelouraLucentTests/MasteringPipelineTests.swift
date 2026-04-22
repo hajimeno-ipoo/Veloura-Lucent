@@ -9,13 +9,19 @@ struct MasteringPipelineTests {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
         let inputURL = tempDirectory.appending(path: "song_lifter.wav")
+        let logs = MasteringLogCollector()
 
         try makeTestTone(at: inputURL)
 
-        let output = try await MasteringService().process(inputFile: inputURL, profile: .streaming) { _ in }
+        let output = try await MasteringService().process(inputFile: inputURL, profile: .streaming) { message in
+            logs.append(message)
+        }
 
         #expect(FileManager.default.fileExists(atPath: output.path()))
         #expect(output.lastPathComponent.contains("song_lifter_mastered"))
+        #expect(logs.values.contains("解析モード: マスタリングCPU"))
+        #expect(logs.values.contains { $0.hasPrefix("解析: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains { $0.hasPrefix("合計: ") && $0.hasSuffix("秒") })
 
         let written = try AVAudioFile(forReading: output)
         #expect(written.length > 0)
@@ -132,5 +138,22 @@ struct MasteringPipelineTests {
             settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 2)
         )
         try file.write(from: buffer)
+    }
+}
+
+private final class MasteringLogCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    var values: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ message: String) {
+        lock.lock()
+        storage.append(message)
+        lock.unlock()
     }
 }

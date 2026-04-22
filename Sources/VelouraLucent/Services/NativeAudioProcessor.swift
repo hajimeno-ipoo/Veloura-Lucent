@@ -133,17 +133,17 @@ struct NativeAudioProcessor {
         let benchmarkRecorder = collectsBenchmark ? AudioProcessingBenchmarkRecorder() : nil
 
         logger?.log("入力音声を読み込みます")
-        let signal = try measure("loadAudio", recorder: benchmarkRecorder) {
+        let signal = try measure("loadAudio", label: "読み込み", recorder: benchmarkRecorder, logger: logger) {
             try AudioFileService.loadAudio(from: inputFile)
         }
 
         let resolvedAnalysisMode = analysisMode.resolvedMode
         logger?.log("音声を解析します")
         logger?.log(analysisMode.logDescription)
-        let analysis = measure("analyze", recorder: benchmarkRecorder) {
+        let analysis = measure("analyze", label: "解析", recorder: benchmarkRecorder, logger: logger) {
             AudioAnalyzer(mode: resolvedAnalysisMode).analyze(signal: signal)
         }
-        let neuralPrediction = measure("neuralPrediction", recorder: benchmarkRecorder) {
+        let neuralPrediction = measure("neuralPrediction", label: "解析補助", recorder: benchmarkRecorder, logger: logger) {
             NeuralFoldoverEstimator().predict(
                 features: NeuralFoldoverFeatures(
                     harmonicConfidence: analysis.harmonicConfidence,
@@ -157,28 +157,31 @@ struct NativeAudioProcessor {
         }
 
         logger?.log("ノイズを除去します")
-        let denoised = measure("denoise", recorder: benchmarkRecorder) {
+        let denoised = measure("denoise", label: "ノイズ除去", recorder: benchmarkRecorder, logger: logger) {
             SpectralGateDenoiser(strength: denoiseStrength).process(signal: signal)
         }
 
         logger?.log("高域を補完します")
-        let upscaled = measure("harmonicUpscale", recorder: benchmarkRecorder) {
+        let upscaled = measure("harmonicUpscale", label: "高域補完", recorder: benchmarkRecorder, logger: logger) {
             HarmonicUpscaler().process(signal: denoised, analysis: analysis, prediction: neuralPrediction)
         }
 
         logger?.log("ダイナミクスを整えます")
-        let shaped = measure("multibandDynamics", recorder: benchmarkRecorder) {
+        let shaped = measure("multibandDynamics", label: "ダイナミクス", recorder: benchmarkRecorder, logger: logger) {
             MultibandDynamicsProcessor().process(signal: upscaled)
         }
 
         logger?.log("最終音量を整えます")
-        let finalized = measure("loudnessFinalize", recorder: benchmarkRecorder) {
+        let finalized = measure("loudnessFinalize", label: "最終音量", recorder: benchmarkRecorder, logger: logger) {
             LoudnessProcessor().process(signal: shaped)
         }
 
         logger?.log("処理済みファイルを書き出します")
-        try measure("saveAudio", recorder: benchmarkRecorder) {
+        try measure("saveAudio", label: "書き出し", recorder: benchmarkRecorder, logger: logger) {
             try AudioFileService.saveAudio(finalized, to: outputFile)
+        }
+        if let benchmarkRecorder {
+            logger?.log("合計: \(formatProcessingDuration(benchmarkRecorder.stages.reduce(0) { $0 + $1.durationSeconds }))")
         }
         logger?.log("処理が完了しました")
 
@@ -187,31 +190,43 @@ struct NativeAudioProcessor {
 
     private func measure<T>(
         _ stageName: String,
+        label: String,
         recorder: AudioProcessingBenchmarkRecorder?,
+        logger: AudioProcessingLogger?,
         work: () throws -> T
     ) rethrows -> T {
-        guard let recorder else {
-            return try work()
+        let start = DispatchTime.now().uptimeNanoseconds
+        do {
+            let result = try work()
+            let duration = durationSeconds(since: start)
+            recorder?.append(stageName, durationSeconds: duration)
+            logger?.log("\(label): \(formatProcessingDuration(duration))")
+            return result
+        } catch {
+            let duration = durationSeconds(since: start)
+            recorder?.append(stageName, durationSeconds: duration)
+            logger?.log("\(label): \(formatProcessingDuration(duration))")
+            throw error
         }
-        return try recorder.measure(stageName, work: work)
     }
+
+    private func durationSeconds(since start: UInt64) -> Double {
+        let end = DispatchTime.now().uptimeNanoseconds
+        return Double(end - start) / 1_000_000_000
+    }
+
 }
 
 private final class AudioProcessingBenchmarkRecorder {
     private(set) var stages: [AudioProcessingStageBenchmark] = []
 
-    func measure<T>(_ stageName: String, work: () throws -> T) rethrows -> T {
-        let start = DispatchTime.now().uptimeNanoseconds
-        defer {
-            let end = DispatchTime.now().uptimeNanoseconds
-            stages.append(
-                AudioProcessingStageBenchmark(
-                    name: stageName,
-                    durationSeconds: Double(end - start) / 1_000_000_000
-                )
+    func append(_ stageName: String, durationSeconds: Double) {
+        stages.append(
+            AudioProcessingStageBenchmark(
+                name: stageName,
+                durationSeconds: durationSeconds
             )
-        }
-        return try work()
+        )
     }
 }
 

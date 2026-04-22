@@ -11,17 +11,24 @@ struct MasteringService {
         let logger = MasteringClosureLogger(logHandler: logHandler)
 
         try await Task.detached(priority: .userInitiated) {
+            let recorder = MasteringStageTimingRecorder()
             logger.log(MasteringStep.analyze.rawValue)
-            let signal = try AudioFileService.loadAudio(from: inputFile)
-            let analysis = MasteringAnalysisService.analyze(signal: signal)
+            logger.log("解析モード: マスタリングCPU")
+            let analysisInput = try recorder.measure(label: "解析", logger: logger) {
+                let signal = try AudioFileService.loadAudio(from: inputFile)
+                return (signal, MasteringAnalysisService.analyze(signal: signal))
+            }
             let mastered = MasteringProcessor().process(
-                signal: signal,
-                analysis: analysis,
+                signal: analysisInput.0,
+                analysis: analysisInput.1,
                 settings: settings,
                 logger: logger
             )
             logger.log(MasteringStep.save.rawValue)
-            try AudioFileService.saveAudio(mastered, to: outputURL)
+            try recorder.measure(label: "保存", logger: logger) {
+                try AudioFileService.saveAudio(mastered, to: outputURL)
+            }
+            logger.log("合計: \(formatProcessingDuration(recorder.totalDurationSeconds))")
         }.value
 
         guard FileManager.default.fileExists(atPath: outputPath) else {
@@ -66,5 +73,34 @@ private struct MasteringClosureLogger: AudioProcessingLogger, Sendable {
 
     func log(_ message: String) {
         logHandler(message)
+    }
+}
+
+func formatProcessingDuration(_ seconds: Double) -> String {
+    String(format: "%.2f秒", seconds)
+}
+
+private final class MasteringStageTimingRecorder {
+    private(set) var totalDurationSeconds: Double = 0
+
+    func measure<T>(label: String, logger: AudioProcessingLogger, work: () throws -> T) rethrows -> T {
+        let start = DispatchTime.now().uptimeNanoseconds
+        do {
+            let result = try work()
+            let duration = durationSeconds(since: start)
+            totalDurationSeconds += duration
+            logger.log("\(label): \(formatProcessingDuration(duration))")
+            return result
+        } catch {
+            let duration = durationSeconds(since: start)
+            totalDurationSeconds += duration
+            logger.log("\(label): \(formatProcessingDuration(duration))")
+            throw error
+        }
+    }
+
+    private func durationSeconds(since start: UInt64) -> Double {
+        let end = DispatchTime.now().uptimeNanoseconds
+        return Double(end - start) / 1_000_000_000
     }
 }

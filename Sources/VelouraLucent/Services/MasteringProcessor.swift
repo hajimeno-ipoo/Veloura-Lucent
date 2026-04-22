@@ -6,32 +6,52 @@ struct MasteringProcessor {
         let finishingIntensity = clamped(settings.finishingIntensity, min: 0, max: 1)
 
         logger?.log(MasteringStep.tone.rawValue)
-        var current = applyTone(signal: signal, analysis: analysis, settings: settings, finishingIntensity: finishingIntensity)
+        var current = measure(label: "音色", logger: logger) {
+            applyTone(signal: signal, analysis: analysis, settings: settings, finishingIntensity: finishingIntensity)
+        }
 
         logger?.log(MasteringStep.deEss.rawValue)
-        current = applyDeEsser(signal: current, analysis: analysis, settings: settings)
+        current = measure(label: "ディエッサー", logger: logger) {
+            applyDeEsser(signal: current, analysis: analysis, settings: settings)
+        }
 
         logger?.log(MasteringStep.dynamics.rawValue)
-        current = applyMultibandCompression(
-            signal: current,
-            analysis: analysis,
-            settings: settings.multibandCompression,
-            dynamicsRetention: dynamicsRetention,
-            finishingIntensity: finishingIntensity
-        )
+        current = measure(label: "ダイナミクス", logger: logger) {
+            applyMultibandCompression(
+                signal: current,
+                analysis: analysis,
+                settings: settings.multibandCompression,
+                dynamicsRetention: dynamicsRetention,
+                finishingIntensity: finishingIntensity
+            )
+        }
 
         logger?.log(MasteringStep.saturate.rawValue)
-        current = applySaturation(signal: current, amount: effectiveSaturation(settings.saturationAmount, dynamicsRetention: dynamicsRetention, finishingIntensity: finishingIntensity))
+        current = measure(label: "倍音", logger: logger) {
+            applySaturation(signal: current, amount: effectiveSaturation(settings.saturationAmount, dynamicsRetention: dynamicsRetention, finishingIntensity: finishingIntensity))
+        }
 
         logger?.log(MasteringStep.stereo.rawValue)
-        current = applyStereoWidth(signal: current, targetWidth: settings.stereoWidth)
+        current = measure(label: "広がり", logger: logger) {
+            applyStereoWidth(signal: current, targetWidth: settings.stereoWidth)
+        }
 
         logger?.log(MasteringStep.loudness.rawValue)
-        return applyLoudness(
-            signal: current,
-            targetLKFS: effectiveTargetLoudness(settings.targetLoudness, dynamicsRetention: dynamicsRetention, finishingIntensity: finishingIntensity),
-            peakCeilingDB: settings.peakCeilingDB
-        )
+        return measure(label: "音量", logger: logger) {
+            applyLoudness(
+                signal: current,
+                targetLKFS: effectiveTargetLoudness(settings.targetLoudness, dynamicsRetention: dynamicsRetention, finishingIntensity: finishingIntensity),
+                peakCeilingDB: settings.peakCeilingDB
+            )
+        }
+    }
+
+    private func measure<T>(label: String, logger: AudioProcessingLogger?, work: () -> T) -> T {
+        let start = DispatchTime.now().uptimeNanoseconds
+        let result = work()
+        let end = DispatchTime.now().uptimeNanoseconds
+        logger?.log("\(label): \(formatProcessingDuration(Double(end - start) / 1_000_000_000))")
+        return result
     }
 
     private func applyTone(signal: AudioSignal, analysis: MasteringAnalysis, settings: MasteringSettings, finishingIntensity: Float) -> AudioSignal {

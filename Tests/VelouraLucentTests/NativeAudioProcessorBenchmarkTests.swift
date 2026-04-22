@@ -12,11 +12,13 @@ struct NativeAudioProcessorBenchmarkTests {
         let outputURL = tempDirectory.appending(path: "benchmark-output.wav")
 
         try makeTestTone(at: inputURL, duration: 2)
+        let logs = LogCollector()
 
         let benchmark = try NativeAudioProcessor().benchmark(
             inputFile: inputURL,
             outputFile: outputURL,
-            denoiseStrength: .balanced
+            denoiseStrength: .balanced,
+            logger: logs
         )
 
         let expectedStages = [
@@ -34,6 +36,8 @@ struct NativeAudioProcessorBenchmarkTests {
         #expect(benchmark.stages.allSatisfy { $0.durationSeconds >= 0 })
         #expect(benchmark.totalDurationSeconds >= 0)
         #expect(FileManager.default.fileExists(atPath: outputURL.path()))
+        #expect(logs.values.contains { $0.hasPrefix("解析: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains { $0.hasPrefix("合計: ") && $0.hasSuffix("秒") })
 
         let report = benchmarkReport(for: benchmark)
         let reportURL = FileManager.default.temporaryDirectory.appending(path: "VelouraLucentNativeAudioBenchmark.txt")
@@ -146,5 +150,22 @@ struct NativeAudioProcessorBenchmarkTests {
             settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 2)
         )
         try file.write(from: buffer)
+    }
+}
+
+private final class LogCollector: AudioProcessingLogger, @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    var values: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func log(_ message: String) {
+        lock.lock()
+        storage.append(message)
+        lock.unlock()
     }
 }
