@@ -21,17 +21,29 @@ struct NativeAudioProcessingBenchmark: Equatable, Sendable {
     }
 }
 
+enum AudioAnalysisMode: Equatable, Sendable {
+    case cpu
+    case experimentalMetal
+}
+
+struct AudioSeparatedMeanSpectra: Equatable, Sendable {
+    let harmonic: [Float]
+    let percussive: [Float]
+}
+
 struct NativeAudioProcessor {
     func process(
         inputFile: URL,
         outputFile: URL,
         denoiseStrength: DenoiseStrength = .balanced,
+        analysisMode: AudioAnalysisMode = .cpu,
         logger: AudioProcessingLogger? = nil
     ) throws {
         _ = try run(
             inputFile: inputFile,
             outputFile: outputFile,
             denoiseStrength: denoiseStrength,
+            analysisMode: analysisMode,
             logger: logger,
             collectsBenchmark: false
         )
@@ -41,12 +53,14 @@ struct NativeAudioProcessor {
         inputFile: URL,
         outputFile: URL,
         denoiseStrength: DenoiseStrength = .balanced,
+        analysisMode: AudioAnalysisMode = .cpu,
         logger: AudioProcessingLogger? = nil
     ) throws -> NativeAudioProcessingBenchmark {
         try run(
             inputFile: inputFile,
             outputFile: outputFile,
             denoiseStrength: denoiseStrength,
+            analysisMode: analysisMode,
             logger: logger,
             collectsBenchmark: true
         )
@@ -56,6 +70,7 @@ struct NativeAudioProcessor {
         inputFile: URL,
         outputFile: URL,
         denoiseStrength: DenoiseStrength,
+        analysisMode: AudioAnalysisMode,
         logger: AudioProcessingLogger?,
         collectsBenchmark: Bool
     ) throws -> NativeAudioProcessingBenchmark {
@@ -68,7 +83,7 @@ struct NativeAudioProcessor {
 
         logger?.log("音声を解析します")
         let analysis = measure("analyze", recorder: benchmarkRecorder) {
-            AudioAnalyzer().analyze(signal: signal)
+            AudioAnalyzer(mode: analysisMode).analyze(signal: signal)
         }
         let neuralPrediction = measure("neuralPrediction", recorder: benchmarkRecorder) {
             NeuralFoldoverEstimator().predict(
@@ -177,6 +192,12 @@ private final class ConcurrentChannelResults: @unchecked Sendable {
 }
 
 private struct AudioAnalyzer {
+    let mode: AudioAnalysisMode
+
+    init(mode: AudioAnalysisMode = .cpu) {
+        self.mode = mode
+    }
+
     func analyze(signal: AudioSignal) -> AnalysisData {
         let mono = signal.monoMixdown()
         let spectrogram = SpectralDSP.stft(mono)
@@ -251,9 +272,17 @@ private struct AudioAnalyzer {
         )
     }
 
-    private func separatedMeanSpectra(spectrogram: Spectrogram) -> (harmonic: [Float], percussive: [Float]) {
+    private func separatedMeanSpectra(spectrogram: Spectrogram) -> AudioSeparatedMeanSpectra {
+        if mode == .experimentalMetal,
+           let separatedSpectrum = MetalAudioAnalysisProcessor().separatedMeanSpectra(spectrogram: spectrogram) {
+            return separatedSpectrum
+        }
+        return cpuSeparatedMeanSpectra(spectrogram: spectrogram)
+    }
+
+    private func cpuSeparatedMeanSpectra(spectrogram: Spectrogram) -> AudioSeparatedMeanSpectra {
         guard spectrogram.frameCount > 0, spectrogram.binCount > 0 else {
-            return ([], [])
+            return AudioSeparatedMeanSpectra(harmonic: [], percussive: [])
         }
 
         let frameCount = spectrogram.frameCount
@@ -291,7 +320,7 @@ private struct AudioAnalyzer {
             harmonicSpectrum[binIndex] *= scale
             percussiveSpectrum[binIndex] *= scale
         }
-        return (harmonicSpectrum, percussiveSpectrum)
+        return AudioSeparatedMeanSpectra(harmonic: harmonicSpectrum, percussive: percussiveSpectrum)
     }
 
     private func estimateTransientAmount(_ signal: [Float]) -> Float {
