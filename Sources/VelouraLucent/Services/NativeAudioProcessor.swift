@@ -267,16 +267,16 @@ private struct SpectralGateDenoiser: Sendable {
         let smoothedFrameEnergy = SpectralDSP.movingAverage(frameEnergy, windowSize: 7)
 
         for frameIndex in sourceFrameIndices {
-            let realFrame = spectrogram.real[frameIndex]
-            let imagFrame = spectrogram.imag[frameIndex]
-            let previousRealFrame = frameIndex > 0 ? spectrogram.real[frameIndex - 1] : []
-            let previousImagFrame = frameIndex > 0 ? spectrogram.imag[frameIndex - 1] : []
+            let frameStart = frameIndex * binCount
+            let previousFrameStart = frameStart - binCount
             for binIndex in 0..<binCount {
-                let magnitude = hypotf(realFrame[binIndex], imagFrame[binIndex])
+                let index = frameStart + binIndex
+                let magnitude = hypotf(spectrogram.real[index], spectrogram.imag[index])
                 noiseSums[binIndex] += magnitude
                 noiseMinimums[binIndex] = min(noiseMinimums[binIndex], magnitude)
                 if frameIndex > 0 {
-                    let previous = hypotf(previousRealFrame[binIndex], previousImagFrame[binIndex])
+                    let previousIndex = previousFrameStart + binIndex
+                    let previous = hypotf(spectrogram.real[previousIndex], spectrogram.imag[previousIndex])
                     granularSums[binIndex] += abs(magnitude - previous)
                 }
             }
@@ -295,33 +295,31 @@ private struct SpectralGateDenoiser: Sendable {
         for frameIndex in 0..<spectrogram.frameCount {
             let transientRatio = frameEnergy[frameIndex] / max(smoothedFrameEnergy[frameIndex], 1e-6)
             let transientLift = max(0, min(0.35, (transientRatio - 1) * tuning.transientProtection))
-            let previousRealFrame = frameIndex > 0 ? spectrogram.real[frameIndex - 1] : []
-            let previousImagFrame = frameIndex > 0 ? spectrogram.imag[frameIndex - 1] : []
-            spectrogram.real[frameIndex].withUnsafeMutableBufferPointer { realFrame in
-                spectrogram.imag[frameIndex].withUnsafeMutableBufferPointer { imagFrame in
-                    for binIndex in 0..<binCount {
-                        let magnitude = hypotf(realFrame[binIndex], imagFrame[binIndex])
-                        let threshold = noiseProfile[binIndex] * tuning.thresholdMultiplier * coefficients.thresholdScale[binIndex]
-                        let floor = coefficients.floor[binIndex]
-                        let rawMask = max(floor, min(1.0, (magnitude - threshold) / max(magnitude, 1e-6)))
-                        let granularActivity: Float
-                        if frameIndex > 0 {
-                            let previous = hypotf(previousRealFrame[binIndex], previousImagFrame[binIndex])
-                            granularActivity = abs(magnitude - previous)
-                        } else {
-                            granularActivity = 0
-                        }
-                        let granularThreshold = granularProfile[binIndex] * coefficients.granularThresholdScale[binIndex]
-                        let granularExcess = max(0, granularActivity - granularThreshold)
-                        let granularMask = max(
-                            floor,
-                            1 - min(0.72, granularExcess / max(magnitude + granularThreshold, 1e-6)) * tuning.granularReduction
-                        )
-                        let mask = min(1.0, max(rawMask, granularMask) + transientLift)
-                        realFrame[binIndex] *= mask
-                        imagFrame[binIndex] *= mask
-                    }
+            let frameStart = frameIndex * binCount
+            let previousFrameStart = frameStart - binCount
+            for binIndex in 0..<binCount {
+                let index = frameStart + binIndex
+                let magnitude = hypotf(spectrogram.real[index], spectrogram.imag[index])
+                let threshold = noiseProfile[binIndex] * tuning.thresholdMultiplier * coefficients.thresholdScale[binIndex]
+                let floor = coefficients.floor[binIndex]
+                let rawMask = max(floor, min(1.0, (magnitude - threshold) / max(magnitude, 1e-6)))
+                let granularActivity: Float
+                if frameIndex > 0 {
+                    let previousIndex = previousFrameStart + binIndex
+                    let previous = hypotf(spectrogram.real[previousIndex], spectrogram.imag[previousIndex])
+                    granularActivity = abs(magnitude - previous)
+                } else {
+                    granularActivity = 0
                 }
+                let granularThreshold = granularProfile[binIndex] * coefficients.granularThresholdScale[binIndex]
+                let granularExcess = max(0, granularActivity - granularThreshold)
+                let granularMask = max(
+                    floor,
+                    1 - min(0.72, granularExcess / max(magnitude + granularThreshold, 1e-6)) * tuning.granularReduction
+                )
+                let mask = min(1.0, max(rawMask, granularMask) + transientLift)
+                spectrogram.real[index] *= mask
+                spectrogram.imag[index] *= mask
             }
         }
 
@@ -400,8 +398,11 @@ private struct MultibandDynamicsProcessor: Sendable {
             guard end > start else { continue }
 
             let bandEnergy: [Float] = (0..<spectrogram.frameCount).map { frameIndex in
-                let values = (start...end).map { hypotf(spectrogram.real[frameIndex][$0], spectrogram.imag[frameIndex][$0]) }
-                return values.reduce(0, +) / Float(values.count)
+                var sum: Float = 0
+                for binIndex in start...end {
+                    sum += spectrogram.magnitude(frameIndex: frameIndex, binIndex: binIndex)
+                }
+                return sum / Float(end - start + 1)
             }
             let threshold = SpectralDSP.percentile(bandEnergy, percentile)
             let reductionLinear = powf(10, -reductionDB / 20)
@@ -412,8 +413,7 @@ private struct MultibandDynamicsProcessor: Sendable {
             for frameIndex in 0..<spectrogram.frameCount {
                 let gain = max(reductionLinear, min(1.0, mask[frameIndex]))
                 for binIndex in start...end {
-                    spectrogram.real[frameIndex][binIndex] *= gain
-                    spectrogram.imag[frameIndex][binIndex] *= gain
+                    spectrogram.scaleBin(frameIndex: frameIndex, binIndex: binIndex, by: gain)
                 }
             }
         }
@@ -474,8 +474,14 @@ private struct HarmonicUpscaler: Sendable {
             return Array(repeating: 0, count: channel.count)
         }
 
-        var foldReal = Array(repeating: Array(repeating: Float.zero, count: spectrogram.binCount), count: spectrogram.frameCount)
-        var foldImag = Array(repeating: Array(repeating: Float.zero, count: spectrogram.binCount), count: spectrogram.frameCount)
+        var folded = Spectrogram.zeroed(
+            frameCount: spectrogram.frameCount,
+            fftSize: spectrogram.fftSize,
+            hopSize: spectrogram.hopSize,
+            originalLength: spectrogram.originalLength,
+            leadingPadding: spectrogram.leadingPadding,
+            trailingPadding: spectrogram.trailingPadding
+        )
 
         for frameIndex in 0..<spectrogram.frameCount {
             for sourceBin in sourceStart...sourceEnd {
@@ -483,20 +489,16 @@ private struct HarmonicUpscaler: Sendable {
                 guard targetBin >= targetStart else { continue }
                 let normalizedPosition = Float(targetBin - targetStart) / Float(max(spectrogram.binCount - targetStart - 1, 1))
                 let lift = mix * (1 - normalizedPosition * 0.45)
-                foldReal[frameIndex][targetBin] += spectrogram.real[frameIndex][sourceBin] * lift
-                foldImag[frameIndex][targetBin] += spectrogram.imag[frameIndex][sourceBin] * lift
+                let sourceIndex = spectrogram.storageIndex(frameIndex: frameIndex, binIndex: sourceBin)
+                folded.addToBin(
+                    frameIndex: frameIndex,
+                    binIndex: targetBin,
+                    real: spectrogram.real[sourceIndex] * lift,
+                    imag: spectrogram.imag[sourceIndex] * lift
+                )
             }
         }
 
-        let folded = Spectrogram(
-            real: foldReal,
-            imag: foldImag,
-            fftSize: spectrogram.fftSize,
-            hopSize: spectrogram.hopSize,
-            originalLength: spectrogram.originalLength,
-            leadingPadding: spectrogram.leadingPadding,
-            trailingPadding: spectrogram.trailingPadding
-        )
         return SpectralDSP.istft(folded)
     }
 }

@@ -2,33 +2,98 @@ import Accelerate
 import Foundation
 
 struct Spectrogram {
-    var real: [[Float]]
-    var imag: [[Float]]
+    var real: [Float]
+    var imag: [Float]
     let fftSize: Int
     let hopSize: Int
     let originalLength: Int
     let leadingPadding: Int
     let trailingPadding: Int
+    let frameCount: Int
 
-    var frameCount: Int { real.count }
     var binCount: Int { fftSize / 2 + 1 }
 
+    init(
+        real: [Float],
+        imag: [Float],
+        fftSize: Int,
+        hopSize: Int,
+        originalLength: Int,
+        leadingPadding: Int,
+        trailingPadding: Int,
+        frameCount: Int
+    ) {
+        self.real = real
+        self.imag = imag
+        self.fftSize = fftSize
+        self.hopSize = hopSize
+        self.originalLength = originalLength
+        self.leadingPadding = leadingPadding
+        self.trailingPadding = trailingPadding
+        self.frameCount = frameCount
+    }
+
+    static func zeroed(
+        frameCount: Int,
+        fftSize: Int,
+        hopSize: Int,
+        originalLength: Int,
+        leadingPadding: Int,
+        trailingPadding: Int
+    ) -> Spectrogram {
+        let binCount = fftSize / 2 + 1
+        let valueCount = frameCount * binCount
+        return Spectrogram(
+            real: Array(repeating: Float.zero, count: valueCount),
+            imag: Array(repeating: Float.zero, count: valueCount),
+            fftSize: fftSize,
+            hopSize: hopSize,
+            originalLength: originalLength,
+            leadingPadding: leadingPadding,
+            trailingPadding: trailingPadding,
+            frameCount: frameCount
+        )
+    }
+
+    func storageIndex(frameIndex: Int, binIndex: Int) -> Int {
+        frameIndex * binCount + binIndex
+    }
+
     func magnitudes() -> [[Float]] {
-        zip(real, imag).map { realFrame, imagFrame in
-            zip(realFrame, imagFrame).map { hypotf($0, $1) }
+        (0..<frameCount).map { frameIndex in
+            let start = frameIndex * binCount
+            return (0..<binCount).map { binIndex in
+                let index = start + binIndex
+                return hypotf(real[index], imag[index])
+            }
         }
     }
 
     func magnitude(frameIndex: Int, binIndex: Int) -> Float {
-        hypotf(real[frameIndex][binIndex], imag[frameIndex][binIndex])
+        let index = storageIndex(frameIndex: frameIndex, binIndex: binIndex)
+        return hypotf(real[index], imag[index])
+    }
+
+    mutating func scaleBin(frameIndex: Int, binIndex: Int, by gain: Float) {
+        let index = storageIndex(frameIndex: frameIndex, binIndex: binIndex)
+        real[index] *= gain
+        imag[index] *= gain
+    }
+
+    mutating func addToBin(frameIndex: Int, binIndex: Int, real realValue: Float, imag imagValue: Float) {
+        let index = storageIndex(frameIndex: frameIndex, binIndex: binIndex)
+        real[index] += realValue
+        imag[index] += imagValue
     }
 
     func meanMagnitudes() -> [Float] {
         guard frameCount > 0 else { return [] }
         var means = Array(repeating: Float.zero, count: binCount)
         for frameIndex in 0..<frameCount {
+            let start = frameIndex * binCount
             for binIndex in 0..<binCount {
-                means[binIndex] += magnitude(frameIndex: frameIndex, binIndex: binIndex)
+                let index = start + binIndex
+                means[binIndex] += hypotf(real[index], imag[index])
             }
         }
         let scale = 1 / Float(frameCount)
@@ -39,8 +104,10 @@ struct Spectrogram {
         guard frameCount > 0 else { return [] }
         return (0..<frameCount).map { frameIndex in
             var sum: Float = 0
+            let start = frameIndex * binCount
             for binIndex in 0..<binCount {
-                sum += magnitude(frameIndex: frameIndex, binIndex: binIndex)
+                let index = start + binIndex
+                sum += hypotf(real[index], imag[index])
             }
             return sum / Float(binCount)
         }
@@ -64,11 +131,9 @@ enum SpectralDSP {
         let window = resources.window
         let dft = resources.forward
 
-        var realFrames: [[Float]] = []
-        var imagFrames: [[Float]] = []
-        realFrames.reserveCapacity(frameCount)
-        imagFrames.reserveCapacity(frameCount)
         let binCount = fftSize / 2 + 1
+        var realFrames = Array(repeating: Float.zero, count: frameCount * binCount)
+        var imagFrames = Array(repeating: Float.zero, count: frameCount * binCount)
         let inputImag = Array(repeating: Float.zero, count: fftSize)
         var frame = Array(repeating: Float.zero, count: fftSize)
         var outputReal = Array(repeating: Float.zero, count: fftSize)
@@ -81,8 +146,9 @@ enum SpectralDSP {
 
             dft.transform(inputReal: frame, inputImaginary: inputImag, outputReal: &outputReal, outputImaginary: &outputImag)
 
-            realFrames.append(Array(outputReal[0..<binCount]))
-            imagFrames.append(Array(outputImag[0..<binCount]))
+            let outputStart = frameIndex * binCount
+            realFrames[outputStart..<(outputStart + binCount)] = outputReal[0..<binCount]
+            imagFrames[outputStart..<(outputStart + binCount)] = outputImag[0..<binCount]
         }
 
         return Spectrogram(
@@ -92,7 +158,8 @@ enum SpectralDSP {
             hopSize: hopSize,
             originalLength: source.count,
             leadingPadding: padding,
-            trailingPadding: trailingPadding
+            trailingPadding: trailingPadding,
+            frameCount: frameCount
         )
     }
 
@@ -118,15 +185,15 @@ enum SpectralDSP {
 
         for frameIndex in 0..<spectrogram.frameCount {
             let start = frameIndex * hopSize
-            let halfReal = spectrogram.real[frameIndex]
-            let halfImag = spectrogram.imag[frameIndex]
-            fullReal[0..<halfReal.count] = halfReal[0..<halfReal.count]
-            fullImag[0..<halfImag.count] = halfImag[0..<halfImag.count]
+            let inputStart = frameIndex * spectrogram.binCount
+            fullReal[0..<spectrogram.binCount] = spectrogram.real[inputStart..<(inputStart + spectrogram.binCount)]
+            fullImag[0..<spectrogram.binCount] = spectrogram.imag[inputStart..<(inputStart + spectrogram.binCount)]
 
-            if halfReal.count > 2 {
-                for index in 1..<(halfReal.count - 1) {
-                    fullReal[fftSize - index] = halfReal[index]
-                    fullImag[fftSize - index] = -halfImag[index]
+            if spectrogram.binCount > 2 {
+                for index in 1..<(spectrogram.binCount - 1) {
+                    let sourceIndex = inputStart + index
+                    fullReal[fftSize - index] = spectrogram.real[sourceIndex]
+                    fullImag[fftSize - index] = -spectrogram.imag[sourceIndex]
                 }
             }
 
