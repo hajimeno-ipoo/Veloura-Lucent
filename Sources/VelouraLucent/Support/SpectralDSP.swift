@@ -37,19 +37,32 @@ struct Spectrogram {
         frameIndex * binCount + binIndex
     }
 
-    func magnitudes() -> [[Float]] {
-        (0..<frameCount).map { frameIndex in
-            let start = frameIndex * binCount
-            return (0..<binCount).map { binIndex in
-                let index = start + binIndex
-                return hypotf(real[index], imag[index])
-            }
-        }
-    }
-
     func magnitude(frameIndex: Int, binIndex: Int) -> Float {
         let index = storageIndex(frameIndex: frameIndex, binIndex: binIndex)
         return hypotf(real[index], imag[index])
+    }
+
+    func fillMagnitudes(frameIndex: Int, into magnitudes: inout [Float]) {
+        if magnitudes.count != binCount {
+            magnitudes = Array(repeating: Float.zero, count: binCount)
+        }
+
+        let start = frameIndex * binCount
+        for binIndex in 0..<binCount {
+            let index = start + binIndex
+            magnitudes[binIndex] = hypotf(real[index], imag[index])
+        }
+    }
+
+    func fillMagnitudeHistory(binIndex: Int, into history: inout [Float]) {
+        if history.count != frameCount {
+            history = Array(repeating: Float.zero, count: frameCount)
+        }
+
+        for frameIndex in 0..<frameCount {
+            let index = storageIndex(frameIndex: frameIndex, binIndex: binIndex)
+            history[frameIndex] = hypotf(real[index], imag[index])
+        }
     }
 
     mutating func scaleBin(frameIndex: Int, binIndex: Int, by gain: Float) {

@@ -184,8 +184,7 @@ private struct AudioAnalyzer {
             return AnalysisData(cutoffFrequency: 16_000, dominantHarmonics: [], harmonicConfidence: 0, hasShimmer: false, shimmerRatio: 0, brightnessRatio: 0, transientAmount: 0, noiseAmount: 0)
         }
 
-        let magnitudes = spectrogram.magnitudes()
-        let separatedSpectrum = separatedMeanSpectra(magnitudes: magnitudes)
+        let separatedSpectrum = separatedMeanSpectra(spectrogram: spectrogram)
         let harmonicSpectrum = SpectralDSP.medianFilter(separatedSpectrum.harmonic, windowSize: 7)
         let percussiveSpectrum = SpectralDSP.medianFilter(separatedSpectrum.percussive, windowSize: 5)
         let meanSpectrum = zip(harmonicSpectrum, percussiveSpectrum).map { harmonic, percussive in
@@ -252,33 +251,36 @@ private struct AudioAnalyzer {
         )
     }
 
-    private func separatedMeanSpectra(magnitudes: [[Float]]) -> (harmonic: [Float], percussive: [Float]) {
-        guard let firstFrame = magnitudes.first, !firstFrame.isEmpty else {
+    private func separatedMeanSpectra(spectrogram: Spectrogram) -> (harmonic: [Float], percussive: [Float]) {
+        guard spectrogram.frameCount > 0, spectrogram.binCount > 0 else {
             return ([], [])
         }
 
-        let frameCount = magnitudes.count
-        let binCount = firstFrame.count
-        var temporalMedian = Array(repeating: Array(repeating: Float.zero, count: binCount), count: frameCount)
+        let frameCount = spectrogram.frameCount
+        let binCount = spectrogram.binCount
+        var temporalMedian = Array(repeating: Float.zero, count: frameCount * binCount)
+        var history = Array(repeating: Float.zero, count: frameCount)
 
         for binIndex in 0..<binCount {
-            let history = magnitudes.map { $0[binIndex] }
+            spectrogram.fillMagnitudeHistory(binIndex: binIndex, into: &history)
             let filtered = SpectralDSP.medianFilter(history, windowSize: 17)
             for frameIndex in 0..<frameCount {
-                temporalMedian[frameIndex][binIndex] = filtered[frameIndex]
+                temporalMedian[frameIndex * binCount + binIndex] = filtered[frameIndex]
             }
         }
 
         var harmonicSpectrum = Array(repeating: Float.zero, count: binCount)
         var percussiveSpectrum = Array(repeating: Float.zero, count: binCount)
+        var frameMagnitudes = Array(repeating: Float.zero, count: binCount)
 
         for frameIndex in 0..<frameCount {
-            let spectralMedian = SpectralDSP.medianFilter(magnitudes[frameIndex], windowSize: 9)
+            spectrogram.fillMagnitudes(frameIndex: frameIndex, into: &frameMagnitudes)
+            let spectralMedian = SpectralDSP.medianFilter(frameMagnitudes, windowSize: 9)
             for binIndex in 0..<binCount {
-                let harmonicWeight = temporalMedian[frameIndex][binIndex]
+                let harmonicWeight = temporalMedian[frameIndex * binCount + binIndex]
                 let percussiveWeight = spectralMedian[binIndex]
                 let total = max(harmonicWeight + percussiveWeight, 1e-6)
-                let magnitude = magnitudes[frameIndex][binIndex]
+                let magnitude = frameMagnitudes[binIndex]
                 harmonicSpectrum[binIndex] += magnitude * harmonicWeight / total
                 percussiveSpectrum[binIndex] += magnitude * percussiveWeight / total
             }

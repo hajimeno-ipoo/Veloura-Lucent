@@ -113,7 +113,6 @@ enum AudioFileService {
             return .empty
         }
 
-        let magnitudes = spectrogram.magnitudes()
         let timeBuckets = min(120, max(1, spectrogram.frameCount))
         let frequencyBuckets = 56
         let maxFrequency = signal.sampleRate * 0.5
@@ -149,7 +148,7 @@ enum AudioFileService {
 
                 for frameIndex in startFrame..<endFrame {
                     for binIndex in range {
-                        let value = magnitudes[frameIndex][binIndex]
+                        let value = spectrogram.magnitude(frameIndex: frameIndex, binIndex: binIndex)
                         energy += value * value
                         count += 1
                     }
@@ -207,7 +206,6 @@ enum AudioFileService {
             )
         }
 
-        let magnitudes = spectrogram.magnitudes()
         let frequencyStep = sampleRate / Double(spectrogram.fftSize)
         let bandBinRanges = AudioBandCatalog.previewBands.map { band -> (String, ClosedRange<Int>) in
             let lower = max(0, min(Int(floor(band.lowerBound / frequencyStep)), spectrogram.binCount - 1))
@@ -219,13 +217,16 @@ enum AudioFileService {
             ($0.0, Array(repeating: 0, count: spectrogram.frameCount))
         })
 
+        var frameMagnitudes = Array(repeating: Float.zero, count: spectrogram.binCount)
         for frameIndex in 0..<spectrogram.frameCount {
-            let frameMagnitudes = magnitudes[frameIndex]
+            spectrogram.fillMagnitudes(frameIndex: frameIndex, into: &frameMagnitudes)
             for (bandID, range) in bandBinRanges {
-                let values = frameMagnitudes[range]
-                let meanSquare = values.reduce(0.0) { partial, value in
-                    partial + value * value
-                } / Float(max(values.count, 1))
+                var energy: Float = 0
+                for binIndex in range {
+                    let value = frameMagnitudes[binIndex]
+                    energy += value * value
+                }
+                let meanSquare = energy / Float(max(range.count, 1))
                 let rms = sqrtf(max(meanSquare, 1e-12))
                 frameBandLevels[bandID]?[frameIndex] = 20 * log10f(rms)
             }
