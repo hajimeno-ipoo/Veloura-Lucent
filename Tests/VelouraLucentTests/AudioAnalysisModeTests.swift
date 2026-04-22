@@ -110,6 +110,48 @@ struct AudioAnalysisModeTests {
         try report.write(to: reportURL, atomically: true, encoding: .utf8)
     }
 
+    @Test
+    func recordsLongCPUAndExperimentalMetalAnalysisBenchmarks() throws {
+        guard ProcessInfo.processInfo.environment["VELOURA_RUN_LONG_ANALYSIS_BENCHMARK"] == "1" else {
+            return
+        }
+
+        let durations = [10.0, 30.0, 60.0]
+        var results: [AnalysisBenchmarkComparison] = []
+
+        for duration in durations {
+            let signal = makeTestSignal(duration: duration)
+            let cpuBenchmark = measureAnalysis(
+                label: "cpu",
+                mode: .cpu,
+                signal: signal,
+                warmupIterations: 0,
+                measuredIterations: 1
+            )
+            let metalBenchmark = measureAnalysis(
+                label: "experimentalMetal",
+                mode: .experimentalMetal,
+                signal: signal,
+                warmupIterations: 0,
+                measuredIterations: 1
+            )
+
+            #expect(cpuBenchmark.measuredDurations.count == 1)
+            #expect(metalBenchmark.measuredDurations.count == 1)
+            results.append(
+                AnalysisBenchmarkComparison(
+                    duration: duration,
+                    cpu: cpuBenchmark,
+                    metal: metalBenchmark
+                )
+            )
+        }
+
+        let report = analysisBenchmarkReport(results: results)
+        let reportURL = FileManager.default.temporaryDirectory.appending(path: "VelouraLucentLongAnalysisModeBenchmark.txt")
+        try report.write(to: reportURL, atomically: true, encoding: .utf8)
+    }
+
     private func measureAnalysis(
         label: String,
         mode: AudioAnalysisMode,
