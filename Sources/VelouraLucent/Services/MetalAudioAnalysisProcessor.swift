@@ -25,24 +25,13 @@ struct MetalAudioAnalysisProcessor: Sendable {
     }
 }
 
-private extension MetalAudioAnalysisProcessor {
-    func separatedMeanSpectra(magnitudes: [Float], frameCount: Int, binCount: Int) -> AudioSeparatedMeanSpectra {
+extension MetalAudioAnalysisProcessor {
+    private func separatedMeanSpectra(magnitudes: [Float], frameCount: Int, binCount: Int) -> AudioSeparatedMeanSpectra {
         guard frameCount > 0, binCount > 0 else {
             return AudioSeparatedMeanSpectra(harmonic: [], percussive: [])
         }
 
-        var temporalMedian = Array(repeating: Float.zero, count: frameCount * binCount)
-        var history = Array(repeating: Float.zero, count: frameCount)
-
-        for binIndex in 0..<binCount {
-            for frameIndex in 0..<frameCount {
-                history[frameIndex] = magnitudes[frameIndex * binCount + binIndex]
-            }
-            let filtered = SpectralDSP.medianFilter(history, windowSize: 17)
-            for frameIndex in 0..<frameCount {
-                temporalMedian[frameIndex * binCount + binIndex] = filtered[frameIndex]
-            }
-        }
+        let temporalMedian = makeTemporalMedian17(magnitudes: magnitudes, frameCount: frameCount, binCount: binCount)
 
         var harmonicSpectrum = Array(repeating: Float.zero, count: binCount)
         var percussiveSpectrum = Array(repeating: Float.zero, count: binCount)
@@ -70,7 +59,26 @@ private extension MetalAudioAnalysisProcessor {
         return AudioSeparatedMeanSpectra(harmonic: harmonicSpectrum, percussive: percussiveSpectrum)
     }
 
-    func makeMagnitudes(spectrogram: Spectrogram) -> [Float]? {
+    func makeTemporalMedian17(magnitudes: [Float], frameCount: Int, binCount: Int) -> [Float] {
+        guard frameCount > 0, binCount > 0 else { return [] }
+
+        var temporalMedian = Array(repeating: Float.zero, count: frameCount * binCount)
+        var history = Array(repeating: Float.zero, count: frameCount)
+
+        for binIndex in 0..<binCount {
+            for frameIndex in 0..<frameCount {
+                history[frameIndex] = magnitudes[frameIndex * binCount + binIndex]
+            }
+            let filtered = SpectralDSP.medianFilter(history, windowSize: 17)
+            for frameIndex in 0..<frameCount {
+                temporalMedian[frameIndex * binCount + binIndex] = filtered[frameIndex]
+            }
+        }
+
+        return temporalMedian
+    }
+
+    private func makeMagnitudes(spectrogram: Spectrogram) -> [Float]? {
         #if canImport(Metal)
         let valueCount = spectrogram.frameCount * spectrogram.binCount
         guard valueCount > 0,

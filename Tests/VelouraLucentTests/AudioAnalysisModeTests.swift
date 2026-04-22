@@ -53,6 +53,31 @@ struct AudioAnalysisModeTests {
     }
 
     @Test
+    func cpuTemporalMedian17MatchesReferenceImplementation() {
+        let frameCount = 31
+        let binCount = 13
+        let valueCount = frameCount * binCount
+        let magnitudes = (0..<valueCount).map { index -> Float in
+            let sample = sin(Double(index) * 0.31) * 0.4
+            let modulation = cos(Double(index) * 0.17) * 0.2
+            return Float(sample + modulation)
+        }
+
+        let temporalMedian = MetalAudioAnalysisProcessor().makeTemporalMedian17(
+            magnitudes: magnitudes,
+            frameCount: frameCount,
+            binCount: binCount
+        )
+        let reference = referenceTemporalMedian17(
+            magnitudes: magnitudes,
+            frameCount: frameCount,
+            binCount: binCount
+        )
+
+        #expect(temporalMedian == reference)
+    }
+
+    @Test
     func experimentalMetalAnalysisValuesStayNearCPU() {
         let signal = makeTestSignal(duration: 2)
 
@@ -196,6 +221,23 @@ struct AudioAnalysisModeTests {
             lines.append("speedup.cpu_over_experimentalMetal: \(String(format: "%.3f", result.speedRatio))x")
         }
         return lines.joined(separator: "\n")
+    }
+
+    private func referenceTemporalMedian17(magnitudes: [Float], frameCount: Int, binCount: Int) -> [Float] {
+        var temporalMedian = Array(repeating: Float.zero, count: frameCount * binCount)
+        var history = Array(repeating: Float.zero, count: frameCount)
+
+        for binIndex in 0..<binCount {
+            for frameIndex in 0..<frameCount {
+                history[frameIndex] = magnitudes[frameIndex * binCount + binIndex]
+            }
+            let filtered = SpectralDSP.medianFilter(history, windowSize: 17)
+            for frameIndex in 0..<frameCount {
+                temporalMedian[frameIndex * binCount + binIndex] = filtered[frameIndex]
+            }
+        }
+
+        return temporalMedian
     }
 
     private struct AnalysisBenchmarkComparison {
