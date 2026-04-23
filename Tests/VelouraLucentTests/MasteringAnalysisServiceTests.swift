@@ -84,14 +84,41 @@ struct MasteringAnalysisServiceTests {
         }
 
         let benchmark = try MasteringAnalysisService.analyzeWithBenchmark(fileURL: inputURL)
+        let signal = try AudioFileService.loadAudio(from: inputURL)
+        let spectrogram = SpectralDSP.stft(signal.monoMixdown())
+        let metalSpectralSummary = measureMetalSpectralSummary(spectrogram: spectrogram, sampleRate: signal.sampleRate)
         #expect(benchmark.stages.map(\.name) == ["stft", "loudness", "truePeak", "spectralSummary", "stereoWidth"])
         #expect(benchmark.stages.allSatisfy { $0.durationSeconds >= 0 })
         #expect(benchmark.analysis.integratedLoudness.isFinite)
         #expect(benchmark.analysis.truePeakDBFS.isFinite)
 
-        let report = realAudioBenchmarkReport(inputURL: inputURL, benchmark: benchmark)
+        let report = realAudioBenchmarkReport(inputURL: inputURL, benchmark: benchmark, metalSpectralSummary: metalSpectralSummary)
         let reportURL = FileManager.default.temporaryDirectory.appending(path: "VelouraLucentRealMasteringAnalysisBenchmark.txt")
         try report.write(to: reportURL, atomically: true, encoding: .utf8)
+    }
+
+    @Test
+    func metalMasteringSpectralSummaryStaysNearCPUWhenAvailable() throws {
+        let processor = MetalAudioAnalysisProcessor()
+        guard processor.isAvailable else { return }
+
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let fileURL = tempDirectory.appending(path: "metal-mastering-summary.wav")
+
+        try makeStereoTone(at: fileURL)
+
+        let signal = try AudioFileService.loadAudio(from: fileURL)
+        let spectrogram = SpectralDSP.stft(signal.monoMixdown())
+        let cpu = MasteringAnalysisService.analyze(signal: signal)
+        let metal = processor.masteringSpectralSummary(spectrogram: spectrogram, sampleRate: signal.sampleRate)
+
+        #expect(metal != nil)
+        guard let metal else { return }
+        expectClose(metal.lowBandLevelDB, cpu.lowBandLevelDB, tolerance: 0.001)
+        expectClose(metal.midBandLevelDB, cpu.midBandLevelDB, tolerance: 0.001)
+        expectClose(metal.highBandLevelDB, cpu.highBandLevelDB, tolerance: 0.001)
+        expectClose(metal.harshnessScore, cpu.harshnessScore, tolerance: 0.0001)
     }
 
     @Test
@@ -113,7 +140,11 @@ struct MasteringAnalysisServiceTests {
         return lines.joined(separator: "\n")
     }
 
-    private func realAudioBenchmarkReport(inputURL: URL, benchmark: MasteringAnalysisService.Benchmark) -> String {
+    private func realAudioBenchmarkReport(
+        inputURL: URL,
+        benchmark: MasteringAnalysisService.Benchmark,
+        metalSpectralSummary: TimedMetalSpectralSummary?
+    ) -> String {
         let slowestStage = benchmark.stages.max { $0.durationSeconds < $1.durationSeconds }
         var lines = [
             "Veloura Lucent real mastering analysis benchmark",
@@ -133,7 +164,53 @@ struct MasteringAnalysisServiceTests {
         for stage in benchmark.stages {
             lines.append("\(stage.name): \(String(format: "%.6f", stage.durationSeconds))s")
         }
+        if let metalSpectralSummary {
+            lines.append("experimentalMetal.spectralSummary: \(String(format: "%.6f", metalSpectralSummary.durationSeconds))s")
+            lines.append("experimentalMetal.lowBand: \(String(format: "%.3f", metalSpectralSummary.summary.lowBandLevelDB)) dB")
+            lines.append("experimentalMetal.midBand: \(String(format: "%.3f", metalSpectralSummary.summary.midBandLevelDB)) dB")
+            lines.append("experimentalMetal.highBand: \(String(format: "%.3f", metalSpectralSummary.summary.highBandLevelDB)) dB")
+            lines.append("experimentalMetal.harshness: \(String(format: "%.3f", metalSpectralSummary.summary.harshnessScore))")
+            lines.append("diff.lowBand.metal_minus_cpu: \(String(format: "%.6f", metalSpectralSummary.summary.lowBandLevelDB - benchmark.analysis.lowBandLevelDB)) dB")
+            lines.append("diff.midBand.metal_minus_cpu: \(String(format: "%.6f", metalSpectralSummary.summary.midBandLevelDB - benchmark.analysis.midBandLevelDB)) dB")
+            lines.append("diff.highBand.metal_minus_cpu: \(String(format: "%.6f", metalSpectralSummary.summary.highBandLevelDB - benchmark.analysis.highBandLevelDB)) dB")
+            lines.append("diff.harshness.metal_minus_cpu: \(String(format: "%.6f", metalSpectralSummary.summary.harshnessScore - benchmark.analysis.harshnessScore))")
+            let cpuSpectralSummary = benchmark.duration(for: "spectralSummary") ?? 0
+            lines.append("speedup.spectralSummary.cpu_over_experimentalMetal: \(String(format: "%.3f", speedRatio(cpuSpectralSummary, metalSpectralSummary.durationSeconds)))x")
+        } else {
+            lines.append("experimentalMetal.spectralSummary: unavailable")
+        }
         return lines.joined(separator: "\n")
+    }
+
+    private func measureMetalSpectralSummary(spectrogram: Spectrogram, sampleRate: Double) -> TimedMetalSpectralSummary? {
+        let processor = MetalAudioAnalysisProcessor()
+        guard processor.isAvailable else { return nil }
+
+        var summary: MasteringSpectralSummary?
+        let duration = measureSeconds {
+            summary = processor.masteringSpectralSummary(spectrogram: spectrogram, sampleRate: sampleRate)
+        }
+        guard let summary else { return nil }
+        return TimedMetalSpectralSummary(summary: summary, durationSeconds: duration)
+    }
+
+    private func measureSeconds(_ work: () -> Void) -> Double {
+        let start = DispatchTime.now().uptimeNanoseconds
+        work()
+        let end = DispatchTime.now().uptimeNanoseconds
+        return Double(end - start) / 1_000_000_000
+    }
+
+    private func speedRatio(_ cpu: Double, _ metal: Double) -> Double {
+        metal > 0 ? cpu / metal : 0
+    }
+
+    private func expectClose(_ actual: Double, _ expected: Double, tolerance: Double) {
+        #expect(abs(actual - expected) <= tolerance)
+    }
+
+    private func expectClose(_ actual: Float, _ expected: Float, tolerance: Float) {
+        #expect(abs(actual - expected) <= tolerance)
     }
 
     private func referenceTruePeak(_ channels: [[Float]]) -> Float {
@@ -337,5 +414,10 @@ struct MasteringAnalysisServiceTests {
     private struct ReferenceBinRange {
         let lower: Int
         let upperInclusive: Int
+    }
+
+    private struct TimedMetalSpectralSummary {
+        let summary: MasteringSpectralSummary
+        let durationSeconds: Double
     }
 }

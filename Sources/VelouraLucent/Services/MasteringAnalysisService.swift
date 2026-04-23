@@ -1,6 +1,13 @@
 import Accelerate
 import Foundation
 
+struct MasteringSpectralSummary: Sendable, Equatable {
+    let lowBandLevelDB: Double
+    let midBandLevelDB: Double
+    let highBandLevelDB: Double
+    let harshnessScore: Float
+}
+
 enum MasteringAnalysisService {
     struct Benchmark: Sendable {
         let analysis: MasteringAnalysis
@@ -112,13 +119,6 @@ enum MasteringAnalysisService {
         return peak
     }
 
-    private struct SpectralSummary {
-        let lowBandLevelDB: Double
-        let midBandLevelDB: Double
-        let highBandLevelDB: Double
-        let harshnessScore: Float
-    }
-
     private struct BinRange {
         let lower: Int
         let upperInclusive: Int
@@ -128,9 +128,9 @@ enum MasteringAnalysisService {
         }
     }
 
-    private static func spectralSummary(for spectrogram: Spectrogram, sampleRate: Double) -> SpectralSummary {
+    private static func spectralSummary(for spectrogram: Spectrogram, sampleRate: Double) -> MasteringSpectralSummary {
         guard spectrogram.frameCount > 0 else {
-            return SpectralSummary(lowBandLevelDB: -120, midBandLevelDB: -120, highBandLevelDB: -120, harshnessScore: 0)
+            return MasteringSpectralSummary(lowBandLevelDB: -120, midBandLevelDB: -120, highBandLevelDB: -120, harshnessScore: 0)
         }
 
         let frequencyStep = sampleRate / Double(spectrogram.fftSize)
@@ -190,7 +190,7 @@ enum MasteringAnalysisService {
             harshAir += frameHarshAir
         }
 
-        return SpectralSummary(
+        return MasteringSpectralSummary(
             lowBandLevelDB: bandLevelDB(energy: lowEnergy, count: lowCount),
             midBandLevelDB: bandLevelDB(energy: midEnergy, count: midCount),
             highBandLevelDB: bandLevelDB(energy: highEnergy, count: highCount),
