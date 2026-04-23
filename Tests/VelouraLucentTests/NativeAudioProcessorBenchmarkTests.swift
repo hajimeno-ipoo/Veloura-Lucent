@@ -38,6 +38,13 @@ struct NativeAudioProcessorBenchmarkTests {
         #expect(FileManager.default.fileExists(atPath: outputURL.path()))
         #expect(logs.values.contains { $0.hasPrefix("解析: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("合計: ") && $0.hasSuffix("秒") })
+        let total = try #require(parsedDuration(prefix: "合計: ", from: logs.values))
+        let stagePrefixes = ["読み込み: ", "解析: ", "解析補助: ", "ノイズ除去: ", "高域補完: ", "ダイナミクス: ", "最終音量: ", "書き出し: "]
+        var summedStages = 0.0
+        for prefix in stagePrefixes {
+            summedStages += try #require(parsedDuration(prefix: prefix, from: logs.values))
+        }
+        #expect(total + 0.10 >= summedStages)
 
         let report = benchmarkReport(for: benchmark)
         let reportURL = FileManager.default.temporaryDirectory.appending(path: "VelouraLucentNativeAudioBenchmark.txt")
@@ -151,6 +158,16 @@ struct NativeAudioProcessorBenchmarkTests {
         )
         try file.write(from: buffer)
     }
+}
+
+private func parsedDuration(prefix: String, from logs: [String]) -> Double? {
+    guard let line = logs.first(where: { $0.hasPrefix(prefix) && $0.hasSuffix("秒") }) else {
+        return nil
+    }
+    let trimmed = line
+        .replacingOccurrences(of: prefix, with: "")
+        .replacingOccurrences(of: "秒", with: "")
+    return Double(trimmed)
 }
 
 private final class LogCollector: AudioProcessingLogger, @unchecked Sendable {

@@ -12,6 +12,7 @@ struct MasteringService {
 
         try await Task.detached(priority: .userInitiated) {
             let recorder = MasteringStageTimingRecorder()
+            let totalStart = DispatchTime.now().uptimeNanoseconds
             logger.log(MasteringStep.analyze.rawValue)
             logger.log("解析モード: マスタリングCPU")
             let analysisInput = try recorder.measure(label: "解析", logger: logger) {
@@ -32,7 +33,7 @@ struct MasteringService {
             try recorder.measure(label: "保存", logger: logger) {
                 try AudioFileService.saveAudio(mastered, to: outputURL)
             }
-            logger.log("合計: \(formatProcessingDuration(recorder.totalDurationSeconds))")
+            logger.log("合計: \(formatProcessingDuration(durationSeconds(since: totalStart)))")
         }.value
 
         guard FileManager.default.fileExists(atPath: outputPath) else {
@@ -124,4 +125,9 @@ private final class MasteringStageTimingRecorder {
         let end = DispatchTime.now().uptimeNanoseconds
         return Double(end - start) / 1_000_000_000
     }
+}
+
+private func durationSeconds(since start: UInt64) -> Double {
+    let end = DispatchTime.now().uptimeNanoseconds
+    return Double(end - start) / 1_000_000_000
 }
