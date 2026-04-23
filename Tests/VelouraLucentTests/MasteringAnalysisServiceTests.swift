@@ -50,6 +50,30 @@ struct MasteringAnalysisServiceTests {
     }
 
     @Test
+    func recordsRealAudioMasteringAnalysisBenchmark() throws {
+        guard ProcessInfo.processInfo.environment["VELOURA_RUN_REAL_AUDIO_BENCHMARK"] == "1" else {
+            return
+        }
+
+        let projectDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let inputURL = projectDirectory.appending(path: "violin #002 睡眠.wav")
+        guard FileManager.default.fileExists(atPath: inputURL.path(percentEncoded: false)) else {
+            Issue.record("Real audio fixture is missing: \(inputURL.path(percentEncoded: false))")
+            return
+        }
+
+        let benchmark = try MasteringAnalysisService.analyzeWithBenchmark(fileURL: inputURL)
+        #expect(benchmark.stages.map(\.name) == ["stft", "loudness", "truePeak", "spectralSummary", "stereoWidth"])
+        #expect(benchmark.stages.allSatisfy { $0.durationSeconds >= 0 })
+        #expect(benchmark.analysis.integratedLoudness.isFinite)
+        #expect(benchmark.analysis.truePeakDBFS.isFinite)
+
+        let report = realAudioBenchmarkReport(inputURL: inputURL, benchmark: benchmark)
+        let reportURL = FileManager.default.temporaryDirectory.appending(path: "VelouraLucentRealMasteringAnalysisBenchmark.txt")
+        try report.write(to: reportURL, atomically: true, encoding: .utf8)
+    }
+
+    @Test
     func approximateTruePeakMatchesReferenceInterpolation() {
         let channels: [[Float]] = [
             [0, 0.12, -0.37, 0.52, -0.18, 0.04, -0.09],
@@ -65,6 +89,29 @@ struct MasteringAnalysisServiceTests {
             lines.append("\(stage.name): \(String(format: "%.6f", stage.durationSeconds))s")
         }
         lines.append("total: \(String(format: "%.6f", benchmark.totalDurationSeconds))s")
+        return lines.joined(separator: "\n")
+    }
+
+    private func realAudioBenchmarkReport(inputURL: URL, benchmark: MasteringAnalysisService.Benchmark) -> String {
+        let slowestStage = benchmark.stages.max { $0.durationSeconds < $1.durationSeconds }
+        var lines = [
+            "Veloura Lucent real mastering analysis benchmark",
+            "input: \(inputURL.path(percentEncoded: false))",
+            "integratedLoudness: \(String(format: "%.3f", benchmark.analysis.integratedLoudness)) LKFS",
+            "truePeak: \(String(format: "%.3f", benchmark.analysis.truePeakDBFS)) dBFS",
+            "lowBand: \(String(format: "%.3f", benchmark.analysis.lowBandLevelDB)) dB",
+            "midBand: \(String(format: "%.3f", benchmark.analysis.midBandLevelDB)) dB",
+            "highBand: \(String(format: "%.3f", benchmark.analysis.highBandLevelDB)) dB",
+            "harshness: \(String(format: "%.3f", benchmark.analysis.harshnessScore))",
+            "stereoWidth: \(String(format: "%.3f", benchmark.analysis.stereoWidth))",
+            "total: \(String(format: "%.6f", benchmark.totalDurationSeconds))s"
+        ]
+        if let slowestStage {
+            lines.append("slowest: \(slowestStage.name)=\(String(format: "%.6f", slowestStage.durationSeconds))s")
+        }
+        for stage in benchmark.stages {
+            lines.append("\(stage.name): \(String(format: "%.6f", stage.durationSeconds))s")
+        }
         return lines.joined(separator: "\n")
     }
 
