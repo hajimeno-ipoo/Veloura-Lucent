@@ -16,7 +16,11 @@ struct MasteringService {
             logger.log("解析モード: マスタリングCPU")
             let analysisInput = try recorder.measure(label: "解析", logger: logger) {
                 let signal = try AudioFileService.loadAudio(from: inputFile)
-                return (signal, MasteringAnalysisService.analyze(signal: signal))
+                let benchmark = MasteringAnalysisService.analyzeWithBenchmark(signal: signal)
+                for stage in benchmark.stages {
+                    logger.log("解析/\(masteringAnalysisStageDisplayName(stage.name)): \(formatProcessingDuration(stage.durationSeconds))")
+                }
+                return (signal, benchmark.analysis)
             }
             let mastered = MasteringProcessor().process(
                 signal: analysisInput.0,
@@ -78,6 +82,23 @@ private struct MasteringClosureLogger: AudioProcessingLogger, Sendable {
 
 func formatProcessingDuration(_ seconds: Double) -> String {
     String(format: "%.2f秒", seconds)
+}
+
+private func masteringAnalysisStageDisplayName(_ name: String) -> String {
+    switch name {
+    case "stft":
+        "STFT"
+    case "loudness":
+        "ラウドネス"
+    case "truePeak":
+        "トゥルーピーク"
+    case "spectralSummary":
+        "帯域集計"
+    case "stereoWidth":
+        "ステレオ幅"
+    default:
+        name
+    }
 }
 
 private final class MasteringStageTimingRecorder {

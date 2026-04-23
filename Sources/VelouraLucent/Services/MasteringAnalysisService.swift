@@ -2,15 +2,38 @@ import Accelerate
 import Foundation
 
 enum MasteringAnalysisService {
+    struct Benchmark: Sendable {
+        let analysis: MasteringAnalysis
+        let stages: [AudioProcessingStageBenchmark]
+
+        var totalDurationSeconds: Double {
+            stages.reduce(0) { $0 + $1.durationSeconds }
+        }
+
+        func duration(for stageName: String) -> Double? {
+            stages.first { $0.name == stageName }?.durationSeconds
+        }
+    }
+
     static func analyze(fileURL: URL) throws -> MasteringAnalysis {
         let signal = try AudioFileService.loadAudio(from: fileURL)
         return analyze(signal: signal)
     }
 
     static func analyze(signal: AudioSignal) -> MasteringAnalysis {
+        analyzeWithBenchmark(signal: signal).analysis
+    }
+
+    static func analyzeWithBenchmark(fileURL: URL) throws -> Benchmark {
+        let signal = try AudioFileService.loadAudio(from: fileURL)
+        return analyzeWithBenchmark(signal: signal)
+    }
+
+    static func analyzeWithBenchmark(signal: AudioSignal) -> Benchmark {
+        var recorder = AnalysisBenchmarkRecorder()
         let mono = signal.monoMixdown()
         guard !mono.isEmpty else {
-            return MasteringAnalysis(
+            let analysis = MasteringAnalysis(
                 integratedLoudness: -70,
                 truePeakDBFS: -120,
                 lowBandLevelDB: -120,
@@ -19,23 +42,35 @@ enum MasteringAnalysisService {
                 harshnessScore: 0,
                 stereoWidth: 0
             )
+            return Benchmark(analysis: analysis, stages: [])
         }
 
-        let spectrogram = SpectralDSP.stft(mono)
-        let loudness = integratedLoudness(mono: mono, sampleRate: signal.sampleRate)
-        let peak = approximateTruePeak(signal.channels)
-        let spectralSummary = spectralSummary(for: spectrogram, sampleRate: signal.sampleRate)
-        let width = stereoWidth(for: signal)
+        let spectrogram = recorder.measure("stft") {
+            SpectralDSP.stft(mono)
+        }
+        let loudness = recorder.measure("loudness") {
+            integratedLoudness(mono: mono, sampleRate: signal.sampleRate)
+        }
+        let peak = recorder.measure("truePeak") {
+            approximateTruePeak(signal.channels)
+        }
+        let spectralSummaryResult = recorder.measure("spectralSummary") {
+            spectralSummary(for: spectrogram, sampleRate: signal.sampleRate)
+        }
+        let width = recorder.measure("stereoWidth") {
+            stereoWidth(for: signal)
+        }
 
-        return MasteringAnalysis(
+        let analysis = MasteringAnalysis(
             integratedLoudness: loudness,
             truePeakDBFS: 20 * log10(max(Double(peak), 1e-12)),
-            lowBandLevelDB: spectralSummary.lowBandLevelDB,
-            midBandLevelDB: spectralSummary.midBandLevelDB,
-            highBandLevelDB: spectralSummary.highBandLevelDB,
-            harshnessScore: spectralSummary.harshnessScore,
+            lowBandLevelDB: spectralSummaryResult.lowBandLevelDB,
+            midBandLevelDB: spectralSummaryResult.midBandLevelDB,
+            highBandLevelDB: spectralSummaryResult.highBandLevelDB,
+            harshnessScore: spectralSummaryResult.harshnessScore,
             stereoWidth: width
         )
+        return Benchmark(analysis: analysis, stages: recorder.stages)
     }
 
     static func integratedLoudness(signal: AudioSignal) -> Float {
@@ -222,5 +257,22 @@ enum MasteringAnalysisService {
                 + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
                 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3
         )
+    }
+
+    private struct AnalysisBenchmarkRecorder {
+        private(set) var stages: [AudioProcessingStageBenchmark] = []
+
+        mutating func measure<T>(_ stageName: String, work: () -> T) -> T {
+            let start = DispatchTime.now().uptimeNanoseconds
+            let result = work()
+            let end = DispatchTime.now().uptimeNanoseconds
+            stages.append(
+                AudioProcessingStageBenchmark(
+                    name: stageName,
+                    durationSeconds: Double(end - start) / 1_000_000_000
+                )
+            )
+            return result
+        }
     }
 }

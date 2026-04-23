@@ -20,6 +20,11 @@ struct MasteringPipelineTests {
         #expect(FileManager.default.fileExists(atPath: output.path()))
         #expect(output.lastPathComponent.contains("song_lifter_mastered"))
         #expect(logs.values.contains("解析モード: マスタリングCPU"))
+        #expect(logs.values.contains { $0.hasPrefix("解析/STFT: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains { $0.hasPrefix("解析/ラウドネス: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains { $0.hasPrefix("解析/トゥルーピーク: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains { $0.hasPrefix("解析/帯域集計: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains { $0.hasPrefix("解析/ステレオ幅: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("解析: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("合計: ") && $0.hasSuffix("秒") })
 
