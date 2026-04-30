@@ -278,42 +278,42 @@ final class ProcessingJob {
         guard message.hasPrefix("ノイズ除去/") else { return }
         let current = denoiseEffectReport ?? .empty
 
-        if let value = percentValue(in: message, prefix: "ノイズ除去/10-16kHzチラつき: ") {
+        if let value = decibelValue(in: message, prefix: "ノイズ除去/10-16kHzチラつき: ") {
             denoiseEffectReport = DenoiseEffectReport(
-                shimmerFlickerChangePercent: value,
-                hf12ChangePercent: current.hf12ChangePercent,
-                hf16ChangePercent: current.hf16ChangePercent,
-                hf18ChangePercent: current.hf18ChangePercent
+                shimmerFlickerChangeDB: value,
+                hf12ChangeDB: current.hf12ChangeDB,
+                hf16ChangeDB: current.hf16ChangeDB,
+                hf18ChangeDB: current.hf18ChangeDB
             )
-        } else if let value = percentValue(in: message, prefix: "ノイズ除去/12kHz以上: ") {
+        } else if let value = decibelValue(in: message, prefix: "ノイズ除去/12kHz以上: ") {
             denoiseEffectReport = DenoiseEffectReport(
-                shimmerFlickerChangePercent: current.shimmerFlickerChangePercent,
-                hf12ChangePercent: value,
-                hf16ChangePercent: current.hf16ChangePercent,
-                hf18ChangePercent: current.hf18ChangePercent
+                shimmerFlickerChangeDB: current.shimmerFlickerChangeDB,
+                hf12ChangeDB: value,
+                hf16ChangeDB: current.hf16ChangeDB,
+                hf18ChangeDB: current.hf18ChangeDB
             )
-        } else if let value = percentValue(in: message, prefix: "ノイズ除去/16kHz以上: ") {
+        } else if let value = decibelValue(in: message, prefix: "ノイズ除去/16kHz以上: ") {
             denoiseEffectReport = DenoiseEffectReport(
-                shimmerFlickerChangePercent: current.shimmerFlickerChangePercent,
-                hf12ChangePercent: current.hf12ChangePercent,
-                hf16ChangePercent: value,
-                hf18ChangePercent: current.hf18ChangePercent
+                shimmerFlickerChangeDB: current.shimmerFlickerChangeDB,
+                hf12ChangeDB: current.hf12ChangeDB,
+                hf16ChangeDB: value,
+                hf18ChangeDB: current.hf18ChangeDB
             )
-        } else if let value = percentValue(in: message, prefix: "ノイズ除去/18kHz以上: ") {
+        } else if let value = decibelValue(in: message, prefix: "ノイズ除去/18kHz以上: ") {
             denoiseEffectReport = DenoiseEffectReport(
-                shimmerFlickerChangePercent: current.shimmerFlickerChangePercent,
-                hf12ChangePercent: current.hf12ChangePercent,
-                hf16ChangePercent: current.hf16ChangePercent,
-                hf18ChangePercent: value
+                shimmerFlickerChangeDB: current.shimmerFlickerChangeDB,
+                hf12ChangeDB: current.hf12ChangeDB,
+                hf16ChangeDB: current.hf16ChangeDB,
+                hf18ChangeDB: value
             )
         }
     }
 
-    private func percentValue(in message: String, prefix: String) -> Double? {
+    private func decibelValue(in message: String, prefix: String) -> Double? {
         guard message.hasPrefix(prefix) else { return nil }
         let rawValue = message
             .dropFirst(prefix.count)
-            .replacingOccurrences(of: "%", with: "")
+            .replacingOccurrences(of: "dB", with: "")
             .replacingOccurrences(of: "±", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return Double(rawValue)

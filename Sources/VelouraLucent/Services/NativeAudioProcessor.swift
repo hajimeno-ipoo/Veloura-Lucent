@@ -222,34 +222,34 @@ struct NativeAudioProcessor {
         guard let logger else { return }
         let before = DenoiseEffectMetrics(signal: input)
         let after = DenoiseEffectMetrics(signal: denoised)
-        logger.log("ノイズ除去/10-16kHzチラつき: \(formatSignedPercentChange(from: before.shimmerFlicker, to: after.shimmerFlicker))")
-        logger.log("ノイズ除去/12kHz以上: \(formatSignedPercentChange(from: before.hf12Ratio, to: after.hf12Ratio))")
-        logger.log("ノイズ除去/16kHz以上: \(formatSignedPercentChange(from: before.hf16Ratio, to: after.hf16Ratio))")
-        logger.log("ノイズ除去/18kHz以上: \(formatSignedPercentChange(from: before.hf18Ratio, to: after.hf18Ratio))")
+        logger.log("ノイズ除去/10-16kHzチラつき: \(formatSignedDecibelChange(from: before.shimmerFlicker, to: after.shimmerFlicker))")
+        logger.log("ノイズ除去/12kHz以上: \(formatSignedDecibelChange(from: before.hf12Magnitude, to: after.hf12Magnitude))")
+        logger.log("ノイズ除去/16kHz以上: \(formatSignedDecibelChange(from: before.hf16Magnitude, to: after.hf16Magnitude))")
+        logger.log("ノイズ除去/18kHz以上: \(formatSignedDecibelChange(from: before.hf18Magnitude, to: after.hf18Magnitude))")
     }
 
-    private func formatSignedPercentChange(from before: Float, to after: Float) -> String {
+    private func formatSignedDecibelChange(from before: Float, to after: Float) -> String {
         guard before.isFinite, after.isFinite, before > 1e-9 else {
-            return "±0.0%"
+            return "±0.0 dB"
         }
-        let percent = (after - before) / before * 100
-        return String(format: "%+.1f%%", percent)
+        let decibels = 20 * log10(Double(max(after, 1e-9) / before))
+        return String(format: "%+.1f dB", decibels)
     }
 }
 
 private struct DenoiseEffectMetrics {
     let shimmerFlicker: Float
-    let hf12Ratio: Float
-    let hf16Ratio: Float
-    let hf18Ratio: Float
+    let hf12Magnitude: Float
+    let hf16Magnitude: Float
+    let hf18Magnitude: Float
 
     init(signal: AudioSignal) {
         let spectrogram = SpectralDSP.stft(signal.monoMixdown())
         guard spectrogram.frameCount > 0, spectrogram.binCount > 0 else {
             shimmerFlicker = 0
-            hf12Ratio = 0
-            hf16Ratio = 0
-            hf18Ratio = 0
+            hf12Magnitude = 0
+            hf16Magnitude = 0
+            hf18Magnitude = 0
             return
         }
 
@@ -260,10 +260,9 @@ private struct DenoiseEffectMetrics {
         let hf16Start = Self.binIndex(for: 16_000, frequencyStep: frequencyStep, binCount: spectrogram.binCount)
         let hf18Start = Self.binIndex(for: 18_000, frequencyStep: frequencyStep, binCount: spectrogram.binCount)
 
-        var totalEnergy: Float = 0
-        var hf12Energy: Float = 0
-        var hf16Energy: Float = 0
-        var hf18Energy: Float = 0
+        var hf12Sum: Float = 0
+        var hf16Sum: Float = 0
+        var hf18Sum: Float = 0
         var previousShimmerMean: Float?
         var shimmerMeanSum: Float = 0
         var shimmerDiffSum: Float = 0
@@ -273,19 +272,18 @@ private struct DenoiseEffectMetrics {
             var shimmerEnergy: Float = 0
             var shimmerCount = 0
             for binIndex in 0..<spectrogram.binCount {
-                let energy = spectrogram.magnitude(frameIndex: frameIndex, binIndex: binIndex)
-                totalEnergy += energy
+                let magnitude = spectrogram.magnitude(frameIndex: frameIndex, binIndex: binIndex)
                 if binIndex >= hf12Start {
-                    hf12Energy += energy
+                    hf12Sum += magnitude
                 }
                 if binIndex >= hf16Start {
-                    hf16Energy += energy
+                    hf16Sum += magnitude
                 }
                 if binIndex >= hf18Start {
-                    hf18Energy += energy
+                    hf18Sum += magnitude
                 }
                 if binIndex >= shimmerStart, binIndex <= shimmerEnd {
-                    shimmerEnergy += energy
+                    shimmerEnergy += magnitude
                     shimmerCount += 1
                 }
             }
@@ -299,11 +297,11 @@ private struct DenoiseEffectMetrics {
             shimmerFrameCount += 1
         }
 
-        let safeTotal = max(totalEnergy, 1e-9)
-        hf12Ratio = hf12Energy / safeTotal
-        hf16Ratio = hf16Energy / safeTotal
-        hf18Ratio = hf18Energy / safeTotal
-        shimmerFlicker = shimmerDiffSum / max(shimmerMeanSum, 1e-9) * Float(max(shimmerFrameCount, 1)) / Float(max(shimmerFrameCount - 1, 1))
+        let frameCount = Float(max(spectrogram.frameCount, 1))
+        hf12Magnitude = hf12Sum / frameCount
+        hf16Magnitude = hf16Sum / frameCount
+        hf18Magnitude = hf18Sum / frameCount
+        shimmerFlicker = shimmerDiffSum / Float(max(shimmerFrameCount - 1, 1))
     }
 
     private static func binIndex(for frequency: Double, frequencyStep: Double, binCount: Int) -> Int {

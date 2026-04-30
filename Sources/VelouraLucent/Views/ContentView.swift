@@ -416,18 +416,18 @@ struct ContentView: View {
     private func denoiseEffectCard(_ report: DenoiseEffectReport) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("ノイズ除去の効き方")
+                Text("ノイズ除去後の高域変化")
                     .font(.headline)
-                Text("左に伸びるほど減少、右に伸びるほど増加です。補正後全体ではなく、ノイズ除去工程だけを見ます。")
+                Text("左に伸びるほど、その帯域の音量やチラつきが下がっています。補正後全体ではなく、ノイズ除去工程だけを見ます。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                denoiseEffectRow(title: "10-16kHzチラつき", value: report.shimmerFlickerChangePercent, limit: 40)
-                denoiseEffectRow(title: "12kHz以上", value: report.hf12ChangePercent, limit: 40)
-                denoiseEffectRow(title: "16kHz以上", value: report.hf16ChangePercent, limit: 40)
-                denoiseEffectRow(title: "18kHz以上", value: report.hf18ChangePercent, limit: 40)
+                denoiseEffectRow(title: "10-16kHzチラつき", value: report.shimmerFlickerChangeDB, limit: 12)
+                denoiseEffectRow(title: "12kHz以上", value: report.hf12ChangeDB, limit: 12)
+                denoiseEffectRow(title: "16kHz以上", value: report.hf16ChangeDB, limit: 12)
+                denoiseEffectRow(title: "18kHz以上", value: report.hf18ChangeDB, limit: 12)
             }
         }
         .padding(14)
@@ -441,7 +441,7 @@ struct ContentView: View {
                 Text(title)
                     .font(.caption.weight(.semibold))
                 Spacer()
-                Text(String(format: "%+.1f%%", value))
+                Text(String(format: "%+.1f dB", value))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(value <= 0 ? .green : .orange)
             }

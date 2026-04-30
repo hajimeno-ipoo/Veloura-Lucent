@@ -148,16 +148,16 @@ struct AudioMetricSnapshot: Sendable {
 }
 
 struct DenoiseEffectReport: Sendable, Equatable {
-    let shimmerFlickerChangePercent: Double
-    let hf12ChangePercent: Double
-    let hf16ChangePercent: Double
-    let hf18ChangePercent: Double
+    let shimmerFlickerChangeDB: Double
+    let hf12ChangeDB: Double
+    let hf16ChangeDB: Double
+    let hf18ChangeDB: Double
 
     static let empty = DenoiseEffectReport(
-        shimmerFlickerChangePercent: 0,
-        hf12ChangePercent: 0,
-        hf16ChangePercent: 0,
-        hf18ChangePercent: 0
+        shimmerFlickerChangeDB: 0,
+        hf12ChangeDB: 0,
+        hf16ChangeDB: 0,
+        hf18ChangeDB: 0
     )
 }
 
