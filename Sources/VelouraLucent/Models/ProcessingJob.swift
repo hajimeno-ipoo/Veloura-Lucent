@@ -33,6 +33,7 @@ final class ProcessingJob {
     var inputMetrics: AudioMetricSnapshot?
     var outputMetrics: AudioMetricSnapshot?
     var masteredMetrics: AudioMetricSnapshot?
+    var denoiseEffectReport: DenoiseEffectReport?
     var inputSpectrogram: SpectrogramSnapshot?
     var outputSpectrogram: SpectrogramSnapshot?
     var masteredSpectrogram: SpectrogramSnapshot?
@@ -94,6 +95,7 @@ final class ProcessingJob {
         inputMetrics = nil
         outputMetrics = nil
         masteredMetrics = nil
+        denoiseEffectReport = nil
         inputSpectrogram = nil
         outputSpectrogram = nil
         masteredSpectrogram = nil
@@ -122,6 +124,7 @@ final class ProcessingJob {
         completedSteps = []
         masteredOutputFile = outputFile.map { MasteringService.defaultOutputURL(for: $0) }
         masteredMetrics = nil
+        denoiseEffectReport = nil
         outputSpectrogram = nil
         masteredSpectrogram = nil
         masteringLogText = ""
@@ -196,6 +199,7 @@ final class ProcessingJob {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         updateProgress(for: trimmed)
+        updateDenoiseEffectReport(for: trimmed)
 
         if logText.isEmpty {
             logText = trimmed
@@ -268,6 +272,51 @@ final class ProcessingJob {
             completedSteps.insert(activeStep)
         }
         activeStep = nextStep
+    }
+
+    private func updateDenoiseEffectReport(for message: String) {
+        guard message.hasPrefix("ノイズ除去/") else { return }
+        let current = denoiseEffectReport ?? .empty
+
+        if let value = percentValue(in: message, prefix: "ノイズ除去/10-16kHzチラつき: ") {
+            denoiseEffectReport = DenoiseEffectReport(
+                shimmerFlickerChangePercent: value,
+                hf12ChangePercent: current.hf12ChangePercent,
+                hf16ChangePercent: current.hf16ChangePercent,
+                hf18ChangePercent: current.hf18ChangePercent
+            )
+        } else if let value = percentValue(in: message, prefix: "ノイズ除去/12kHz以上: ") {
+            denoiseEffectReport = DenoiseEffectReport(
+                shimmerFlickerChangePercent: current.shimmerFlickerChangePercent,
+                hf12ChangePercent: value,
+                hf16ChangePercent: current.hf16ChangePercent,
+                hf18ChangePercent: current.hf18ChangePercent
+            )
+        } else if let value = percentValue(in: message, prefix: "ノイズ除去/16kHz以上: ") {
+            denoiseEffectReport = DenoiseEffectReport(
+                shimmerFlickerChangePercent: current.shimmerFlickerChangePercent,
+                hf12ChangePercent: current.hf12ChangePercent,
+                hf16ChangePercent: value,
+                hf18ChangePercent: current.hf18ChangePercent
+            )
+        } else if let value = percentValue(in: message, prefix: "ノイズ除去/18kHz以上: ") {
+            denoiseEffectReport = DenoiseEffectReport(
+                shimmerFlickerChangePercent: current.shimmerFlickerChangePercent,
+                hf12ChangePercent: current.hf12ChangePercent,
+                hf16ChangePercent: current.hf16ChangePercent,
+                hf18ChangePercent: value
+            )
+        }
+    }
+
+    private func percentValue(in message: String, prefix: String) -> Double? {
+        guard message.hasPrefix(prefix) else { return nil }
+        let rawValue = message
+            .dropFirst(prefix.count)
+            .replacingOccurrences(of: "%", with: "")
+            .replacingOccurrences(of: "±", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return Double(rawValue)
     }
 
     private func updateMasteringProgress(for message: String) {

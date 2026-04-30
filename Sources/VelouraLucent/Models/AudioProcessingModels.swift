@@ -147,6 +147,20 @@ struct AudioMetricSnapshot: Sendable {
     let averageSpectrum: [SpectrumMetric]
 }
 
+struct DenoiseEffectReport: Sendable, Equatable {
+    let shimmerFlickerChangePercent: Double
+    let hf12ChangePercent: Double
+    let hf16ChangePercent: Double
+    let hf18ChangePercent: Double
+
+    static let empty = DenoiseEffectReport(
+        shimmerFlickerChangePercent: 0,
+        hf12ChangePercent: 0,
+        hf16ChangePercent: 0,
+        hf18ChangePercent: 0
+    )
+}
+
 struct BandEnergyMetric: Sendable, Identifiable {
     let id: String
     let label: String

@@ -46,6 +46,31 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func denoiseEffectReportUpdatesFromLogs() {
+        let job = ProcessingJob()
+
+        job.appendLog("ノイズ除去/10-16kHzチラつき: -12.5%")
+        job.appendLog("ノイズ除去/12kHz以上: -8.0%")
+        job.appendLog("ノイズ除去/16kHz以上: +3.5%")
+        job.appendLog("ノイズ除去/18kHz以上: ±0.0%")
+
+        #expect(job.denoiseEffectReport?.shimmerFlickerChangePercent == -12.5)
+        #expect(job.denoiseEffectReport?.hf12ChangePercent == -8.0)
+        #expect(job.denoiseEffectReport?.hf16ChangePercent == 3.5)
+        #expect(job.denoiseEffectReport?.hf18ChangePercent == 0.0)
+    }
+
+    @Test
+    func processingResetClearsDenoiseEffectReport() {
+        let job = ProcessingJob()
+
+        job.appendLog("ノイズ除去/12kHz以上: -8.0%")
+        job.beginProcessing()
+
+        #expect(job.denoiseEffectReport == nil)
+    }
+
+    @Test
     func successMarksAllStepsComplete() {
         let job = ProcessingJob()
         let output = URL(fileURLWithPath: "/tmp/output.wav")

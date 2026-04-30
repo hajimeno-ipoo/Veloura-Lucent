@@ -362,6 +362,10 @@ struct ContentView: View {
                         mastered: job.masteredMetrics
                     )
                 )
+
+                if let denoiseEffectReport = job.denoiseEffectReport {
+                    denoiseEffectCard(denoiseEffectReport)
+                }
             } else {
                 Text("音声を選ぶと、ここに入力・補正後・最終版の比較がまとめて表示されます。")
                     .foregroundStyle(.secondary)
@@ -407,6 +411,67 @@ struct ContentView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func denoiseEffectCard(_ report: DenoiseEffectReport) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("ノイズ除去の効き方")
+                    .font(.headline)
+                Text("左に伸びるほど減少、右に伸びるほど増加です。補正後全体ではなく、ノイズ除去工程だけを見ます。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                denoiseEffectRow(title: "10-16kHzチラつき", value: report.shimmerFlickerChangePercent, limit: 40)
+                denoiseEffectRow(title: "12kHz以上", value: report.hf12ChangePercent, limit: 40)
+                denoiseEffectRow(title: "16kHz以上", value: report.hf16ChangePercent, limit: 40)
+                denoiseEffectRow(title: "18kHz以上", value: report.hf18ChangePercent, limit: 40)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func denoiseEffectRow(title: String, value: Double, limit: Double) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                Text(String(format: "%+.1f%%", value))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(value <= 0 ? .green : .orange)
+            }
+
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let center = width / 2
+                let ratio = min(abs(value) / limit, 1)
+                let barWidth = center * ratio
+
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.secondary.opacity(0.14))
+                        .frame(height: 6)
+
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.35))
+                        .frame(width: 1, height: 10)
+                        .offset(x: center)
+
+                    if ratio > 0.001 {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(value <= 0 ? Color.green.opacity(0.78) : Color.orange.opacity(0.78))
+                            .frame(width: max(2, barWidth), height: 6)
+                            .offset(x: value <= 0 ? center - max(2, barWidth) : center)
+                    }
+                }
+            }
+            .frame(height: 10)
+        }
     }
 
     private func qualityReportSeverityText(_ severity: AudioQualityReportSeverity) -> String {
