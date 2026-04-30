@@ -363,8 +363,12 @@ struct ContentView: View {
                     )
                 )
 
-                if let denoiseEffectReport = job.denoiseEffectReport {
-                    denoiseEffectCard(denoiseEffectReport)
+                if let noiseReturnReport = NoiseReturnReportService.makeReport(
+                    denoiseEffect: job.denoiseEffectReport,
+                    corrected: job.outputMetrics,
+                    mastered: job.masteredMetrics
+                ) {
+                    noiseReturnCard(noiseReturnReport)
                 }
             } else {
                 Text("音声を選ぶと、ここに入力・補正後・最終版の比較がまとめて表示されます。")
@@ -411,6 +415,115 @@ struct ContentView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func noiseReturnCard(_ report: NoiseReturnReport) -> some View {
+        guard let row = report.primaryRow else {
+            return AnyView(EmptyView())
+        }
+
+        let returnText = row.returnRatePercent.map { String(format: "戻り %.0f%%", $0) } ?? "戻り率なし"
+
+        return AnyView(
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("ノイズ状態チェック")
+                        .font(.title3.weight(.bold))
+                    Text("代表帯域: \(row.label)。入力、ノイズ除去後、マスタリング後のノイズ感を単純表示します。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(noiseReturnSeverityText(report.severity))
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(noiseReturnSeverityColor(report.severity))
+            }
+
+            HStack(spacing: 12) {
+                noiseStateBlock(title: "入力", valueText: "基準", detail: "0.0 dB", tint: .blue)
+                noiseStateBlock(title: "ノイズ除去後", valueText: String(format: "%+.1f dB", row.denoiseDeltaDB), detail: denoiseAmountText(row.denoiseDeltaDB), tint: row.denoiseDeltaDB <= -0.3 ? .green : .secondary)
+                noiseStateBlock(title: "マスタリング後", valueText: String(format: "%+.1f dB", row.masteredDeltaFromInputDB), detail: returnText, tint: noiseReturnSeverityColor(row.severity))
+            }
+
+            HStack {
+                Text("マスタリングで戻った量")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(String(format: "%+.1f dB", row.masteringDeltaDB))
+                    .font(.title3.monospacedDigit().weight(.bold))
+                    .foregroundStyle(noiseReturnSeverityColor(row.severity))
+            }
+
+            Text(noiseReturnSummaryText(row))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        )
+    }
+
+    private func noiseStateBlock(title: String, valueText: String, detail: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(valueText)
+                .font(.title2.monospacedDigit().weight(.bold))
+                .foregroundStyle(tint)
+            Text(detail)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func denoiseAmountText(_ value: Double) -> String {
+        if value <= -1.0 {
+            return "しっかり除去"
+        }
+        if value <= -0.3 {
+            return "少し除去"
+        }
+        return "ほぼ変化なし"
+    }
+
+    private func noiseReturnSummaryText(_ row: NoiseReturnRow) -> String {
+        switch row.severity {
+        case .ok:
+            return "マスタリング後も、ノイズ除去の効果は大きく崩れていません。"
+        case .caution:
+            return "マスタリングで少し高域が戻っています。ノイズ感が少し戻る可能性があります。"
+        case .warning:
+            return "マスタリングで高域が大きく戻っています。ノイズ除去の効果が薄れて聞こえる可能性があります。"
+        }
+    }
+
+    private func noiseReturnSeverityText(_ severity: NoiseReturnSeverity) -> String {
+        switch severity {
+        case .ok:
+            return "OK"
+        case .caution:
+            return "注意"
+        case .warning:
+            return "警告"
+        }
+    }
+
+    private func noiseReturnSeverityColor(_ severity: NoiseReturnSeverity) -> Color {
+        switch severity {
+        case .ok:
+            return .green
+        case .caution:
+            return .orange
+        case .warning:
+            return .red
+        }
     }
 
     private func denoiseEffectCard(_ report: DenoiseEffectReport) -> some View {

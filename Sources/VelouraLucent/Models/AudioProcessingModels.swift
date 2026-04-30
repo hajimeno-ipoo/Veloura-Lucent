@@ -161,6 +161,65 @@ struct DenoiseEffectReport: Sendable, Equatable {
     )
 }
 
+enum NoiseReturnSeverity: Sendable, Equatable {
+    case ok
+    case caution
+    case warning
+}
+
+struct NoiseReturnReport: Sendable, Equatable {
+    let rows: [NoiseReturnRow]
+
+    var primaryRow: NoiseReturnRow? {
+        rows.max { lhs, rhs in
+            if lhs.severity.rank != rhs.severity.rank {
+                return lhs.severity.rank < rhs.severity.rank
+            }
+            return lhs.returnAmountScore < rhs.returnAmountScore
+        }
+    }
+
+    var severity: NoiseReturnSeverity {
+        if rows.contains(where: { $0.severity == .warning }) {
+            return .warning
+        }
+        if rows.contains(where: { $0.severity == .caution }) {
+            return .caution
+        }
+        return .ok
+    }
+}
+
+struct NoiseReturnRow: Sendable, Equatable, Identifiable {
+    let id: String
+    let label: String
+    let denoiseDeltaDB: Double
+    let masteringDeltaDB: Double
+    let returnRatePercent: Double?
+    let severity: NoiseReturnSeverity
+
+    var masteredDeltaFromInputDB: Double {
+        denoiseDeltaDB + masteringDeltaDB
+    }
+
+    var returnAmountScore: Double {
+        max(returnRatePercent ?? 0, masteringDeltaDB * 100)
+    }
+}
+
+private extension NoiseReturnSeverity {
+    var rank: Int {
+        switch self {
+        case .ok:
+            return 0
+        case .caution:
+            return 1
+        case .warning:
+            return 2
+        }
+    }
+}
+
 struct BandEnergyMetric: Sendable, Identifiable {
     let id: String
     let label: String

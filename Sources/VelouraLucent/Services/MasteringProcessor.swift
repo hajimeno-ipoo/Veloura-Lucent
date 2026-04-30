@@ -33,7 +33,12 @@ struct MasteringProcessor {
 
         logger?.log(MasteringStep.stereo.rawValue)
         current = measure(label: "広がり", logger: logger) {
-            applyStereoWidth(signal: current, targetWidth: settings.stereoWidth)
+            applyHighReturnGuard(
+                signal: applyStereoWidth(signal: current, targetWidth: settings.stereoWidth),
+                analysis: analysis,
+                settings: settings,
+                finishingIntensity: finishingIntensity
+            )
         }
 
         logger?.log(MasteringStep.loudness.rawValue)
@@ -288,6 +293,39 @@ struct MasteringProcessor {
         channels[0] = widenedLeft
         channels[1] = widenedRight
         return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+    }
+
+    private func applyHighReturnGuard(
+        signal: AudioSignal,
+        analysis: MasteringAnalysis,
+        settings: MasteringSettings,
+        finishingIntensity: Float
+    ) -> AudioSignal {
+        let reduction = highReturnGuardReduction(
+            analysis: analysis,
+            settings: settings,
+            finishingIntensity: finishingIntensity
+        )
+        guard reduction > 0.001 else { return signal }
+
+        let channels = signal.channels.map { channel in
+            let high = SpectralDSP.highPass(channel, cutoff: 10_000, sampleRate: signal.sampleRate)
+            return channel.indices.map { index in
+                channel[index] - high[index] * reduction
+            }
+        }
+        return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+    }
+
+    private func highReturnGuardReduction(
+        analysis: MasteringAnalysis,
+        settings: MasteringSettings,
+        finishingIntensity: Float
+    ) -> Float {
+        let harshnessPressure = max(0, analysis.harshnessScore - 0.45) * 0.75
+        let airBoostPressure = max(0, settings.highShelfGain - 0.40) * 0.20
+        let finishPressure = max(0, finishingIntensity - 0.55) * 0.10
+        return clamped(harshnessPressure + airBoostPressure + finishPressure, min: 0, max: 0.34)
     }
 
     private func applyLoudness(signal: AudioSignal, targetLKFS: Float, peakCeilingDB: Float) -> AudioSignal {

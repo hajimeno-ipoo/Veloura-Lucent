@@ -95,6 +95,24 @@ struct MasteringPipelineTests {
     }
 
     @Test
+    func masteringLimitsHighReturnForHarshMaterial() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let inputURL = tempDirectory.appending(path: "harsh-air-check.wav")
+
+        try makeHarshAirTone(at: inputURL)
+
+        let before = try AudioComparisonService.analyze(fileURL: inputURL)
+        let output = try await MasteringService().process(inputFile: inputURL, profile: .streaming) { _ in }
+        let after = try AudioComparisonService.analyze(fileURL: output)
+
+        let beforeHigh = try #require(before.bandEnergies.first { $0.id == "high" }?.levelDB)
+        let afterHigh = try #require(after.bandEnergies.first { $0.id == "high" }?.levelDB)
+
+        #expect(afterHigh - after.rmsDBFS <= beforeHigh - before.rmsDBFS + 3.6)
+    }
+
+    @Test
     func masteredOutputURLsStayWav() {
         let inputURL = URL(fileURLWithPath: "/tmp/song_lifter.mp3")
 
@@ -143,6 +161,32 @@ struct MasteringPipelineTests {
             let transient = index % 7_200 < 120 ? 0.55 : 0
             left[index] = Float(body + bright + transient)
             right[index] = Float(body * 0.96 + sin(2 * Double.pi * 7_100 * t) * 0.09 + transient * 0.92)
+        }
+
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 2)
+        )
+        try file.write(from: buffer)
+    }
+
+    private func makeHarshAirTone(at url: URL) throws {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 3)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        let left = buffer.floatChannelData![0]
+        let right = buffer.floatChannelData![1]
+
+        for index in 0..<frameCount {
+            let t = Double(index) / sampleRate
+            let body = Float(sin(2 * Double.pi * 260 * t) * 0.06)
+            let presence = Float(sin(2 * Double.pi * 6_800 * t) * 0.026)
+            let air = Float(sin(2 * Double.pi * 13_500 * t) * 0.018)
+            let shimmer = Float(sin(2 * Double.pi * 15_500 * t + sin(2 * Double.pi * 11 * t)) * 0.012)
+            left[index] = body + presence + air + shimmer
+            right[index] = body * 0.97 + presence * 0.92 - air * 0.28 + shimmer * 0.7
         }
 
         let file = try AVAudioFile(
