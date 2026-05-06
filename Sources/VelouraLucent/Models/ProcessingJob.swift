@@ -41,6 +41,7 @@ final class ProcessingJob {
     var masteredMetrics: AudioMetricSnapshot?
     var inputCorrectionAnalysis: AnalysisData?
     var inputCorrectionAnalysisMode: AudioAnalysisMode?
+    var outputMasteringAnalysis: MasteringAnalysis?
     var inputNoiseMeasurements: NoiseMeasurementSnapshot?
     var outputNoiseMeasurements: NoiseMeasurementSnapshot?
     var masteredNoiseMeasurements: NoiseMeasurementSnapshot?
@@ -113,6 +114,7 @@ final class ProcessingJob {
         masteredMetrics = nil
         inputCorrectionAnalysis = nil
         inputCorrectionAnalysisMode = nil
+        outputMasteringAnalysis = nil
         inputNoiseMeasurements = nil
         outputNoiseMeasurements = nil
         masteredNoiseMeasurements = nil
@@ -149,6 +151,7 @@ final class ProcessingJob {
         masteredOutputFile = outputFile.map { MasteringService.defaultOutputURL(for: $0) }
         outputMetrics = nil
         masteredMetrics = nil
+        outputMasteringAnalysis = nil
         outputNoiseMeasurements = nil
         masteredNoiseMeasurements = nil
         denoiseEffectReport = nil
@@ -229,6 +232,10 @@ final class ProcessingJob {
     func finishOutputMetricAnalysis(_ metrics: AudioMetricSnapshot) {
         outputMetrics = metrics
         isAnalyzingMetrics = false
+    }
+
+    func finishOutputMasteringAnalysis(_ analysis: MasteringAnalysis) {
+        outputMasteringAnalysis = analysis
     }
 
     func finishOutputNoiseMeasurement(_ measurements: NoiseMeasurementSnapshot) {

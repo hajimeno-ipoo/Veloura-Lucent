@@ -26,11 +26,13 @@ struct ProcessingJobTests {
     func selectingInputClearsPrecomputedCorrectionAnalysis() {
         let job = ProcessingJob()
         job.finishInputCorrectionAnalysis(makeAnalysis(), mode: .cpu)
+        job.finishOutputMasteringAnalysis(makeMasteringAnalysis())
 
         job.prepareForSelection(URL(fileURLWithPath: "/tmp/next.wav"))
 
         #expect(job.inputCorrectionAnalysis?.cutoffFrequency == nil)
         #expect(job.inputCorrectionAnalysisMode == nil)
+        #expect(job.outputMasteringAnalysis == nil)
     }
 
     @Test
@@ -230,6 +232,18 @@ struct ProcessingJobTests {
             rolloffDepth: 0,
             airBandEnergyRatio: 0,
             artifactBandRatio: 0
+        )
+    }
+
+    private func makeMasteringAnalysis() -> MasteringAnalysis {
+        MasteringAnalysis(
+            integratedLoudness: -16,
+            truePeakDBFS: -1,
+            lowBandLevelDB: -24,
+            midBandLevelDB: -18,
+            highBandLevelDB: -20,
+            harshnessScore: 0.25,
+            stereoWidth: 0.8
         )
     }
 }

@@ -2121,6 +2121,9 @@ struct ContentView: View {
                     preview.setPreviewSnapshot(correctedArtifacts.previewSnapshot, for: .corrected, sourceURL: outputFile)
                     preview.preparePreview(for: nil, target: .mastered)
                     job.finishOutputMetricAnalysis(correctedArtifacts.metrics)
+                    if let masteringAnalysis = correctedArtifacts.masteringAnalysis {
+                        job.finishOutputMasteringAnalysis(masteringAnalysis)
+                    }
                     job.finishOutputNoiseMeasurement(correctedArtifacts.noiseMeasurements)
                     job.finishOutputSpectrogram(correctedArtifacts.spectrogram)
                 }
@@ -2145,6 +2148,7 @@ struct ContentView: View {
                 let masteredFile = try await MasteringService().process(
                     inputFile: correctedFile,
                     settings: appliedSettings,
+                    initialAnalysis: job.outputMasteringAnalysis,
                     referenceNoiseMeasurements: job.outputNoiseMeasurements
                 ) { message in
                     Task { @MainActor in
@@ -2152,7 +2156,7 @@ struct ContentView: View {
                     }
                 }
 
-                let masteredArtifacts = try await makeAudioAnalysisArtifacts(for: masteredFile)
+                let masteredArtifacts = try await makeAudioAnalysisArtifacts(for: masteredFile, includeMasteringAnalysis: false)
 
                 await MainActor.run {
                     guard isCurrentMasteringSelection(selectionID, correctedFile: correctedFile) else { return }
@@ -2191,6 +2195,7 @@ struct ContentView: View {
     private struct AudioAnalysisArtifacts: Sendable {
         let previewSnapshot: AudioPreviewSnapshot
         let metrics: AudioMetricSnapshot
+        let masteringAnalysis: MasteringAnalysis?
         let correctionAnalysis: AnalysisData?
         let correctionAnalysisMode: AudioAnalysisMode?
         let noiseMeasurements: NoiseMeasurementSnapshot
@@ -2199,6 +2204,7 @@ struct ContentView: View {
 
     private struct MetricAnalysisArtifacts: Sendable {
         let metrics: AudioMetricSnapshot
+        let masteringAnalysis: MasteringAnalysis?
         let correctionAnalysis: AnalysisData?
         let correctionAnalysisMode: AudioAnalysisMode?
         let noiseMeasurements: NoiseMeasurementSnapshot
@@ -2210,7 +2216,7 @@ struct ContentView: View {
 
         Task {
             do {
-                let artifacts = try await makeMetricAnalysisArtifacts(for: url)
+                let artifacts = try await makeMetricAnalysisArtifacts(for: url, includeMasteringAnalysis: target == .corrected)
 
                 await MainActor.run {
                     guard isCurrentMetricSelection(target: target, selectionID: selectionID, fileURL: url) else { return }
@@ -2224,6 +2230,9 @@ struct ContentView: View {
                         job.finishInputSpectrogram(artifacts.spectrogram)
                     case .corrected:
                         job.finishOutputMetricAnalysis(artifacts.metrics)
+                        if let masteringAnalysis = artifacts.masteringAnalysis {
+                            job.finishOutputMasteringAnalysis(masteringAnalysis)
+                        }
                         job.finishOutputNoiseMeasurement(artifacts.noiseMeasurements)
                         job.finishOutputSpectrogram(artifacts.spectrogram)
                     case .mastered:
@@ -2241,16 +2250,18 @@ struct ContentView: View {
         }
     }
 
-    private func makeAudioAnalysisArtifacts(for url: URL) async throws -> AudioAnalysisArtifacts {
+    private func makeAudioAnalysisArtifacts(for url: URL, includeMasteringAnalysis: Bool = true) async throws -> AudioAnalysisArtifacts {
         try await Task.detached(priority: .utility) {
             let signal = try AudioFileService.loadAudio(from: url)
             async let previewSnapshot = AudioFileService.makePreviewSnapshot(from: signal)
             async let metrics = try await AudioComparisonService.analyzeConcurrently(signal: signal)
+            async let masteringAnalysis = includeMasteringAnalysis ? MasteringAnalysisService.analyze(signal: signal) : nil
             async let noiseMeasurements = NoiseMeasurementService.analyze(signal: signal)
             async let spectrogram = AudioFileService.makeSpectrogramSnapshot(from: signal)
             return try await AudioAnalysisArtifacts(
                 previewSnapshot: previewSnapshot,
                 metrics: metrics,
+                masteringAnalysis: masteringAnalysis,
                 correctionAnalysis: nil,
                 correctionAnalysisMode: nil,
                 noiseMeasurements: noiseMeasurements,
@@ -2259,16 +2270,18 @@ struct ContentView: View {
         }.value
     }
 
-    private func makeMetricAnalysisArtifacts(for url: URL) async throws -> MetricAnalysisArtifacts {
+    private func makeMetricAnalysisArtifacts(for url: URL, includeMasteringAnalysis: Bool = false) async throws -> MetricAnalysisArtifacts {
         let mode = job.selectedAnalysisMode.resolvedMode
         return try await Task.detached(priority: .utility) {
             let signal = try AudioFileService.loadAudio(from: url)
             async let metrics = try await AudioComparisonService.analyzeConcurrently(signal: signal)
+            async let masteringAnalysis = includeMasteringAnalysis ? MasteringAnalysisService.analyze(signal: signal) : nil
             async let correctionAnalysis = AudioAnalyzer(mode: mode).analyze(signal: signal)
             async let noiseMeasurements = NoiseMeasurementService.analyze(signal: signal)
             async let spectrogram = AudioFileService.makeSpectrogramSnapshot(from: signal)
             return try await MetricAnalysisArtifacts(
                 metrics: metrics,
+                masteringAnalysis: masteringAnalysis,
                 correctionAnalysis: correctionAnalysis,
                 correctionAnalysisMode: mode,
                 noiseMeasurements: noiseMeasurements,

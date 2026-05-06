@@ -90,6 +90,30 @@ struct MasteringPipelineTests {
     }
 
     @Test
+    func masteringCanReuseInitialAnalysis() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let inputURL = tempDirectory.appending(path: "analysis-cache-check.wav")
+        let logs = MasteringLogCollector()
+
+        try makeTestTone(at: inputURL)
+        let signal = try AudioFileService.loadAudio(from: inputURL)
+        let analysis = MasteringAnalysisService.analyze(signal: signal)
+
+        let output = try await MasteringService().process(
+            inputFile: inputURL,
+            settings: MasteringProfile.streaming.settings,
+            initialAnalysis: analysis
+        ) { message in
+            logs.append(message)
+        }
+
+        #expect(FileManager.default.fileExists(atPath: output.path()))
+        #expect(logs.values.contains("解析: 既存結果を使用"))
+        #expect(!logs.values.contains { $0.hasPrefix("解析/STFT: ") })
+    }
+
+    @Test
     func masteringKeepsTruePeakNearCeiling() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)

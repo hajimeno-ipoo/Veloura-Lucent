@@ -8,6 +8,7 @@ struct MasteringService {
     func process(
         inputFile: URL,
         settings: MasteringSettings,
+        initialAnalysis: MasteringAnalysis? = nil,
         referenceNoiseMeasurements: NoiseMeasurementSnapshot? = nil,
         logHandler: @escaping @Sendable (String) -> Void
     ) async throws -> URL {
@@ -20,17 +21,25 @@ struct MasteringService {
             let totalStart = DispatchTime.now().uptimeNanoseconds
             logger.log(MasteringStep.analyze.rawValue)
             logger.log("解析モード: マスタリングCPU")
-            let analysisInput = try recorder.measure(label: "解析", logger: logger) {
-                let signal = try AudioFileService.loadAudio(from: inputFile)
-                let benchmark = MasteringAnalysisService.analyzeWithBenchmark(signal: signal)
-                for stage in benchmark.stages {
-                    logger.log("解析/\(masteringAnalysisStageDisplayName(stage.name)): \(formatProcessingDuration(stage.durationSeconds))")
+            let signal = try recorder.measure(label: "読み込み", logger: logger) {
+                try AudioFileService.loadAudio(from: inputFile)
+            }
+            let analysis: MasteringAnalysis
+            if let initialAnalysis {
+                analysis = initialAnalysis
+                logger.log("解析: 既存結果を使用")
+            } else {
+                analysis = recorder.measure(label: "解析", logger: logger) {
+                    let benchmark = MasteringAnalysisService.analyzeWithBenchmark(signal: signal)
+                    for stage in benchmark.stages {
+                        logger.log("解析/\(masteringAnalysisStageDisplayName(stage.name)): \(formatProcessingDuration(stage.durationSeconds))")
+                    }
+                    return benchmark.analysis
                 }
-                return (signal, benchmark.analysis)
             }
             let mastered = MasteringProcessor().process(
-                signal: analysisInput.0,
-                analysis: analysisInput.1,
+                signal: signal,
+                analysis: analysis,
                 settings: settings,
                 referenceNoiseMeasurements: referenceNoiseMeasurements,
                 logger: logger
