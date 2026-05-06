@@ -94,6 +94,7 @@ struct NativeAudioProcessor {
         denoiseStrength: DenoiseStrength = .balanced,
         correctionSettings: CorrectionSettings? = nil,
         analysisMode: AudioAnalysisMode = .auto,
+        initialAnalysis: AnalysisData? = nil,
         logger: AudioProcessingLogger? = nil
     ) throws {
         _ = try run(
@@ -102,6 +103,7 @@ struct NativeAudioProcessor {
             denoiseStrength: denoiseStrength,
             correctionSettings: correctionSettings ?? denoiseStrength.settings,
             analysisMode: analysisMode,
+            initialAnalysis: initialAnalysis,
             logger: logger,
             collectsBenchmark: false
         )
@@ -113,6 +115,7 @@ struct NativeAudioProcessor {
         denoiseStrength: DenoiseStrength = .balanced,
         correctionSettings: CorrectionSettings? = nil,
         analysisMode: AudioAnalysisMode = .auto,
+        initialAnalysis: AnalysisData? = nil,
         logger: AudioProcessingLogger? = nil
     ) throws -> NativeAudioProcessingBenchmark {
         try run(
@@ -121,6 +124,7 @@ struct NativeAudioProcessor {
             denoiseStrength: denoiseStrength,
             correctionSettings: correctionSettings ?? denoiseStrength.settings,
             analysisMode: analysisMode,
+            initialAnalysis: initialAnalysis,
             logger: logger,
             collectsBenchmark: true
         )
@@ -132,6 +136,7 @@ struct NativeAudioProcessor {
         denoiseStrength: DenoiseStrength,
         correctionSettings: CorrectionSettings,
         analysisMode: AudioAnalysisMode,
+        initialAnalysis: AnalysisData?,
         logger: AudioProcessingLogger?,
         collectsBenchmark: Bool
     ) throws -> NativeAudioProcessingBenchmark {
@@ -146,8 +151,15 @@ struct NativeAudioProcessor {
         let resolvedAnalysisMode = analysisMode.resolvedMode
         logger?.log("音声を解析します")
         logger?.log(analysisMode.logDescription)
-        let originalAnalysis = measure("analyze", label: "解析", recorder: benchmarkRecorder, logger: logger) {
-            AudioAnalyzer(mode: resolvedAnalysisMode).analyze(signal: signal)
+        let originalAnalysis: AnalysisData
+        if let initialAnalysis {
+            originalAnalysis = initialAnalysis
+            benchmarkRecorder?.append("analyze", durationSeconds: 0)
+            logger?.log("解析: 既存結果を使用")
+        } else {
+            originalAnalysis = measure("analyze", label: "解析", recorder: benchmarkRecorder, logger: logger) {
+                AudioAnalyzer(mode: resolvedAnalysisMode).analyze(signal: signal)
+            }
         }
 
         logger?.log("低域ノイズを先に整えます")

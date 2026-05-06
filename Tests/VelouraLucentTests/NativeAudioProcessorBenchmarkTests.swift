@@ -61,6 +61,32 @@ struct NativeAudioProcessorBenchmarkTests {
     }
 
     @Test
+    func benchmarkCanReuseInitialAnalysis() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let inputURL = tempDirectory.appending(path: "precomputed-analysis-input.wav")
+        let outputURL = tempDirectory.appending(path: "precomputed-analysis-output.wav")
+
+        try makeTestTone(at: inputURL, duration: 1)
+        let signal = try AudioFileService.loadAudio(from: inputURL)
+        let initialAnalysis = AudioAnalyzer(mode: .cpu).analyze(signal: signal)
+        let logs = LogCollector()
+
+        let benchmark = try NativeAudioProcessor().benchmark(
+            inputFile: inputURL,
+            outputFile: outputURL,
+            denoiseStrength: .balanced,
+            analysisMode: .cpu,
+            initialAnalysis: initialAnalysis,
+            logger: logs
+        )
+
+        #expect(benchmark.duration(for: "analyze") == 0)
+        #expect(logs.values.contains("解析: 既存結果を使用"))
+        #expect(FileManager.default.fileExists(atPath: outputURL.path()))
+    }
+
+    @Test
     func recordsRealAudioCPUAndExperimentalMetalBenchmark() throws {
         guard ProcessInfo.processInfo.environment["VELOURA_RUN_REAL_AUDIO_BENCHMARK"] == "1" else {
             return

@@ -2093,6 +2093,8 @@ struct ContentView: View {
         guard let inputFile = job.inputFile else { return }
         let selectionID = inputSelectionID
         let appliedSettings = job.editableCorrectionSettings
+        let resolvedAnalysisMode = job.selectedAnalysisMode.resolvedMode
+        let initialAnalysis = job.inputCorrectionAnalysisMode == resolvedAnalysisMode ? job.inputCorrectionAnalysis : nil
         job.beginProcessing(appliedSettings: appliedSettings)
 
         Task {
@@ -2101,7 +2103,8 @@ struct ContentView: View {
                     inputFile: inputFile,
                     denoiseStrength: job.selectedDenoiseStrength,
                     correctionSettings: appliedSettings,
-                    analysisMode: job.selectedAnalysisMode
+                    analysisMode: job.selectedAnalysisMode,
+                    initialAnalysis: initialAnalysis
                 ) { message in
                     Task { @MainActor in
                         job.appendLog(message)
@@ -2186,12 +2189,16 @@ struct ContentView: View {
     private struct AudioAnalysisArtifacts: Sendable {
         let previewSnapshot: AudioPreviewSnapshot
         let metrics: AudioMetricSnapshot
+        let correctionAnalysis: AnalysisData?
+        let correctionAnalysisMode: AudioAnalysisMode?
         let noiseMeasurements: NoiseMeasurementSnapshot
         let spectrogram: SpectrogramSnapshot
     }
 
     private struct MetricAnalysisArtifacts: Sendable {
         let metrics: AudioMetricSnapshot
+        let correctionAnalysis: AnalysisData?
+        let correctionAnalysisMode: AudioAnalysisMode?
         let noiseMeasurements: NoiseMeasurementSnapshot
         let spectrogram: SpectrogramSnapshot
     }
@@ -2208,6 +2215,9 @@ struct ContentView: View {
                     switch target {
                     case .input:
                         job.finishInputMetricAnalysis(artifacts.metrics)
+                        if let analysis = artifacts.correctionAnalysis, let mode = artifacts.correctionAnalysisMode {
+                            job.finishInputCorrectionAnalysis(analysis, mode: mode)
+                        }
                         job.finishInputNoiseMeasurement(artifacts.noiseMeasurements)
                         job.finishInputSpectrogram(artifacts.spectrogram)
                     case .corrected:
@@ -2239,6 +2249,8 @@ struct ContentView: View {
             return try await AudioAnalysisArtifacts(
                 previewSnapshot: previewSnapshot,
                 metrics: metrics,
+                correctionAnalysis: nil,
+                correctionAnalysisMode: nil,
                 noiseMeasurements: noiseMeasurements,
                 spectrogram: spectrogram
             )
@@ -2246,12 +2258,20 @@ struct ContentView: View {
     }
 
     private func makeMetricAnalysisArtifacts(for url: URL) async throws -> MetricAnalysisArtifacts {
-        try await Task.detached(priority: .utility) {
+        let mode = job.selectedAnalysisMode.resolvedMode
+        return try await Task.detached(priority: .utility) {
             let signal = try AudioFileService.loadAudio(from: url)
             async let metrics = try await AudioComparisonService.analyzeConcurrently(signal: signal)
+            async let correctionAnalysis = AudioAnalyzer(mode: mode).analyze(signal: signal)
             async let noiseMeasurements = NoiseMeasurementService.analyze(signal: signal)
             async let spectrogram = AudioFileService.makeSpectrogramSnapshot(from: signal)
-            return try await MetricAnalysisArtifacts(metrics: metrics, noiseMeasurements: noiseMeasurements, spectrogram: spectrogram)
+            return try await MetricAnalysisArtifacts(
+                metrics: metrics,
+                correctionAnalysis: correctionAnalysis,
+                correctionAnalysisMode: mode,
+                noiseMeasurements: noiseMeasurements,
+                spectrogram: spectrogram
+            )
         }.value
     }
 

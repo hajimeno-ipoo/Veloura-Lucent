@@ -23,6 +23,17 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func selectingInputClearsPrecomputedCorrectionAnalysis() {
+        let job = ProcessingJob()
+        job.finishInputCorrectionAnalysis(makeAnalysis(), mode: .cpu)
+
+        job.prepareForSelection(URL(fileURLWithPath: "/tmp/next.wav"))
+
+        #expect(job.inputCorrectionAnalysis?.cutoffFrequency == nil)
+        #expect(job.inputCorrectionAnalysisMode == nil)
+    }
+
+    @Test
     func autoAnalysisModeReportsResolvedMode() {
         let expected = MetalAudioAnalysisProcessor().isAvailable ? AudioAnalysisMode.experimentalMetal : .cpu
 
@@ -203,6 +214,22 @@ struct ProcessingJobTests {
             shortTermLoudness: [],
             dynamics: [],
             averageSpectrum: []
+        )
+    }
+
+    private func makeAnalysis() -> AnalysisData {
+        AnalysisData(
+            cutoffFrequency: 16_000,
+            dominantHarmonics: [],
+            harmonicConfidence: 0,
+            hasShimmer: false,
+            shimmerRatio: 0,
+            brightnessRatio: 0,
+            transientAmount: 0,
+            noiseAmount: 0,
+            rolloffDepth: 0,
+            airBandEnergyRatio: 0,
+            artifactBandRatio: 0
         )
     }
 }

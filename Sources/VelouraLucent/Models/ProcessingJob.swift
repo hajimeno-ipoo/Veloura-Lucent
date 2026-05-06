@@ -39,6 +39,8 @@ final class ProcessingJob {
     var inputMetrics: AudioMetricSnapshot?
     var outputMetrics: AudioMetricSnapshot?
     var masteredMetrics: AudioMetricSnapshot?
+    var inputCorrectionAnalysis: AnalysisData?
+    var inputCorrectionAnalysisMode: AudioAnalysisMode?
     var inputNoiseMeasurements: NoiseMeasurementSnapshot?
     var outputNoiseMeasurements: NoiseMeasurementSnapshot?
     var masteredNoiseMeasurements: NoiseMeasurementSnapshot?
@@ -109,6 +111,8 @@ final class ProcessingJob {
         inputMetrics = nil
         outputMetrics = nil
         masteredMetrics = nil
+        inputCorrectionAnalysis = nil
+        inputCorrectionAnalysisMode = nil
         inputNoiseMeasurements = nil
         outputNoiseMeasurements = nil
         masteredNoiseMeasurements = nil
@@ -211,6 +215,11 @@ final class ProcessingJob {
     func finishInputMetricAnalysis(_ metrics: AudioMetricSnapshot) {
         inputMetrics = metrics
         isAnalyzingMetrics = false
+    }
+
+    func finishInputCorrectionAnalysis(_ analysis: AnalysisData, mode: AudioAnalysisMode) {
+        inputCorrectionAnalysis = analysis
+        inputCorrectionAnalysisMode = mode
     }
 
     func finishInputNoiseMeasurement(_ measurements: NoiseMeasurementSnapshot) {
