@@ -176,7 +176,8 @@ struct NativeAudioProcessor {
             return RumbleReducer(settings: correctionSettings).process(
                 signal: dehummed,
                 reference: signal,
-                referenceMeasurements: initialNoiseMeasurements
+                referenceMeasurements: initialNoiseMeasurements,
+                logger: logger
             )
         }
 
@@ -234,7 +235,8 @@ struct NativeAudioProcessor {
             ShimmerPeakLimiter(settings: correctionSettings).process(
                 signal: residueGuarded,
                 reference: signal,
-                referenceMeasurements: initialNoiseMeasurements
+                referenceMeasurements: initialNoiseMeasurements,
+                logger: logger
             )
         }
 
@@ -432,35 +434,49 @@ private struct RumbleReducer: Sendable {
     func process(
         signal: AudioSignal,
         reference: AudioSignal,
-        referenceMeasurements: NoiseMeasurementSnapshot? = nil
+        referenceMeasurements: NoiseMeasurementSnapshot? = nil,
+        logger: AudioProcessingLogger? = nil
     ) -> AudioSignal {
         let intensity = clamped(settings.lowCleanup * 0.68 + settings.noiseDetectionSensitivity * 0.22, min: 0, max: 1)
-        guard intensity > 0.05 else { return signal }
+        guard intensity > 0.05 else {
+            logger?.log("低域ノイズ/測定回数: 0")
+            return signal
+        }
         let channels = mapChannelsConcurrently(signal.channels) {
             processChannel($0, sampleRate: signal.sampleRate, intensity: intensity)
         }
         return adaptiveRumbleLimit(
             signal: AudioSignal(channels: channels, sampleRate: signal.sampleRate),
             reference: reference,
-            referenceMeasurements: referenceMeasurements
+            referenceMeasurements: referenceMeasurements,
+            logger: logger
         )
     }
 
     private func adaptiveRumbleLimit(
         signal: AudioSignal,
         reference: AudioSignal,
-        referenceMeasurements: NoiseMeasurementSnapshot?
+        referenceMeasurements: NoiseMeasurementSnapshot?,
+        logger: AudioProcessingLogger?
     ) -> AudioSignal {
         let improvementDB = settings.correctionIntensity >= 0.65 ? 3.2 : (settings.correctionIntensity >= 0.45 ? 1.2 : 0.0)
-        guard improvementDB > 0 else { return signal }
+        guard improvementDB > 0 else {
+            logger?.log("低域ノイズ/測定回数: 0")
+            return signal
+        }
 
         let measurements = referenceMeasurements ?? NoiseMeasurementService.analyze(signal: reference)
         let target = measurements.comparableLevel(for: "rumble") - improvementDB
         var currentSignal = signal
+        var measurementCount = 0
         for _ in 0..<4 {
+            measurementCount += 1
             let current = NoiseMeasurementService.analyze(signal: currentSignal).value(for: "rumble")?.comparableLevelDB ?? -120
             let excessDB = max(0, current - target)
-            guard excessDB > 0.1 else { return currentSignal }
+            guard excessDB > 0.1 else {
+                logger?.log("低域ノイズ/測定回数: \(measurementCount)")
+                return currentSignal
+            }
 
             let gain = powf(10, -Float(min(excessDB, 48)) / 20)
             let sampleRate = currentSignal.sampleRate
@@ -469,6 +485,7 @@ private struct RumbleReducer: Sendable {
             }
             currentSignal = AudioSignal(channels: channels, sampleRate: sampleRate)
         }
+        logger?.log("低域ノイズ/測定回数: \(measurementCount)")
         return currentSignal
     }
 
@@ -1375,7 +1392,8 @@ private struct ShimmerPeakLimiter: Sendable {
     func process(
         signal: AudioSignal,
         reference: AudioSignal,
-        referenceMeasurements: NoiseMeasurementSnapshot? = nil
+        referenceMeasurements: NoiseMeasurementSnapshot? = nil,
+        logger: AudioProcessingLogger? = nil
     ) -> AudioSignal {
         let attenuationDB = max(0, (settings.correctionIntensity - 0.38) * 42 + (settings.noiseDetectionSensitivity - 0.40) * 8)
         let baseGain = powf(10, -attenuationDB / 20)
@@ -1384,21 +1402,14 @@ private struct ShimmerPeakLimiter: Sendable {
             processChannel($0, sampleRate: signal.sampleRate, lower: 5_000, upper: 14_000, gain: baseGain)
         }
         let baseLimited = AudioSignal(channels: channels, sampleRate: signal.sampleRate)
-        let shimmerLimited = adaptiveLimit(
+        return adaptiveLimit(
             signal: baseLimited,
             referenceMeasurements: referenceMeasurements,
-            id: "shimmer",
-            lower: 5_000,
-            upper: 14_000,
-            improvementDB: targetImprovementDB
-        )
-        return adaptiveLimit(
-            signal: shimmerLimited,
-            referenceMeasurements: referenceMeasurements,
-            id: "hiss",
-            lower: 5_000,
-            upper: 20_000,
-            improvementDB: targetImprovementDB
+            rules: [
+                AdaptiveRule(id: "shimmer", lower: 5_000, upper: 14_000, improvementDB: targetImprovementDB),
+                AdaptiveRule(id: "hiss", lower: 5_000, upper: 20_000, improvementDB: targetImprovementDB)
+            ],
+            logger: logger
         )
     }
 
@@ -1408,30 +1419,59 @@ private struct ShimmerPeakLimiter: Sendable {
         return -0.2
     }
 
+    private struct AdaptiveRule {
+        let id: String
+        let lower: Double
+        let upper: Double
+        let improvementDB: Double
+    }
+
     private func adaptiveLimit(
         signal: AudioSignal,
         referenceMeasurements: NoiseMeasurementSnapshot,
-        id: String,
-        lower: Double,
-        upper: Double,
-        improvementDB: Double
+        rules: [AdaptiveRule],
+        logger: AudioProcessingLogger?,
+        maxPasses: Int = 5
     ) -> AudioSignal {
-        let target = referenceMeasurements.comparableLevel(for: id) - improvementDB
         var currentSignal = signal
+        var measurementCount = 0
 
-        for _ in 0..<5 {
-            let current = NoiseMeasurementService.analyze(signal: currentSignal).comparableLevel(for: id)
-            let excessDB = max(0, current - target)
-            guard excessDB > 0.1 else { return currentSignal }
+        logger?.log("シマー制限: 一括判定を開始")
+        for _ in 0..<maxPasses {
+            let currentMeasurements = NoiseMeasurementService.analyze(signal: currentSignal)
+            measurementCount += 1
+            logger?.log("シマー制限/測定: \(measurementCount)/\(maxPasses)")
 
-            let gain = powf(10, -Float(min(excessDB, 72)) / 20)
+            let strongestExcess = rules
+                .map { rule -> (rule: AdaptiveRule, excessDB: Double) in
+                    let target = referenceMeasurements.comparableLevel(for: rule.id) - rule.improvementDB
+                    let current = currentMeasurements.comparableLevel(for: rule.id)
+                    return (rule, max(0, current - target))
+                }
+                .max { $0.excessDB < $1.excessDB }
+
+            guard let strongestExcess, strongestExcess.excessDB > 0.1 else {
+                logger?.log("シマー制限/測定回数: \(measurementCount)")
+                logger?.log("シマー制限: 完了")
+                return currentSignal
+            }
+
+            let gain = powf(10, -Float(min(strongestExcess.excessDB, 72)) / 20)
             let sampleRate = currentSignal.sampleRate
             let channels = mapChannelsConcurrently(currentSignal.channels) {
-                processChannel($0, sampleRate: sampleRate, lower: lower, upper: upper, gain: gain)
+                processChannel(
+                    $0,
+                    sampleRate: sampleRate,
+                    lower: strongestExcess.rule.lower,
+                    upper: strongestExcess.rule.upper,
+                    gain: gain
+                )
             }
             currentSignal = AudioSignal(channels: channels, sampleRate: sampleRate)
         }
 
+        logger?.log("シマー制限/測定回数: \(measurementCount)")
+        logger?.log("シマー制限: 上限回数で終了")
         return currentSignal
     }
 

@@ -43,6 +43,11 @@ struct NativeAudioProcessorBenchmarkTests {
         #expect(FileManager.default.fileExists(atPath: outputURL.path()))
         #expect(logs.values.contains { $0.hasPrefix("解析: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains("ノイズ除去/STFT再利用: 2回"))
+        let rumbleMeasurements = try #require(parsedInteger(prefix: "低域ノイズ/測定回数: ", from: logs.values))
+        let shimmerMeasurements = try #require(parsedInteger(prefix: "シマー制限/測定回数: ", from: logs.values))
+        #expect(rumbleMeasurements <= 4)
+        #expect(shimmerMeasurements <= 5)
+        #expect(logs.values.contains("シマー制限: 一括判定を開始"))
         #expect(logs.values.contains { $0.hasPrefix("ノイズ除去/10-16kHzチラつき: ") && $0.hasSuffix(" dB") })
         #expect(logs.values.contains { $0.hasPrefix("ノイズ除去/12kHz以上: ") && $0.hasSuffix(" dB") })
         #expect(logs.values.contains { $0.hasPrefix("ノイズ除去/16kHz以上: ") && $0.hasSuffix(" dB") })
@@ -207,6 +212,13 @@ private func parsedDuration(prefix: String, from logs: [String]) -> Double? {
         .replacingOccurrences(of: prefix, with: "")
         .replacingOccurrences(of: "秒", with: "")
     return Double(trimmed)
+}
+
+private func parsedInteger(prefix: String, from logs: [String]) -> Int? {
+    guard let line = logs.first(where: { $0.hasPrefix(prefix) }) else {
+        return nil
+    }
+    return Int(line.replacingOccurrences(of: prefix, with: ""))
 }
 
 private final class LogCollector: AudioProcessingLogger, @unchecked Sendable {
