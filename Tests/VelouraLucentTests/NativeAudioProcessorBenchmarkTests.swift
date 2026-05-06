@@ -70,6 +70,7 @@ struct NativeAudioProcessorBenchmarkTests {
         try makeTestTone(at: inputURL, duration: 1)
         let signal = try AudioFileService.loadAudio(from: inputURL)
         let initialAnalysis = AudioAnalyzer(mode: .cpu).analyze(signal: signal)
+        let initialNoiseMeasurements = NoiseMeasurementService.analyze(signal: signal)
         let logs = LogCollector()
 
         let benchmark = try NativeAudioProcessor().benchmark(
@@ -78,11 +79,13 @@ struct NativeAudioProcessorBenchmarkTests {
             denoiseStrength: .balanced,
             analysisMode: .cpu,
             initialAnalysis: initialAnalysis,
+            initialNoiseMeasurements: initialNoiseMeasurements,
             logger: logs
         )
 
         #expect(benchmark.duration(for: "analyze") == 0)
         #expect(logs.values.contains("解析: 既存結果を使用"))
+        #expect(logs.values.contains("ノイズ測定: 既存結果を使用"))
         #expect(FileManager.default.fileExists(atPath: outputURL.path()))
     }
 

@@ -67,6 +67,29 @@ struct MasteringPipelineTests {
     }
 
     @Test
+    func masteringCanReuseReferenceNoiseMeasurements() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let inputURL = tempDirectory.appending(path: "noise-cache-check.wav")
+        let logs = MasteringLogCollector()
+
+        try makeTestTone(at: inputURL)
+        let signal = try AudioFileService.loadAudio(from: inputURL)
+        let noiseMeasurements = NoiseMeasurementService.analyze(signal: signal)
+
+        let output = try await MasteringService().process(
+            inputFile: inputURL,
+            settings: MasteringProfile.streaming.settings,
+            referenceNoiseMeasurements: noiseMeasurements
+        ) { message in
+            logs.append(message)
+        }
+
+        #expect(FileManager.default.fileExists(atPath: output.path()))
+        #expect(logs.values.contains("ノイズ測定: 既存結果を使用"))
+    }
+
+    @Test
     func masteringKeepsTruePeakNearCeiling() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)

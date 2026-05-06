@@ -1,7 +1,13 @@
 import Foundation
 
 struct MasteringProcessor {
-    func process(signal: AudioSignal, analysis: MasteringAnalysis, settings: MasteringSettings, logger: AudioProcessingLogger? = nil) -> AudioSignal {
+    func process(
+        signal: AudioSignal,
+        analysis: MasteringAnalysis,
+        settings: MasteringSettings,
+        referenceNoiseMeasurements: NoiseMeasurementSnapshot? = nil,
+        logger: AudioProcessingLogger? = nil
+    ) -> AudioSignal {
         let dynamicsRetention = clamped(settings.dynamicsRetention, min: 0, max: 1)
         let finishingIntensity = clamped(settings.finishingIntensity, min: 0, max: 1)
 
@@ -72,7 +78,12 @@ struct MasteringProcessor {
 
         logger?.log(MasteringStep.noiseReturnGuard.rawValue)
         return measure(label: "ノイズ戻りガード", logger: logger) {
-            applyNoiseReturnGuard(signal: guarded, reference: signal)
+            applyNoiseReturnGuard(
+                signal: guarded,
+                reference: signal,
+                referenceMeasurements: referenceNoiseMeasurements,
+                logger: logger
+            )
         }
     }
 
@@ -353,8 +364,17 @@ struct MasteringProcessor {
         return clamped(harshnessPressure + airBoostPressure + finishPressure, min: 0, max: 0.48)
     }
 
-    private func applyNoiseReturnGuard(signal: AudioSignal, reference: AudioSignal) -> AudioSignal {
-        let referenceMeasurements = NoiseMeasurementService.analyze(signal: reference)
+    private func applyNoiseReturnGuard(
+        signal: AudioSignal,
+        reference: AudioSignal,
+        referenceMeasurements: NoiseMeasurementSnapshot?,
+        logger: AudioProcessingLogger?
+    ) -> AudioSignal {
+        let reusedMeasurements = referenceMeasurements != nil
+        let referenceMeasurements = referenceMeasurements ?? NoiseMeasurementService.analyze(signal: reference)
+        if reusedMeasurements {
+            logger?.log("ノイズ測定: 既存結果を使用")
+        }
         var current = adaptiveNoiseLimit(signal: signal, referenceMeasurements: referenceMeasurements, id: "hiss", lower: 5_000, upper: 20_000, allowedReturnDB: -5.5)
         current = adaptiveNoiseLimit(signal: current, referenceMeasurements: referenceMeasurements, id: "sibilance", lower: 5_000, upper: 20_000, allowedReturnDB: 0.35)
         current = adaptiveNoiseLimit(signal: current, referenceMeasurements: referenceMeasurements, id: "shimmer", lower: 5_000, upper: 20_000, allowedReturnDB: 0.45)

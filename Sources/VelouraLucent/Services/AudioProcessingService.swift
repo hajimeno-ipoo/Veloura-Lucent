@@ -7,6 +7,7 @@ struct AudioProcessingService {
         correctionSettings: CorrectionSettings? = nil,
         analysisMode: AudioAnalysisMode = .auto,
         initialAnalysis: AnalysisData? = nil,
+        initialNoiseMeasurements: NoiseMeasurementSnapshot? = nil,
         logHandler: @escaping @Sendable (String) -> Void
     ) async throws -> URL {
         let outputURL = Self.temporaryOutputURL(for: inputFile)
@@ -21,6 +22,7 @@ struct AudioProcessingService {
                 correctionSettings: correctionSettings ?? denoiseStrength.settings,
                 analysisMode: analysisMode,
                 initialAnalysis: initialAnalysis,
+                initialNoiseMeasurements: initialNoiseMeasurements,
                 logger: logger
             )
         }.value

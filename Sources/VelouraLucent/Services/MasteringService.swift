@@ -5,7 +5,12 @@ struct MasteringService {
         try await process(inputFile: inputFile, settings: profile.settings, logHandler: logHandler)
     }
 
-    func process(inputFile: URL, settings: MasteringSettings, logHandler: @escaping @Sendable (String) -> Void) async throws -> URL {
+    func process(
+        inputFile: URL,
+        settings: MasteringSettings,
+        referenceNoiseMeasurements: NoiseMeasurementSnapshot? = nil,
+        logHandler: @escaping @Sendable (String) -> Void
+    ) async throws -> URL {
         let outputURL = Self.temporaryOutputURL(for: inputFile)
         let outputPath = outputURL.path(percentEncoded: false)
         let logger = MasteringClosureLogger(logHandler: logHandler)
@@ -27,6 +32,7 @@ struct MasteringService {
                 signal: analysisInput.0,
                 analysis: analysisInput.1,
                 settings: settings,
+                referenceNoiseMeasurements: referenceNoiseMeasurements,
                 logger: logger
             )
             logger.log(MasteringStep.save.rawValue)

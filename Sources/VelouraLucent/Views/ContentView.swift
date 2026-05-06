@@ -2104,7 +2104,8 @@ struct ContentView: View {
                     denoiseStrength: job.selectedDenoiseStrength,
                     correctionSettings: appliedSettings,
                     analysisMode: job.selectedAnalysisMode,
-                    initialAnalysis: initialAnalysis
+                    initialAnalysis: initialAnalysis,
+                    initialNoiseMeasurements: job.inputNoiseMeasurements
                 ) { message in
                     Task { @MainActor in
                         job.appendLog(message)
@@ -2143,7 +2144,8 @@ struct ContentView: View {
             do {
                 let masteredFile = try await MasteringService().process(
                     inputFile: correctedFile,
-                    settings: appliedSettings
+                    settings: appliedSettings,
+                    referenceNoiseMeasurements: job.outputNoiseMeasurements
                 ) { message in
                     Task { @MainActor in
                         job.appendMasteringLog(message)

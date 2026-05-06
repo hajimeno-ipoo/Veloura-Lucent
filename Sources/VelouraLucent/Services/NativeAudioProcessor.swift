@@ -95,6 +95,7 @@ struct NativeAudioProcessor {
         correctionSettings: CorrectionSettings? = nil,
         analysisMode: AudioAnalysisMode = .auto,
         initialAnalysis: AnalysisData? = nil,
+        initialNoiseMeasurements: NoiseMeasurementSnapshot? = nil,
         logger: AudioProcessingLogger? = nil
     ) throws {
         _ = try run(
@@ -104,6 +105,7 @@ struct NativeAudioProcessor {
             correctionSettings: correctionSettings ?? denoiseStrength.settings,
             analysisMode: analysisMode,
             initialAnalysis: initialAnalysis,
+            initialNoiseMeasurements: initialNoiseMeasurements,
             logger: logger,
             collectsBenchmark: false
         )
@@ -116,6 +118,7 @@ struct NativeAudioProcessor {
         correctionSettings: CorrectionSettings? = nil,
         analysisMode: AudioAnalysisMode = .auto,
         initialAnalysis: AnalysisData? = nil,
+        initialNoiseMeasurements: NoiseMeasurementSnapshot? = nil,
         logger: AudioProcessingLogger? = nil
     ) throws -> NativeAudioProcessingBenchmark {
         try run(
@@ -125,6 +128,7 @@ struct NativeAudioProcessor {
             correctionSettings: correctionSettings ?? denoiseStrength.settings,
             analysisMode: analysisMode,
             initialAnalysis: initialAnalysis,
+            initialNoiseMeasurements: initialNoiseMeasurements,
             logger: logger,
             collectsBenchmark: true
         )
@@ -137,6 +141,7 @@ struct NativeAudioProcessor {
         correctionSettings: CorrectionSettings,
         analysisMode: AudioAnalysisMode,
         initialAnalysis: AnalysisData?,
+        initialNoiseMeasurements: NoiseMeasurementSnapshot?,
         logger: AudioProcessingLogger?,
         collectsBenchmark: Bool
     ) throws -> NativeAudioProcessingBenchmark {
@@ -161,11 +166,18 @@ struct NativeAudioProcessor {
                 AudioAnalyzer(mode: resolvedAnalysisMode).analyze(signal: signal)
             }
         }
+        if initialNoiseMeasurements != nil {
+            logger?.log("ノイズ測定: 既存結果を使用")
+        }
 
         logger?.log("低域ノイズを先に整えます")
         let lowCleaned = measure("lowNoiseCleanup", label: "低域ノイズ", recorder: benchmarkRecorder, logger: logger) {
             let dehummed = HumRemover(settings: correctionSettings).process(signal: signal)
-            return RumbleReducer(settings: correctionSettings).process(signal: dehummed, reference: signal)
+            return RumbleReducer(settings: correctionSettings).process(
+                signal: dehummed,
+                reference: signal,
+                referenceMeasurements: initialNoiseMeasurements
+            )
         }
 
         logger?.log("ノイズを除去します")
@@ -215,7 +227,11 @@ struct NativeAudioProcessor {
         }
         logger?.log("シマーを抑えます")
         let shimmerLimited = measure("shimmerPeakLimit", label: "シマー制限", recorder: benchmarkRecorder, logger: logger) {
-            ShimmerPeakLimiter(settings: correctionSettings).process(signal: residueGuarded, reference: signal)
+            ShimmerPeakLimiter(settings: correctionSettings).process(
+                signal: residueGuarded,
+                reference: signal,
+                referenceMeasurements: initialNoiseMeasurements
+            )
         }
 
         logger?.log("ピークを保護します")
@@ -482,7 +498,11 @@ private struct HumRemover: Sendable {
 private struct RumbleReducer: Sendable {
     let settings: CorrectionSettings
 
-    func process(signal: AudioSignal, reference: AudioSignal) -> AudioSignal {
+    func process(
+        signal: AudioSignal,
+        reference: AudioSignal,
+        referenceMeasurements: NoiseMeasurementSnapshot? = nil
+    ) -> AudioSignal {
         let intensity = clamped(settings.lowCleanup * 0.68 + settings.noiseDetectionSensitivity * 0.22, min: 0, max: 1)
         guard intensity > 0.05 else { return signal }
         let channels = mapChannelsConcurrently(signal.channels) {
@@ -490,15 +510,21 @@ private struct RumbleReducer: Sendable {
         }
         return adaptiveRumbleLimit(
             signal: AudioSignal(channels: channels, sampleRate: signal.sampleRate),
-            reference: reference
+            reference: reference,
+            referenceMeasurements: referenceMeasurements
         )
     }
 
-    private func adaptiveRumbleLimit(signal: AudioSignal, reference: AudioSignal) -> AudioSignal {
+    private func adaptiveRumbleLimit(
+        signal: AudioSignal,
+        reference: AudioSignal,
+        referenceMeasurements: NoiseMeasurementSnapshot?
+    ) -> AudioSignal {
         let improvementDB = settings.correctionIntensity >= 0.65 ? 3.2 : (settings.correctionIntensity >= 0.45 ? 1.2 : 0.0)
         guard improvementDB > 0 else { return signal }
 
-        let target = (NoiseMeasurementService.analyze(signal: reference).value(for: "rumble")?.comparableLevelDB ?? -120) - improvementDB
+        let measurements = referenceMeasurements ?? NoiseMeasurementService.analyze(signal: reference)
+        let target = measurements.comparableLevel(for: "rumble") - improvementDB
         var currentSignal = signal
         for _ in 0..<4 {
             let current = NoiseMeasurementService.analyze(signal: currentSignal).value(for: "rumble")?.comparableLevelDB ?? -120
@@ -1359,10 +1385,14 @@ private struct LowMidResidueGuard: Sendable {
 private struct ShimmerPeakLimiter: Sendable {
     let settings: CorrectionSettings
 
-    func process(signal: AudioSignal, reference: AudioSignal) -> AudioSignal {
+    func process(
+        signal: AudioSignal,
+        reference: AudioSignal,
+        referenceMeasurements: NoiseMeasurementSnapshot? = nil
+    ) -> AudioSignal {
         let attenuationDB = max(0, (settings.correctionIntensity - 0.38) * 42 + (settings.noiseDetectionSensitivity - 0.40) * 8)
         let baseGain = powf(10, -attenuationDB / 20)
-        let referenceMeasurements = NoiseMeasurementService.analyze(signal: reference)
+        let referenceMeasurements = referenceMeasurements ?? NoiseMeasurementService.analyze(signal: reference)
         let channels = mapChannelsConcurrently(signal.channels) {
             processChannel($0, sampleRate: signal.sampleRate, lower: 5_000, upper: 14_000, gain: baseGain)
         }
