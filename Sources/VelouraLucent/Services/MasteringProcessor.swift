@@ -121,9 +121,15 @@ struct MasteringProcessor {
             peakCeilingDB: settings.peakCeilingDB,
             logger: logger
         )
+        let finalGuarded = applyFinalNoiseReturnCeiling(
+            signal: mastered,
+            reference: signal,
+            peakCeilingDB: settings.peakCeilingDB,
+            logger: logger
+        )
         logger?.log("ルート/マスタリング/実行工程数: \(routePlan.runLikeCount)/\(MasteringRouteStep.allCases.count)")
         logger?.log("ルート/マスタリング/スキップ工程数: \(MasteringRouteStep.allCases.count - routePlan.runLikeCount)/\(MasteringRouteStep.allCases.count)")
-        return mastered
+        return finalGuarded
     }
 
     private func measure<T>(label: String, logger: AudioProcessingLogger?, work: () -> T) -> T {
@@ -397,10 +403,10 @@ struct MasteringProcessor {
         settings: MasteringSettings,
         finishingIntensity: Float
     ) -> Float {
-        let harshnessPressure = max(0, analysis.harshnessScore - 0.42) * 0.92
-        let airBoostPressure = max(0, settings.highShelfGain - 0.36) * 0.34
-        let finishPressure = max(0, finishingIntensity - 0.52) * 0.18
-        return clamped(harshnessPressure + airBoostPressure + finishPressure, min: 0, max: 0.30)
+        let harshnessPressure = max(0, analysis.harshnessScore - 0.48) * 0.58
+        let airBoostPressure = max(0, settings.highShelfGain - 0.42) * 0.18
+        let finishPressure = max(0, finishingIntensity - 0.58) * 0.10
+        return clamped(harshnessPressure + airBoostPressure + finishPressure, min: 0, max: 0.18)
     }
 
     private func applyNoiseReturnGuard(
@@ -707,9 +713,10 @@ struct MasteringProcessor {
         logger: AudioProcessingLogger?
     ) -> AudioSignal {
         let rules = [
-            HighFloorRule(label: "5-10kHz", lower: 5_000, upper: 10_000, maxDropDB: 5.0, maxBoostDB: 7.0),
-            HighFloorRule(label: "10-16kHz", lower: 10_000, upper: 16_000, maxDropDB: 6.0, maxBoostDB: 7.0),
-            HighFloorRule(label: "16kHz以上", lower: 16_000, upper: 24_000, maxDropDB: 8.0, maxBoostDB: 6.0)
+            HighFloorRule(label: "5-8kHz", lower: 5_000, upper: 8_000, maxDropDB: 4.0, maxBoostDB: 8.0),
+            HighFloorRule(label: "8-12kHz", lower: 8_000, upper: 12_000, maxDropDB: 4.5, maxBoostDB: 9.0),
+            HighFloorRule(label: "12-16kHz", lower: 12_000, upper: 16_000, maxDropDB: 4.5, maxBoostDB: 8.0),
+            HighFloorRule(label: "16kHz以上", lower: 16_000, upper: 24_000, maxDropDB: 5.5, maxBoostDB: 7.0)
         ]
         var current = signal
         var didApply = false
@@ -741,6 +748,122 @@ struct MasteringProcessor {
         }
 
         guard didApply else { return signal }
+        let peakLimited = enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
+        return constrainHighFloorNoiseReturn(
+            signal: peakLimited,
+            fallback: signal,
+            reference: reference,
+            peakCeilingDB: peakCeilingDB,
+            logger: logger
+        )
+    }
+
+    private func constrainHighFloorNoiseReturn(
+        signal: AudioSignal,
+        fallback: AudioSignal,
+        reference: AudioSignal,
+        peakCeilingDB: Float,
+        logger: AudioProcessingLogger?
+    ) -> AudioSignal {
+        let referenceNoise = NoiseMeasurementService.analyze(signal: reference)
+        let candidates: [(mix: Float, signal: AudioSignal)] = [
+            (1.0, signal),
+            (0.75, blendHighFloor(base: fallback, boosted: signal, mix: 0.75)),
+            (0.50, blendHighFloor(base: fallback, boosted: signal, mix: 0.50)),
+            (0.25, blendHighFloor(base: fallback, boosted: signal, mix: 0.25)),
+            (0.0, fallback)
+        ]
+
+        for candidate in candidates {
+            let candidateNoise = NoiseMeasurementService.analyze(signal: candidate.signal)
+            let hissReturn = noiseReturn(id: NoiseMeasurementID.hiss, reference: referenceNoise, current: candidateNoise)
+            let sibilanceReturn = noiseReturn(id: NoiseMeasurementID.sibilance, reference: referenceNoise, current: candidateNoise)
+            guard hissReturn <= 0.5, sibilanceReturn <= 0.4 else { continue }
+            if candidate.mix < 1 {
+                logger?.log("高域保持: ノイズ戻り抑制 mix \(String(format: "%.2f", candidate.mix))")
+            }
+            return enforcePeakCeiling(signal: candidate.signal, peakCeilingDB: peakCeilingDB)
+        }
+
+        logger?.log("高域保持: ノイズ戻り抑制 mix 0.00")
+        return fallback
+    }
+
+    private func blendHighFloor(base: AudioSignal, boosted: AudioSignal, mix: Float) -> AudioSignal {
+        let channelCount = min(base.channels.count, boosted.channels.count)
+        guard channelCount > 0 else { return base }
+        var channels = base.channels
+        for channelIndex in 0..<channelCount {
+            let count = min(base.channels[channelIndex].count, boosted.channels[channelIndex].count)
+            guard count > 0 else { continue }
+            channels[channelIndex] = (0..<count).map { index in
+                base.channels[channelIndex][index] * (1 - mix) + boosted.channels[channelIndex][index] * mix
+            }
+        }
+        return AudioSignal(channels: channels, sampleRate: base.sampleRate)
+    }
+
+    private func noiseReturn(id: String, reference: NoiseMeasurementSnapshot, current: NoiseMeasurementSnapshot) -> Double {
+        guard let referenceValue = reference.comparableLevel(for: id),
+              let currentValue = current.comparableLevel(for: id)
+        else {
+            return 0
+        }
+        return currentValue - referenceValue
+    }
+
+    private func applyFinalNoiseReturnCeiling(
+        signal: AudioSignal,
+        reference: AudioSignal,
+        peakCeilingDB: Float,
+        logger: AudioProcessingLogger?
+    ) -> AudioSignal {
+        var current = signal
+        let referenceNoise = NoiseMeasurementService.analyze(signal: reference)
+
+        for pass in 1...6 {
+            let currentNoise = NoiseMeasurementService.analyze(signal: current)
+            let hissReturn = noiseReturn(id: NoiseMeasurementID.hiss, reference: referenceNoise, current: currentNoise)
+            let sibilanceReturn = noiseReturn(id: NoiseMeasurementID.sibilance, reference: referenceNoise, current: currentNoise)
+            guard hissReturn > 0.5 || sibilanceReturn > 0.4 else {
+                if pass > 1 {
+                    logger?.log("ノイズ戻り: 最終上限確認 \(pass - 1)/6")
+                }
+                return enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
+            }
+
+            let sampleRate = current.sampleRate
+            if hissReturn > 0.5 {
+                let gain = powf(10, -Float(min((hissReturn - 0.5) * 45.0, 80.0)) / 20)
+                let channels = mapChannelsConcurrently(current.channels) {
+                    scaleBand(
+                        channel: $0,
+                        sampleRate: sampleRate,
+                        lower: 8_000,
+                        upper: 20_000,
+                        gain: gain
+                    )
+                }
+                current = AudioSignal(channels: channels, sampleRate: sampleRate)
+                logger?.log("ノイズ戻り: 最終ヒス上限 \(pass)/6")
+            }
+
+            if sibilanceReturn > 0.4 {
+                let gain = powf(10, -Float(min((sibilanceReturn - 0.4) * 0.9, 5.0)) / 20)
+                let channels = mapChannelsConcurrently(current.channels) {
+                    scaleBand(
+                        channel: $0,
+                        sampleRate: sampleRate,
+                        lower: 5_000,
+                        upper: 12_000,
+                        gain: gain
+                    )
+                }
+                current = AudioSignal(channels: channels, sampleRate: sampleRate)
+                logger?.log("ノイズ戻り: 最終サ行上限 \(pass)/6")
+            }
+        }
+
         return enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
     }
 

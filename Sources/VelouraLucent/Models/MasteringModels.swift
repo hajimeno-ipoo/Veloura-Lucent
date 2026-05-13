@@ -54,7 +54,7 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
         case .streaming:
             return MasteringSettings(
                 targetLoudness: -14.5,
-                peakCeilingDB: -1.0,
+                peakCeilingDB: -1.5,
                 lowShelfGain: 0.85,
                 lowMidGain: -0.28,
                 presenceGain: 0.38,

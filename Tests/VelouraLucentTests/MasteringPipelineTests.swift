@@ -218,11 +218,43 @@ struct MasteringPipelineTests {
     }
 
     @Test
+    func masteringPreservesAirAndPresenceWithinMusicalGoal() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let inputURL = tempDirectory.appending(path: "musical-air-goal.wav")
+
+        try makeMusicalAirTone(at: inputURL)
+
+        let reference = try AudioFileService.loadAudio(from: inputURL)
+        let output = try await MasteringService().process(inputFile: inputURL, profile: .streaming) { _ in }
+        let mastered = try AudioFileService.loadAudio(from: output)
+
+        let referencePresence = bandRMSDB(signal: reference, lower: 5_000, upper: 8_000)
+        let masteredPresence = bandRMSDB(signal: mastered, lower: 5_000, upper: 8_000)
+        let referenceBrilliance = bandRMSDB(signal: reference, lower: 8_000, upper: 12_000)
+        let masteredBrilliance = bandRMSDB(signal: mastered, lower: 8_000, upper: 12_000)
+        let referenceAir = bandRMSDB(signal: reference, lower: 12_000, upper: 16_000)
+        let masteredAir = bandRMSDB(signal: mastered, lower: 12_000, upper: 16_000)
+        let referenceUltraAir = bandRMSDB(signal: reference, lower: 16_000, upper: 20_000)
+        let masteredUltraAir = bandRMSDB(signal: mastered, lower: 16_000, upper: 20_000)
+        let masteredMetrics = try AudioComparisonService.analyze(fileURL: output)
+
+        #expect(FileManager.default.fileExists(atPath: output.path()))
+        #expect(masteredPresence >= referencePresence - 8.0)
+        #expect(masteredBrilliance >= referenceBrilliance - 8.0)
+        #expect(masteredAir >= referenceAir - 7.0)
+        #expect(masteredUltraAir >= referenceUltraAir - 6.0)
+        #expect((-16.5 ... -13.0).contains(masteredMetrics.integratedLoudnessLUFS))
+        #expect(masteredMetrics.truePeakDBFS <= -1.5)
+    }
+
+    @Test
     func masteringNoiseReturnHissReductionIsBoundedForAudioQuality() {
         let hissRule = InternalAudioJudgementPolicy.masteringNoiseReturnLimits.first {
             $0.id == NoiseMeasurementID.hiss
         }
 
+        #expect(hissRule?.lowerFrequency == 8_000)
         #expect(hissRule?.reductionMultiplier == 2.2)
         #expect(hissRule?.maxReductionDB == 18.0)
     }
@@ -312,6 +344,45 @@ struct MasteringPipelineTests {
             let shimmer = Float(sin(2 * Double.pi * 15_500 * t + sin(2 * Double.pi * 11 * t)) * 0.012)
             left[index] = body + presence + air + shimmer
             right[index] = body * 0.97 + presence * 0.92 - air * 0.28 + shimmer * 0.7
+        }
+
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 2)
+        )
+        try file.write(from: buffer)
+    }
+
+    private func makeMusicalAirTone(at url: URL) throws {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 4)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        let left = buffer.floatChannelData![0]
+        let right = buffer.floatChannelData![1]
+
+        for index in 0..<frameCount {
+            let t = Double(index) / sampleRate
+            let swell = 0.74 + 0.18 * sin(2 * Double.pi * 0.32 * t)
+            let body = sin(2 * Double.pi * 190 * t) * 0.11
+                + sin(2 * Double.pi * 380 * t) * 0.045
+                + sin(2 * Double.pi * 760 * t) * 0.022
+            let presence = sin(2 * Double.pi * 6_400 * t) * 0.014 * swell
+            let brilliance = sin(2 * Double.pi * 9_800 * t) * 0.012 * swell
+            let air = sin(2 * Double.pi * 13_400 * t) * 0.009 * swell
+            let ultraAir = sin(2 * Double.pi * 17_800 * t) * 0.006 * swell
+            let transient = index % 9_600 < 90 ? 0.045 : 0
+
+            left[index] = Float(body + presence + brilliance + air + ultraAir + transient)
+            right[index] = Float(
+                body * 0.96
+                    + presence * 0.88
+                    + brilliance * 0.72
+                    - air * 0.40
+                    - ultraAir * 0.34
+                    + transient * 0.82
+            )
         }
 
         let file = try AVAudioFile(

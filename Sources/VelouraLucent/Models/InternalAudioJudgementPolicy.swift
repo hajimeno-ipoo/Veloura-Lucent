@@ -71,7 +71,7 @@ enum InternalAudioJudgementPolicy {
     static let masteringNoiseReturnLimits: [NoiseReturnLimit] = [
         NoiseReturnLimit(
             id: NoiseMeasurementID.hiss,
-            lowerFrequency: 5_000,
+            lowerFrequency: 8_000,
             upperFrequency: 20_000,
             allowedReturnDB: -2.0,
             reductionMultiplier: 2.2,
@@ -80,18 +80,18 @@ enum InternalAudioJudgementPolicy {
         NoiseReturnLimit(
             id: NoiseMeasurementID.sibilance,
             lowerFrequency: 5_000,
-            upperFrequency: 20_000,
-            allowedReturnDB: 0.35,
-            reductionMultiplier: 1.2,
-            maxReductionDB: 12.0
+            upperFrequency: 12_000,
+            allowedReturnDB: 0.6,
+            reductionMultiplier: 0.9,
+            maxReductionDB: 6.0
         ),
         NoiseReturnLimit(
             id: NoiseMeasurementID.shimmer,
-            lowerFrequency: 5_000,
-            upperFrequency: 20_000,
-            allowedReturnDB: 0.45,
-            reductionMultiplier: 1.2,
-            maxReductionDB: 12.0
+            lowerFrequency: 8_000,
+            upperFrequency: 16_000,
+            allowedReturnDB: 0.7,
+            reductionMultiplier: 0.9,
+            maxReductionDB: 6.0
         )
     ]
 

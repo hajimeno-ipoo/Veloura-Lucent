@@ -4,6 +4,44 @@ import Testing
 
 struct RealAudioWorkflowTests {
     @Test
+    func realMasteringGoalFileMeetsHighBandTargets() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let inputPath = environment["VELOURA_REAL_GOAL_INPUT"],
+              let correctedPath = environment["VELOURA_REAL_GOAL_CORRECTED"]
+        else {
+            return
+        }
+
+        let inputURL = URL(fileURLWithPath: inputPath)
+        let correctedURL = URL(fileURLWithPath: correctedPath)
+        guard FileManager.default.fileExists(atPath: inputURL.path(percentEncoded: false)),
+              FileManager.default.fileExists(atPath: correctedURL.path(percentEncoded: false))
+        else {
+            Issue.record("Real goal audio files are missing")
+            return
+        }
+
+        let input = try AudioFileService.loadAudio(from: inputURL)
+        let corrected = try AudioFileService.loadAudio(from: correctedURL)
+        let masteredURL = try await MasteringService().process(inputFile: correctedURL, profile: .streaming) { _ in }
+        let mastered = try AudioFileService.loadAudio(from: masteredURL)
+        let masteredMetrics = try AudioComparisonService.analyze(fileURL: masteredURL)
+
+        let report = masteringGoalReport(input: input, corrected: corrected, mastered: mastered, masteredURL: masteredURL)
+        let reportURL = FileManager.default.temporaryDirectory.appending(path: "VelouraLucentRealMasteringGoal.md")
+        try report.write(to: reportURL, atomically: true, encoding: .utf8)
+
+        #expect(FileManager.default.fileExists(atPath: masteredURL.path(percentEncoded: false)))
+        #expect(masteringBandDrop(input: input, mastered: mastered, lower: 5_000, upper: 8_000) >= -8.0)
+        #expect(masteringBandDrop(input: input, mastered: mastered, lower: 8_000, upper: 12_000) >= -8.0)
+        #expect(masteringBandDrop(input: input, mastered: mastered, lower: 12_000, upper: 16_000) >= -7.0)
+        #expect(masteringBandDrop(input: input, mastered: mastered, lower: 16_000, upper: 20_000) >= -6.0)
+        #expect((-17.0 ... -13.0).contains(masteredMetrics.integratedLoudnessLUFS))
+        #expect(masteredMetrics.truePeakDBFS <= -1.5)
+        #expect(FileManager.default.fileExists(atPath: reportURL.path(percentEncoded: false)))
+    }
+
+    @Test
     func realAudioExcerptProducesCorrectedAndMasteredComparisonReport() async throws {
         let projectDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let sourceURL = projectDirectory.appending(path: "violin #002 睡眠.wav")
@@ -110,7 +148,50 @@ struct RealAudioWorkflowTests {
         return "| \(label) | \(format(Double(loudness))) | \(format(peak)) |"
     }
 
+    private func masteringGoalReport(input: AudioSignal, corrected: AudioSignal, mastered: AudioSignal, masteredURL: URL) -> String {
+        let bands: [(label: String, lower: Double, upper: Double, target: Double)] = [
+            ("5-8kHz", 5_000, 8_000, -8.0),
+            ("8-12kHz", 8_000, 12_000, -8.0),
+            ("12-16kHz", 12_000, 16_000, -7.0),
+            ("16-20kHz", 16_000, 20_000, -6.0)
+        ]
+        var lines = [
+            "# Real Mastering Goal",
+            "",
+            "- mastered: \(masteredURL.path(percentEncoded: false))",
+            "",
+            "| band | input | corrected | mastered | mastered-input | target |",
+            "| --- | ---: | ---: | ---: | ---: | ---: |"
+        ]
+        for band in bands {
+            let inputLevel = bandRMSDB(signal: input, lower: band.lower, upper: band.upper)
+            let correctedLevel = bandRMSDB(signal: corrected, lower: band.lower, upper: band.upper)
+            let masteredLevel = bandRMSDB(signal: mastered, lower: band.lower, upper: band.upper)
+            lines.append("| \(band.label) | \(format(inputLevel)) | \(format(correctedLevel)) | \(format(masteredLevel)) | \(format(masteredLevel - inputLevel, signed: true)) | >= \(format(band.target, signed: true)) |")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    private func masteringBandDrop(input: AudioSignal, mastered: AudioSignal, lower: Double, upper: Double) -> Double {
+        bandRMSDB(signal: mastered, lower: lower, upper: upper) - bandRMSDB(signal: input, lower: lower, upper: upper)
+    }
+
     private func format(_ value: Double, signed: Bool = false) -> String {
         String(format: signed ? "%+.1f dB" : "%.1f dB", value)
     }
+}
+
+private func bandRMSDB(signal: AudioSignal, lower: Double, upper: Double) -> Double {
+    let upperBound = min(upper, signal.sampleRate * 0.5 - 100)
+    guard lower < upperBound else { return -120 }
+    let mono = signal.monoMixdown()
+    let band = SpectralDSP.lowPass(
+        SpectralDSP.highPass(mono, cutoff: lower, sampleRate: signal.sampleRate),
+        cutoff: upperBound,
+        sampleRate: signal.sampleRate
+    )
+    let meanSquare = band.reduce(0.0) { partial, sample in
+        partial + Double(sample * sample)
+    } / Double(max(band.count, 1))
+    return 10 * log10(max(meanSquare, 1e-12))
 }
