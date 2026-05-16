@@ -23,12 +23,15 @@ struct NoiseWorkflowVerificationTests {
                 correctionSettings: strength.settings,
                 analysisMode: .cpu
             ) { _ in }
+            let correctedNoise = NoiseMeasurementService.analyze(signal: try AudioFileService.loadAudio(from: correctedURL))
             let masteredURL = try await MasteringService().process(
                 inputFile: correctedURL,
-                profile: .streaming
+                settings: MasteringProfile.streaming.settings,
+                referenceNoiseMeasurements: correctedNoise,
+                originalReferenceFile: inputURL,
+                originalReferenceNoiseMeasurements: inputNoise
             ) { _ in }
 
-            let correctedNoise = NoiseMeasurementService.analyze(signal: try AudioFileService.loadAudio(from: correctedURL))
             let masteredNoise = NoiseMeasurementService.analyze(signal: try AudioFileService.loadAudio(from: masteredURL))
 
             rows.append(

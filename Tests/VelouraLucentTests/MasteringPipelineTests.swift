@@ -116,6 +116,7 @@ struct MasteringPipelineTests {
         #expect(FileManager.default.fileExists(atPath: output.path()))
         #expect(fullMeasurementCount <= 1)
         #expect(logs.values.contains { $0.hasPrefix("ノイズ戻り/軽量判定: ") })
+        #expect((parsedInteger(prefix: "ノイズ戻り/軽量判定回数: ", from: logs.values) ?? 0) <= 3)
         #expect(!logs.values.contains("ノイズ戻り/測定: 8/8"))
     }
 
