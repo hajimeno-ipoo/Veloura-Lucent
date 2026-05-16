@@ -176,6 +176,50 @@ struct NoiseCheckReportServiceTests {
     }
 
     @Test
+    func dbfsNoiseDisplayScaleIncludesSeverityThresholds() throws {
+        let report = try #require(NoiseCheckReportService.makeReport(
+            input: snapshot(hiss: -58, sibilance: 3, shimmer: -58, mud: -12, hum: 2, rumble: -48, room: -52),
+            corrected: nil,
+            mastered: nil,
+            correctionSettings: DenoiseStrength.gentle.settings,
+            settings: MasteringProfile.natural.settings
+        ))
+
+        let hiss = try #require(report.rows.first { $0.id == "hiss" })
+        let shimmer = try #require(report.rows.first { $0.id == "shimmer" })
+
+        #expect(hiss.displayScale.maximum >= InternalAudioJudgementPolicy.severityLimit(for: "hiss")!.warningDB)
+        #expect(shimmer.displayScale.maximum >= InternalAudioJudgementPolicy.severityLimit(for: "shimmer")!.warningDB)
+        #expect(hiss.displayScale.ratio(for: -65) < hiss.displayScale.ratio(for: -58))
+        #expect(shimmer.displayScale.ratio(for: -66) < shimmer.displayScale.ratio(for: -58))
+    }
+
+    @Test
+    func adviceIsHiddenWhenRecommendedChangeWouldBeZero() throws {
+        var correctionSettings = DenoiseStrength.strong.settings
+        correctionSettings.noiseDetectionSensitivity = 1.0
+        var masteringSettings = MasteringProfile.streaming.settings
+        masteringSettings.highShelfGain = -0.20
+
+        let input = snapshot(hiss: -72, sibilance: 3, shimmer: -72, mud: -12, hum: 2, rumble: -48, room: -52)
+        let corrected = snapshot(hiss: -58, sibilance: 3, shimmer: -72, mud: -12, hum: 2, rumble: -48, room: -52)
+        let mastered = snapshot(hiss: -56, sibilance: 3, shimmer: -72, mud: -12, hum: 2, rumble: -48, room: -52)
+
+        let report = try #require(NoiseCheckReportService.makeReport(
+            input: input,
+            corrected: corrected,
+            mastered: mastered,
+            correctionSettings: correctionSettings,
+            settings: masteringSettings
+        ))
+
+        let hiss = try #require(report.rows.first { $0.id == "hiss" })
+        #expect(hiss.severity == .warning)
+        #expect(hiss.recommendedActions.isEmpty)
+        #expect(report.recommendedActions.allSatisfy { $0.currentValue != $0.recommendedValue })
+    }
+
+    @Test
     func missingNoiseBarsUseConsistentPlaceholderWidth() throws {
         let report = try #require(NoiseCheckReportService.makeReport(
             input: snapshot(hiss: -72, sibilance: 3, shimmer: -72, mud: -12, hum: 2, rumble: -48, room: -52),

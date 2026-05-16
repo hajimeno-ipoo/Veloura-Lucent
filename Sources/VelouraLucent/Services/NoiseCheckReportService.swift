@@ -198,12 +198,17 @@ enum NoiseCheckReportService {
 
         var actions: [NoiseCheckAction] = []
         if masteringReturned || masteringStillHigh {
-            actions.append(definition.masteringAction(masteringDelta, mastered))
+            appendIfUseful(definition.masteringAction(masteringDelta, mastered), to: &actions)
         }
         if actions.count < 2 && (correctionWorse || correctionWeak || (corrected == nil && inputWasHigh)) {
-            actions.append(definition.correctionAction(correctionDelta, corrected ?? input))
+            appendIfUseful(definition.correctionAction(correctionDelta, corrected ?? input), to: &actions)
         }
         return Array(actions.prefix(2))
+    }
+
+    private static func appendIfUseful(_ action: NoiseCheckAction, to actions: inout [NoiseCheckAction]) {
+        guard action.currentValue != action.recommendedValue else { return }
+        actions.append(action)
     }
 
     private static func mergedActions(from rows: [NoiseCheckRow]) -> [NoiseCheckAction] {
@@ -245,7 +250,7 @@ enum NoiseCheckReportService {
                 unitLabel: "dBFS",
                 measurementDescription: "静かな区間の8kHz以上の床",
                 displayDescription: "下がるほどノイズが少ない",
-                displayScale: NoiseCheckDisplayScale(minimum: -120, maximum: -80),
+                displayScale: NoiseCheckDisplayScale(minimum: -120, maximum: -55),
                 cautionDB: limit(for: NoiseMeasurementID.hiss).cautionDB,
                 warningDB: limit(for: NoiseMeasurementID.hiss).warningDB,
                 masteringWorseningCautionDB: limit(for: NoiseMeasurementID.hiss).masteringWorseningCautionDB,
@@ -312,7 +317,7 @@ enum NoiseCheckReportService {
                 unitLabel: "dBFS",
                 measurementDescription: "静かな区間の10〜16kHz床",
                 displayDescription: "下がるほど高域ノイズが少ない",
-                displayScale: NoiseCheckDisplayScale(minimum: -120, maximum: -80),
+                displayScale: NoiseCheckDisplayScale(minimum: -120, maximum: -55),
                 cautionDB: limit(for: NoiseMeasurementID.shimmer).cautionDB,
                 warningDB: limit(for: NoiseMeasurementID.shimmer).warningDB,
                 masteringWorseningCautionDB: limit(for: NoiseMeasurementID.shimmer).masteringWorseningCautionDB,
