@@ -460,6 +460,62 @@ struct DiagnosticStageExportTests {
         #expect(guardedPeak <= denoisedPeak - 0.15)
     }
 
+    @Test
+    func shimmerPeakLimiterReducesShortShimmerWithoutDullingSustainedHighs() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let inputURL = tempDirectory.appending(path: "shimmer-limiter-mixed-highs.wav")
+        let diagnostics = tempDirectory.appending(path: "correction-stages")
+        let logs = DiagnosticLogCollector()
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        try makeShimmerLimiterMixedTone(at: inputURL)
+
+        var settings = DenoiseStrength.strong.settings
+        settings.correctionIntensity = 0.82
+        settings.noiseDetectionSensitivity = 0.82
+        settings.highNaturalness = 0.86
+
+        _ = try await AudioProcessingService().process(
+            inputFile: inputURL,
+            denoiseStrength: .strong,
+            correctionSettings: settings,
+            analysisMode: .cpu,
+            diagnosticOutputDirectory: diagnostics
+        ) { message in
+            logs.append(message)
+        }
+
+        let beforeLimit = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "06_correction_lowMidResidueGuard"))
+        let afterLimit = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "07_correction_shimmerPeakLimit"))
+        let highPreserved = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "08_correction_correctionHighPreserve"))
+        let correctionFinal = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "10_correction_peakSafety"))
+        let shimmerBurstBefore = maxWindowBandRMSDB(signal: beforeLimit, lower: 10_000, upper: 14_000)
+        let shimmerBurstAfter = maxWindowBandRMSDB(signal: afterLimit, lower: 10_000, upper: 14_000)
+        let steadySparkleBefore = try bandLevelDB(signal: excerpt(from: beforeLimit, startSeconds: 0.25, durationSeconds: 0.12), lower: 8_000, upper: 12_000)
+        let steadySparkleAfter = try bandLevelDB(signal: excerpt(from: afterLimit, startSeconds: 0.25, durationSeconds: 0.12), lower: 8_000, upper: 12_000)
+        let steadyAirBefore = try bandLevelDB(signal: excerpt(from: beforeLimit, startSeconds: 0.25, durationSeconds: 0.12), lower: 12_000, upper: 16_000)
+        let steadyAirAfter = try bandLevelDB(signal: excerpt(from: afterLimit, startSeconds: 0.25, durationSeconds: 0.12), lower: 12_000, upper: 16_000)
+        let ultraAirBefore = try bandLevelDB(signal: excerpt(from: beforeLimit, startSeconds: 0.25, durationSeconds: 0.12), lower: 16_000, upper: 20_000)
+        let ultraAirAfter = try bandLevelDB(signal: excerpt(from: afterLimit, startSeconds: 0.25, durationSeconds: 0.12), lower: 16_000, upper: 20_000)
+        let highPreservedSparkle = try bandLevelDB(signal: excerpt(from: highPreserved, startSeconds: 0.25, durationSeconds: 0.12), lower: 8_000, upper: 12_000)
+        let highPreservedAir = try bandLevelDB(signal: excerpt(from: highPreserved, startSeconds: 0.25, durationSeconds: 0.12), lower: 12_000, upper: 16_000)
+        let finalSparkle = try bandLevelDB(signal: excerpt(from: correctionFinal, startSeconds: 0.25, durationSeconds: 0.12), lower: 8_000, upper: 12_000)
+        let finalAir = try bandLevelDB(signal: excerpt(from: correctionFinal, startSeconds: 0.25, durationSeconds: 0.12), lower: 12_000, upper: 16_000)
+        let beforeNoise = NoiseMeasurementService.analyze(signal: beforeLimit, ids: [NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer])
+        let afterNoise = NoiseMeasurementService.analyze(signal: afterLimit, ids: [NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer])
+
+        #expect(logs.values.contains("シマー制限: 短時間判定を開始"))
+        #expect(shimmerBurstAfter <= shimmerBurstBefore - 1.0)
+        #expect(steadySparkleAfter >= steadySparkleBefore - 1.0)
+        #expect(steadyAirAfter >= steadyAirBefore - 1.0)
+        #expect(ultraAirAfter >= ultraAirBefore - 1.5)
+        #expect(highPreservedSparkle >= steadySparkleAfter - 0.1)
+        #expect(highPreservedAir >= steadyAirAfter - 0.1)
+        #expect(finalSparkle >= steadySparkleBefore - 1.0)
+        #expect(finalAir >= steadyAirBefore - 1.0)
+        #expect((afterNoise.comparableLevel(for: NoiseMeasurementID.hiss) ?? -120) <= (beforeNoise.comparableLevel(for: NoiseMeasurementID.hiss) ?? -120) + 0.2)
+        #expect((afterNoise.comparableLevel(for: NoiseMeasurementID.shimmer) ?? -120) <= (beforeNoise.comparableLevel(for: NoiseMeasurementID.shimmer) ?? -120) + 0.2)
+    }
+
     private func diagnosticWAVs(in directory: URL) throws -> [URL] {
         try FileManager.default.contentsOfDirectory(
             at: directory,
@@ -693,6 +749,35 @@ struct DiagnosticStageExportTests {
             let burstEnvelope = phase > 0.10 && phase < 0.145 ? 1.0 : 0.0
             let shimmer = sin(2 * Double.pi * 12_600 * time) * 0.085 * burstEnvelope
             channel[index] = Float(body + sustainedAir + shimmer)
+        }
+
+        let file = try AVAudioFile(forWriting: url, settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 1))
+        try file.write(from: buffer)
+    }
+
+    private func makeShimmerLimiterMixedTone(at url: URL, duration: Double = 2.4, sampleRate: Double = 48_000) throws {
+        let frameCount = Int(duration * sampleRate)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        let channel = buffer.floatChannelData![0]
+        var random = DiagnosticDeterministicRandom(seed: 0x51A1_CE11)
+        var noise = Array(repeating: Float.zero, count: frameCount)
+        for index in 0..<frameCount {
+            noise[index] = Float((random.nextDouble() * 2 - 1) * 0.035)
+        }
+        let highNoise = SpectralDSP.highPass(noise, cutoff: 10_000, sampleRate: sampleRate)
+        for index in 0..<frameCount {
+            let time = Double(index) / sampleRate
+            let body = sin(2 * Double.pi * 330 * time) * 0.060
+                + sin(2 * Double.pi * 660 * time) * 0.040
+            let sustainedSparkle = sin(2 * Double.pi * 9_600 * time) * 0.022
+            let sustainedAir = sin(2 * Double.pi * 13_200 * time) * 0.020
+            let sustainedUltraAir = sin(2 * Double.pi * 17_200 * time) * 0.008
+            let phase = time.truncatingRemainder(dividingBy: 0.48)
+            let burstEnvelope = phase > 0.10 && phase < 0.145 ? 1.0 : 0.0
+            let shimmerBurst = sin(2 * Double.pi * 12_600 * time) * 0.160 * burstEnvelope
+            channel[index] = Float(body + sustainedSparkle + sustainedAir + sustainedUltraAir + shimmerBurst + Double(highNoise[index]))
         }
 
         let file = try AVAudioFile(forWriting: url, settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 1))

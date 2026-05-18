@@ -58,7 +58,7 @@ struct NativeAudioProcessorBenchmarkTests {
         }
         if let shimmerMeasurements {
             #expect(shimmerMeasurements <= 5)
-            #expect(logs.values.contains("シマー制限: 一括判定を開始"))
+            #expect(logs.values.contains("シマー制限: 短時間判定を開始"))
         } else {
             #expect(logs.values.contains { $0.hasPrefix("ルート/補正: シマー制限 = スキップ") })
         }

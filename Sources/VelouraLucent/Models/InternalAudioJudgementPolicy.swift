@@ -97,21 +97,20 @@ enum InternalAudioJudgementPolicy {
 
     static func shimmerLimitRules(improvementDB: Double) -> [ShimmerLimitRule] {
         [
-            ShimmerLimitRule(id: NoiseMeasurementID.shimmer, lowerFrequency: 5_000, upperFrequency: 14_000, improvementDB: improvementDB),
-            ShimmerLimitRule(id: NoiseMeasurementID.hiss, lowerFrequency: 5_000, upperFrequency: 20_000, improvementDB: improvementDB)
+            ShimmerLimitRule(id: NoiseMeasurementID.shimmer, lowerFrequency: 8_000, upperFrequency: 14_000, improvementDB: improvementDB)
         ]
     }
 
     static func shimmerMaxReductionPerPassDB(correctionIntensity: Float) -> Double {
-        if correctionIntensity >= 0.70 { return 24 }
-        if correctionIntensity >= 0.50 { return 12 }
-        return 8
+        if correctionIntensity >= 0.70 { return 4.0 }
+        if correctionIntensity >= 0.50 { return 3.0 }
+        return 2.0
     }
 
     static func shimmerReductionScale(correctionIntensity: Float) -> Double {
-        if correctionIntensity >= 0.70 { return 1.25 }
-        if correctionIntensity >= 0.50 { return 0.82 }
-        return 0.65
+        if correctionIntensity >= 0.70 { return 0.65 }
+        if correctionIntensity >= 0.50 { return 0.50 }
+        return 0.35
     }
 
     static func severityLimit(for id: String) -> NoiseSeverityLimit? {

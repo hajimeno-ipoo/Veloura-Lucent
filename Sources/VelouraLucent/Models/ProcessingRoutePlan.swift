@@ -93,6 +93,7 @@ struct CorrectionRoutePlan: Sendable, Equatable {
             && hum.map { $0 < InternalAudioJudgementPolicy.routeLowNoiseQuietHumDB } == true
         let highNoiseIsQuiet = hiss.map { $0 < InternalAudioJudgementPolicy.routeHighNoiseQuietHissDB } == true
             && shimmer.map { $0 < InternalAudioJudgementPolicy.routeHighNoiseQuietShimmerDB } == true
+            && !analysis.hasShimmer
         let highNoiseNeedsCare = (hiss.map { $0 > InternalAudioJudgementPolicy.routeHighNoiseCareHissDB } ?? true)
             || (shimmer.map { $0 > InternalAudioJudgementPolicy.routeHighNoiseCareShimmerDB } ?? true)
             || analysis.hasShimmer

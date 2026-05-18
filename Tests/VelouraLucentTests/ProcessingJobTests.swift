@@ -171,6 +171,36 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func shortShimmerDoesNotSkipShimmerLimitEvenWhenHighNoiseFloorIsQuiet() {
+        let plan = CorrectionRoutePlan.make(
+            analysis: AnalysisData(
+                cutoffFrequency: 16_000,
+                dominantHarmonics: [],
+                harmonicConfidence: 0.2,
+                hasShimmer: true,
+                shimmerRatio: 0.24,
+                brightnessRatio: 0.3,
+                transientAmount: 0.35,
+                noiseAmount: 0.2,
+                rolloffDepth: 0.1,
+                airBandEnergyRatio: 0.2,
+                artifactBandRatio: 0.1,
+                denoiseEffectMetrics: nil
+            ),
+            noiseMeasurements: makeNoiseSnapshot(
+                hiss: -62,
+                sibilance: 4,
+                shimmer: -50,
+                mud: -12,
+                hum: 2,
+                rumble: -16
+            )
+        )
+
+        #expect(plan.decision(for: .shimmerPeakLimit).action == .run)
+    }
+
+    @Test
     func missingCorrectionNoiseMeasurementsDoNotSkipNoiseSensitiveSteps() {
         let plan = CorrectionRoutePlan.make(
             analysis: makeAnalysis(),

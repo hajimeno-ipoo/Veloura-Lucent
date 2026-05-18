@@ -447,12 +447,16 @@ struct MasteringPipelineTests {
 
     @Test
     func shimmerLimiterReductionLimitsStayModerateByCorrectionStrength() {
-        #expect(InternalAudioJudgementPolicy.shimmerMaxReductionPerPassDB(correctionIntensity: 0.72) == 24)
-        #expect(InternalAudioJudgementPolicy.shimmerMaxReductionPerPassDB(correctionIntensity: 0.50) == 12)
-        #expect(InternalAudioJudgementPolicy.shimmerMaxReductionPerPassDB(correctionIntensity: 0.30) == 8)
-        #expect(InternalAudioJudgementPolicy.shimmerReductionScale(correctionIntensity: 0.72) == 1.25)
-        #expect(InternalAudioJudgementPolicy.shimmerReductionScale(correctionIntensity: 0.50) == 0.82)
-        #expect(InternalAudioJudgementPolicy.shimmerReductionScale(correctionIntensity: 0.30) == 0.65)
+        let rules = InternalAudioJudgementPolicy.shimmerLimitRules(improvementDB: 1.0)
+        #expect(rules == [
+            ShimmerLimitRule(id: NoiseMeasurementID.shimmer, lowerFrequency: 8_000, upperFrequency: 14_000, improvementDB: 1.0)
+        ])
+        #expect(InternalAudioJudgementPolicy.shimmerMaxReductionPerPassDB(correctionIntensity: 0.72) == 4.0)
+        #expect(InternalAudioJudgementPolicy.shimmerMaxReductionPerPassDB(correctionIntensity: 0.50) == 3.0)
+        #expect(InternalAudioJudgementPolicy.shimmerMaxReductionPerPassDB(correctionIntensity: 0.30) == 2.0)
+        #expect(InternalAudioJudgementPolicy.shimmerReductionScale(correctionIntensity: 0.72) == 0.65)
+        #expect(InternalAudioJudgementPolicy.shimmerReductionScale(correctionIntensity: 0.50) == 0.50)
+        #expect(InternalAudioJudgementPolicy.shimmerReductionScale(correctionIntensity: 0.30) == 0.35)
     }
 
     @Test

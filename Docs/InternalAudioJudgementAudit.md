@@ -6,10 +6,10 @@
 |---|---|---|---|---|---|---|---|
 | 低域整理の実行判定 | `CorrectionRoutePlan.make` | `rumble`, `hum` | rumble < -12 dB かつ hum < 5 dB ならスキップ | 測定値なしはスキップしない | 低域処理の有無が変わる | 高 | 測定不能時に実行へ倒す |
 | サ行保護の軽量判定 | `CorrectionRoutePlan.make` | `sibilance`, `shimmerRatio` | sibilance < 7 dB かつ shimmerRatio < 0.18 なら軽量 | 測定値なしは通常実行 | 高域保護の強さが変わる | 高 | 測定不能時に軽量化しない |
-| シマー制限の実行判定 | `CorrectionRoutePlan.make` | `hiss`, `shimmer`, `hasShimmer` | hiss < -58 dB かつ shimmer < -46 dB ならスキップ | 測定値なしは実行 | 高域ノイズ抑制の有無が変わる | 高 | 測定不能時にスキップしない |
+| シマー制限の実行判定 | `CorrectionRoutePlan.make` | `hiss`, `shimmer`, `hasShimmer` | hiss < -58 dB かつ shimmer < -46 dB かつ短時間シマーなしならスキップ | 測定値なしは実行 | 短時間シマー抑制の有無が変わる | 高 | 測定不能時や短時間シマーありではスキップしない |
 | 低中域整理の実行判定 | `CorrectionRoutePlan.make` | `mud` | mud < -9 dB ならスキップ | 測定値なしは実行 | 低中域の削り方が変わる | 中 | 測定不能時にスキップしない |
 | ノイズ除去本体 | `SpectralGateDenoiser` | STFT、静かなフレーム、帯域別マスク | profile と詳細設定から算出 | 空音声は処理なし | 音全体のノイズと質感が変わる | 高 | 現状維持、しきい値をポリシー化対象外に分類 |
-| シマー制限の最大削り量 | `ShimmerPeakLimiter` | `hiss`, `shimmer` | 8 / 12 / 24 dB | 参照値欠損時は再測定 | 高域の明るさとチラつきが変わる | 高 | 12 / 24 / 36 dB から抑制 |
+| シマー制限の最大削り量 | `ShimmerPeakLimiter` | `shimmer` | 2 / 3 / 4 dB | 参照値欠損時は再測定 | 短時間のチラつきだけを抑え、持続する高域を守る | 高 | 8〜14kHzの短時間イベントだけを対象にする |
 | マスタリングのディエッサー判定 | `MasteringRoutePlan.make` | `harshnessScore`, `sibilance` | harshness < 0.24 かつ sibilance < 7 dB ならスキップ | 測定値なしは実行 | 刺さり抑制の有無が変わる | 高 | 測定不能時にスキップしない |
 | 高域戻りガード判定 | `MasteringRoutePlan.make` | `harshnessScore`, `highShelfGain`, `shimmer` | harshness < 0.30 かつ highShelfGain < 0.34 かつ shimmer < -44 dB ならスキップ | 測定値なしは実行 | 高域抑制の有無が変わる | 高 | 測定不能時にスキップしない |
 | ノイズ戻りガード判定 | `MasteringRoutePlan.make` | `hiss`, `sibilance`, `shimmer` | hiss < -58 dB、sibilance < 7 dB、shimmer < -46 dB なら軽量 | 測定値なしは通常実行 | マスタリング後のノイズ抑制が変わる | 高 | 測定不能時に軽量化しない |
@@ -22,5 +22,5 @@
 
 - 測定値なしを `-120 dB` として扱う経路は修正対象。
 - `hiss 4.0倍` と最大 `36 dB` はマスタリングで音を削りすぎるため修正対象。
-- シマー制限の最大 `12 / 24 / 36 dB` は強すぎるため修正対象。
+- シマー制限は、最大 `2 / 3 / 4 dB` の短時間イベント処理にして、広い高域を一括で下げない。
 - 表示専用のグラフ計算は今回の修正対象外。
