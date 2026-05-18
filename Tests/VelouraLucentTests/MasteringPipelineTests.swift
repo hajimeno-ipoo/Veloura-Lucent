@@ -215,14 +215,12 @@ struct MasteringPipelineTests {
 
         let referencePresence = bandRMSDB(signal: reference, lower: 5_000, upper: 10_000)
         let masteredPresence = bandRMSDB(signal: mastered, lower: 5_000, upper: 10_000)
-        let referenceAir = bandRMSDB(signal: reference, lower: 10_000, upper: 16_000)
-        let masteredAir = bandRMSDB(signal: mastered, lower: 10_000, upper: 16_000)
 
         #expect(FileManager.default.fileExists(atPath: output.path()))
-        #expect(masteredPresence >= referencePresence - 6.0)
-        #expect(masteredAir >= referenceAir - 7.0)
+        #expect(masteredPresence >= referencePresence - 2.0)
+        expectHighBandsNotDulled(reference: reference, processed: mastered)
         #expect(!logs.values.contains("高域保持: ノイズ戻り抑制 mix 0.00"))
-        #expect(logs.values.contains { $0.hasPrefix("高域保持: ") } || masteredPresence >= referencePresence - 5.0)
+        #expect(logs.values.contains { $0.hasPrefix("高域保持: ") } || masteredPresence >= referencePresence - 2.0)
     }
 
     @Test
@@ -239,22 +237,14 @@ struct MasteringPipelineTests {
 
         let referencePresence = bandRMSDB(signal: reference, lower: 5_000, upper: 8_000)
         let masteredPresence = bandRMSDB(signal: mastered, lower: 5_000, upper: 8_000)
-        let referenceBrilliance = bandRMSDB(signal: reference, lower: 8_000, upper: 12_000)
-        let masteredBrilliance = bandRMSDB(signal: mastered, lower: 8_000, upper: 12_000)
-        let referenceAir = bandRMSDB(signal: reference, lower: 12_000, upper: 16_000)
-        let masteredAir = bandRMSDB(signal: mastered, lower: 12_000, upper: 16_000)
-        let referenceUltraAir = bandRMSDB(signal: reference, lower: 16_000, upper: 20_000)
-        let masteredUltraAir = bandRMSDB(signal: mastered, lower: 16_000, upper: 20_000)
         let referenceRoom = bandRMSDB(signal: reference, lower: 300, upper: 3_000)
         let masteredRoom = bandRMSDB(signal: mastered, lower: 300, upper: 3_000)
         let referenceMetrics = try AudioComparisonService.analyze(fileURL: inputURL)
         let masteredMetrics = try AudioComparisonService.analyze(fileURL: output)
 
         #expect(FileManager.default.fileExists(atPath: output.path()))
-        #expect(masteredPresence >= referencePresence - 8.0)
-        #expect(masteredBrilliance >= referenceBrilliance - 6.5)
-        #expect(masteredAir >= referenceAir - 7.0)
-        #expect(masteredUltraAir >= referenceUltraAir - 6.0)
+        #expect(masteredPresence >= referencePresence - 2.0)
+        expectHighBandsNotDulled(reference: reference, processed: mastered)
         #expect(masteredRoom - masteredMetrics.rmsDBFS <= referenceRoom - referenceMetrics.rmsDBFS + 1.2)
         #expect((-18.2 ... -14.0).contains(masteredMetrics.integratedLoudnessLUFS))
         #expect(masteredMetrics.truePeakDBFS <= -1.5)
@@ -310,13 +300,17 @@ struct MasteringPipelineTests {
         }
 
         let masteredWithOriginal = try AudioFileService.loadAudio(from: outputWithOriginal)
+        let correctedBrilliance = bandBalanceDB(signal: corrected, lower: 8_000, upper: 12_000)
+        let correctedAir = bandBalanceDB(signal: corrected, lower: 12_000, upper: 16_000)
         let originalBrilliance = bandBalanceDB(signal: original, lower: 8_000, upper: 12_000)
         let withOriginalBrilliance = bandBalanceDB(signal: masteredWithOriginal, lower: 8_000, upper: 12_000)
         let originalAir = bandBalanceDB(signal: original, lower: 12_000, upper: 16_000)
         let withOriginalAir = bandBalanceDB(signal: masteredWithOriginal, lower: 12_000, upper: 16_000)
 
-        #expect(withOriginalBrilliance >= originalBrilliance - 6.0)
-        #expect(withOriginalAir >= originalAir - 6.0)
+        #expect(withOriginalBrilliance >= correctedBrilliance + 1.0)
+        #expect(withOriginalAir >= correctedAir + 1.0)
+        #expect(withOriginalBrilliance >= originalBrilliance - 4.0)
+        #expect(withOriginalAir >= originalAir - 4.0)
         #expect(logs.values.contains { $0.hasPrefix("原音参照読み込み: ") })
     }
 
@@ -598,6 +592,27 @@ private func bandRMSDB(signal: AudioSignal, lower: Double, upper: Double) -> Dou
 
 private func bandBalanceDB(signal: AudioSignal, lower: Double, upper: Double) -> Double {
     bandRMSDB(signal: signal, lower: lower, upper: upper) - fullRMSDB(signal: signal)
+}
+
+private func expectHighBandsNotDulled(
+    reference: AudioSignal,
+    processed: AudioSignal,
+    maxBrillianceDropDB: Double = 2.0,
+    maxAirDropDB: Double = 2.0,
+    maxUltraAirDropDB: Double = 2.5
+) {
+    #expect(
+        bandRMSDB(signal: processed, lower: 8_000, upper: 12_000)
+            >= bandRMSDB(signal: reference, lower: 8_000, upper: 12_000) - maxBrillianceDropDB
+    )
+    #expect(
+        bandRMSDB(signal: processed, lower: 12_000, upper: 16_000)
+            >= bandRMSDB(signal: reference, lower: 12_000, upper: 16_000) - maxAirDropDB
+    )
+    #expect(
+        bandRMSDB(signal: processed, lower: 16_000, upper: 20_000)
+            >= bandRMSDB(signal: reference, lower: 16_000, upper: 20_000) - maxUltraAirDropDB
+    )
 }
 
 private func fullRMSDB(signal: AudioSignal) -> Double {

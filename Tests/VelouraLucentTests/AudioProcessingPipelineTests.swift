@@ -184,18 +184,17 @@ struct AudioProcessingPipelineTests {
 
         let inputSignal = try AudioFileService.loadAudio(from: inputURL)
         let outputSignal = try AudioFileService.loadAudio(from: output)
-        let inputBrilliance = bandBalanceDB(signal: inputSignal, lower: 8_000, upper: 12_000)
-        let outputBrilliance = bandBalanceDB(signal: outputSignal, lower: 8_000, upper: 12_000)
-        let inputAir = bandBalanceDB(signal: inputSignal, lower: 12_000, upper: 16_000)
-        let outputAir = bandBalanceDB(signal: outputSignal, lower: 12_000, upper: 16_000)
         let inputNoise = NoiseMeasurementService.analyze(signal: inputSignal)
         let outputNoise = NoiseMeasurementService.analyze(signal: outputSignal)
 
-        #expect(outputBrilliance >= inputBrilliance - 6.0)
-        #expect(outputAir >= inputAir - 6.0)
+        expectHighBandsNotDulled(reference: inputSignal, processed: outputSignal)
         #expect((outputNoise.comparableLevel(for: NoiseMeasurementID.hiss) ?? 0) <= (inputNoise.comparableLevel(for: NoiseMeasurementID.hiss) ?? 0) + 0.5)
         #expect((outputNoise.comparableLevel(for: NoiseMeasurementID.shimmer) ?? 0) <= (inputNoise.comparableLevel(for: NoiseMeasurementID.shimmer) ?? 0) + 0.5)
-        #expect(logs.values.contains { $0.hasPrefix("補正後高域保持") } || outputBrilliance >= inputBrilliance - 5.0)
+        #expect(
+            logs.values.contains { $0.hasPrefix("補正後高域保持") }
+                || bandRMSDB(signal: outputSignal, lower: 8_000, upper: 12_000)
+                    >= bandRMSDB(signal: inputSignal, lower: 8_000, upper: 12_000) - 2.0
+        )
     }
 
     @Test
@@ -472,6 +471,27 @@ struct AudioProcessingPipelineTests {
 
     private func bandBalanceDB(signal: AudioSignal, lower: Double, upper: Double) -> Double {
         bandRMSDB(signal: signal, lower: lower, upper: upper) - fullRMSDB(signal: signal)
+    }
+
+    private func expectHighBandsNotDulled(
+        reference: AudioSignal,
+        processed: AudioSignal,
+        maxBrillianceDropDB: Double = 2.0,
+        maxAirDropDB: Double = 2.0,
+        maxUltraAirDropDB: Double = 2.5
+    ) {
+        #expect(
+            bandRMSDB(signal: processed, lower: 8_000, upper: 12_000)
+                >= bandRMSDB(signal: reference, lower: 8_000, upper: 12_000) - maxBrillianceDropDB
+        )
+        #expect(
+            bandRMSDB(signal: processed, lower: 12_000, upper: 16_000)
+                >= bandRMSDB(signal: reference, lower: 12_000, upper: 16_000) - maxAirDropDB
+        )
+        #expect(
+            bandRMSDB(signal: processed, lower: 16_000, upper: 20_000)
+                >= bandRMSDB(signal: reference, lower: 16_000, upper: 20_000) - maxUltraAirDropDB
+        )
     }
 
     private func fullRMSDB(signal: AudioSignal) -> Double {

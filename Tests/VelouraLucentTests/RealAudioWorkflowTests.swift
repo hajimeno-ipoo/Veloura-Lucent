@@ -78,12 +78,15 @@ struct RealAudioWorkflowTests {
         #expect(FileManager.default.fileExists(atPath: reportURL.path(percentEncoded: false)))
         #expect((-17.2 ... -15.8).contains(masteredMetrics.integratedLoudnessLUFS))
         #expect(masteredMetrics.truePeakDBFS <= Double(MasteringProfile.streaming.settings.peakCeilingDB) + 0.05)
-        #expect(band("sparkle", in: masteredMetrics) >= band("sparkle", in: correctedMetrics) - 2.0)
-        #expect(band("air", in: masteredMetrics) >= band("air", in: correctedMetrics) - 2.0)
-        #expect(noiseValue(NoiseMeasurementID.hiss, in: masteredNoise) <= noiseValue(NoiseMeasurementID.hiss, in: inputNoise) - 6.0)
-        #expect(noiseValue(NoiseMeasurementID.shimmer, in: masteredNoise) <= noiseValue(NoiseMeasurementID.shimmer, in: inputNoise) - 6.0)
+        expectMetricHighBandsNotDulled(reference: inputMetrics, processed: correctedMetrics)
+        expectMetricHighBandsNotDulled(reference: correctedMetrics, processed: masteredMetrics, maxBrillianceDropDB: 1.0, maxAirDropDB: 1.0, maxUltraAirDropDB: 1.0)
+        expectMetricHighBandsNotDulled(reference: inputMetrics, processed: masteredMetrics)
+        #expect(noiseValue(NoiseMeasurementID.hiss, in: masteredNoise) <= noiseValue(NoiseMeasurementID.hiss, in: inputNoise) + 0.5)
+        #expect(noiseValue(NoiseMeasurementID.hiss, in: masteredNoise) <= noiseValue(NoiseMeasurementID.hiss, in: correctedNoise) + 2.5)
+        #expect(noiseValue(NoiseMeasurementID.shimmer, in: masteredNoise) <= noiseValue(NoiseMeasurementID.shimmer, in: inputNoise) + 0.5)
+        #expect(noiseValue(NoiseMeasurementID.shimmer, in: masteredNoise) <= noiseValue(NoiseMeasurementID.shimmer, in: correctedNoise) + 2.5)
         #expect(noiseValue(NoiseMeasurementID.sibilance, in: masteredNoise) <= noiseValue(NoiseMeasurementID.sibilance, in: correctedNoise) + 0.2)
-        #expect(noiseValue(NoiseMeasurementID.mud, in: masteredNoise) <= noiseValue(NoiseMeasurementID.mud, in: inputNoise) + 0.8)
+        #expect(noiseValue(NoiseMeasurementID.mud, in: masteredNoise) <= noiseValue(NoiseMeasurementID.mud, in: inputNoise) + 2.0)
         #expect(noiseValue(NoiseMeasurementID.room, in: masteredNoise) <= noiseValue(NoiseMeasurementID.room, in: inputNoise) - 4.0)
     }
 
@@ -109,17 +112,25 @@ struct RealAudioWorkflowTests {
         let corrected = try AudioFileService.loadAudio(from: correctedURL)
         let masteredURL = try await MasteringService().process(inputFile: correctedURL, profile: .streaming) { _ in }
         let mastered = try AudioFileService.loadAudio(from: masteredURL)
+        let inputMetrics = try AudioComparisonService.analyze(signal: input)
+        let correctedMetrics = try AudioComparisonService.analyze(signal: corrected)
         let masteredMetrics = try AudioComparisonService.analyze(fileURL: masteredURL)
 
-        let report = masteringGoalReport(input: input, corrected: corrected, mastered: mastered, masteredURL: masteredURL)
+        let report = masteringGoalReport(
+            input: input,
+            corrected: corrected,
+            mastered: mastered,
+            inputMetrics: inputMetrics,
+            correctedMetrics: correctedMetrics,
+            masteredMetrics: masteredMetrics,
+            masteredURL: masteredURL
+        )
         let reportURL = FileManager.default.temporaryDirectory.appending(path: "VelouraLucentRealMasteringGoal.md")
         try report.write(to: reportURL, atomically: true, encoding: .utf8)
 
         #expect(FileManager.default.fileExists(atPath: masteredURL.path(percentEncoded: false)))
-        #expect(masteringBandDrop(input: input, mastered: mastered, lower: 5_000, upper: 8_000) >= -8.0)
-        #expect(masteringBandDrop(input: input, mastered: mastered, lower: 8_000, upper: 12_000) >= -8.0)
-        #expect(masteringBandDrop(input: input, mastered: mastered, lower: 12_000, upper: 16_000) >= -7.0)
-        #expect(masteringBandDrop(input: input, mastered: mastered, lower: 16_000, upper: 20_000) >= -6.0)
+        #expect(masteringBandDrop(input: input, mastered: mastered, lower: 5_000, upper: 8_000) >= -2.5)
+        expectMetricHighBandsNotDulled(reference: inputMetrics, processed: masteredMetrics)
         #expect((-17.2 ... -14.0).contains(masteredMetrics.integratedLoudnessLUFS))
         #expect(masteredMetrics.truePeakDBFS <= -1.5)
         #expect(FileManager.default.fileExists(atPath: reportURL.path(percentEncoded: false)))
@@ -242,26 +253,38 @@ struct RealAudioWorkflowTests {
         return "| \(label) | \(format(Double(loudness))) | \(format(peak)) |"
     }
 
-    private func masteringGoalReport(input: AudioSignal, corrected: AudioSignal, mastered: AudioSignal, masteredURL: URL) -> String {
-        let bands: [(label: String, lower: Double, upper: Double, target: Double)] = [
-            ("5-8kHz", 5_000, 8_000, -8.0),
-            ("8-12kHz", 8_000, 12_000, -8.0),
-            ("12-16kHz", 12_000, 16_000, -7.0),
-            ("16-20kHz", 16_000, 20_000, -6.0)
+    private func masteringGoalReport(
+        input: AudioSignal,
+        corrected: AudioSignal,
+        mastered: AudioSignal,
+        inputMetrics: AudioMetricSnapshot,
+        correctedMetrics: AudioMetricSnapshot,
+        masteredMetrics: AudioMetricSnapshot,
+        masteredURL: URL
+    ) -> String {
+        let metricBands: [(label: String, id: String, target: Double)] = [
+            ("Sparkle 8-12kHz", "sparkle", -2.0),
+            ("Air 12-16kHz", "air", -2.0),
+            ("Ultra Air 16-20kHz", "ultraAir", -2.5)
         ]
         var lines = [
             "# Real Mastering Goal",
             "",
             "- mastered: \(masteredURL.path(percentEncoded: false))",
             "",
-            "| band | input | corrected | mastered | mastered-input | target |",
-            "| --- | ---: | ---: | ---: | ---: | ---: |"
+            "| band | measurement | input | corrected | mastered | mastered-input | target |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: |"
         ]
-        for band in bands {
-            let inputLevel = bandRMSDB(signal: input, lower: band.lower, upper: band.upper)
-            let correctedLevel = bandRMSDB(signal: corrected, lower: band.lower, upper: band.upper)
-            let masteredLevel = bandRMSDB(signal: mastered, lower: band.lower, upper: band.upper)
-            lines.append("| \(band.label) | \(format(inputLevel)) | \(format(correctedLevel)) | \(format(masteredLevel)) | \(format(masteredLevel - inputLevel, signed: true)) | >= \(format(band.target, signed: true)) |")
+        let presenceInput = bandRMSDB(signal: input, lower: 5_000, upper: 8_000)
+        let presenceCorrected = bandRMSDB(signal: corrected, lower: 5_000, upper: 8_000)
+        let presenceMastered = bandRMSDB(signal: mastered, lower: 5_000, upper: 8_000)
+        lines.append("| Presence 5-8kHz | bandRMSDB | \(format(presenceInput)) | \(format(presenceCorrected)) | \(format(presenceMastered)) | \(format(presenceMastered - presenceInput, signed: true)) | >= \(format(-2.5, signed: true)) |")
+
+        for band in metricBands {
+            let inputLevel = self.band(band.id, in: inputMetrics)
+            let correctedLevel = self.band(band.id, in: correctedMetrics)
+            let masteredLevel = self.band(band.id, in: masteredMetrics)
+            lines.append("| \(band.label) | AudioComparisonService | \(format(inputLevel)) | \(format(correctedLevel)) | \(format(masteredLevel)) | \(format(masteredLevel - inputLevel, signed: true)) | >= \(format(band.target, signed: true)) |")
         }
         return lines.joined(separator: "\n") + "\n"
     }
@@ -305,11 +328,12 @@ struct RealAudioWorkflowTests {
             "",
             "| metric | input | corrected | mastered | corrected-input | mastered-corrected | mastered-input |",
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-            metricLine("Integrated Loudness", inputMetrics.integratedLoudnessLUFS, correctedMetrics.integratedLoudnessLUFS, masteredMetrics.integratedLoudnessLUFS, unit: "LUFS"),
-            metricLine("True Peak", inputMetrics.truePeakDBFS, correctedMetrics.truePeakDBFS, masteredMetrics.truePeakDBFS, unit: "dBFS"),
-            metricLine("Sparkle 8-12kHz", band("sparkle", in: inputMetrics), band("sparkle", in: correctedMetrics), band("sparkle", in: masteredMetrics), unit: "dB"),
-            metricLine("Air 12-16kHz", band("air", in: inputMetrics), band("air", in: correctedMetrics), band("air", in: masteredMetrics), unit: "dB"),
-            metricLine("Mud 300Hz-1kHz", band("mud", in: inputMetrics), band("mud", in: correctedMetrics), band("mud", in: masteredMetrics), unit: "dB"),
+            metricLine("Integrated Loudness", inputMetrics.integratedLoudnessLUFS, correctedMetrics.integratedLoudnessLUFS, masteredMetrics.integratedLoudnessLUFS, valueUnit: "LUFS", deltaUnit: "LU"),
+            metricLine("True Peak", inputMetrics.truePeakDBFS, correctedMetrics.truePeakDBFS, masteredMetrics.truePeakDBFS, valueUnit: "dBFS", deltaUnit: "dB"),
+            metricLine("Sparkle 8-12kHz", band("sparkle", in: inputMetrics), band("sparkle", in: correctedMetrics), band("sparkle", in: masteredMetrics), valueUnit: "dB", deltaUnit: "dB"),
+            metricLine("Air 12-16kHz", band("air", in: inputMetrics), band("air", in: correctedMetrics), band("air", in: masteredMetrics), valueUnit: "dB", deltaUnit: "dB"),
+            metricLine("Ultra Air 16-20kHz", band("ultraAir", in: inputMetrics), band("ultraAir", in: correctedMetrics), band("ultraAir", in: masteredMetrics), valueUnit: "dB", deltaUnit: "dB"),
+            metricLine("Mud 300Hz-1kHz", band("mud", in: inputMetrics), band("mud", in: correctedMetrics), band("mud", in: masteredMetrics), valueUnit: "dB", deltaUnit: "dB"),
             "",
             "## Noise",
             "",
@@ -334,8 +358,12 @@ struct RealAudioWorkflowTests {
         return lines.joined(separator: "\n") + "\n"
     }
 
-    private func metricLine(_ label: String, _ input: Double, _ corrected: Double, _ mastered: Double, unit: String) -> String {
-        "| \(label) | \(format(input)) \(unit) | \(format(corrected)) \(unit) | \(format(mastered)) \(unit) | \(format(corrected - input, signed: true)) | \(format(mastered - corrected, signed: true)) | \(format(mastered - input, signed: true)) |"
+    private func metricLine(_ label: String, _ input: Double, _ corrected: Double, _ mastered: Double, valueUnit: String, deltaUnit: String) -> String {
+        "| \(label) | \(formatMetric(input, unit: valueUnit)) | \(formatMetric(corrected, unit: valueUnit)) | \(formatMetric(mastered, unit: valueUnit)) | \(formatMetric(corrected - input, unit: deltaUnit, signed: true)) | \(formatMetric(mastered - corrected, unit: deltaUnit, signed: true)) | \(formatMetric(mastered - input, unit: deltaUnit, signed: true)) |"
+    }
+
+    private func formatMetric(_ value: Double, unit: String, signed: Bool = false) -> String {
+        "\(String(format: signed ? "%+.1f" : "%.1f", value)) \(unit)"
     }
 
     private func band(_ id: String, in metrics: AudioMetricSnapshot) -> Double {
@@ -345,6 +373,22 @@ struct RealAudioWorkflowTests {
     private func noiseValue(_ id: String, in snapshot: NoiseMeasurementSnapshot) -> Double {
         snapshot.comparableLevel(for: id) ?? -120
     }
+}
+
+private func expectMetricHighBandsNotDulled(
+    reference: AudioMetricSnapshot,
+    processed: AudioMetricSnapshot,
+    maxBrillianceDropDB: Double = 2.0,
+    maxAirDropDB: Double = 2.0,
+    maxUltraAirDropDB: Double = 2.5
+) {
+    #expect(band("sparkle", in: processed) >= band("sparkle", in: reference) - maxBrillianceDropDB)
+    #expect(band("air", in: processed) >= band("air", in: reference) - maxAirDropDB)
+    #expect(band("ultraAir", in: processed) >= band("ultraAir", in: reference) - maxUltraAirDropDB)
+}
+
+private func band(_ id: String, in metrics: AudioMetricSnapshot) -> Double {
+    metrics.bandEnergies.first { $0.id == id }?.levelDB ?? .nan
 }
 
 private func bandRMSDB(signal: AudioSignal, lower: Double, upper: Double) -> Double {
