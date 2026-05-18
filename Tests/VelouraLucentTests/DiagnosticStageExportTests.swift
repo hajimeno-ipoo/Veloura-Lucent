@@ -76,6 +76,9 @@ struct DiagnosticStageExportTests {
         try report.write(to: reportURL, atomically: true, encoding: .utf8)
 
         #expect(FileManager.default.fileExists(atPath: reportURL.path(percentEncoded: false)))
+        #expect(report.contains("## 補正工程 前stage差分"))
+        #expect(report.contains("## マスタリング工程 前stage差分"))
+        #expect(report.contains("Δ16-20kHz"))
         #expect(try diagnosticWAVs(in: correctionDiagnostics).count == 11)
         #expect(try diagnosticWAVs(in: masteringDiagnostics).count == 15)
     }
@@ -100,7 +103,7 @@ struct DiagnosticStageExportTests {
         let inputSignal = try AudioFileService.loadAudio(from: inputURL)
         let inputNoise = NoiseMeasurementService.analyze(signal: inputSignal)
 
-        _ = try await MasteringService().process(
+        let masteredURL = try await MasteringService().process(
             inputFile: correctedURL,
             settings: MasteringProfile.streaming.settings,
             referenceNoiseMeasurements: correctedNoise,
@@ -111,6 +114,16 @@ struct DiagnosticStageExportTests {
 
         let correctionFiles = try diagnosticWAVs(in: correctionDiagnostics)
         let masteringFiles = try diagnosticWAVs(in: masteringDiagnostics)
+        let report = try diagnosticReport(
+            inputURL: inputURL,
+            excerptURL: inputURL,
+            correctedURL: correctedURL,
+            masteredURL: masteredURL,
+            correctionFiles: correctionFiles,
+            masteringFiles: masteringFiles,
+            startSeconds: 0,
+            durationSeconds: 1.2
+        )
 
         #expect(correctionFiles.count == 11)
         #expect(masteringFiles.count == 15)
@@ -118,6 +131,10 @@ struct DiagnosticStageExportTests {
         #expect(correctionFiles.contains { $0.lastPathComponent.contains("08_correction_correctionHighPreserve") })
         #expect(masteringFiles.contains { $0.lastPathComponent.contains("08_mastering_highReturnGuard") })
         #expect(masteringFiles.contains { $0.lastPathComponent.contains("09_mastering_noiseReturnGuard") })
+        #expect(report.contains("## 補正工程 前stage差分"))
+        #expect(report.contains("## マスタリング工程 前stage差分"))
+        #expect(report.contains("Δ8-12kHz"))
+        #expect(report.contains("->"))
     }
 
     @Test
@@ -713,6 +730,9 @@ struct DiagnosticStageExportTests {
         durationSeconds: Double,
         denoiseMaskBreakdownLines: [String] = []
     ) throws -> String {
+        let correctionMetrics = try diagnosticStageMetrics(for: correctionFiles.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }))
+        let masteringMetrics = try diagnosticStageMetrics(for: masteringFiles.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }))
+
         var lines: [String] = [
             "# Veloura Lucent Stage Diagnostic Report",
             "",
@@ -726,18 +746,20 @@ struct DiagnosticStageExportTests {
             "",
             diagnosticTableHeader()
         ]
-        for file in correctionFiles.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-            lines.append(try diagnosticTableRow(for: file))
+        for metric in correctionMetrics {
+            lines.append(diagnosticTableRow(for: metric))
         }
+        lines.append(contentsOf: diagnosticDeltaSection(title: "補正工程 前stage差分", metrics: correctionMetrics))
         lines.append(contentsOf: [
             "",
             "## マスタリング工程",
             "",
             diagnosticTableHeader()
         ])
-        for file in masteringFiles.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-            lines.append(try diagnosticTableRow(for: file))
+        for metric in masteringMetrics {
+            lines.append(diagnosticTableRow(for: metric))
         }
+        lines.append(contentsOf: diagnosticDeltaSection(title: "マスタリング工程 前stage差分", metrics: masteringMetrics))
         if !denoiseMaskBreakdownLines.isEmpty {
             lines.append(contentsOf: [
                 "",
@@ -755,12 +777,41 @@ struct DiagnosticStageExportTests {
         "| ファイル | LUFS | TP dBFS | 8-12kHz | 12-16kHz | 16-20kHz |\n|---|---:|---:|---:|---:|---:|"
     }
 
-    private func diagnosticTableRow(for file: URL) throws -> String {
-        let metrics = try AudioComparisonService.analyze(fileURL: file)
-        let sparkle = format(band("sparkle", in: metrics))
-        let air = format(band("air", in: metrics))
-        let ultraAir = format(band("ultraAir", in: metrics))
-        return "| \(file.lastPathComponent) | \(format(metrics.integratedLoudnessLUFS)) | \(format(metrics.truePeakDBFS)) | \(sparkle) | \(air) | \(ultraAir) |"
+    private func diagnosticStageMetrics(for files: [URL]) throws -> [DiagnosticStageMetric] {
+        try files.map { file in
+            let metrics = try AudioComparisonService.analyze(fileURL: file)
+            return DiagnosticStageMetric(
+                fileName: file.lastPathComponent,
+                integratedLoudnessLUFS: metrics.integratedLoudnessLUFS,
+                truePeakDBFS: metrics.truePeakDBFS,
+                sparkleDB: band("sparkle", in: metrics),
+                airDB: band("air", in: metrics),
+                ultraAirDB: band("ultraAir", in: metrics)
+            )
+        }
+    }
+
+    private func diagnosticTableRow(for metric: DiagnosticStageMetric) -> String {
+        "| \(metric.fileName) | \(format(metric.integratedLoudnessLUFS)) | \(format(metric.truePeakDBFS)) | \(format(metric.sparkleDB)) | \(format(metric.airDB)) | \(format(metric.ultraAirDB)) |"
+    }
+
+    private func diagnosticDeltaSection(title: String, metrics: [DiagnosticStageMetric]) -> [String] {
+        guard metrics.count > 1 else { return [] }
+        var lines = [
+            "",
+            "## \(title)",
+            "",
+            "| 変化 | Δ8-12kHz | Δ12-16kHz | Δ16-20kHz |",
+            "|---|---:|---:|---:|"
+        ]
+        for index in metrics.indices.dropFirst() {
+            let previous = metrics[metrics.index(before: index)]
+            let current = metrics[index]
+            lines.append(
+                "| \(previous.fileName) -> \(current.fileName) | \(formatDelta(current.sparkleDB - previous.sparkleDB)) | \(formatDelta(current.airDB - previous.airDB)) | \(formatDelta(current.ultraAirDB - previous.ultraAirDB)) |"
+            )
+        }
+        return lines
     }
 
     private func band(_ id: String, in metrics: AudioMetricSnapshot) -> Double {
@@ -805,6 +856,19 @@ struct DiagnosticStageExportTests {
     private func format(_ value: Double) -> String {
         String(format: "%.2f", value)
     }
+
+    private func formatDelta(_ value: Double) -> String {
+        String(format: "%+.2f dB", value)
+    }
+}
+
+private struct DiagnosticStageMetric {
+    let fileName: String
+    let integratedLoudnessLUFS: Double
+    let truePeakDBFS: Double
+    let sparkleDB: Double
+    let airDB: Double
+    let ultraAirDB: Double
 }
 
 private final class DiagnosticLogCollector: @unchecked Sendable {

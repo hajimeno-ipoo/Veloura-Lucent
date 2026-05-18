@@ -371,7 +371,7 @@ struct ContentView: View {
             }
 
             if report.items.isEmpty {
-                Text("大きな音量低下、ピーク超過、高域の増えすぎ、ステレオ幅の急変は見つかっていません。")
+                Text("大きな音量低下、ピーク超過、高域の増えすぎ・下がりすぎ、ステレオ幅の急変は見つかっていません。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
@@ -1123,6 +1123,15 @@ struct ContentView: View {
                 corrected: corrected,
                 mastered: mastered,
                 detail: "12kHz〜16kHz の実測値です。息感や空気の伸びに関わります。"
+            ),
+            directionBandRow(
+                id: "ultraAir",
+                title: "超高域",
+                bandID: "ultraAir",
+                input: inputReference,
+                corrected: corrected,
+                mastered: mastered,
+                detail: "16kHz〜20kHz の実測値です。空気感の最上部と超高域の伸びに関わります。"
             ),
             directionBandRow(
                 id: "mud",

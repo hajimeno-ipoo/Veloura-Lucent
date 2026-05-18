@@ -212,6 +212,16 @@ enum AudioQualityReportService {
                 cautionDB: 2.0,
                 warningDB: 4.0
             ),
+            bandDropItem(
+                id: "ultraAir",
+                label: "超高域",
+                range: "16kHz〜20kHz",
+                reference: reference,
+                target: target,
+                stageName: stageName,
+                cautionDB: 2.5,
+                warningDB: 5.0
+            ),
             bandIncreaseItem(
                 id: "mud",
                 label: "こもり",

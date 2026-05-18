@@ -231,6 +231,7 @@ struct AudioQualityReportServiceTests {
             bands: [
                 "sparkle": -34,
                 "air": -40,
+                "ultraAir": -50,
                 "mud": -28
             ]
         )
@@ -245,6 +246,7 @@ struct AudioQualityReportServiceTests {
             bands: [
                 "sparkle": -37,
                 "air": -43,
+                "ultraAir": -53,
                 "mud": -25
             ]
         )
@@ -259,6 +261,7 @@ struct AudioQualityReportServiceTests {
             bands: [
                 "sparkle": -38,
                 "air": -44,
+                "ultraAir": -54,
                 "mud": -24
             ]
         )
@@ -271,8 +274,10 @@ struct AudioQualityReportServiceTests {
 
         #expect(report.items.contains { $0.title == "補正後の煌びやかさが下がっています" })
         #expect(report.items.contains { $0.title == "補正後の空気感が下がっています" })
+        #expect(report.items.contains { $0.title == "補正後の超高域が下がっています" })
         #expect(report.items.contains { $0.title == "補正後のこもりが増えています" })
         #expect(report.items.contains { $0.detail.contains("8kHz〜12kHz が 3.0 dB") })
+        #expect(report.items.contains { $0.detail.contains("16kHz〜20kHz が 3.0 dB") })
     }
 
     private func makeSnapshot(
