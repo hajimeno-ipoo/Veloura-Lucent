@@ -1193,6 +1193,42 @@ struct MasteringProcessor {
         return currentValue - referenceValue
     }
 
+    private func finalNoiseReturnLimit(for id: String) -> Double {
+        InternalAudioJudgementPolicy.severityLimit(for: id)?.masteringWorseningCautionDB ?? 2.0
+    }
+
+    private func finalNoiseReturnRule(for id: String, allowedReturnDB: Double) -> NoiseReturnLimit? {
+        guard let rule = InternalAudioJudgementPolicy.masteringNoiseReturnLimits.first(where: { $0.id == id }) else {
+            return nil
+        }
+        return NoiseReturnLimit(
+            id: rule.id,
+            lowerFrequency: rule.lowerFrequency,
+            upperFrequency: rule.upperFrequency,
+            allowedReturnDB: allowedReturnDB,
+            reductionMultiplier: max(rule.reductionMultiplier, 1.0),
+            maxReductionDB: max(rule.maxReductionDB, 6.0)
+        )
+    }
+
+    private func forcedNoiseReturnCandidate(
+        signal: AudioSignal,
+        rule: NoiseReturnLimit,
+        gain: Float
+    ) -> AudioSignal {
+        let sampleRate = signal.sampleRate
+        let channels = mapChannelsConcurrently(signal.channels) {
+            scaleBand(
+                channel: $0,
+                sampleRate: sampleRate,
+                lower: rule.lowerFrequency,
+                upper: rule.upperFrequency,
+                gain: gain
+            )
+        }
+        return AudioSignal(channels: channels, sampleRate: sampleRate)
+    }
+
     private func applyFinalNoiseReturnCeiling(
         signal: AudioSignal,
         reference: AudioSignal,
@@ -1202,7 +1238,7 @@ struct MasteringProcessor {
         logger: AudioProcessingLogger?
     ) -> AudioSignal {
         var current = signal
-        let requiredIDs = [NoiseMeasurementID.hiss, NoiseMeasurementID.sibilance]
+        let requiredIDs = [NoiseMeasurementID.hiss, NoiseMeasurementID.sibilance, NoiseMeasurementID.shimmer]
         let referenceNoise = requiredIDs.allSatisfy { referenceNoiseMeasurements?.comparableLevel(for: $0) != nil }
             ? referenceNoiseMeasurements!
             : NoiseMeasurementService.analyze(signal: reference, ids: requiredIDs)
@@ -1216,13 +1252,28 @@ struct MasteringProcessor {
         let maxPasses = 5
         for pass in 1...maxPasses {
             let currentNoise = NoiseMeasurementService.analyze(signal: current, ids: requiredIDs)
-            let hissReturn = noiseReturn(id: NoiseMeasurementID.hiss, reference: referenceNoise, current: currentNoise)
-            let originalHissReturn = originalNoise.map { noiseReturn(id: NoiseMeasurementID.hiss, reference: $0, current: currentNoise) } ?? Double.greatestFiniteMagnitude
+            let strongestHighFloorExcess = [NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer]
+                .compactMap { id -> (rule: NoiseReturnLimit, excessDB: Double)? in
+                    let returnDB = noiseReturn(id: id, reference: referenceNoise, current: currentNoise)
+                    let originalReturnDB = originalNoise.map {
+                        noiseReturn(id: id, reference: $0, current: currentNoise)
+                    } ?? Double.greatestFiniteMagnitude
+                    let limit = finalNoiseReturnLimit(for: id)
+                    let target = min(
+                        limit - 0.15,
+                        InternalAudioJudgementPolicy.masteringNoiseReturnLimits.first(where: { $0.id == id })?.allowedReturnDB ?? limit
+                    )
+                    guard returnDB > limit,
+                          originalReturnDB > 0.5,
+                          let rule = finalNoiseReturnRule(for: id, allowedReturnDB: target)
+                    else { return nil }
+                    return (rule, returnDB - target)
+                }
+                .max { $0.excessDB < $1.excessDB }
             let currentSibilance = currentNoise.comparableLevel(for: NoiseMeasurementID.sibilance)
-            let shouldLimitHiss = hissReturn > 4.0 && originalHissReturn > 0.5
             let shouldLimitSibilance = targetSibilance.isFinite
                 && currentSibilance.map { $0 > targetSibilance } == true
-            guard shouldLimitHiss || shouldLimitSibilance else {
+            guard strongestHighFloorExcess != nil || shouldLimitSibilance else {
                 if pass > 1 {
                     logger?.log("ノイズ戻り: 緊急上限確認 \(pass - 1)/\(maxPasses)")
                 }
@@ -1230,19 +1281,28 @@ struct MasteringProcessor {
             }
 
             let sampleRate = current.sampleRate
-            if shouldLimitHiss {
-                let gain = powf(10, -Float(min((hissReturn - 4.0) * 0.6, 3.0)) / 20)
-                let channels = mapChannelsConcurrently(current.channels) {
-                    scaleBand(
-                        channel: $0,
-                        sampleRate: sampleRate,
-                        lower: 8_000,
-                        upper: 20_000,
+            if let strongestHighFloorExcess {
+                let gain = noiseReturnGain(
+                    for: strongestHighFloorExcess.rule,
+                    excessDB: strongestHighFloorExcess.excessDB
+                )
+                if let candidate = constrainedNoiseReturnCandidate(
+                    signal: current,
+                    guardReference: reference,
+                    rule: strongestHighFloorExcess.rule,
+                    gain: gain,
+                    logger: logger
+                ) {
+                    current = candidate
+                    logger?.log("ノイズ戻り: 緊急\(noiseReturnDisplayName(for: strongestHighFloorExcess.rule.id))上限 \(pass)/\(maxPasses)")
+                } else {
+                    current = forcedNoiseReturnCandidate(
+                        signal: current,
+                        rule: strongestHighFloorExcess.rule,
                         gain: gain
                     )
+                    logger?.log("ノイズ戻り: 緊急\(noiseReturnDisplayName(for: strongestHighFloorExcess.rule.id))上限を優先 \(pass)/\(maxPasses)")
                 }
-                current = AudioSignal(channels: channels, sampleRate: sampleRate)
-                logger?.log("ノイズ戻り: 緊急ヒス上限 \(pass)/\(maxPasses)")
             }
 
             if shouldLimitSibilance {
@@ -1476,7 +1536,7 @@ struct MasteringProcessor {
                 return false
             }
             if let referenceLevel = referenceMeasurements?.comparableLevel(for: rule.id) {
-                let referenceLimit = referenceLevel + rule.allowedReturnDB + 0.35
+                let referenceLimit = referenceLevel + min(rule.allowedReturnDB + 0.35, finalNoiseReturnLimit(for: rule.id))
                 if baseLevel <= referenceLimit, candidateLevel > referenceLimit {
                     return false
                 }

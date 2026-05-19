@@ -1,4 +1,3 @@
-import AVFoundation
 import Foundation
 import Testing
 @testable import VelouraLucent
@@ -6,11 +5,7 @@ import Testing
 struct NoiseWorkflowVerificationTests {
     @Test
     func correctionAndMasteringNoiseWorkflowProducesReport() async throws {
-        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
-        let inputURL = tempDirectory.appending(path: "noise-workflow-input.wav")
-
-        try makeNoiseVerificationTone(at: inputURL)
+        let inputURL = try audioQualityFixtureURL("mixed_mastering_reference.wav")
 
         let inputSignal = try AudioFileService.loadAudio(from: inputURL)
         let inputNoise = NoiseMeasurementService.analyze(signal: inputSignal)
@@ -23,7 +18,8 @@ struct NoiseWorkflowVerificationTests {
                 correctionSettings: strength.settings,
                 analysisMode: .cpu
             ) { _ in }
-            let correctedNoise = NoiseMeasurementService.analyze(signal: try AudioFileService.loadAudio(from: correctedURL))
+            let correctedSignal = try AudioFileService.loadAudio(from: correctedURL)
+            let correctedNoise = NoiseMeasurementService.analyze(signal: correctedSignal)
             let masteredURL = try await MasteringService().process(
                 inputFile: correctedURL,
                 settings: MasteringProfile.streaming.settings,
@@ -32,14 +28,17 @@ struct NoiseWorkflowVerificationTests {
                 originalReferenceNoiseMeasurements: inputNoise
             ) { _ in }
 
-            let masteredNoise = NoiseMeasurementService.analyze(signal: try AudioFileService.loadAudio(from: masteredURL))
+            let masteredSignal = try AudioFileService.loadAudio(from: masteredURL)
+            let masteredNoise = NoiseMeasurementService.analyze(signal: masteredSignal)
 
             rows.append(
                 NoiseWorkflowRow(
                     strength: strength,
                     input: inputNoise,
                     corrected: correctedNoise,
-                    mastered: masteredNoise
+                    mastered: masteredNoise,
+                    correctedSignal: correctedSignal,
+                    masteredSignal: masteredSignal
                 )
             )
 
@@ -65,44 +64,14 @@ struct NoiseWorkflowVerificationTests {
         #expect(strong.value("rumble", in: strong.corrected) <= strong.value("rumble", in: strong.input) - 3.0)
         #expect(strong.value("room", in: strong.corrected) <= strong.value("room", in: strong.input) - 3.0)
         #expect((strong.value("hiss", in: strong.mastered) - strong.value("hiss", in: strong.corrected)).isFinite)
+        expectAudioQualityHighBandsNotDulled(reference: inputSignal, processed: strong.correctedSignal)
+        expectAudioQualityHighBandsNotDulled(reference: inputSignal, processed: strong.masteredSignal)
+        #expect(strong.value("hiss", in: strong.mastered) <= strong.value("hiss", in: strong.corrected)
+            + audioQualityMaxMasteringNoiseReturnDB(for: NoiseMeasurementID.hiss))
+        #expect(strong.value("shimmer", in: strong.mastered) <= strong.value("shimmer", in: strong.corrected)
+            + audioQualityMaxMasteringNoiseReturnDB(for: NoiseMeasurementID.shimmer))
         #expect(report.contains("| 強い | ヒス・シュワシュワ |") && report.contains("マスタリングで戻りすぎ"))
         #expect(report.contains("| 強い | サ行・歯擦音 |") && report.contains("補正の効きが弱い"))
-    }
-
-    private func makeNoiseVerificationTone(at url: URL, duration: Double = 6) throws {
-        let sampleRate = 48_000.0
-        let frameCount = Int(sampleRate * duration)
-        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
-        buffer.frameLength = AVAudioFrameCount(frameCount)
-        let channel = buffer.floatChannelData![0]
-        var random = DeterministicRandom(seed: 0x45D9_F3B)
-
-        for index in 0..<frameCount {
-            let time = Double(index) / sampleRate
-            let body = sin(2 * Double.pi * 220 * time) * 0.075
-                + sin(2 * Double.pi * 440 * time) * 0.045
-                + sin(2 * Double.pi * 880 * time) * 0.018
-            let hiss = (random.nextDouble() * 2 - 1) * 0.012
-                + sin(2 * Double.pi * 11_800 * time) * 0.012
-                + sin(2 * Double.pi * 15_600 * time) * 0.010
-            let sibilanceGate = (time.truncatingRemainder(dividingBy: 1.4) > 0.18
-                && time.truncatingRemainder(dividingBy: 1.4) < 0.31) ? 1.0 : 0.0
-            let sibilance = sin(2 * Double.pi * 7_200 * time) * 0.035 * sibilanceGate
-            let hum = sin(2 * Double.pi * 60 * time) * 0.018
-                + sin(2 * Double.pi * 120 * time) * 0.010
-            let rumble = sin(2 * Double.pi * 43 * time) * 0.014
-            let room = sin(2 * Double.pi * 315 * time) * 0.010
-                + sin(2 * Double.pi * 690 * time) * 0.008
-
-            channel[index] = Float(body + hiss + sibilance + hum + rumble + room)
-        }
-
-        let file = try AVAudioFile(
-            forWriting: url,
-            settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 1)
-        )
-        try file.write(from: buffer)
     }
 
     private func makeReport(rows: [NoiseWorkflowRow]) -> String {
@@ -224,6 +193,8 @@ private struct NoiseWorkflowRow {
     let input: NoiseMeasurementSnapshot
     let corrected: NoiseMeasurementSnapshot
     let mastered: NoiseMeasurementSnapshot
+    let correctedSignal: AudioSignal
+    let masteredSignal: AudioSignal
 
     var allValues: [Double] {
         [input, corrected, mastered].flatMap { snapshot in
@@ -233,19 +204,5 @@ private struct NoiseWorkflowRow {
 
     func value(_ id: String, in snapshot: NoiseMeasurementSnapshot) -> Double {
         snapshot.value(for: id)?.comparableLevelDB ?? -120
-    }
-}
-
-private struct DeterministicRandom {
-    var state: UInt64
-
-    init(seed: UInt64) {
-        self.state = seed
-    }
-
-    mutating func nextDouble() -> Double {
-        state = state &* 6364136223846793005 &+ 1442695040888963407
-        let value = Double((state >> 11) & ((1 << 53) - 1))
-        return value / Double(1 << 53)
     }
 }
