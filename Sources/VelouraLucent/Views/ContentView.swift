@@ -2068,9 +2068,17 @@ struct ContentView: View {
                 await MainActor.run {
                     guard isCurrentInputSelection(selectionID, inputFile: inputFile) else { return }
                     job.finishSuccess(outputFile, appliedSettings: appliedSettings)
-                    preview.preparePreview(for: job.inputFile, target: .input)
+                    preview.preparePreview(for: job.inputFile, target: .input, measureLoudness: false)
+                    if let inputMetrics = job.inputMetrics {
+                        preview.setIntegratedLoudnessLUFS(inputMetrics.integratedLoudnessLUFS, for: .input)
+                    }
                     if let previewSnapshot = correctedArtifacts.previewSnapshot {
-                        preview.setPreviewSnapshot(previewSnapshot, for: .corrected, sourceURL: outputFile)
+                        preview.setPreviewSnapshot(
+                            previewSnapshot,
+                            for: .corrected,
+                            sourceURL: outputFile,
+                            integratedLoudnessLUFS: correctedArtifacts.metrics.integratedLoudnessLUFS
+                        )
                     }
                     preview.preparePreview(for: nil, target: .mastered)
                     job.finishOutputMetricAnalysis(correctedArtifacts.metrics)
@@ -2121,7 +2129,12 @@ struct ContentView: View {
                     guard isCurrentMasteringSelection(selectionID, correctedFile: correctedFile) else { return }
                     job.finishMasteringSuccess(masteredFile, appliedSettings: appliedSettings)
                     if let previewSnapshot = masteredArtifacts.previewSnapshot {
-                        preview.setPreviewSnapshot(previewSnapshot, for: .mastered, sourceURL: masteredFile)
+                        preview.setPreviewSnapshot(
+                            previewSnapshot,
+                            for: .mastered,
+                            sourceURL: masteredFile,
+                            integratedLoudnessLUFS: masteredArtifacts.metrics.integratedLoudnessLUFS
+                        )
                     }
                     job.finishMasteredMetricAnalysis(masteredArtifacts.metrics)
                     job.finishMasteredNoiseMeasurement(masteredArtifacts.noiseMeasurements)
@@ -2182,6 +2195,7 @@ struct ContentView: View {
                     switch target {
                     case .input:
                         job.finishInputMetricAnalysis(artifacts.metrics)
+                        preview.setIntegratedLoudnessLUFS(artifacts.metrics.integratedLoudnessLUFS, for: .input)
                         if let analysis = artifacts.correctionAnalysis, let mode = artifacts.correctionAnalysisMode {
                             job.finishInputCorrectionAnalysis(analysis, mode: mode)
                         }
@@ -2189,6 +2203,7 @@ struct ContentView: View {
                         job.finishInputSpectrogram(artifacts.spectrogram)
                     case .corrected:
                         job.finishOutputMetricAnalysis(artifacts.metrics)
+                        preview.setIntegratedLoudnessLUFS(artifacts.metrics.integratedLoudnessLUFS, for: .corrected)
                         if let masteringAnalysis = artifacts.masteringAnalysis {
                             job.finishOutputMasteringAnalysis(masteringAnalysis)
                         }
@@ -2196,6 +2211,7 @@ struct ContentView: View {
                         job.finishOutputSpectrogram(artifacts.spectrogram)
                     case .mastered:
                         job.finishMasteredMetricAnalysis(artifacts.metrics)
+                        preview.setIntegratedLoudnessLUFS(artifacts.metrics.integratedLoudnessLUFS, for: .mastered)
                         job.finishMasteredNoiseMeasurement(artifacts.noiseMeasurements)
                         job.finishMasteredSpectrogram(artifacts.spectrogram)
                     }
@@ -2322,9 +2338,20 @@ struct ContentView: View {
     }
 
     private func preparePreviewCards() {
-        preview.preparePreview(for: job.inputFile, target: .input)
-        preview.preparePreview(for: job.hasExistingOutput ? job.outputFile : nil, target: .corrected)
-        preview.preparePreview(for: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil, target: .mastered)
+        preview.preparePreview(for: job.inputFile, target: .input, measureLoudness: false)
+        if let inputMetrics = job.inputMetrics {
+            preview.setIntegratedLoudnessLUFS(inputMetrics.integratedLoudnessLUFS, for: .input)
+        }
+
+        preview.preparePreview(for: job.hasExistingOutput ? job.outputFile : nil, target: .corrected, measureLoudness: job.outputMetrics == nil)
+        if let outputMetrics = job.outputMetrics {
+            preview.setIntegratedLoudnessLUFS(outputMetrics.integratedLoudnessLUFS, for: .corrected)
+        }
+
+        preview.preparePreview(for: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil, target: .mastered, measureLoudness: job.masteredMetrics == nil)
+        if let masteredMetrics = job.masteredMetrics {
+            preview.setIntegratedLoudnessLUFS(masteredMetrics.integratedLoudnessLUFS, for: .mastered)
+        }
     }
 
     private func hasCachedAnalysis(for target: MetricTarget, fileURL: URL) -> Bool {

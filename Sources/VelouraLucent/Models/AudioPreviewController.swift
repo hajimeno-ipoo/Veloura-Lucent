@@ -162,7 +162,7 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         playbackLabel = "停止中"
     }
 
-    func preparePreview(for url: URL?, target: AudioPreviewTarget) {
+    func preparePreview(for url: URL?, target: AudioPreviewTarget, measureLoudness: Bool = true) {
         previewTasks[target]?.cancel()
 
         guard let url else {
@@ -181,6 +181,9 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         }
 
         if previewSourceURLs[target] == url, previewSnapshots[target] != nil {
+            if measureLoudness, integratedLoudnessByTarget[target] == nil {
+                prepareLoudness(for: url, target: target)
+            }
             return
         }
 
@@ -193,21 +196,40 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
             let preview = try? await Task.detached(priority: .utility) {
                 let signal = try AudioFileService.loadAudio(from: url)
                 async let snapshot = AudioFileService.makePreviewSnapshot(from: signal)
-                async let loudness = MasteringAnalysisService.integratedLoudness(signal: signal)
+                async let loudness: Float? = measureLoudness ? MasteringAnalysisService.integratedLoudness(signal: signal) : nil
                 return await (snapshot, loudness)
             }.value
 
             guard !Task.isCancelled else { return }
             guard previewSourceURLs[target] == url else { return }
             if let preview {
-                integratedLoudnessByTarget[target] = preview.1
+                if let loudness = preview.1 {
+                    integratedLoudnessByTarget[target] = loudness
+                }
                 setPreviewSnapshot(preview.0, for: target, sourceURL: url)
             }
             previewTasks[target] = nil
         }
     }
 
-    func setPreviewSnapshot(_ snapshot: AudioPreviewSnapshot, for target: AudioPreviewTarget, sourceURL: URL) {
+    private func prepareLoudness(for url: URL, target: AudioPreviewTarget) {
+        previewTasks[target] = Task {
+            let loudness = try? await Task.detached(priority: .utility) {
+                let signal = try AudioFileService.loadAudio(from: url)
+                return MasteringAnalysisService.integratedLoudness(signal: signal)
+            }.value
+
+            guard !Task.isCancelled else { return }
+            guard previewSourceURLs[target] == url else { return }
+            if let loudness {
+                integratedLoudnessByTarget[target] = loudness
+                refreshPlaybackVolumeIfNeeded()
+            }
+            previewTasks[target] = nil
+        }
+    }
+
+    func setPreviewSnapshot(_ snapshot: AudioPreviewSnapshot, for target: AudioPreviewTarget, sourceURL: URL, integratedLoudnessLUFS: Double? = nil) {
         previewSourceURLs[target] = sourceURL
         previewSnapshots[target] = snapshot
         playbackProgresses[target] = normalizedProgress(for: target, duration: snapshot.duration)
@@ -215,6 +237,18 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
             playbackStates[target] = .stopped
         }
         liveBandLevels[target] = makeInitialLiveBandLevels(from: snapshot, target: target)
+        if let integratedLoudnessLUFS {
+            setIntegratedLoudnessLUFS(integratedLoudnessLUFS, for: target)
+        }
+    }
+
+    func setIntegratedLoudnessLUFS(_ loudness: Double, for target: AudioPreviewTarget) {
+        integratedLoudnessByTarget[target] = Float(loudness)
+        refreshPlaybackVolumeIfNeeded()
+    }
+
+    func integratedLoudnessLUFS(for target: AudioPreviewTarget) -> Float? {
+        integratedLoudnessByTarget[target]
     }
 
     func durationText(for target: AudioPreviewTarget) -> String {
