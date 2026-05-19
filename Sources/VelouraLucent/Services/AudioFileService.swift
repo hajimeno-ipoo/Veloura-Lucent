@@ -4,6 +4,11 @@ import Foundation
 import UniformTypeIdentifiers
 
 enum AudioFileService {
+    struct AudioDisplaySnapshots: Sendable {
+        let previewSnapshot: AudioPreviewSnapshot
+        let spectrogram: SpectrogramSnapshot
+    }
+
     static let targetSampleRate = 48_000.0
     static let previewBucketCount = 384
     static let outputFileExtension = "wav"
@@ -71,14 +76,30 @@ enum AudioFileService {
     static func makePreviewSnapshot(from signal: AudioSignal, bucketCount: Int = previewBucketCount) -> AudioPreviewSnapshot {
         let mono = signal.monoMixdown()
         guard !mono.isEmpty else {
-            return AudioPreviewSnapshot(
-                waveform: Array(repeating: 0, count: bucketCount),
-                duration: 0,
-                bandLevels: emptyBandLevels(bucketCount: bucketCount),
-                bandLevelDBs: emptyBandLevels(bucketCount: bucketCount, fill: -120)
+            return emptyPreviewSnapshot(bucketCount: bucketCount)
+        }
+
+        let spectrogram = SpectralDSP.stft(mono, fftSize: previewFFTSize, hopSize: previewHopSize)
+        return makePreviewSnapshot(from: signal, mono: mono, spectrogram: spectrogram, bucketCount: bucketCount)
+    }
+
+    static func makeDisplaySnapshots(from signal: AudioSignal, bucketCount: Int = previewBucketCount) -> AudioDisplaySnapshots {
+        let mono = signal.monoMixdown()
+        guard !mono.isEmpty else {
+            return AudioDisplaySnapshots(
+                previewSnapshot: emptyPreviewSnapshot(bucketCount: bucketCount),
+                spectrogram: .empty
             )
         }
 
+        let spectrogram = SpectralDSP.stft(mono, fftSize: previewFFTSize, hopSize: previewHopSize)
+        return AudioDisplaySnapshots(
+            previewSnapshot: makePreviewSnapshot(from: signal, mono: mono, spectrogram: spectrogram, bucketCount: bucketCount),
+            spectrogram: makeSpectrogramSnapshot(from: signal, mono: mono, spectrogram: spectrogram)
+        )
+    }
+
+    private static func makePreviewSnapshot(from signal: AudioSignal, mono: [Float], spectrogram: Spectrogram, bucketCount: Int) -> AudioPreviewSnapshot {
         let chunkSize = max(1, mono.count / bucketCount)
         let waveform = stride(from: 0, to: mono.count, by: chunkSize).prefix(bucketCount).map { index in
             let end = min(index + chunkSize, mono.count)
@@ -87,7 +108,7 @@ enum AudioFileService {
             return min(1, peak)
         }
 
-        let (bandLevels, bandLevelDBs) = makeBandLevels(from: mono, sampleRate: signal.sampleRate, bucketCount: bucketCount)
+        let (bandLevels, bandLevelDBs) = makeBandLevels(from: spectrogram, sampleRate: signal.sampleRate, bucketCount: bucketCount)
 
         return AudioPreviewSnapshot(
             waveform: Array(waveform),
@@ -109,6 +130,10 @@ enum AudioFileService {
         }
 
         let spectrogram = SpectralDSP.stft(mono, fftSize: previewFFTSize, hopSize: previewHopSize)
+        return makeSpectrogramSnapshot(from: signal, mono: mono, spectrogram: spectrogram)
+    }
+
+    private static func makeSpectrogramSnapshot(from signal: AudioSignal, mono: [Float], spectrogram: Spectrogram) -> SpectrogramSnapshot {
         guard spectrogram.frameCount > 0 else {
             return .empty
         }
@@ -199,6 +224,10 @@ enum AudioFileService {
 
     private static func makeBandLevels(from mono: [Float], sampleRate: Double, bucketCount: Int) -> ([String: [Float]], [String: [Float]]) {
         let spectrogram = SpectralDSP.stft(mono, fftSize: previewFFTSize, hopSize: previewHopSize)
+        return makeBandLevels(from: spectrogram, sampleRate: sampleRate, bucketCount: bucketCount)
+    }
+
+    private static func makeBandLevels(from spectrogram: Spectrogram, sampleRate: Double, bucketCount: Int) -> ([String: [Float]], [String: [Float]]) {
         guard spectrogram.frameCount > 0 else {
             return (
                 emptyBandLevels(bucketCount: bucketCount),
@@ -262,6 +291,15 @@ enum AudioFileService {
         }
 
         return (bucketLevels, bucketLevelDBs)
+    }
+
+    private static func emptyPreviewSnapshot(bucketCount: Int) -> AudioPreviewSnapshot {
+        AudioPreviewSnapshot(
+            waveform: Array(repeating: 0, count: bucketCount),
+            duration: 0,
+            bandLevels: emptyBandLevels(bucketCount: bucketCount),
+            bandLevelDBs: emptyBandLevels(bucketCount: bucketCount, fill: -120)
+        )
     }
 
     private static func emptyBandLevels(bucketCount: Int, fill: Float = 0) -> [String: [Float]] {

@@ -2250,8 +2250,8 @@ struct ContentView: View {
             let signal = try await Self.measureDisplayAnalysis("ファイル読み込み", logHandler: logHandler) {
                 try AudioFileService.loadAudio(from: url)
             }
-            async let previewSnapshot: AudioPreviewSnapshot? = Self.measureOptionalDisplayAnalysis("プレビュー生成", isEnabled: includePreview, logHandler: logHandler) {
-                AudioFileService.makePreviewSnapshot(from: signal)
+            async let displaySnapshots: AudioFileService.AudioDisplaySnapshots? = Self.measureOptionalDisplayAnalysis("プレビュー/スペクトログラム生成", isEnabled: includePreview, logHandler: logHandler) {
+                AudioFileService.makeDisplaySnapshots(from: signal)
             }
             async let metrics = Self.measureDisplayAnalysis("比較指標", logHandler: logHandler) {
                 try await AudioComparisonService.analyzeConcurrently(signal: signal)
@@ -2263,17 +2263,19 @@ struct ContentView: View {
             async let noiseMeasurements = Self.measureDisplayAnalysis("ノイズ測定", logHandler: logHandler) {
                 NoiseMeasurementService.analyze(signal: signal)
             }
-            async let spectrogram = Self.measureDisplayAnalysis("スペクトログラム生成", logHandler: logHandler) {
+            async let spectrogramWithoutPreview = Self.measureOptionalDisplayAnalysis("スペクトログラム生成", isEnabled: !includePreview, logHandler: logHandler) {
                 AudioFileService.makeSpectrogramSnapshot(from: signal)
             }
+            let resolvedDisplaySnapshots = try await displaySnapshots
+            let resolvedSpectrogramWithoutPreview = try await spectrogramWithoutPreview
             return try await AudioAnalysisArtifacts(
-                previewSnapshot: previewSnapshot,
+                previewSnapshot: resolvedDisplaySnapshots?.previewSnapshot,
                 metrics: metrics,
                 masteringAnalysis: masteringAnalysis,
                 correctionAnalysis: correctionAnalysis,
                 correctionAnalysisMode: correctionAnalysisMode,
                 noiseMeasurements: noiseMeasurements,
-                spectrogram: spectrogram
+                spectrogram: resolvedDisplaySnapshots?.spectrogram ?? resolvedSpectrogramWithoutPreview ?? .empty
             )
         }.value
     }
