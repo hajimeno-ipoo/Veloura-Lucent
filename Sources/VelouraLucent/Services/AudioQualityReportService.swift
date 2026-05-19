@@ -66,12 +66,12 @@ enum AudioQualityReportService {
             if stageName == "補正後" {
                 items.append(.info(
                     "補正後は音量を作らないため音量が下がっています",
-                    "Integrated Loudness が \(format(loudnessDrop)) LU 下がっています。最終版で戻る場合は問題として扱いません。"
+                    "平均音量が \(format(loudnessDrop)) LU 下がっています。最終版で戻る場合は問題として扱いません。補正後と最終版を聴き比べてください。"
                 ))
             } else {
                 items.append(.caution(
                     "\(stageName)の音量感が下がっています",
-                    "Integrated Loudness が \(format(loudnessDrop)) LU 下がっています。"
+                    "平均音量が \(format(loudnessDrop)) LU 下がっています。音量感が意図に合うか聴き比べてください。"
                 ))
             }
         }
@@ -79,7 +79,7 @@ enum AudioQualityReportService {
         if target.truePeakDBFS > -0.3 {
             items.append(.warning(
                 "\(stageName)のピークが高すぎます",
-                "True Peak が \(format(target.truePeakDBFS)) dBFS です。"
+                "True Peak が \(format(target.truePeakDBFS)) dBFS です。音割れがないか\(stageName)を試聴してください。"
             ))
         }
 
@@ -118,14 +118,14 @@ enum AudioQualityReportService {
         if loudnessDrop >= 1.5 {
             items.append(.caution(
                 "最終版の音量感が低めです",
-                "入力より Integrated Loudness が \(format(loudnessDrop)) LU 下がっています。"
+                "入力より平均音量が \(format(loudnessDrop)) LU 下がっています。最終版の音量感が意図に合うか聴き比べてください。"
             ))
         }
 
         if loudnessIncrease >= 4.0 {
             items.append(.caution(
                 "最終版の音量感が大きく上がっています",
-                "入力より Integrated Loudness が \(format(loudnessIncrease)) LU 上がっています。"
+                "入力より平均音量が \(format(loudnessIncrease)) LU 上がっています。聴き疲れしないか、入力と最終版を聴き比べてください。"
             ))
         }
 
@@ -182,7 +182,7 @@ enum AudioQualityReportService {
         return AudioQualityReportItem(
             severity: severity,
             title: "\(stageName)の\(label)が増えています",
-            detail: "\(label) が \(formatPercent(increase)) 増えています。"
+            detail: "\(label) が \(formatPercent(increase)) 増えています。刺さりやザラつきがないか聴き比べてください。"
         )
     }
 
@@ -253,7 +253,7 @@ enum AudioQualityReportService {
         return AudioQualityReportItem(
             severity: severity,
             title: "\(stageName)の\(label)が下がっています",
-            detail: "\(range) が \(format(drop)) dB 下がっています。抜け感や空気感が弱く聞こえる可能性があります。"
+            detail: "\(range) が \(format(drop)) dB 下がっています。抜け感、息感、空気感が弱くなっていないか聴き比べてください。"
         )
     }
 
@@ -275,7 +275,7 @@ enum AudioQualityReportService {
         return AudioQualityReportItem(
             severity: severity,
             title: "\(stageName)の\(label)が増えています",
-            detail: "\(range) が \(format(increase)) dB 増えています。こもりや暗さにつながる可能性があります。"
+            detail: "\(range) が \(format(increase)) dB 増えています。こもりや暗さにつながっていないか聴き比べてください。"
         )
     }
 

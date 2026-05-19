@@ -317,7 +317,7 @@ struct CorrectionSettingsPanel: View {
             CorrectionSettingTerm(id: "lowMid", label: "中低域整理", reading: "ちゅうていいきせいり", description: "200Hz〜1kHz付近のこもりや濁りを整えます。"),
             CorrectionSettingTerm(id: "presence", label: "プレゼンス修復", reading: "ぷれぜんすしゅうふく", description: "欠けた中高域を最低限だけ戻します。前に出す演出はマスタリング側で行います。"),
             CorrectionSettingTerm(id: "air", label: "エアー修復", reading: "えあーしゅうふく", description: "欠けた高域を最低限だけ戻します。空気感を足す演出はマスタリング側で行います。"),
-            CorrectionSettingTerm(id: "naturalness", label: "高域の自然さ", reading: "こういきのしぜんさ", description: "シュワシュワ感や人工的な高域を抑え、自然に聞こえる方向へ寄せます。"),
+            CorrectionSettingTerm(id: "naturalness", label: "高域の自然さ", reading: "こういきのしぜんさ", description: "シュワシュワ感や人工的な高域を抑え、声やシンバルの自然さを残します。"),
             CorrectionSettingTerm(id: "noiseDetection", label: "ノイズ検出しきい値", reading: "のいずけんしゅつしきいち", description: "ノイズとして拾う範囲です。高くすると細かいノイズにも反応しやすくなります。"),
             CorrectionSettingTerm(id: "harmonic", label: "高域補完量", reading: "こういきほかんりょう", description: "失われた高域を補う量です。"),
             CorrectionSettingTerm(id: "foldover", label: "foldover補完量", reading: "ふぉーるどおーばーほかんりょう", description: "既存の倍音から高域側へ補う量です。多すぎると人工感が出やすくなります。"),

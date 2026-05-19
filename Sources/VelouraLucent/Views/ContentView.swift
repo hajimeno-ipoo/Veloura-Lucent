@@ -423,7 +423,7 @@ struct ContentView: View {
 
             if !report.recommendedActions.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("次に触るなら")
+                    Text("聴いて気になる場合の調整候補")
                         .font(.headline)
                     ForEach(report.recommendedActions) { action in
                         noiseCheckActionCard(action)
@@ -460,7 +460,7 @@ struct ContentView: View {
             noiseCheckBarLine(title: "最終版", value: row.mastered, row: row, color: .orange, deltaText: row.masteringEffectText, delta: row.masteringDeltaDB)
 
             if row.recommendedActions.isEmpty {
-                Text("追加調整は不要です。")
+                Text("数値上の追加候補はありません。最終版を聴いて違和感がないか確認してください。")
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -560,11 +560,11 @@ struct ContentView: View {
     private func noiseCheckSeverityText(_ severity: NoiseCheckSeverity) -> String {
         switch severity {
         case .low:
-            return "良好"
+            return "目立つ問題なし"
         case .caution:
-            return "やや多め"
+            return "少し目立つ"
         case .warning:
-            return "多め"
+            return "目立つ"
         }
     }
 

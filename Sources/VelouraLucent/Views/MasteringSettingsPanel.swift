@@ -520,7 +520,7 @@ struct MasteringSettingsPanel: View {
 
     private var radarTermDefinitions: [MasteringSettingTerm] {
         [
-            MasteringSettingTerm(id: "loudness", label: "ラウドネス", reading: "らうどねす", description: "曲全体の平均的な音量感です。配信先で聞こえる大きさの目安になります。"),
+            MasteringSettingTerm(id: "loudness", label: "ラウドネス", reading: "らうどねす", description: "曲全体の平均的な音量感です。目標値に必ず合わせるものではなく、仕上げ意図を確認する目安です。"),
             MasteringSettingTerm(id: "truePeak", label: "トゥルーピーク", reading: "とぅるーぴーく", description: "波形の本当の最大ピークです。上がりすぎると歪みやすくなります。")
         ]
     }

@@ -169,16 +169,16 @@ enum NoiseCheckReportService {
             return "悪化なし"
         }
         if current.severity == .low {
-            return "良好"
+            return "目立つ問題なし"
         }
         return noiseCheckSeveritySummary(current.severity)
     }
 
     private static func noiseCheckSeveritySummary(_ severity: NoiseCheckSeverity) -> String {
         switch severity {
-        case .low: return "良好"
-        case .caution: return "やや多め"
-        case .warning: return "多め"
+        case .low: return "目立つ問題なし"
+        case .caution: return "少し目立つ"
+        case .warning: return "目立つ"
         }
     }
 
@@ -504,7 +504,7 @@ enum NoiseCheckReportService {
                 recommendedValue: formatPercent(recommended),
                 changeValue: formatPercentChange(recommended - current),
                 reason: "\(reasonPrefix)（根拠: \(formatDelta(delta ?? targetReduction))）",
-                expectedEffect: "\(expectedEffect)（見込み: \(formatReduction(targetReduction * 0.65))）",
+                expectedEffect: "\(expectedEffect)（目安: \(formatReduction(targetReduction * 0.65))）",
                 caution: caution
             )
         }
@@ -533,7 +533,7 @@ enum NoiseCheckReportService {
                 recommendedValue: format(recommended),
                 changeValue: formatSigned(recommended - current),
                 reason: "\(reasonPrefix)（根拠: \(formatDelta(delta ?? targetReduction))）",
-                expectedEffect: "\(expectedEffect)（見込み: \(formatReduction(targetReduction * 0.65))）",
+                expectedEffect: "\(expectedEffect)（目安: \(formatReduction(targetReduction * 0.65))）",
                 caution: caution
             )
         }
