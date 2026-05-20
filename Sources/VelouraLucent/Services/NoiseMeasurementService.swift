@@ -219,7 +219,7 @@ enum NoiseMeasurementService {
 
     private static func humProminenceDB(mono: [Float], sampleRate: Double, cancellationCheck: @escaping () throws -> Void) throws -> Double {
         let baseFrequencies = [50.0, 60.0]
-        var strongest = 0.0
+        var harmonicFrequencies: [Double] = []
         let spectrogram = SpectralDSP.stft(mono, fftSize: 8192, hopSize: 4096)
         let frequencyStep = sampleRate / Double(spectrogram.fftSize)
 
@@ -228,53 +228,71 @@ enum NoiseMeasurementService {
             var harmonic = base
             while harmonic <= min(360, sampleRate * 0.5 - 30) {
                 try cancellationCheck()
-                let spectral = try harmonicProminenceDB(
-                    spectrogram: spectrogram,
-                    frequency: harmonic,
-                    frequencyStep: frequencyStep,
-                    cancellationCheck: cancellationCheck
-                )
-                let sine = try windowedSineProminenceDB(
-                    mono: mono,
-                    frequency: harmonic,
-                    sampleRate: sampleRate,
-                    cancellationCheck: cancellationCheck
-                )
-                strongest = max(strongest, spectral, sine)
+                harmonicFrequencies.append(harmonic)
                 harmonic += base
             }
+        }
+
+        let sineProminences = try windowedSineProminencesDB(
+            mono: mono,
+            frequencies: harmonicFrequencies,
+            sampleRate: sampleRate,
+            cancellationCheck: cancellationCheck
+        )
+        var strongest = 0.0
+        for harmonic in harmonicFrequencies {
+            try cancellationCheck()
+            let spectral = try harmonicProminenceDB(
+                spectrogram: spectrogram,
+                frequency: harmonic,
+                frequencyStep: frequencyStep,
+                cancellationCheck: cancellationCheck
+            )
+            let sine = sineProminences[harmonic] ?? 0
+            strongest = max(strongest, spectral, sine)
         }
 
         return strongest
     }
 
-    private static func windowedSineProminenceDB(
+    private static func windowedSineProminencesDB(
         mono: [Float],
-        frequency: Double,
+        frequencies: [Double],
         sampleRate: Double,
         cancellationCheck: @escaping () throws -> Void
-    ) throws -> Double {
+    ) throws -> [Double: Double] {
+        let uniqueFrequencies = Array(Set(frequencies)).sorted()
+        let frequencyPlan = HumSineFrequencyPlan(frequencies: uniqueFrequencies, sampleRate: sampleRate)
         let frameSize = max(2048, Int(sampleRate * 0.50))
         let hopSize = max(1024, frameSize / 2)
-        guard mono.count >= frameSize else { return 0 }
+        guard mono.count >= frameSize else {
+            return Dictionary(uniqueKeysWithValues: uniqueFrequencies.map { ($0, 0) })
+        }
 
-        var values: [Double] = []
+        var valuesByFrequency: [Double: [Double]] = Dictionary(uniqueKeysWithValues: uniqueFrequencies.map { ($0, []) })
         var start = 0
         while start + frameSize <= mono.count {
             try cancellationCheck()
             let frame = Array(mono[start..<(start + frameSize)])
-            let center = sineMagnitudeDB(frame, frequency: frequency, sampleRate: sampleRate)
-            let surrounding = [
-                sineMagnitudeDB(frame, frequency: max(20, frequency - 23), sampleRate: sampleRate),
-                sineMagnitudeDB(frame, frequency: max(20, frequency - 17), sampleRate: sampleRate),
-                sineMagnitudeDB(frame, frequency: min(sampleRate * 0.5 - 20, frequency + 17), sampleRate: sampleRate),
-                sineMagnitudeDB(frame, frequency: min(sampleRate * 0.5 - 20, frequency + 23), sampleRate: sampleRate)
-            ]
-            values.append(center - median(surrounding))
+            var magnitudes: [Double: Double] = [:]
+            for frequency in frequencyPlan.uniqueMeasurementFrequencies {
+                magnitudes[frequency] = sineMagnitudeDB(frame, frequency: frequency, sampleRate: sampleRate)
+            }
+
+            for frequency in uniqueFrequencies {
+                guard let measurementFrequencies = frequencyPlan.measurementFrequenciesByHarmonic[frequency],
+                      let center = magnitudes[measurementFrequencies.center]
+                else { continue }
+                let surrounding = measurementFrequencies.surrounding.compactMap { magnitudes[$0] }
+                valuesByFrequency[frequency, default: []].append(center - median(surrounding))
+            }
+
             start += hopSize
         }
 
-        return max(0, percentile(values, 0.50))
+        return Dictionary(uniqueKeysWithValues: valuesByFrequency.map { frequency, values in
+            (frequency, max(0, percentile(values, 0.50)))
+        })
     }
 
     private static func sineMagnitudeDB(_ samples: [Float], frequency: Double, sampleRate: Double) -> Double {
@@ -405,5 +423,31 @@ private struct NoiseMeasurementDefinition {
         self.unitLabel = unitLabel
         self.measurementDescription = measurementDescription
         self.lowerIsBetter = lowerIsBetter
+    }
+}
+
+struct HumSineFrequencyPlan {
+    let measurementFrequenciesByHarmonic: [Double: (center: Double, surrounding: [Double])]
+    let uniqueMeasurementFrequencies: [Double]
+
+    init(frequencies: [Double], sampleRate: Double) {
+        var plannedFrequencies: [Double: (center: Double, surrounding: [Double])] = [:]
+        var allMeasurementFrequencies: [Double] = []
+
+        for frequency in frequencies {
+            let center = frequency
+            let surrounding = [
+                max(20, frequency - 23),
+                max(20, frequency - 17),
+                min(sampleRate * 0.5 - 20, frequency + 17),
+                min(sampleRate * 0.5 - 20, frequency + 23)
+            ]
+            plannedFrequencies[frequency] = (center: center, surrounding: surrounding)
+            allMeasurementFrequencies.append(center)
+            allMeasurementFrequencies.append(contentsOf: surrounding)
+        }
+
+        measurementFrequenciesByHarmonic = plannedFrequencies
+        uniqueMeasurementFrequencies = Array(Set(allMeasurementFrequencies)).sorted()
     }
 }

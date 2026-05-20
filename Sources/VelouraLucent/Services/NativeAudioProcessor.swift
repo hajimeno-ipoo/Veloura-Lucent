@@ -283,6 +283,7 @@ struct NativeAudioProcessor {
         let signal = try measure("loadAudio", label: "読み込み", recorder: benchmarkRecorder, logger: logger, progressStep: .loadAudio) {
             try AudioFileService.loadAudio(from: inputFile)
         }
+        let noiseMeasurementCache = NoiseMeasurementRunCache()
         saveDiagnostic(signal, to: diagnosticOutputDirectory, order: 0, id: "input", label: "入力", logger: logger)
 
         let resolvedAnalysisMode = analysisMode.resolvedMode
@@ -303,10 +304,19 @@ struct NativeAudioProcessor {
         let routeNoiseMeasurements: NoiseMeasurementSnapshot
         if let initialNoiseMeasurements {
             routeNoiseMeasurements = initialNoiseMeasurements
+            noiseMeasurementCache.store(
+                initialNoiseMeasurements,
+                signalID: "input",
+                ids: NoiseMeasurementRunCache.allNoiseIDs
+            )
             logger?.log("ノイズ測定: 既存結果を使用")
         } else {
             routeNoiseMeasurements = measure("routeNoiseMeasurement", label: "ルート用ノイズ測定", recorder: benchmarkRecorder, logger: logger) {
-                NoiseMeasurementService.analyze(signal: signal)
+                noiseMeasurementCache.snapshot(
+                    signalID: "input",
+                    signal: signal,
+                    ids: NoiseMeasurementRunCache.allNoiseIDs
+                )
             }
         }
         let routePlan = CorrectionRoutePlan.make(
@@ -394,7 +404,7 @@ struct NativeAudioProcessor {
             benchmarkRecorder?.append("repairShimmerGuard", durationSeconds: 0)
             logger?.skip(.repairShimmerGuard, reason: repairDecision.reason)
             repairGuarded = repaired
-        } else if !repairIncreasedHighNoise(repaired, referenceMeasurements: routeNoiseMeasurements) {
+        } else if !repairIncreasedHighNoise(repaired, referenceMeasurements: routeNoiseMeasurements, measurementCache: noiseMeasurementCache) {
             benchmarkRecorder?.append("repairShimmerGuard", durationSeconds: 0)
             logger?.skip(.repairShimmerGuard, reason: "高域修復でノイズ指標が悪化していません")
             logger?.log("修復後シマー保護: 早期終了 - 高域修復でノイズ指標が悪化していません")
@@ -449,6 +459,7 @@ struct NativeAudioProcessor {
                 signal: shimmerLimited,
                 reference: signal,
                 referenceMeasurements: routeNoiseMeasurements,
+                measurementCache: noiseMeasurementCache,
                 logger: logger
             )
         }
@@ -457,6 +468,7 @@ struct NativeAudioProcessor {
             constrainCorrectionMudIncrease(
                 signal: highPreserved,
                 referenceMeasurements: routeNoiseMeasurements,
+                measurementCache: noiseMeasurementCache,
                 logger: logger
             )
         }
@@ -534,8 +546,13 @@ struct NativeAudioProcessor {
         logger.log("ノイズ除去/18kHz以上: \(formatSignedDecibelChange(from: before.hf18Magnitude, to: after.hf18Magnitude))")
     }
 
-    private func repairIncreasedHighNoise(_ signal: AudioSignal, referenceMeasurements: NoiseMeasurementSnapshot) -> Bool {
-        let repairedMeasurements = NoiseMeasurementService.analyze(
+    private func repairIncreasedHighNoise(
+        _ signal: AudioSignal,
+        referenceMeasurements: NoiseMeasurementSnapshot,
+        measurementCache: NoiseMeasurementRunCache
+    ) -> Bool {
+        let repairedMeasurements = measurementCache.snapshot(
+            signalID: "harmonicRepair",
             signal: signal,
             ids: [NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer, NoiseMeasurementID.sibilance]
         )
@@ -556,6 +573,7 @@ struct NativeAudioProcessor {
         signal: AudioSignal,
         reference: AudioSignal,
         referenceMeasurements: NoiseMeasurementSnapshot,
+        measurementCache: NoiseMeasurementRunCache,
         logger: AudioProcessingLogger?
     ) -> AudioSignal {
         struct Rule {
@@ -601,6 +619,7 @@ struct NativeAudioProcessor {
             signal: current,
             fallback: signal,
             referenceMeasurements: referenceMeasurements,
+            measurementCache: measurementCache,
             logger: logger
         )
     }
@@ -609,12 +628,17 @@ struct NativeAudioProcessor {
         signal: AudioSignal,
         fallback: AudioSignal,
         referenceMeasurements: NoiseMeasurementSnapshot,
+        measurementCache: NoiseMeasurementRunCache,
         logger: AudioProcessingLogger?
     ) -> AudioSignal {
-        let fallbackMeasurements = NoiseMeasurementService.analyze(
+        let highNoiseIDs = [NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer, NoiseMeasurementID.sibilance]
+        var measurementCount = 0
+        let fallbackMeasurements = measurementCache.snapshot(
+            signalID: "correctionHighPreserve.fallback",
             signal: fallback,
-            ids: [NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer, NoiseMeasurementID.sibilance]
+            ids: highNoiseIDs
         )
+        measurementCount += 1
         let fallbackHissReturn = noiseDelta(id: NoiseMeasurementID.hiss, reference: referenceMeasurements, current: fallbackMeasurements)
         let fallbackShimmerReturn = noiseDelta(id: NoiseMeasurementID.shimmer, reference: referenceMeasurements, current: fallbackMeasurements)
         let fallbackSibilanceReturn = noiseDelta(id: NoiseMeasurementID.sibilance, reference: referenceMeasurements, current: fallbackMeasurements)
@@ -632,11 +656,13 @@ struct NativeAudioProcessor {
             (0.10, blendSignals(base: fallback, boosted: signal, mix: 0.10))
         ]
 
-        for candidate in candidates {
-            let measurements = NoiseMeasurementService.analyze(
+        for (index, candidate) in candidates.enumerated() {
+            let measurements = measurementCache.snapshot(
+                signalID: "correctionHighPreserve.candidate.\(index)",
                 signal: candidate.signal,
-                ids: [NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer, NoiseMeasurementID.sibilance]
+                ids: highNoiseIDs
             )
+            measurementCount += 1
             let hissReturn = noiseDelta(id: NoiseMeasurementID.hiss, reference: referenceMeasurements, current: measurements)
             let shimmerReturn = noiseDelta(id: NoiseMeasurementID.shimmer, reference: referenceMeasurements, current: measurements)
             let sibilanceReturn = noiseDelta(id: NoiseMeasurementID.sibilance, reference: referenceMeasurements, current: measurements)
@@ -649,9 +675,11 @@ struct NativeAudioProcessor {
             if candidate.mix < 1 {
                 logger?.log("補正後高域保持: ノイズ/超高域戻り抑制 mix \(String(format: "%.2f", candidate.mix))")
             }
+            logger?.log("補正後高域保持/測定回数: \(measurementCount)")
             return candidate.signal
         }
 
+        logger?.log("補正後高域保持/測定回数: \(measurementCount)")
         logger?.log("補正後高域保持: ノイズ/超高域戻り抑制で見送り")
         return fallback
     }
@@ -659,33 +687,67 @@ struct NativeAudioProcessor {
     private func constrainCorrectionMudIncrease(
         signal: AudioSignal,
         referenceMeasurements: NoiseMeasurementSnapshot,
+        measurementCache: NoiseMeasurementRunCache,
         logger: AudioProcessingLogger?
     ) -> AudioSignal {
-        let currentMeasurements = NoiseMeasurementService.analyze(signal: signal, ids: [NoiseMeasurementID.mud])
+        var measurementCount = 0
+        let currentMeasurements = measurementCache.snapshot(
+            signalID: "correctionMudGuard.current",
+            signal: signal,
+            ids: [NoiseMeasurementID.mud]
+        )
+        measurementCount += 1
         guard let referenceMud = referenceMeasurements.comparableLevel(for: NoiseMeasurementID.mud),
               let currentMud = currentMeasurements.comparableLevel(for: NoiseMeasurementID.mud)
         else {
+            logger?.log("低中域残り/測定回数: \(measurementCount)")
             return signal
         }
 
         let allowedIncreaseDB = 0.5
         let excessDB = currentMud - referenceMud - allowedIncreaseDB
-        guard excessDB > 0.25 else { return signal }
+        guard excessDB > 0.25 else {
+            logger?.log("低中域残り/測定回数: \(measurementCount)")
+            return signal
+        }
 
         let targetGainDB = -min(excessDB * 0.85, 3.0)
         let candidates = [targetGainDB, targetGainDB * 0.75, targetGainDB * 0.50, targetGainDB * 0.25]
-        for gainDB in candidates {
-            let candidate = scaleCorrectionSignalBand(signal: signal, lower: 300, upper: 1_000, gainDB: gainDB)
-            let candidateMud = NoiseMeasurementService.analyze(signal: candidate, ids: [NoiseMeasurementID.mud]).comparableLevel(for: NoiseMeasurementID.mud) ?? currentMud
-            if candidateMud <= referenceMud + allowedIncreaseDB {
-                logger?.log("低中域残り: こもり悪化を抑制 \(String(format: "%.1f", gainDB)) dB")
-                return candidate
+            .enumerated()
+            .map { index, gainDB in
+                let candidate = scaleCorrectionSignalBand(signal: signal, lower: 300, upper: 1_000, gainDB: gainDB)
+                return (
+                    score: MudCorrectionCandidateScore(
+                        index: index,
+                        gainDB: gainDB,
+                        bandRMSDB: bandRMSDB(signal: candidate, lower: 300, upper: 1_000)
+                    ),
+                    signal: candidate
+                )
             }
+        guard let selectedScore = MudCorrectionCandidateSelector.select(candidates.map(\.score)),
+              let selectedCandidate = candidates.first(where: { $0.score.index == selectedScore.index })
+        else {
+            logger?.log("低中域残り/測定回数: \(measurementCount)")
+            return signal
         }
-
-        let limited = scaleCorrectionSignalBand(signal: signal, lower: 300, upper: 1_000, gainDB: targetGainDB)
-        logger?.log("低中域残り: こもり悪化を抑制 \(String(format: "%.1f", targetGainDB)) dB")
-        return limited
+        logger?.log(
+            "低中域残り/候補選定: \(selectedCandidate.score.index) gain \(String(format: "%.1f", selectedCandidate.score.gainDB)) dB"
+        )
+        let candidateMeasurements = measurementCache.snapshot(
+            signalID: "correctionMudGuard.candidate.\(selectedCandidate.score.index)",
+            signal: selectedCandidate.signal,
+            ids: [NoiseMeasurementID.mud]
+        )
+        measurementCount += 1
+        let candidateMud = candidateMeasurements.comparableLevel(for: NoiseMeasurementID.mud) ?? currentMud
+        logger?.log("低中域残り/測定回数: \(measurementCount)")
+        if candidateMud > referenceMud + allowedIncreaseDB {
+            logger?.log("低中域残り: 最終候補でもこもり基準を超過したため見送り")
+            return signal
+        }
+        logger?.log("低中域残り: こもり悪化を抑制 \(String(format: "%.1f", selectedCandidate.score.gainDB)) dB")
+        return selectedCandidate.signal
     }
 
     private func blendSignals(base: AudioSignal, boosted: AudioSignal, mix: Float) -> AudioSignal {
@@ -765,6 +827,66 @@ struct NativeAudioProcessor {
         }
         let decibels = 20 * log10(Double(max(after, 1e-9) / before))
         return String(format: "%+.1f dB", decibels)
+    }
+}
+
+private final class NoiseMeasurementRunCache {
+    static let allNoiseIDs = [
+        NoiseMeasurementID.hiss,
+        NoiseMeasurementID.sibilance,
+        NoiseMeasurementID.shimmer,
+        NoiseMeasurementID.mud,
+        NoiseMeasurementID.hum,
+        NoiseMeasurementID.rumble,
+        NoiseMeasurementID.room
+    ]
+
+    private struct Key: Hashable {
+        let signalID: String
+        let ids: [String]
+    }
+
+    private var storage: [Key: NoiseMeasurementSnapshot] = [:]
+
+    func store(_ snapshot: NoiseMeasurementSnapshot, signalID: String, ids: [String]) {
+        storage[Key(signalID: signalID, ids: normalized(ids))] = snapshot
+    }
+
+    func snapshot(signalID: String, signal: AudioSignal, ids: [String]) -> NoiseMeasurementSnapshot {
+        let requestedIDs = normalized(ids)
+        let requestedIDSet = Set(requestedIDs)
+        if let cached = storage[Key(signalID: signalID, ids: requestedIDs)] {
+            return cached
+        }
+        if let cached = storage.first(where: { key, _ in
+            key.signalID == signalID && requestedIDSet.isSubset(of: Set(key.ids))
+        })?.value {
+            return cached
+        }
+        let measured = NoiseMeasurementService.analyze(signal: signal, ids: requestedIDs)
+        storage[Key(signalID: signalID, ids: requestedIDs)] = measured
+        return measured
+    }
+
+    private func normalized(_ ids: [String]) -> [String] {
+        Array(Set(ids)).sorted()
+    }
+}
+
+struct MudCorrectionCandidateScore: Sendable, Equatable {
+    let index: Int
+    let gainDB: Double
+    let bandRMSDB: Double
+}
+
+enum MudCorrectionCandidateSelector {
+    static func select(_ candidates: [MudCorrectionCandidateScore]) -> MudCorrectionCandidateScore? {
+        candidates.min {
+            if $0.bandRMSDB == $1.bandRMSDB {
+                return $0.index < $1.index
+            }
+            return $0.bandRMSDB < $1.bandRMSDB
+        }
     }
 }
 

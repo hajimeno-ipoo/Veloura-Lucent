@@ -227,7 +227,24 @@ struct AudioProcessingPipelineTests {
         #expect(FileManager.default.fileExists(atPath: output.path()))
         #expect(outputMud <= inputMud + 0.5)
         #expect(logs.values.contains { $0.hasPrefix("低中域残り: こもり悪化を抑制") } || outputMud <= inputMud)
+        let mudMeasurementCount = try #require(parsedInteger(prefix: "低中域残り/測定回数: ", from: logs.values))
+        #expect(mudMeasurementCount <= 2)
     }
+
+    @Test
+    func correctionMudGuardSelectsCandidateBeforeFinalMudMeasurement() async throws {
+        let candidates = [
+            MudCorrectionCandidateScore(index: 0, gainDB: -2.0, bandRMSDB: -24.9),
+            MudCorrectionCandidateScore(index: 1, gainDB: -1.5, bandRMSDB: -25.4),
+            MudCorrectionCandidateScore(index: 2, gainDB: -1.0, bandRMSDB: -25.1),
+            MudCorrectionCandidateScore(index: 3, gainDB: -0.5, bandRMSDB: -24.7)
+        ]
+
+        let selected = try #require(MudCorrectionCandidateSelector.select(candidates))
+        #expect(selected.index == 1)
+        #expect(selected.gainDB == -1.5)
+    }
+
 
     @Test
     func shimmerLimiterDoesNotUseFiveFullMeasurementPasses() async throws {

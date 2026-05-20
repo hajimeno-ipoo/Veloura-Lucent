@@ -24,6 +24,42 @@ struct NoiseMeasurementServiceTests {
     }
 
     @Test
+    func humMeasurementPreservesKnownFixtureValues() {
+        let clean = testSignal { time in
+            let tone = sin(2 * Double.pi * 440 * time) * 0.08
+            let lowInstrument = sin(2 * Double.pi * 82 * time) * 0.04
+            return Float(tone + lowInstrument)
+        }
+        let hum = testSignal { time in
+            let tone = sin(2 * Double.pi * 440 * time) * 0.08
+            let noise = sin(2 * Double.pi * 60 * time) * 0.025
+            return Float(tone + noise)
+        }
+
+        let cleanValue = value("hum", in: NoiseMeasurementService.analyze(signal: clean, ids: [NoiseMeasurementID.hum]))
+        let humValue = value("hum", in: NoiseMeasurementService.analyze(signal: hum, ids: [NoiseMeasurementID.hum]))
+
+        #expect(abs(cleanValue - 0.0) < 0.0001)
+        #expect(abs(humValue - 27.21716346666377) < 0.0001)
+    }
+
+    @Test
+    func humSineFrequencyPlanSharesDuplicateFrameFrequencies() {
+        let sampleRate = 48_000.0
+        let harmonics = [
+            50.0, 100.0, 150.0, 200.0, 250.0, 300.0, 350.0,
+            60.0, 120.0, 180.0, 240.0, 300.0, 360.0
+        ]
+
+        let plan = HumSineFrequencyPlan(frequencies: harmonics, sampleRate: sampleRate)
+
+        #expect(harmonics.count * 5 == 65)
+        #expect(plan.uniqueMeasurementFrequencies.count == 56)
+        #expect(plan.measurementFrequenciesByHarmonic[300]?.center == 300)
+        #expect(plan.measurementFrequenciesByHarmonic[300]?.surrounding == [277, 283, 317, 323])
+    }
+
+    @Test
     func detectsSibilanceAsShortPeakExcess() {
         let smooth = testSignal { time in
             Float(sin(2 * Double.pi * 440 * time) * 0.08)
