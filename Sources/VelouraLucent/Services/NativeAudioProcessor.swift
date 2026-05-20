@@ -1801,7 +1801,7 @@ private struct SpectralGateDenoiser: Sendable {
                     granularBaseline: granularProfile[binIndex],
                     coreProtection: tuning.coreProtection
                 )
-                let highFloorLift = highBandMusicalProtection.floorLift(frameIndex: frameIndex, frequency: frequency, pass: pass)
+                let highFloorLift = highBandMusicalProtection.floorLift(frameIndex: frameIndex, binIndex: binIndex, pass: pass)
                 let protectedRawFloor = min(
                     0.995,
                     floor + highFloorLift
@@ -1974,6 +1974,7 @@ private struct HighBandMusicalProtection {
     }
 
     private let bands: [Band]
+    private let bandIndexByBin: [Int?]
 
     init(spectrogram: Spectrogram, frequencyStep: Double, frameEnergy: [Float]) {
         let bodyEnergy = Self.bandEnergy(in: spectrogram, lower: 160, upper: 5_000, frequencyStep: frequencyStep)
@@ -1988,7 +1989,7 @@ private struct HighBandMusicalProtection {
             return bodyWeight * frameWeight
         }
 
-        bands = [
+        let builtBands = [
             Self.makeBand(
                 spectrogram: spectrogram,
                 frequencyStep: frequencyStep,
@@ -2023,14 +2024,22 @@ private struct HighBandMusicalProtection {
                 bodyWeights: bodyWeights
             )
         ]
+        bands = builtBands
+        bandIndexByBin = (0..<spectrogram.binCount).map { binIndex in
+            let frequency = Double(binIndex) * frequencyStep
+            return builtBands.firstIndex(where: { $0.contains(frequency) })
+        }
     }
 
-    func floorLift(frameIndex: Int, frequency: Double, pass: Int) -> Float {
-        guard let band = bands.first(where: { $0.contains(frequency) }),
-              band.frameLift.indices.contains(frameIndex)
+    func floorLift(frameIndex: Int, binIndex: Int, pass: Int) -> Float {
+        guard bandIndexByBin.indices.contains(binIndex),
+              let bandIndex = bandIndexByBin[binIndex],
+              bands.indices.contains(bandIndex),
+              bands[bandIndex].frameLift.indices.contains(frameIndex)
         else {
             return 0
         }
+        let band = bands[bandIndex]
         let passLift = pass > 1 ? band.secondPassLift : 0
         return band.frameLift[frameIndex] + passLift * min(1, band.frameLift[frameIndex] / max(band.baseLift, 1e-6))
     }
