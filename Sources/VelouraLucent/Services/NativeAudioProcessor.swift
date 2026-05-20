@@ -1811,16 +1811,21 @@ private struct SpectralGateDenoiser: Sendable {
                     floor,
                     1 - min(0.72, granularExcess / max(magnitude + granularThreshold, 1e-6)) * tuning.granularReduction
                 )
-                let shimmerMask = shimmerStabilizationMask(
-                    spectrogram: spectrogram,
-                    frameIndex: frameIndex,
-                    binIndex: binIndex,
-                    magnitude: magnitude,
-                    shimmerStartBin: shimmerStartBin,
-                    shimmerEndBin: shimmerEndBin,
-                    transientLift: frameTransientLift * transientLiftScaleByBin[binIndex],
-                    exceptionRelaxation: shimmerExceptionRelaxation
-                )
+                let shimmerMask: Float
+                if binIndex < shimmerStartBin || binIndex > shimmerEndBin {
+                    shimmerMask = 1
+                } else {
+                    shimmerMask = shimmerStabilizationMask(
+                        spectrogram: spectrogram,
+                        frameIndex: frameIndex,
+                        binIndex: binIndex,
+                        magnitude: magnitude,
+                        shimmerStartBin: shimmerStartBin,
+                        shimmerEndBin: shimmerEndBin,
+                        transientLift: frameTransientLift * transientLiftScaleByBin[binIndex],
+                        exceptionRelaxation: shimmerExceptionRelaxation
+                    )
+                }
                 let highBandWeight = highBandWeightByBin[binIndex]
                 let highProtectionWeight = min(1, highFloorLift / 0.30)
                 let nonTonalHighReduction = highBandWeight * (1 - highProtectionWeight) * 0.03
