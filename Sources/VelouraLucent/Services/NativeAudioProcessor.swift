@@ -1792,7 +1792,7 @@ private struct SpectralGateDenoiser: Sendable {
                 let granularThreshold = granularThresholdByBin[binIndex]
                 let granularExcess = max(0, granularActivity - granularThreshold)
                 let frequency = frequencyByBin[binIndex]
-                let floor = DenoiseMaskCoefficients.protectedFloor(
+                let floor = frequency > 5_000 ? baseFloor : DenoiseMaskCoefficients.protectedFloor(
                     baseFloor: baseFloor,
                     frequency: frequency,
                     magnitude: magnitude,
