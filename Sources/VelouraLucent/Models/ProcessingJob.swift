@@ -173,8 +173,21 @@ final class ProcessingJob {
     var inputSpectrogram: SpectrogramSnapshot?
     var outputSpectrogram: SpectrogramSnapshot?
     var masteredSpectrogram: SpectrogramSnapshot?
-    var logText = ""
-    var masteringLogText = ""
+    static let visibleLogLineLimit = 80
+    private(set) var logLines: [String] = []
+    private(set) var masteringLogLines: [String] = []
+    var logText: String {
+        logLines.joined(separator: "\n")
+    }
+    var masteringLogText: String {
+        masteringLogLines.joined(separator: "\n")
+    }
+    var visibleLogLines: [String] {
+        Array(logLines.suffix(Self.visibleLogLineLimit))
+    }
+    var visibleMasteringLogLines: [String] {
+        Array(masteringLogLines.suffix(Self.visibleLogLineLimit))
+    }
     var statusMessage = "待機中"
     var masteringStatusMessage = "待機中"
     var isProcessing = false
@@ -294,8 +307,8 @@ final class ProcessingJob {
         inputSpectrogram = nil
         outputSpectrogram = nil
         masteredSpectrogram = nil
-        logText = ""
-        masteringLogText = ""
+        logLines.removeAll()
+        masteringLogLines.removeAll()
         statusMessage = "処理待ち"
         masteringStatusMessage = "補正後に実行できます"
         lastError = nil
@@ -323,7 +336,7 @@ final class ProcessingJob {
     func beginProcessing(appliedSettings: CorrectionSettings? = nil) {
         isProcessing = true
         lastError = nil
-        logText = ""
+        logLines.removeAll()
         statusMessage = "処理中"
         activeStep = nil
         completedSteps = []
@@ -341,7 +354,7 @@ final class ProcessingJob {
         masteredSpectrogram = nil
         resetDisplayAnalysisStates(for: .corrected)
         resetDisplayAnalysisStates(for: .mastered)
-        masteringLogText = ""
+        masteringLogLines.removeAll()
         masteringStatusMessage = "補正後に実行できます"
         masteringLastError = nil
         hasExistingMasteredOutput = false
@@ -358,7 +371,7 @@ final class ProcessingJob {
         guard outputFile != nil else { return }
         isMastering = true
         masteringLastError = nil
-        masteringLogText = ""
+        masteringLogLines.removeAll()
         masteringStatusMessage = "マスタリング中"
         masteringActiveStep = nil
         completedMasteringSteps = []
@@ -533,11 +546,7 @@ final class ProcessingJob {
         }
         updateDenoiseEffectReport(for: trimmed)
 
-        if logText.isEmpty {
-            logText = trimmed
-        } else {
-            logText += "\n\(trimmed)"
-        }
+        logLines.append(trimmed)
     }
 
     func appendMasteringLog(_ message: String) {
@@ -548,11 +557,7 @@ final class ProcessingJob {
             return
         }
 
-        if masteringLogText.isEmpty {
-            masteringLogText = trimmed
-        } else {
-            masteringLogText += "\n\(trimmed)"
-        }
+        masteringLogLines.append(trimmed)
     }
 
     func finishSuccess(_ outputURL: URL, appliedSettings: CorrectionSettings? = nil) {

@@ -1993,21 +1993,32 @@ struct ContentView: View {
 
     private var logSection: some View {
         HStack(alignment: .top, spacing: 14) {
-            logCard(title: "補正ログ", text: job.logText, placeholder: "ここに補正ログが表示されます。")
-            logCard(title: "マスタリングログ", text: job.masteringLogText, placeholder: "ここにマスタリングログが表示されます。")
+            logCard(title: "補正ログ", lines: job.visibleLogLines, placeholder: "ここに補正ログが表示されます。")
+            logCard(title: "マスタリングログ", lines: job.visibleMasteringLogLines, placeholder: "ここにマスタリングログが表示されます。")
         }
     }
 
-    private func logCard(title: String, text: String, placeholder: String) -> some View {
+    private func logCard(title: String, lines: [String], placeholder: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.headline)
 
             ScrollView {
-                Text(text.isEmpty ? placeholder : text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
+                if lines.isEmpty {
+                    Text(placeholder)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .padding(12)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                        }
+                    }
                     .padding(12)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 180)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))

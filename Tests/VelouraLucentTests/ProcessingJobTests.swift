@@ -73,6 +73,65 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func logLinesKeepFullTextWhileVisibleLinesAreLimited() {
+        let job = ProcessingJob()
+        let totalLines = ProcessingJob.visibleLogLineLimit + 5
+
+        for index in 1 ... totalLines {
+            job.appendLog("補正ログ\(index)")
+        }
+
+        #expect(job.logLines.count == totalLines)
+        #expect(job.logText.contains("補正ログ1"))
+        #expect(job.visibleLogLines.count == ProcessingJob.visibleLogLineLimit)
+        #expect(job.visibleLogLines.first == "補正ログ6")
+        #expect(job.visibleLogLines.last == "補正ログ\(totalLines)")
+    }
+
+    @Test
+    func masteringLogLinesKeepFullTextWhileVisibleLinesAreLimited() {
+        let job = ProcessingJob()
+        let totalLines = ProcessingJob.visibleLogLineLimit + 3
+
+        for index in 1 ... totalLines {
+            job.appendMasteringLog("マスタリングログ\(index)")
+        }
+
+        #expect(job.masteringLogLines.count == totalLines)
+        #expect(job.masteringLogText.contains("マスタリングログ1"))
+        #expect(job.visibleMasteringLogLines.count == ProcessingJob.visibleLogLineLimit)
+        #expect(job.visibleMasteringLogLines.first == "マスタリングログ4")
+        #expect(job.visibleMasteringLogLines.last == "マスタリングログ\(totalLines)")
+    }
+
+    @Test
+    func progressEventsDoNotEnterVisibleLogLines() {
+        let job = ProcessingJob()
+
+        job.beginProcessing()
+        job.appendLog(ProcessingProgressEvent.correction(step: .loadAudio, state: .started, detail: nil).encodedMessage)
+        job.appendLog("人が読むログ")
+
+        #expect(job.activeStep == .loadAudio)
+        #expect(job.logLines == ["人が読むログ"])
+        #expect(job.visibleLogLines == ["人が読むログ"])
+    }
+
+    @Test
+    func startingProcessingClearsLogLines() {
+        let job = ProcessingJob()
+
+        job.appendLog("古い補正ログ")
+        job.appendMasteringLog("古いマスタリングログ")
+        job.beginProcessing()
+
+        #expect(job.logLines.isEmpty)
+        #expect(job.masteringLogLines.isEmpty)
+        #expect(job.logText.isEmpty)
+        #expect(job.masteringLogText.isEmpty)
+    }
+
+    @Test
     func skippedCorrectionEventUpdatesProgress() {
         let job = ProcessingJob()
 
