@@ -190,9 +190,9 @@ struct MasteringSettingsPanel: View {
             item: masteringSettingDefinitions[0],
             valueText: String(format: "%.2f", job.editableMasteringSettings.lowShelfGain),
             scaleLabels: ["軽い", "標準", "太い"],
-            stepperActions: stepper(for: \.lowShelfGain, delta: 0.05, range: 0 ... 2.5)
+            stepperActions: stepper(for: \.lowShelfGain, delta: 0.01, range: 0 ... 2.5)
         ) {
-            Slider(value: settingBinding(\.lowShelfGain, range: 0 ... 2.5), in: 0 ... 2.5, step: 0.05)
+            Slider(value: settingBinding(\.lowShelfGain, range: 0 ... 2.5), in: 0 ... 2.5, step: 0.01)
         }
     }
 
@@ -201,9 +201,9 @@ struct MasteringSettingsPanel: View {
             item: masteringSettingDefinitions[1],
             valueText: String(format: "%.2f", job.editableMasteringSettings.lowMidGain),
             scaleLabels: ["すっきり", "標準", "厚い"],
-            stepperActions: stepper(for: \.lowMidGain, delta: 0.05, range: -1.2 ... 1.2)
+            stepperActions: stepper(for: \.lowMidGain, delta: 0.01, range: -1.2 ... 1.2)
         ) {
-            Slider(value: settingBinding(\.lowMidGain, range: -1.2 ... 1.2), in: -1.2 ... 1.2, step: 0.05)
+            Slider(value: settingBinding(\.lowMidGain, range: -1.2 ... 1.2), in: -1.2 ... 1.2, step: 0.01)
         }
     }
 
@@ -212,9 +212,9 @@ struct MasteringSettingsPanel: View {
             item: masteringSettingDefinitions[2],
             valueText: String(format: "%.2f", job.editableMasteringSettings.presenceGain),
             scaleLabels: ["奥", "標準", "前"],
-            stepperActions: stepper(for: \.presenceGain, delta: 0.05, range: 0 ... 1.2)
+            stepperActions: stepper(for: \.presenceGain, delta: 0.01, range: 0 ... 1.2)
         ) {
-            Slider(value: settingBinding(\.presenceGain, range: 0 ... 1.2), in: 0 ... 1.2, step: 0.05)
+            Slider(value: settingBinding(\.presenceGain, range: 0 ... 1.2), in: 0 ... 1.2, step: 0.01)
         }
     }
 
@@ -223,9 +223,9 @@ struct MasteringSettingsPanel: View {
             item: masteringSettingDefinitions[3],
             valueText: String(format: "%.2f", job.editableMasteringSettings.highShelfGain),
             scaleLabels: ["丸い", "標準", "明るい"],
-            stepperActions: stepper(for: \.highShelfGain, delta: 0.05, range: 0 ... 2.5)
+            stepperActions: stepper(for: \.highShelfGain, delta: 0.01, range: 0 ... 2.5)
         ) {
-            Slider(value: settingBinding(\.highShelfGain, range: 0 ... 2.5), in: 0 ... 2.5, step: 0.05)
+            Slider(value: settingBinding(\.highShelfGain, range: 0 ... 2.5), in: 0 ... 2.5, step: 0.01)
         }
     }
 
@@ -250,9 +250,9 @@ struct MasteringSettingsPanel: View {
             ),
             valueText: String(format: "%.1f dB", job.editableMasteringSettings.deEsserThresholdDB),
             scaleLabels: ["敏感", "標準", "鈍い"],
-            stepperActions: stepper(for: \.deEsserThresholdDB, delta: 0.5, range: -36 ... -18)
+            stepperActions: stepper(for: \.deEsserThresholdDB, delta: 0.1, range: -36 ... -18)
         ) {
-            Slider(value: settingBinding(\.deEsserThresholdDB, range: -36 ... -18), in: -36 ... -18, step: 0.5)
+            Slider(value: settingBinding(\.deEsserThresholdDB, range: -36 ... -18), in: -36 ... -18, step: 0.1)
         }
     }
 
@@ -294,12 +294,12 @@ struct MasteringSettingsPanel: View {
                 valueText: String(format: "%.1f dB", settings.thresholdDB),
                 hintText: "左ほど深く効き、右ほど自然に残ります。",
                 scaleLabels: ["深く効く", "標準", "浅く効く"],
-                stepperActions: compressorStepper(band: band, field: \.thresholdDB, delta: 0.5, range: -36 ... -12)
+                stepperActions: compressorStepper(band: band, field: \.thresholdDB, delta: 0.1, range: -36 ... -12)
             ) {
                 Slider(
                     value: compressorBinding(band: band, field: \.thresholdDB, range: -36 ... -12),
                     in: -36 ... -12,
-                    step: 0.5
+                    step: 0.1
                 )
             }
 
@@ -308,12 +308,12 @@ struct MasteringSettingsPanel: View {
                 valueText: String(format: "%.2f", settings.ratio),
                 hintText: "右ほど圧縮が強くなります。",
                 scaleLabels: ["自然", "標準", "強く圧縮"],
-                stepperActions: compressorStepper(band: band, field: \.ratio, delta: 0.05, range: 1.1 ... 4.0)
+                stepperActions: compressorStepper(band: band, field: \.ratio, delta: 0.01, range: 1.1 ... 4.0)
             ) {
                 Slider(
                     value: compressorBinding(band: band, field: \.ratio, range: 1.1 ... 4.0),
                     in: 1.1 ... 4.0,
-                    step: 0.05
+                    step: 0.01
                 )
             }
         }
