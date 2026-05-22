@@ -25,7 +25,8 @@ struct ContentView: View {
                     preview: preview,
                     inputFileURL: job.inputFile,
                     correctedFileURL: job.hasExistingOutput ? job.outputFile : nil,
-                    masteredFileURL: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil
+                    masteredFileURL: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil,
+                    completionReport: completionReport
                 )
                 correctionActionSection
                 masteringActionSection
@@ -54,6 +55,19 @@ struct ContentView: View {
             Text("補正で荒れを整えたあと、別機能のマスタリングで仕上げまで行います。")
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var completionReport: CompletionReport? {
+        CompletionReportService.makeReport(
+            input: job.inputMetrics,
+            corrected: job.outputMetrics,
+            mastered: job.masteredMetrics,
+            inputNoise: job.inputNoiseMeasurements,
+            correctedNoise: job.outputNoiseMeasurements,
+            masteredNoise: job.masteredNoiseMeasurements,
+            correctionSettings: job.appliedCorrectionSettings ?? job.editableCorrectionSettings,
+            masteringSettings: job.appliedMasteringSettings ?? job.editableMasteringSettings
+        )
     }
 
     private var inputSection: some View {
