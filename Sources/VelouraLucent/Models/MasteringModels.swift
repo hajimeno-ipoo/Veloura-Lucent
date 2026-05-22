@@ -360,7 +360,9 @@ enum AudioComparisonSide: String, CaseIterable, Identifiable {
 }
 
 enum MasteringStep: String, CaseIterable, Hashable {
+    case loadAudio = "補正済み音源を読み込みます"
     case analyze = "補正済み音源を解析します"
+    case routeNoiseMeasurement = "ノイズ戻りの基準を測定します"
     case tone = "帯域バランスを整えます"
     case deEss = "ハーシュネスを抑えます"
     case dynamics = "帯域のバランスを整えます"
@@ -370,12 +372,22 @@ enum MasteringStep: String, CaseIterable, Hashable {
     case loudness = "ラウドネスを整えます"
     case highReturnGuard = "高域戻りを抑えます"
     case noiseReturnGuard = "ノイズ戻りを抑えます"
+    case highPreserve = "高域保持を確認します"
+    case finalNoiseCeiling = "最終ノイズ上限を確認します"
+    case finalHighPreserve = "最終高域保持を確認します"
+    case finalLoudnessRestore = "最終音量を復帰します"
+    case finalNoiseConfirm = "最終ノイズを確認します"
+    case finalLoudnessBounds = "最終音量上限を確認します"
     case save = "マスタリング済みファイルを書き出します"
 
     var title: String {
         switch self {
+        case .loadAudio:
+            return "読み込み"
         case .analyze:
             return "解析"
+        case .routeNoiseMeasurement:
+            return "ノイズ基準"
         case .tone:
             return "帯域バランス"
         case .deEss:
@@ -394,6 +406,18 @@ enum MasteringStep: String, CaseIterable, Hashable {
             return "高域戻り"
         case .noiseReturnGuard:
             return "ノイズ戻り"
+        case .highPreserve:
+            return "高域保持"
+        case .finalNoiseCeiling:
+            return "最終ノイズ上限"
+        case .finalHighPreserve:
+            return "最終高域保持"
+        case .finalLoudnessRestore:
+            return "最終音量復帰"
+        case .finalNoiseConfirm:
+            return "最終ノイズ確認"
+        case .finalLoudnessBounds:
+            return "最終音量上限"
         case .save:
             return "書き出し"
         }
@@ -401,7 +425,9 @@ enum MasteringStep: String, CaseIterable, Hashable {
 
     var eventID: String {
         switch self {
+        case .loadAudio: "loadAudio"
         case .analyze: "analyze"
+        case .routeNoiseMeasurement: "routeNoiseMeasurement"
         case .tone: "tone"
         case .deEss: "deEss"
         case .dynamics: "dynamics"
@@ -411,6 +437,12 @@ enum MasteringStep: String, CaseIterable, Hashable {
         case .loudness: "loudness"
         case .highReturnGuard: "highReturnGuard"
         case .noiseReturnGuard: "noiseReturnGuard"
+        case .highPreserve: "highPreserve"
+        case .finalNoiseCeiling: "finalNoiseCeiling"
+        case .finalHighPreserve: "finalHighPreserve"
+        case .finalLoudnessRestore: "finalLoudnessRestore"
+        case .finalNoiseConfirm: "finalNoiseConfirm"
+        case .finalLoudnessBounds: "finalLoudnessBounds"
         case .save: "save"
         }
     }

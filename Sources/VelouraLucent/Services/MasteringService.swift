@@ -22,8 +22,8 @@ struct MasteringService {
         try await Task.detached(priority: .userInitiated) {
             let recorder = MasteringStageTimingRecorder()
             let totalStart = DispatchTime.now().uptimeNanoseconds
-            logger.start(MasteringStep.analyze)
-            logger.log(MasteringStep.analyze.rawValue)
+            logger.start(MasteringStep.loadAudio)
+            logger.log(MasteringStep.loadAudio.rawValue)
             logger.log("解析モード: マスタリングCPU")
             let signal = try recorder.measure(label: "読み込み", logger: logger) {
                 try AudioFileService.loadAudio(from: inputFile)
@@ -36,9 +36,14 @@ struct MasteringService {
             } else {
                 originalReferenceSignal = nil
             }
+            logger.complete(MasteringStep.loadAudio)
+
             let analysis: MasteringAnalysis
+            logger.start(MasteringStep.analyze)
+            logger.log(MasteringStep.analyze.rawValue)
             if let initialAnalysis {
                 analysis = initialAnalysis
+                logger.skip(MasteringStep.analyze, reason: "既存の解析結果を使用")
                 logger.log("解析: 既存結果を使用")
             } else {
                 analysis = recorder.measure(label: "解析", logger: logger) {
@@ -48,17 +53,22 @@ struct MasteringService {
                     }
                     return benchmark.analysis
                 }
+                logger.complete(MasteringStep.analyze)
             }
+
             let routeNoiseMeasurements: NoiseMeasurementSnapshot
+            logger.start(MasteringStep.routeNoiseMeasurement)
+            logger.log(MasteringStep.routeNoiseMeasurement.rawValue)
             if let referenceNoiseMeasurements {
                 routeNoiseMeasurements = referenceNoiseMeasurements
+                logger.skip(MasteringStep.routeNoiseMeasurement, reason: "既存の測定結果を使用")
                 logger.log("ノイズ測定: 既存結果を使用")
             } else {
                 routeNoiseMeasurements = recorder.measure(label: "ルート用ノイズ測定", logger: logger) {
                     NoiseMeasurementService.analyze(signal: signal)
                 }
+                logger.complete(MasteringStep.routeNoiseMeasurement)
             }
-            logger.complete(MasteringStep.analyze)
             let mastered = MasteringProcessor().process(
                 signal: signal,
                 analysis: analysis,

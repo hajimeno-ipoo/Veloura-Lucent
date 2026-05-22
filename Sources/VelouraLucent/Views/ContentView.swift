@@ -302,15 +302,17 @@ struct ContentView: View {
             ProgressView(value: value)
                 .tint(tint)
 
-            HStack(spacing: 8) {
-                ForEach(steps, id: \.self) { step in
-                    progressBadge(
-                        title: step.title,
-                        isCompleted: completedSteps.contains(step),
-                        isActive: activeStep == step,
-                        isSkipped: skippedSteps.contains(step),
-                        isFailed: failedSteps.contains(step)
-                    )
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(steps, id: \.self) { step in
+                        progressBadge(
+                            title: step.title,
+                            isCompleted: completedSteps.contains(step),
+                            isActive: activeStep == step,
+                            isSkipped: skippedSteps.contains(step),
+                            isFailed: failedSteps.contains(step)
+                        )
+                    }
                 }
             }
         }
@@ -343,15 +345,17 @@ struct ContentView: View {
             ProgressView(value: masteringProgressValue)
                 .tint(masteringStatusColor)
 
-            HStack(spacing: 8) {
-                ForEach(MasteringStep.allCases, id: \.self) { step in
-                    progressBadge(
-                        title: step.title,
-                        isCompleted: job.completedMasteringSteps.contains(step),
-                        isActive: job.masteringActiveStep == step,
-                        isSkipped: job.skippedMasteringSteps.contains(step),
-                        isFailed: job.failedMasteringSteps.contains(step)
-                    )
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(MasteringStep.allCases, id: \.self) { step in
+                        progressBadge(
+                            title: step.title,
+                            isCompleted: job.completedMasteringSteps.contains(step),
+                            isActive: job.masteringActiveStep == step,
+                            isSkipped: job.skippedMasteringSteps.contains(step),
+                            isFailed: job.failedMasteringSteps.contains(step)
+                        )
+                    }
                 }
             }
         }

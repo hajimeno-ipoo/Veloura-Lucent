@@ -350,22 +350,22 @@ private struct CorrectionTermHelpButton: View {
             isPresented.toggle()
         }
         .labelStyle(.iconOnly)
-        .font(.callout)
+        .font(.title3)
         .foregroundStyle(.secondary)
         .buttonStyle(.plain)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text(title)
-                    .font(.headline)
+                    .font(.title3.weight(.semibold))
                 Text(reading)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                 Text(description)
-                    .font(.subheadline)
+                    .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(14)
-            .frame(width: 260, alignment: .leading)
+            .padding(16)
+            .frame(width: 320, alignment: .leading)
         }
     }
 }

@@ -154,7 +154,9 @@ struct MasteringProcessor {
             )
         }
         saveDiagnostic(noiseGuarded, to: diagnosticOutputDirectory, order: 9, id: "noiseReturnGuard", label: "ノイズ戻りガード後", logger: logger)
-        let mastered = measure(label: "マスタリング/計測: 高域保持", logger: logger) {
+        logger?.start(.highPreserve)
+        logger?.log(MasteringStep.highPreserve.rawValue)
+        let mastered = measure(label: "マスタリング/計測: 高域保持", logger: logger, progressStep: .highPreserve) {
             preserveMasteringHighFloor(
                 signal: noiseGuarded,
                 reference: signal,
@@ -166,7 +168,9 @@ struct MasteringProcessor {
             )
         }
         saveDiagnostic(mastered, to: diagnosticOutputDirectory, order: 10, id: "highPreserve", label: "高域保持後", logger: logger)
-        let finalGuarded = measure(label: "マスタリング/計測: 最終ノイズ上限", logger: logger) {
+        logger?.start(.finalNoiseCeiling)
+        logger?.log(MasteringStep.finalNoiseCeiling.rawValue)
+        let finalGuarded = measure(label: "マスタリング/計測: 最終ノイズ上限", logger: logger, progressStep: .finalNoiseCeiling) {
             applyFinalNoiseReturnCeiling(
                 signal: mastered,
                 reference: signal,
@@ -177,7 +181,9 @@ struct MasteringProcessor {
             )
         }
         saveDiagnostic(finalGuarded, to: diagnosticOutputDirectory, order: 11, id: "finalNoiseCeiling", label: "最終ノイズ上限後", logger: logger)
-        let finalHighPreserved = measure(label: "マスタリング/計測: 最終高域保持", logger: logger) {
+        logger?.start(.finalHighPreserve)
+        logger?.log(MasteringStep.finalHighPreserve.rawValue)
+        let finalHighPreserved = measure(label: "マスタリング/計測: 最終高域保持", logger: logger, progressStep: .finalHighPreserve) {
             preserveMasteringHighFloor(
                 signal: finalGuarded,
                 reference: signal,
@@ -189,7 +195,9 @@ struct MasteringProcessor {
             )
         }
         saveDiagnostic(finalHighPreserved, to: diagnosticOutputDirectory, order: 12, id: "finalHighPreserve", label: "最終高域保持後", logger: logger)
-        let finalLoudnessRestored = measure(label: "マスタリング/計測: 最終音量復帰", logger: logger) {
+        logger?.start(.finalLoudnessRestore)
+        logger?.log(MasteringStep.finalLoudnessRestore.rawValue)
+        let finalLoudnessRestored = measure(label: "マスタリング/計測: 最終音量復帰", logger: logger, progressStep: .finalLoudnessRestore) {
             restoreFinalLoudnessAfterGuards(
                 signal: finalHighPreserved,
                 reference: signal,
@@ -202,7 +210,9 @@ struct MasteringProcessor {
             )
         }
         saveDiagnostic(finalLoudnessRestored, to: diagnosticOutputDirectory, order: 13, id: "finalLoudnessRestore", label: "最終音量復帰後", logger: logger)
-        let finalNoiseConfirmed = measure(label: "マスタリング/計測: 最終ノイズ確認", logger: logger) {
+        logger?.start(.finalNoiseConfirm)
+        logger?.log(MasteringStep.finalNoiseConfirm.rawValue)
+        let finalNoiseConfirmed = measure(label: "マスタリング/計測: 最終ノイズ確認", logger: logger, progressStep: .finalNoiseConfirm) {
             applyFinalNoiseReturnCeiling(
                 signal: finalLoudnessRestored,
                 reference: signal,
@@ -213,7 +223,9 @@ struct MasteringProcessor {
             )
         }
         saveDiagnostic(finalNoiseConfirmed, to: diagnosticOutputDirectory, order: 14, id: "finalNoiseConfirm", label: "最終ノイズ確認後", logger: logger)
-        let finalLoudnessBounded = measure(label: "マスタリング/計測: 最終音量上限", logger: logger) {
+        logger?.start(.finalLoudnessBounds)
+        logger?.log(MasteringStep.finalLoudnessBounds.rawValue)
+        let finalLoudnessBounded = measure(label: "マスタリング/計測: 最終音量上限", logger: logger, progressStep: .finalLoudnessBounds) {
             enforceFinalLoudnessPolicyBounds(
                 signal: finalNoiseConfirmed,
                 baselineLoudness: loudnessBaseline,

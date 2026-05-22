@@ -278,7 +278,7 @@ struct NativeAudioProcessor {
         let benchmarkRecorder = collectsBenchmark ? AudioProcessingBenchmarkRecorder() : nil
         let totalStart = DispatchTime.now().uptimeNanoseconds
 
-        logger?.start(.loadAudio)
+        logger?.start(ProcessingStep.loadAudio)
         logger?.log("入力音声を読み込みます")
         let signal = try measure("loadAudio", label: "読み込み", recorder: benchmarkRecorder, logger: logger, progressStep: .loadAudio) {
             try AudioFileService.loadAudio(from: inputFile)
@@ -309,9 +309,13 @@ struct NativeAudioProcessor {
                 signalID: "input",
                 ids: NoiseMeasurementRunCache.allNoiseIDs
             )
+            benchmarkRecorder?.append("routeNoiseMeasurement", durationSeconds: 0)
+            logger?.skip(ProcessingStep.routeNoiseMeasurement, reason: "既存の測定結果を使用")
             logger?.log("ノイズ測定: 既存結果を使用")
         } else {
-            routeNoiseMeasurements = measure("routeNoiseMeasurement", label: "ルート用ノイズ測定", recorder: benchmarkRecorder, logger: logger) {
+            logger?.start(ProcessingStep.routeNoiseMeasurement)
+            logger?.log(ProcessingStep.routeNoiseMeasurement.rawValue)
+            routeNoiseMeasurements = measure("routeNoiseMeasurement", label: "ルート用ノイズ測定", recorder: benchmarkRecorder, logger: logger, progressStep: .routeNoiseMeasurement) {
                 noiseMeasurementCache.snapshot(
                     signalID: "input",
                     signal: signal,
@@ -364,10 +368,14 @@ struct NativeAudioProcessor {
         }
         saveDiagnostic(sibilanceGuarded, to: diagnosticOutputDirectory, order: 3, id: "sibilanceShimmerGuard", label: "サ行シマー保護後", logger: logger)
 
-        let postDenoiseAnalysis = measure("analyzeDenoised", label: "再解析", recorder: benchmarkRecorder, logger: logger) {
+        logger?.start(.analyzeDenoised)
+        logger?.log(ProcessingStep.analyzeDenoised.rawValue)
+        let postDenoiseAnalysis = measure("analyzeDenoised", label: "再解析", recorder: benchmarkRecorder, logger: logger, progressStep: .analyzeDenoised) {
             AudioAnalyzer(mode: resolvedAnalysisMode).analyze(signal: sibilanceGuarded)
         }
-        let repairPrediction = measure("neuralPrediction", label: "解析補助", recorder: benchmarkRecorder, logger: logger) {
+        logger?.start(.analysisAssist)
+        logger?.log(ProcessingStep.analysisAssist.rawValue)
+        let repairPrediction = measure("neuralPrediction", label: "解析補助", recorder: benchmarkRecorder, logger: logger, progressStep: .analysisAssist) {
             NeuralFoldoverEstimator().predict(
                 features: NeuralFoldoverFeatures(
                     harmonicConfidence: postDenoiseAnalysis.harmonicConfidence,
@@ -464,7 +472,9 @@ struct NativeAudioProcessor {
             )
         }
         saveDiagnostic(highPreserved, to: diagnosticOutputDirectory, order: 8, id: "correctionHighPreserve", label: "高域保持後", logger: logger)
-        let mudControlled = measure("correctionMudGuard", label: "補正/計測: 低中域残り確認", recorder: benchmarkRecorder, logger: logger) {
+        logger?.start(.correctionMudGuard)
+        logger?.log(ProcessingStep.correctionMudGuard.rawValue)
+        let mudControlled = measure("correctionMudGuard", label: "補正/計測: 低中域残り確認", recorder: benchmarkRecorder, logger: logger, progressStep: .correctionMudGuard) {
             constrainCorrectionMudIncrease(
                 signal: highPreserved,
                 referenceMeasurements: routeNoiseMeasurements,

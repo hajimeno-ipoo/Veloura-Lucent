@@ -192,6 +192,17 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func correctionInternalMeasurementStepsUpdateCurrentLabel() {
+        let job = ProcessingJob()
+
+        job.beginProcessing()
+        job.appendLog(ProcessingProgressEvent.correction(step: .routeNoiseMeasurement, state: .started, detail: nil).encodedMessage)
+
+        #expect(job.activeStep == .routeNoiseMeasurement)
+        #expect(job.progressLabel == "ノイズ測定 を実行中")
+    }
+
+    @Test
     func failedCorrectionStepIsKeptForProgressDisplay() {
         let job = ProcessingJob()
 
@@ -361,6 +372,18 @@ struct ProcessingJobTests {
 
         #expect(job.masteringActiveStep == .tone)
         #expect(job.completedMasteringSteps.contains(.analyze))
+    }
+
+    @Test
+    func masteringFinalMeasurementStepsUpdateCurrentLabel() {
+        let job = ProcessingJob()
+        job.outputFile = URL(fileURLWithPath: "/tmp/output.wav")
+
+        job.beginMastering()
+        job.appendMasteringLog(ProcessingProgressEvent.mastering(step: .finalLoudnessRestore, state: .started, detail: nil).encodedMessage)
+
+        #expect(job.masteringActiveStep == .finalLoudnessRestore)
+        #expect(job.masteringActiveStep?.title == "最終音量復帰")
     }
 
     @Test
