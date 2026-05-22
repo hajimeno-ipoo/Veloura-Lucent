@@ -357,6 +357,26 @@ struct MasteringPipelineTests {
     }
 
     @Test
+    func youtubeSpotifyPresetReachesTargetWhenHeadroomAllows() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let inputURL = tempDirectory.appending(path: "youtube-spotify-target.wav")
+
+        try makeCleanHeadroomTone(at: inputURL)
+
+        let settings = MasteringProfile.youtubeSpotify.settings
+        let output = try await MasteringService().process(
+            inputFile: inputURL,
+            settings: settings
+        ) { _ in }
+        let metrics = try AudioComparisonService.analyze(fileURL: output)
+
+        #expect(FileManager.default.fileExists(atPath: output.path()))
+        #expect(abs(metrics.integratedLoudnessLUFS - Double(settings.targetLoudness)) <= 1.5)
+        #expect(metrics.truePeakDBFS <= Double(settings.peakCeilingDB) + 0.05)
+    }
+
+    @Test
     func masteringUsesOriginalReferenceWhenCorrectedInputLostAir() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
@@ -483,6 +503,30 @@ struct MasteringPipelineTests {
             let t = Double(index) / sampleRate
             left[index] = Float(sin(2 * Double.pi * 220 * t) * 0.08 + sin(2 * Double.pi * 8_000 * t) * 0.02)
             right[index] = Float(sin(2 * Double.pi * 220 * t + 0.12) * 0.08 + sin(2 * Double.pi * 7_600 * t) * 0.018)
+        }
+
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 2)
+        )
+        try file.write(from: buffer)
+    }
+
+    private func makeCleanHeadroomTone(at url: URL) throws {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 3)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        let left = buffer.floatChannelData![0]
+        let right = buffer.floatChannelData![1]
+
+        for index in 0..<frameCount {
+            let t = Double(index) / sampleRate
+            let body = sin(2 * Double.pi * 220 * t) * 0.14
+            let support = sin(2 * Double.pi * 440 * t) * 0.035
+            left[index] = Float(body + support)
+            right[index] = Float(body * 0.98 + support * 0.96)
         }
 
         let file = try AVAudioFile(

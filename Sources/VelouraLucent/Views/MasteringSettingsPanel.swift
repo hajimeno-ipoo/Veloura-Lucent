@@ -15,14 +15,18 @@ struct MasteringSettingsPanel: View {
 
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("仕上がり")
-                        .font(.subheadline.weight(.semibold))
+                    HStack(spacing: 6) {
+                        Text("仕上がり")
+                            .font(.subheadline.weight(.semibold))
+                        MasteringProfileHelpButton(profile: job.selectedMasteringProfile)
+                    }
                     Picker("仕上がり", selection: $job.selectedMasteringProfile) {
                         ForEach(MasteringProfile.allCases) { profile in
                             Text(profile.title).tag(profile)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
+                    .frame(minWidth: 220, alignment: .leading)
                     .disabled(job.isMastering)
                 }
 
@@ -579,6 +583,35 @@ private struct MasteringTermHelpButton: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Text(description)
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(width: 260, alignment: .leading)
+        }
+    }
+}
+
+private struct MasteringProfileHelpButton: View {
+    let profile: MasteringProfile
+    @State private var isPresented = false
+
+    var body: some View {
+        Button("プリセットの説明を表示", systemImage: "questionmark.circle") {
+            isPresented.toggle()
+        }
+        .labelStyle(.iconOnly)
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(profile.title)
+                    .font(.headline)
+                Text(profile.presetTargetText)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Text(profile.presetHelpText)
                     .font(.subheadline)
                     .fixedSize(horizontal: false, vertical: true)
             }

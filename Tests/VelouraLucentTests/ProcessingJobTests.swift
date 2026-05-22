@@ -436,6 +436,26 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func applyingNewMasteringProfilesReflectsTargetAndCeilingSettings() {
+        let job = ProcessingJob()
+
+        job.applyMasteringProfile(.safeAIStreaming)
+        #expect(job.editableMasteringSettings.targetLoudness == -14.5)
+        #expect(job.editableMasteringSettings.peakCeilingDB == -1.2)
+        #expect(job.editableMasteringSettings.loudnessAdjustmentPolicy.label == "安全AI配信")
+
+        job.applyMasteringProfile(.youtubeSpotify)
+        #expect(job.editableMasteringSettings.targetLoudness == -14.0)
+        #expect(job.editableMasteringSettings.peakCeilingDB == -1.0)
+        #expect(job.editableMasteringSettings.loudnessAdjustmentPolicy.label == "YouTube / Spotify向け")
+
+        job.applyMasteringProfile(.releaseLoud)
+        #expect(job.editableMasteringSettings.targetLoudness == -12.0)
+        #expect(job.editableMasteringSettings.peakCeilingDB == -1.0)
+        #expect(job.editableMasteringSettings.loudnessAdjustmentPolicy.label == "リリース音圧重視")
+    }
+
+    @Test
     func applyingCorrectionProfileResetsEditableSettings() {
         let job = ProcessingJob()
 

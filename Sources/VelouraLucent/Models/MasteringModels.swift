@@ -4,6 +4,9 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
     case natural
     case streaming
     case forward
+    case safeAIStreaming
+    case youtubeSpotify
+    case releaseLoud
 
     var id: String { rawValue }
 
@@ -15,6 +18,12 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
             return "聴きやすく整える"
         case .forward:
             return "押し出し強め"
+        case .safeAIStreaming:
+            return "安全AI配信"
+        case .youtubeSpotify:
+            return "YouTube / Spotify向け"
+        case .releaseLoud:
+            return "リリース音圧重視"
         }
     }
 
@@ -26,6 +35,38 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
             return "ラウドネスと帯域のバランスを、聞きやすさ重視で整えます"
         case .forward:
             return "密度とプレゼンスを少し積極的に持ち上げて仕上げます"
+        case .safeAIStreaming:
+            return "ノイズ戻りを抑えながら配信向けの音量を狙います"
+        case .youtubeSpotify:
+            return "YouTubeやSpotify向けに音量を明確に狙います"
+        case .releaseLoud:
+            return "音圧を重視して、強く前に出る仕上げにします"
+        }
+    }
+
+    var presetTargetText: String {
+        let settings = settings
+        return String(
+            format: "目安: %.1f LUFS / True Peak上限: %.1f dBFS",
+            Double(settings.targetLoudness),
+            Double(settings.peakCeilingDB)
+        )
+    }
+
+    var presetHelpText: String {
+        switch self {
+        case .natural:
+            return "原音の雰囲気を残しながら、音量を控えめに整えます。"
+        case .streaming:
+            return "聞きやすさを優先し、ラウドネスと帯域のバランスを整えます。"
+        case .forward:
+            return "密度と前に出る感じを少し強めます。"
+        case .safeAIStreaming:
+            return "ノイズ戻りを抑えながら、配信向けの音量を狙います。"
+        case .youtubeSpotify:
+            return "YouTubeやSpotify向けに、扱いやすい音量を狙います。"
+        case .releaseLoud:
+            return "音圧を重視します。強弱が少なくなる場合があります。"
         }
     }
 
@@ -91,9 +132,43 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
                 dynamicsRetention: 0.52,
                 finishingIntensity: 0.75
             )
+        case .safeAIStreaming:
+            return makeMasteringSettings(
+                basedOn: .streaming,
+                targetLoudness: -14.5,
+                peakCeilingDB: -1.2,
+                finishingIntensity: 0.65
+            )
+        case .youtubeSpotify:
+            return makeMasteringSettings(
+                basedOn: .forward,
+                targetLoudness: -14.0,
+                peakCeilingDB: -1.0,
+                finishingIntensity: 0.85
+            )
+        case .releaseLoud:
+            return makeMasteringSettings(
+                basedOn: .forward,
+                targetLoudness: -12.0,
+                peakCeilingDB: -1.0,
+                finishingIntensity: 0.95
+            )
         }
     }
 
+}
+
+private func makeMasteringSettings(
+    basedOn profile: MasteringProfile,
+    targetLoudness: Float,
+    peakCeilingDB: Float,
+    finishingIntensity: Float
+) -> MasteringSettings {
+    var settings = profile.settings
+    settings.targetLoudness = targetLoudness
+    settings.peakCeilingDB = peakCeilingDB
+    settings.finishingIntensity = finishingIntensity
+    return settings
 }
 
 struct MasteringSettings: Sendable, Equatable {
@@ -131,7 +206,25 @@ extension MasteringSettings {
                 finalRestoreLimitDB: 1.5
             )
         }
-        if finishingIntensity >= 0.70 {
+        if finishingIntensity < 0.60 {
+            return LoudnessAdjustmentPolicy(
+                label: "聴きやすく整える",
+                maxBoostDB: 3.0,
+                maxCutDB: 1.5,
+                deadbandDB: 0.5,
+                finalRestoreLimitDB: 2.0
+            )
+        }
+        if finishingIntensity < 0.70 {
+            return LoudnessAdjustmentPolicy(
+                label: "安全AI配信",
+                maxBoostDB: 4.0,
+                maxCutDB: 1.5,
+                deadbandDB: 0.5,
+                finalRestoreLimitDB: 2.5
+            )
+        }
+        if finishingIntensity < 0.80 {
             return LoudnessAdjustmentPolicy(
                 label: "押し出し強め",
                 maxBoostDB: 4.5,
@@ -140,19 +233,28 @@ extension MasteringSettings {
                 finalRestoreLimitDB: 2.0
             )
         }
+        if finishingIntensity < 0.90 {
+            return LoudnessAdjustmentPolicy(
+                label: "YouTube / Spotify向け",
+                maxBoostDB: 5.0,
+                maxCutDB: 2.0,
+                deadbandDB: 0.5,
+                finalRestoreLimitDB: 3.0
+            )
+        }
         return LoudnessAdjustmentPolicy(
-            label: "聴きやすく整える",
-            maxBoostDB: 3.0,
-            maxCutDB: 1.5,
+            label: "リリース音圧重視",
+            maxBoostDB: 6.0,
+            maxCutDB: 2.0,
             deadbandDB: 0.5,
-            finalRestoreLimitDB: 2.0
+            finalRestoreLimitDB: 3.0
         )
     }
 
     var aggressiveSettingWarnings: [String] {
         var warnings: [String] = []
         if targetLoudness >= -12 {
-            warnings.append("かなり大きい仕上げです。音が平坦に聞こえやすくなります。")
+            warnings.append("音圧重視。強弱が少なくなる場合があります。")
         }
         if peakCeilingDB >= -0.7 {
             warnings.append("歪みやすい設定です。配信や再生環境によって音割れする可能性があります。")
