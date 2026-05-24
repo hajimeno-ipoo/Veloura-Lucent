@@ -247,6 +247,43 @@ struct DiagnosticStageExportTests {
     }
 
     @Test
+    func denoiseProtectsActiveLowBodyWhileReducingQuietLowNoise() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let inputURL = tempDirectory.appending(path: "denoise-low-body-under-quiet-noise.wav")
+        let diagnostics = tempDirectory.appending(path: "correction-stages")
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        try makeDenoiseLowBodyWithQuietLowNoiseTone(at: inputURL)
+
+        _ = try await AudioProcessingService().process(
+            inputFile: inputURL,
+            denoiseStrength: .balanced,
+            analysisMode: .cpu,
+            diagnosticOutputDirectory: diagnostics
+        ) { _ in }
+
+        let lowCleaned = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "01_correction_lowNoiseCleanup"))
+        let denoised = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "02_correction_denoise"))
+        let quietBefore = try excerpt(from: lowCleaned, startSeconds: 0.10, durationSeconds: 0.45)
+        let quietAfter = try excerpt(from: denoised, startSeconds: 0.10, durationSeconds: 0.45)
+        let musicBefore = try excerpt(from: lowCleaned, startSeconds: 1.10, durationSeconds: 0.70)
+        let musicAfter = try excerpt(from: denoised, startSeconds: 1.10, durationSeconds: 0.70)
+
+        let quietRumbleDrop = bandLevelDB(signal: quietAfter, lower: 20, upper: 150)
+            - bandLevelDB(signal: quietBefore, lower: 20, upper: 150)
+        let activeRumbleDrop = bandLevelDB(signal: musicAfter, lower: 20, upper: 150)
+            - bandLevelDB(signal: musicBefore, lower: 20, upper: 150)
+        let activeWarmthDrop = bandLevelDB(signal: musicAfter, lower: 150, upper: 300)
+            - bandLevelDB(signal: musicBefore, lower: 150, upper: 300)
+        let activeMudDrop = bandLevelDB(signal: musicAfter, lower: 300, upper: 1_000)
+            - bandLevelDB(signal: musicBefore, lower: 300, upper: 1_000)
+
+        #expect(quietRumbleDrop <= -2.5)
+        #expect(activeRumbleDrop >= -2.2)
+        #expect(activeWarmthDrop >= -2.2)
+        #expect(activeMudDrop >= -2.2)
+    }
+
+    @Test
     func correctionHighPreserveRestoresMusicalHighBandsWithoutReturningUltraHiss() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let inputURL = tempDirectory.appending(path: "correction-high-preserve-musical-air.wav")
@@ -615,6 +652,38 @@ struct DiagnosticStageExportTests {
             let musicalAir = sin(2 * Double.pi * 13_200 * time) * 0.026 * musicEnvelope
             let backgroundHiss = Double(highNoise[index])
             channel[index] = Float(body + musicalAir + backgroundHiss)
+        }
+
+        let file = try AVAudioFile(forWriting: url, settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 1))
+        try file.write(from: buffer)
+    }
+
+    private func makeDenoiseLowBodyWithQuietLowNoiseTone(at url: URL, duration: Double = 2.4, sampleRate: Double = 48_000) throws {
+        let frameCount = Int(duration * sampleRate)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        let channel = buffer.floatChannelData![0]
+        var random = DiagnosticDeterministicRandom(seed: 0x1A2B_3C4D)
+        var noise = Array(repeating: Float.zero, count: frameCount)
+        for index in 0..<frameCount {
+            noise[index] = Float((random.nextDouble() * 2 - 1) * 0.08)
+        }
+        let lowNoise = SpectralDSP.lowPass(
+            SpectralDSP.highPass(noise, cutoff: 20, sampleRate: sampleRate),
+            cutoff: 150,
+            sampleRate: sampleRate
+        )
+        for index in 0..<frameCount {
+            let time = Double(index) / sampleRate
+            let musicEnvelope = time > 0.85 ? 1.0 : 0.0
+            let lowBody = (
+                sin(2 * Double.pi * 72 * time) * 0.060
+                    + sin(2 * Double.pi * 190 * time) * 0.045
+                    + sin(2 * Double.pi * 520 * time) * 0.038
+            ) * musicEnvelope
+            let backgroundNoise = Double(lowNoise[index]) * (musicEnvelope > 0 ? 0.35 : 1.0)
+            channel[index] = Float(lowBody + backgroundNoise)
         }
 
         let file = try AVAudioFile(forWriting: url, settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 1))

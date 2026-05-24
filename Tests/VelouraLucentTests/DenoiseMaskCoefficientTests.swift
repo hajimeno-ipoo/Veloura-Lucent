@@ -120,6 +120,132 @@ struct DenoiseMaskCoefficientTests {
     }
 
     @Test
+    func activeMusicLowBandFloorOnlyProtectsActiveLowAndLowMidBins() {
+        let baseFloor: Float = 0.18
+        let activeMinimum: Float = 0.866_025_4
+
+        let lowBodyFloor = DenoiseMaskCoefficients.activeMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 120,
+            magnitude: 0.24,
+            noiseLevel: 0.06,
+            isActiveMusicFrame: true,
+            minimumFloor: activeMinimum
+        )
+        let lowMidFloor = DenoiseMaskCoefficients.activeMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 520,
+            magnitude: 0.24,
+            noiseLevel: 0.06,
+            isActiveMusicFrame: true,
+            minimumFloor: activeMinimum
+        )
+        let quietFloor = DenoiseMaskCoefficients.activeMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 120,
+            magnitude: 0.24,
+            noiseLevel: 0.06,
+            isActiveMusicFrame: false,
+            minimumFloor: activeMinimum
+        )
+        let subsonicFloor = DenoiseMaskCoefficients.activeMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 12,
+            magnitude: 0.24,
+            noiseLevel: 0.06,
+            isActiveMusicFrame: true,
+            minimumFloor: activeMinimum
+        )
+        let highFloor = DenoiseMaskCoefficients.activeMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 1_400,
+            magnitude: 0.24,
+            noiseLevel: 0.06,
+            isActiveMusicFrame: true,
+            minimumFloor: activeMinimum
+        )
+        let noiseFloor = DenoiseMaskCoefficients.activeMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 120,
+            magnitude: 0.06,
+            noiseLevel: 0.06,
+            isActiveMusicFrame: true,
+            minimumFloor: activeMinimum
+        )
+
+        expectClose(lowBodyFloor, activeMinimum)
+        expectClose(lowMidFloor, activeMinimum)
+        expectClose(quietFloor, baseFloor)
+        expectClose(subsonicFloor, baseFloor)
+        expectClose(highFloor, baseFloor)
+        expectClose(noiseFloor, baseFloor)
+    }
+
+    @Test
+    func humRemovalFrameAttenuationKeepsQuietFramesAndWeakensActiveMusicFrames() {
+        let quietScale = HumRemovalFrameAttenuation.scale(
+            frameEnergy: 0.10,
+            quietThreshold: 0.20,
+            activeThreshold: 0.50,
+            activeScale: 0.35
+        )
+        let activeScale = HumRemovalFrameAttenuation.scale(
+            frameEnergy: 0.60,
+            quietThreshold: 0.20,
+            activeThreshold: 0.50,
+            activeScale: 0.35
+        )
+        let transitionScale = HumRemovalFrameAttenuation.scale(
+            frameEnergy: 0.35,
+            quietThreshold: 0.20,
+            activeThreshold: 0.50,
+            activeScale: 0.35
+        )
+
+        expectClose(quietScale, 1.0)
+        expectClose(activeScale, 0.35)
+        #expect(transitionScale > activeScale)
+        #expect(transitionScale < quietScale)
+    }
+
+    @Test
+    func humRemovalFrameAttenuationKeepsMoreReductionForProminentHum() {
+        let spectrogram = Spectrogram(
+            real: [
+                1.0, 1.0, 10.0, 1.0, 1.0,
+                1.0, 1.0, 1.4, 1.0, 1.0
+            ],
+            imag: Array(repeating: Float.zero, count: 10),
+            fftSize: 8,
+            hopSize: 4,
+            originalLength: 8,
+            leadingPadding: 0,
+            trailingPadding: 0,
+            frameCount: 2
+        )
+
+        let prominentScale = HumRemovalFrameAttenuation.scale(
+            spectrogram: spectrogram,
+            frameIndex: 0,
+            centerBin: 2,
+            frameEnergy: 0.60,
+            quietThreshold: 0.20,
+            activeThreshold: 0.50
+        )
+        let musicalScale = HumRemovalFrameAttenuation.scale(
+            spectrogram: spectrogram,
+            frameIndex: 1,
+            centerBin: 2,
+            frameEnergy: 0.60,
+            quietThreshold: 0.20,
+            activeThreshold: 0.50
+        )
+
+        expectClose(prominentScale, 0.85)
+        expectClose(musicalScale, 0.35)
+    }
+
+    @Test
     func exceptionRelaxationWeakensShimmerStabilizationWhenAirBandIsStrong() {
         let normalRelaxation = DenoiseShimmerStabilizer.exceptionRelaxation(
             airEnergy: 0.12,
