@@ -215,7 +215,7 @@ extension MasteringSettings {
                 maxCutDB: 1.5,
                 deadbandDB: 0.5,
                 finalRestoreLimitDB: 2.0,
-                targetOvershootLimitDB: 1.25
+                targetOvershootLimitDB: 1.0
             )
         }
         if finishingIntensity < 0.70 {
@@ -235,7 +235,7 @@ extension MasteringSettings {
                 maxCutDB: 2.0,
                 deadbandDB: 0.5,
                 finalRestoreLimitDB: 2.0,
-                targetOvershootLimitDB: 1.25
+                targetOvershootLimitDB: 1.5
             )
         }
         if finishingIntensity < 0.90 {
@@ -245,7 +245,7 @@ extension MasteringSettings {
                 maxCutDB: 2.0,
                 deadbandDB: 0.5,
                 finalRestoreLimitDB: 3.0,
-                targetOvershootLimitDB: 0.75
+                targetOvershootLimitDB: 1.25
             )
         }
         return LoudnessAdjustmentPolicy(
