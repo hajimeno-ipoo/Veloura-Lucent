@@ -225,6 +225,7 @@ struct MasteringProcessor {
                 referenceNoiseMeasurements: referenceNoiseMeasurements,
                 originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
                 targetLKFS: guidedLoudnessTarget,
+                requestedTargetLKFS: effectiveLoudnessTarget,
                 peakCeilingDB: settings.peakCeilingDB,
                 policy: loudnessPolicy,
                 logger: logger
@@ -1406,6 +1407,7 @@ struct MasteringProcessor {
         referenceNoiseMeasurements: NoiseMeasurementSnapshot?,
         originalReferenceNoiseMeasurements: NoiseMeasurementSnapshot?,
         targetLKFS: Float,
+        requestedTargetLKFS: Float,
         peakCeilingDB: Float,
         policy: LoudnessAdjustmentPolicy,
         logger: AudioProcessingLogger?
@@ -1416,14 +1418,26 @@ struct MasteringProcessor {
         }
 
         let loudnessDeficitDB = Double(targetLKFS - currentLoudness)
-        guard loudnessDeficitDB > 0.35 else {
-            return enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
-        }
-
         let peak = max(MasteringAnalysisService.approximateTruePeak(signal.channels), 1e-6)
         let currentPeakDB = 20 * log10(Double(peak))
         let peakHeadroomDB = max(0, Double(peakCeilingDB) - currentPeakDB)
-        let requestedGainDB = min(loudnessDeficitDB, peakHeadroomDB, policy.finalRestoreLimitDB)
+        let safetyRestoreLimitDB = 2.0
+        let requestedTargetOvershootLimitDB = 1.25
+        let requestedTargetHeadroomDB = max(
+            0,
+            Double(requestedTargetLKFS - currentLoudness) + requestedTargetOvershootLimitDB
+        )
+        let requestedGainDB: Double
+        if loudnessDeficitDB > 0.35 {
+            requestedGainDB = min(loudnessDeficitDB, peakHeadroomDB, policy.finalRestoreLimitDB)
+        } else {
+            requestedGainDB = min(
+                safetyRestoreLimitDB,
+                peakHeadroomDB,
+                policy.finalRestoreLimitDB,
+                requestedTargetHeadroomDB
+            )
+        }
         guard requestedGainDB > 0.25 else {
             logger?.log("最終音量復帰: ピーク余裕不足")
             return enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)

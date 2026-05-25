@@ -267,27 +267,35 @@ struct MasteringPipelineTests {
         let inputURL = tempDirectory.appending(path: "final-loudness-restore.wav")
         let logs = MasteringLogCollector()
 
-        try makeMusicalAirTone(at: inputURL)
+        try makeCleanHeadroomTone(at: inputURL)
+        var settings = MasteringProfile.streaming.settings
+        settings.targetLoudness = -16.2
 
         let output = try await MasteringService().process(
             inputFile: inputURL,
-            settings: MasteringProfile.streaming.settings,
+            settings: settings,
             diagnosticOutputDirectory: diagnostics
         ) { message in
             logs.append(message)
         }
         let masteredMetrics = try AudioComparisonService.analyze(fileURL: output)
         let baselineMetrics = try masteringLoudnessBaselineMetrics(in: diagnostics)
-        let policy = MasteringProfile.streaming.settings.loudnessAdjustmentPolicy
+        let beforeFinalRestore = try AudioComparisonService.analyze(
+            fileURL: diagnosticFile(in: diagnostics, containing: "12_mastering_finalHighPreserve")
+        )
+        let afterFinalRestore = try AudioComparisonService.analyze(
+            fileURL: diagnosticFile(in: diagnostics, containing: "13_mastering_finalLoudnessRestore")
+        )
+        let policy = settings.loudnessAdjustmentPolicy
 
         #expect(FileManager.default.fileExists(atPath: output.path()))
+        #expect(afterFinalRestore.integratedLoudnessLUFS >= beforeFinalRestore.integratedLoudnessLUFS + 1.0)
+        #expect(afterFinalRestore.integratedLoudnessLUFS <= beforeFinalRestore.integratedLoudnessLUFS + 2.2)
+        #expect(afterFinalRestore.truePeakDBFS <= Double(settings.peakCeilingDB) + 0.05)
         #expect(masteredMetrics.integratedLoudnessLUFS <= baselineMetrics.integratedLoudnessLUFS + policy.maxBoostDB + 0.2)
         #expect(masteredMetrics.integratedLoudnessLUFS >= baselineMetrics.integratedLoudnessLUFS - policy.maxCutDB - 0.2)
-        #expect(masteredMetrics.truePeakDBFS <= Double(MasteringProfile.streaming.settings.peakCeilingDB) + 0.05)
-        #expect(
-            logs.values.contains { $0.hasPrefix("最終音量復帰: ") }
-                || logs.values.contains { $0.hasPrefix("ラウドネス方針: 聴きやすく整える") }
-        )
+        #expect(masteredMetrics.truePeakDBFS <= Double(settings.peakCeilingDB) + 0.05)
+        #expect(logs.values.contains { $0.hasPrefix("最終音量復帰: +") })
     }
 
     @Test
