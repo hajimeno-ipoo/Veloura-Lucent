@@ -193,6 +193,7 @@ struct LoudnessAdjustmentPolicy: Sendable, Equatable {
     let maxCutDB: Double
     let deadbandDB: Double
     let finalRestoreLimitDB: Double
+    let targetOvershootLimitDB: Double
 }
 
 extension MasteringSettings {
@@ -203,7 +204,8 @@ extension MasteringSettings {
                 maxBoostDB: 1.5,
                 maxCutDB: 1.0,
                 deadbandDB: 0.5,
-                finalRestoreLimitDB: 1.5
+                finalRestoreLimitDB: 1.5,
+                targetOvershootLimitDB: 0.75
             )
         }
         if finishingIntensity < 0.60 {
@@ -212,7 +214,8 @@ extension MasteringSettings {
                 maxBoostDB: 3.0,
                 maxCutDB: 1.5,
                 deadbandDB: 0.5,
-                finalRestoreLimitDB: 2.0
+                finalRestoreLimitDB: 2.0,
+                targetOvershootLimitDB: 1.25
             )
         }
         if finishingIntensity < 0.70 {
@@ -221,7 +224,8 @@ extension MasteringSettings {
                 maxBoostDB: 4.0,
                 maxCutDB: 1.5,
                 deadbandDB: 0.5,
-                finalRestoreLimitDB: 2.5
+                finalRestoreLimitDB: 2.5,
+                targetOvershootLimitDB: 0.75
             )
         }
         if finishingIntensity < 0.80 {
@@ -230,7 +234,8 @@ extension MasteringSettings {
                 maxBoostDB: 4.5,
                 maxCutDB: 2.0,
                 deadbandDB: 0.5,
-                finalRestoreLimitDB: 2.0
+                finalRestoreLimitDB: 2.0,
+                targetOvershootLimitDB: 1.25
             )
         }
         if finishingIntensity < 0.90 {
@@ -239,7 +244,8 @@ extension MasteringSettings {
                 maxBoostDB: 5.0,
                 maxCutDB: 2.0,
                 deadbandDB: 0.5,
-                finalRestoreLimitDB: 3.0
+                finalRestoreLimitDB: 3.0,
+                targetOvershootLimitDB: 0.75
             )
         }
         return LoudnessAdjustmentPolicy(
@@ -247,7 +253,8 @@ extension MasteringSettings {
             maxBoostDB: 6.0,
             maxCutDB: 2.0,
             deadbandDB: 0.5,
-            finalRestoreLimitDB: 3.0
+            finalRestoreLimitDB: 3.0,
+            targetOvershootLimitDB: 2.0
         )
     }
 

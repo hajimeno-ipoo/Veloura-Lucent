@@ -1422,10 +1422,9 @@ struct MasteringProcessor {
         let currentPeakDB = 20 * log10(Double(peak))
         let peakHeadroomDB = max(0, Double(peakCeilingDB) - currentPeakDB)
         let safetyRestoreLimitDB = 2.0
-        let requestedTargetOvershootLimitDB = 1.25
         let requestedTargetHeadroomDB = max(
             0,
-            Double(requestedTargetLKFS - currentLoudness) + requestedTargetOvershootLimitDB
+            Double(requestedTargetLKFS - currentLoudness) + policy.targetOvershootLimitDB
         )
         let requestedGainDB: Double
         if loudnessDeficitDB > 0.35 {
