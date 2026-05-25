@@ -113,27 +113,48 @@ struct MasteringProcessor {
             policy: loudnessPolicy,
             logger: logger
         )
-        let loud = measure(label: "ラウドネス", logger: logger, progressStep: .loudness) {
-            applyLoudness(
+        let lowBodyProtectedLoud = measure(label: "ラウドネス", logger: logger, progressStep: .loudness) {
+            let loud = applyLoudness(
                 signal: current,
                 targetLKFS: guidedLoudnessTarget,
                 peakCeilingDB: settings.peakCeilingDB
             )
+            let loudnessReference = applyLoudness(
+                signal: signal,
+                targetLKFS: guidedLoudnessTarget,
+                peakCeilingDB: settings.peakCeilingDB
+            )
+            let originalLoudnessReference = originalReferenceSignal.map {
+                applyLoudness(
+                    signal: $0,
+                    targetLKFS: guidedLoudnessTarget,
+                    peakCeilingDB: settings.peakCeilingDB
+                )
+            }
+            return enforcePeakCeiling(
+                signal: MasteringLowBodyProtector.process(
+                    signal: loud,
+                    reference: loudnessReference,
+                    activityReference: signal,
+                    musicalReference: originalLoudnessReference
+                ),
+                peakCeilingDB: settings.peakCeilingDB
+            )
         }
-        saveDiagnostic(loud, to: diagnosticOutputDirectory, order: 7, id: "loudness", label: "ラウドネス調整後", logger: logger)
+        saveDiagnostic(lowBodyProtectedLoud, to: diagnosticOutputDirectory, order: 7, id: "loudness", label: "ラウドネス調整後", logger: logger)
 
         let highReturnDecision = routePlan.decision(for: .highReturnGuard)
         let guarded: AudioSignal
         if highReturnDecision.action == .skip {
             logger?.skip(.highReturnGuard, reason: highReturnDecision.reason)
             logger?.log("高域戻りガード: 早期終了 - \(highReturnDecision.reason)")
-            guarded = loud
+            guarded = lowBodyProtectedLoud
         } else {
             logger?.start(.highReturnGuard)
             logger?.log(MasteringStep.highReturnGuard.rawValue)
             guarded = measure(label: "高域戻りガード", logger: logger, progressStep: .highReturnGuard) {
                 applyHighReturnGuard(
-                    signal: loud,
+                    signal: lowBodyProtectedLoud,
                     analysis: analysis,
                     settings: settings,
                     finishingIntensity: finishingIntensity
