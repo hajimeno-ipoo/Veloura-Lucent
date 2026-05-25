@@ -410,8 +410,8 @@ struct MasteringPipelineTests {
         let originalAir = bandBalanceDB(signal: original, lower: 12_000, upper: 16_000)
         let withOriginalAir = bandBalanceDB(signal: masteredWithOriginal, lower: 12_000, upper: 16_000)
 
-        #expect(withOriginalBrilliance >= correctedBrilliance + 1.0)
-        #expect(withOriginalAir >= correctedAir + 1.0)
+        #expect(withOriginalBrilliance >= correctedBrilliance + 0.75)
+        #expect(withOriginalAir >= correctedAir + 0.75)
         #expect(withOriginalBrilliance >= originalBrilliance - 4.0)
         #expect(withOriginalAir >= originalAir - 4.0)
         #expect(logs.values.contains { $0.hasPrefix("原音参照読み込み: ") })

@@ -16,11 +16,14 @@ struct MasteringLowBodyProtectorTests {
 
         #expect(bandRMSDB(signal: protected, lower: 20, upper: 150) >= bandRMSDB(signal: processed, lower: 20, upper: 150) + 0.10)
         #expect(bandRMSDB(signal: protected, lower: 150, upper: 300) >= bandRMSDB(signal: processed, lower: 150, upper: 300) + 0.10)
+        #expect(bandRMSDB(signal: protected, lower: 150, upper: 400) >= bandRMSDB(signal: processed, lower: 150, upper: 400) + 0.20)
+        #expect(bandRMSDB(signal: protected, lower: 250, upper: 500) >= bandRMSDB(signal: processed, lower: 250, upper: 500) + 0.20)
         #expect(bandRMSDB(signal: protected, lower: 300, upper: 1_000) >= bandRMSDB(signal: processed, lower: 300, upper: 1_000) + 0.08)
         #expect(bandRMSDB(signal: protected, lower: 6_000, upper: 12_000) <= bandRMSDB(signal: processed, lower: 6_000, upper: 12_000) + 0.35)
         #expect(bandRMSDB(signal: protected, lower: 12_000, upper: 16_000) <= bandRMSDB(signal: processed, lower: 12_000, upper: 16_000) + 0.35)
         #expect(bandRMSDB(signal: quietProtected, lower: 20, upper: 150) <= bandRMSDB(signal: quietProcessed, lower: 20, upper: 150) + 0.10)
         #expect(bandRMSDB(signal: quietProtected, lower: 150, upper: 300) <= bandRMSDB(signal: quietProcessed, lower: 150, upper: 300) + 0.10)
+        #expect(bandRMSDB(signal: quietProtected, lower: 250, upper: 500) <= bandRMSDB(signal: quietProcessed, lower: 250, upper: 500) + 0.10)
     }
 
     @Test
@@ -37,7 +40,19 @@ struct MasteringLowBodyProtectorTests {
         )
 
         #expect(bandRMSDB(signal: protected, lower: 60, upper: 150) >= bandRMSDB(signal: mastered, lower: 60, upper: 150) + 0.20)
+        #expect(bandRMSDB(signal: protected, lower: 250, upper: 500) >= bandRMSDB(signal: mastered, lower: 250, upper: 500) + 0.10)
         #expect(bandRMSDB(signal: protected, lower: 20, upper: 60) <= bandRMSDB(signal: mastered, lower: 20, upper: 60) + 1.20)
+    }
+
+    @Test
+    func doesNotLiftActiveLowMidWhenItDidNotDrop() {
+        let reference = activeMidBodySignalWithoutLowFoundation()
+
+        let protected = MasteringLowBodyProtector.process(signal: reference, reference: reference)
+
+        #expect(bandRMSDB(signal: protected, lower: 150, upper: 400) <= bandRMSDB(signal: reference, lower: 150, upper: 400) + 0.02)
+        #expect(bandRMSDB(signal: protected, lower: 250, upper: 500) <= bandRMSDB(signal: reference, lower: 250, upper: 500) + 0.02)
+        #expect(bandRMSDB(signal: protected, lower: 300, upper: 1_000) <= bandRMSDB(signal: reference, lower: 300, upper: 1_000) + 0.02)
     }
 
     @Test
@@ -51,6 +66,7 @@ struct MasteringLowBodyProtectorTests {
 
         #expect(bandRMSDB(signal: protected, lower: 20, upper: 150) <= bandRMSDB(signal: processed, lower: 20, upper: 150) + 0.02)
         #expect(bandRMSDB(signal: protected, lower: 150, upper: 300) <= bandRMSDB(signal: processed, lower: 150, upper: 300) + 0.02)
+        #expect(bandRMSDB(signal: protected, lower: 250, upper: 500) <= bandRMSDB(signal: processed, lower: 250, upper: 500) + 0.02)
         #expect(bandRMSDB(signal: protected, lower: 300, upper: 1_000) <= bandRMSDB(signal: processed, lower: 300, upper: 1_000) + 0.02)
     }
 
@@ -70,6 +86,7 @@ struct MasteringLowBodyProtectorTests {
 
         #expect(bandRMSDB(signal: protected, lower: 20, upper: 150) <= bandRMSDB(signal: processed, lower: 20, upper: 150) + 0.02)
         #expect(bandRMSDB(signal: protected, lower: 150, upper: 300) <= bandRMSDB(signal: processed, lower: 150, upper: 300) + 0.02)
+        #expect(bandRMSDB(signal: protected, lower: 250, upper: 500) <= bandRMSDB(signal: processed, lower: 250, upper: 500) + 0.02)
         #expect(bandRMSDB(signal: protected, lower: 300, upper: 1_000) <= bandRMSDB(signal: processed, lower: 300, upper: 1_000) + 0.02)
     }
 
@@ -84,6 +101,7 @@ struct MasteringLowBodyProtectorTests {
 
         #expect(bandRMSDB(signal: protected, lower: 20, upper: 150) >= bandRMSDB(signal: processed, lower: 20, upper: 150) + 0.10)
         #expect(bandRMSDB(signal: protected, lower: 150, upper: 300) >= bandRMSDB(signal: processed, lower: 150, upper: 300) + 0.10)
+        #expect(bandRMSDB(signal: protected, lower: 250, upper: 500) >= bandRMSDB(signal: processed, lower: 250, upper: 500) + 0.20)
         #expect(bandRMSDB(signal: protected, lower: 300, upper: 1_000) >= bandRMSDB(signal: processed, lower: 300, upper: 1_000) + 0.08)
     }
 
@@ -131,6 +149,22 @@ struct MasteringLowBodyProtectorTests {
             let high = sin(2 * Double.pi * 7_200 * t) * 0.010
                 + sin(2 * Double.pi * 13_000 * t) * 0.006
             return Float(lowBody + high)
+        }
+        let right = left.map { $0 * 0.96 }
+        return AudioSignal(channels: [left, right], sampleRate: sampleRate)
+    }
+
+    private func activeMidBodySignalWithoutLowFoundation() -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 3)
+        let left = (0..<frameCount).map { index -> Float in
+            let t = Double(index) / sampleRate
+            let activity = t < 0.90 ? 0.12 : 1.0
+            let midBody = (sin(2 * Double.pi * 260 * t) * 0.08
+                + sin(2 * Double.pi * 620 * t) * 0.05) * activity
+            let high = (sin(2 * Double.pi * 7_200 * t) * 0.010
+                + sin(2 * Double.pi * 13_000 * t) * 0.006) * activity
+            return Float(midBody + high)
         }
         let right = left.map { $0 * 0.96 }
         return AudioSignal(channels: [left, right], sampleRate: sampleRate)

@@ -80,7 +80,7 @@ struct DiagnosticStageExportTests {
         #expect(report.contains("## マスタリング工程 前stage差分"))
         #expect(report.contains("Δ16-20kHz"))
         #expect(try diagnosticWAVs(in: correctionDiagnostics).count == 11)
-        #expect(try diagnosticWAVs(in: masteringDiagnostics).count == 15)
+        #expect(try diagnosticWAVs(in: masteringDiagnostics).count == 16)
     }
 
     @Test

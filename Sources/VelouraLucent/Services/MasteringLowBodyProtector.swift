@@ -3,6 +3,10 @@ import Foundation
 enum MasteringLowBodyProtector {
     private static let minimumActiveFrameRatio: Float = 1.25
     private static let sustainedMusicFloorDB = -36.0
+    private static let activeLowMidBodyLiftDB: Float = 0.5
+    private static let activeLowMidBodyMaxDropDB = 0.05
+    private static let activeLowMidBodyLowerFrequency = 150.0
+    private static let activeLowMidBodyUpperFrequency = 500.0
 
     static func process(
         signal: AudioSignal,
@@ -83,6 +87,15 @@ enum MasteringLowBodyProtector {
                   hasSustainedActivity || activityFrameEnergy[frameIndex] > quietThreshold * minimumActiveFrameRatio
             else { continue }
 
+            if applyActiveLowMidBodyLift(
+                to: &currentSpectrogram,
+                reference: referenceSpectrogram,
+                frameIndex: frameIndex,
+                frequencyStep: frequencyStep
+            ) {
+                didChange = true
+            }
+
             for rule in rules {
                 let startBin = max(1, Int(rule.lower / frequencyStep))
                 let endBin = min(currentSpectrogram.binCount - 1, Int(rule.upper / frequencyStep))
@@ -116,6 +129,39 @@ enum MasteringLowBodyProtector {
             return (channel, false)
         }
         return (SpectralDSP.istft(currentSpectrogram), true)
+    }
+
+    private static func applyActiveLowMidBodyLift(
+        to spectrogram: inout Spectrogram,
+        reference: Spectrogram,
+        frameIndex: Int,
+        frequencyStep: Double
+    ) -> Bool {
+        let startBin = max(1, Int(activeLowMidBodyLowerFrequency / frequencyStep))
+        let endBin = min(spectrogram.binCount - 1, Int(activeLowMidBodyUpperFrequency / frequencyStep))
+        guard endBin >= startBin else { return false }
+
+        let currentLevelDB = frameBandLevelDB(
+            spectrogram,
+            frameIndex: frameIndex,
+            startBin: startBin,
+            endBin: endBin
+        )
+        let referenceLevelDB = frameBandLevelDB(
+            reference,
+            frameIndex: frameIndex,
+            startBin: startBin,
+            endBin: endBin
+        )
+        let dropDB = referenceLevelDB - currentLevelDB
+        guard dropDB > activeLowMidBodyMaxDropDB else { return false }
+
+        let boostDB = min(dropDB - activeLowMidBodyMaxDropDB, Double(activeLowMidBodyLiftDB))
+        let gain = powf(10, Float(boostDB) / 20)
+        for binIndex in startBin...endBin {
+            spectrogram.scaleBin(frameIndex: frameIndex, binIndex: binIndex, by: gain)
+        }
+        return true
     }
 
     private static func frameBandLevelDB(
