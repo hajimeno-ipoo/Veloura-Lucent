@@ -182,6 +182,75 @@ struct DenoiseMaskCoefficientTests {
     }
 
     @Test
+    func decayMusicLowBandFloorOnlyProtectsTailLowBodyAndLowMidBins() {
+        let baseFloor: Float = 0.18
+        let lowBodyMinimum: Float = 0.60
+        let lowMidMinimum: Float = 0.65
+
+        let subLowFloor = DenoiseMaskCoefficients.decayMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 45,
+            magnitude: 0.24,
+            noiseLevel: 0.06,
+            isDecayMusicFrame: true,
+            minimumLowBodyFloor: lowBodyMinimum,
+            minimumLowMidFloor: lowMidMinimum
+        )
+        let lowBodyFloor = DenoiseMaskCoefficients.decayMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 120,
+            magnitude: 0.24,
+            noiseLevel: 0.06,
+            isDecayMusicFrame: true,
+            minimumLowBodyFloor: lowBodyMinimum,
+            minimumLowMidFloor: lowMidMinimum
+        )
+        let lowMidFloor = DenoiseMaskCoefficients.decayMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 220,
+            magnitude: 0.24,
+            noiseLevel: 0.06,
+            isDecayMusicFrame: true,
+            minimumLowBodyFloor: lowBodyMinimum,
+            minimumLowMidFloor: lowMidMinimum
+        )
+        let upperMidFloor = DenoiseMaskCoefficients.decayMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 320,
+            magnitude: 0.24,
+            noiseLevel: 0.06,
+            isDecayMusicFrame: true,
+            minimumLowBodyFloor: lowBodyMinimum,
+            minimumLowMidFloor: lowMidMinimum
+        )
+        let quietFloor = DenoiseMaskCoefficients.decayMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 120,
+            magnitude: 0.24,
+            noiseLevel: 0.06,
+            isDecayMusicFrame: false,
+            minimumLowBodyFloor: lowBodyMinimum,
+            minimumLowMidFloor: lowMidMinimum
+        )
+        let noiseFloor = DenoiseMaskCoefficients.decayMusicLowBandFloor(
+            baseFloor: baseFloor,
+            frequency: 120,
+            magnitude: 0.06,
+            noiseLevel: 0.06,
+            isDecayMusicFrame: true,
+            minimumLowBodyFloor: lowBodyMinimum,
+            minimumLowMidFloor: lowMidMinimum
+        )
+
+        expectClose(subLowFloor, baseFloor)
+        expectClose(lowBodyFloor, lowBodyMinimum)
+        expectClose(lowMidFloor, lowMidMinimum)
+        expectClose(upperMidFloor, baseFloor)
+        expectClose(quietFloor, baseFloor)
+        expectClose(noiseFloor, baseFloor)
+    }
+
+    @Test
     func humRemovalFrameAttenuationKeepsQuietFramesAndWeakensActiveMusicFrames() {
         let quietScale = HumRemovalFrameAttenuation.scale(
             frameEnergy: 0.10,
@@ -206,6 +275,56 @@ struct DenoiseMaskCoefficientTests {
         expectClose(activeScale, 0.35)
         #expect(transitionScale > activeScale)
         #expect(transitionScale < quietScale)
+    }
+
+    @Test
+    func rumbleFrameAttenuationOnlyProtectsLowBodyDuringMusicFrames() {
+        let quietLowBodyScale = RumbleFrameAttenuation.scale(
+            frequency: 90,
+            frameEnergy: 0.10,
+            quietThreshold: 0.20,
+            activeThreshold: 0.50
+        )
+        let activeLowBodyScale = RumbleFrameAttenuation.scale(
+            frequency: 90,
+            frameEnergy: 0.60,
+            quietThreshold: 0.20,
+            activeThreshold: 0.50
+        )
+        let tailLowBodyScale = RumbleFrameAttenuation.scale(
+            frequency: 90,
+            frameEnergy: 0.35,
+            quietThreshold: 0.20,
+            activeThreshold: 0.50
+        )
+        let subRumbleScale = RumbleFrameAttenuation.scale(
+            frequency: 40,
+            frameEnergy: 0.60,
+            quietThreshold: 0.20,
+            activeThreshold: 0.50
+        )
+        let warmthScale = RumbleFrameAttenuation.scale(
+            frequency: 170,
+            frameEnergy: 0.60,
+            quietThreshold: 0.20,
+            activeThreshold: 0.50
+        )
+
+        expectClose(quietLowBodyScale, 1.0)
+        expectClose(activeLowBodyScale, RumbleFrameAttenuation.activeMusicScale)
+        #expect(tailLowBodyScale > activeLowBodyScale)
+        #expect(tailLowBodyScale < quietLowBodyScale)
+        expectClose(subRumbleScale, 1.0)
+        expectClose(warmthScale, 1.0)
+    }
+
+    @Test
+    func rumbleFrameAttenuationKeepsStrongCorrectionRumbleReduction() {
+        expectClose(RumbleFrameAttenuation.activeMusicScale(correctionIntensity: 0.50), 0.60)
+        let transitionScale = RumbleFrameAttenuation.activeMusicScale(correctionIntensity: 0.61)
+        #expect(transitionScale > 0.60)
+        #expect(transitionScale < 1.0)
+        expectClose(RumbleFrameAttenuation.activeMusicScale(correctionIntensity: 0.72), 1.0)
     }
 
     @Test

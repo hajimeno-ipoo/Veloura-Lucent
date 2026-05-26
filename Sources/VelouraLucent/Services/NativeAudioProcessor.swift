@@ -1117,8 +1117,9 @@ private struct RumbleReducer: Sendable {
             logger?.log("低域ノイズ/測定回数: 0")
             return signal
         }
+        let activeLowBodyScale = RumbleFrameAttenuation.activeMusicScale(correctionIntensity: settings.correctionIntensity)
         let channels = mapChannelsConcurrently(signal.channels) {
-            processChannel($0, sampleRate: signal.sampleRate, intensity: intensity)
+            processChannel($0, sampleRate: signal.sampleRate, intensity: intensity, activeLowBodyScale: activeLowBodyScale)
         }
         return adaptiveRumbleLimit(
             signal: AudioSignal(channels: channels, sampleRate: signal.sampleRate),
@@ -1185,9 +1186,12 @@ private struct RumbleReducer: Sendable {
         }
     }
 
-    private func processChannel(_ channel: [Float], sampleRate: Double, intensity: Float) -> [Float] {
+    private func processChannel(_ channel: [Float], sampleRate: Double, intensity: Float, activeLowBodyScale: Float) -> [Float] {
         var spectrogram = SpectralDSP.stft(channel)
         guard spectrogram.frameCount > 0 else { return channel }
+        let frameEnergy = spectrogram.frameAverageMagnitudes()
+        let quietThreshold = SpectralDSP.percentile(frameEnergy, 20)
+        let activeThreshold = max(SpectralDSP.percentile(frameEnergy, 50), quietThreshold + 1e-9)
         let frequencyStep = sampleRate / Double(spectrogram.fftSize)
         let endBin = min(max(Int(150 / frequencyStep), 0), spectrogram.binCount - 1)
 
@@ -1203,13 +1207,64 @@ private struct RumbleReducer: Sendable {
             } else {
                 bandWeight = 0.50
             }
-            let gain = clamped(1 - bandWeight * intensity, min: 0.05, max: 1)
             for frameIndex in 0..<spectrogram.frameCount {
+                let frameScale = RumbleFrameAttenuation.scale(
+                    frequency: frequency,
+                    frameEnergy: frameEnergy[frameIndex],
+                    quietThreshold: quietThreshold,
+                    activeThreshold: activeThreshold,
+                    activeScale: activeLowBodyScale
+                )
+                let gain = clamped(1 - bandWeight * intensity * frameScale, min: 0.05, max: 1)
                 spectrogram.scaleBin(frameIndex: frameIndex, binIndex: binIndex, by: gain)
             }
         }
 
         return SpectralDSP.istft(spectrogram)
+    }
+}
+
+struct RumbleFrameAttenuation: Sendable {
+    static let activeMusicScale: Float = 0.60
+    private static let balancedCorrectionIntensity: Float = 0.50
+    private static let strongCorrectionIntensity: Float = 0.72
+
+    static func activeMusicScale(correctionIntensity: Float) -> Float {
+        if correctionIntensity <= balancedCorrectionIntensity { return activeMusicScale }
+        if correctionIntensity >= strongCorrectionIntensity { return 1.0 }
+        let progress = (correctionIntensity - balancedCorrectionIntensity)
+            / (strongCorrectionIntensity - balancedCorrectionIntensity)
+        return activeMusicScale + (1.0 - activeMusicScale) * progress
+    }
+
+    static func scale(
+        frequency: Double,
+        frameEnergy: Float,
+        quietThreshold: Float,
+        activeThreshold: Float,
+        activeScale: Float = activeMusicScale
+    ) -> Float {
+        guard frequency >= 60, frequency < 150 else {
+            return 1
+        }
+        return scale(
+            frameEnergy: frameEnergy,
+            quietThreshold: quietThreshold,
+            activeThreshold: activeThreshold,
+            activeScale: activeScale
+        )
+    }
+
+    static func scale(
+        frameEnergy: Float,
+        quietThreshold: Float,
+        activeThreshold: Float,
+        activeScale: Float
+    ) -> Float {
+        if frameEnergy <= quietThreshold { return 1 }
+        if frameEnergy >= activeThreshold { return activeScale }
+        let position = (frameEnergy - quietThreshold) / max(activeThreshold - quietThreshold, 1e-9)
+        return 1 - (1 - activeScale) * position
     }
 }
 
@@ -1868,10 +1923,22 @@ private struct SpectralGateDenoiser: Sendable {
             Self.activeMusicLowBandFinalFloor(for: settings.profile),
             1 / Float(max(tuning.passes, 1))
         )
+        let decayMusicLowBandFloors = Self.decayMusicLowBandFinalFloors(for: settings.profile)
+        let decayMusicLowBodyFloor = powf(
+            decayMusicLowBandFloors.lowBody,
+            1 / Float(max(tuning.passes, 1))
+        )
+        let decayMusicLowMidFloor = powf(
+            decayMusicLowBandFloors.lowMid,
+            1 / Float(max(tuning.passes, 1))
+        )
 
         for frameIndex in 0..<spectrogram.frameCount {
-            let isActiveMusicFrame = frameEnergy[frameIndex] > quietThreshold
-                && frameEnergy[frameIndex] >= activeMusicThreshold
+            let currentFrameEnergy = frameEnergy[frameIndex]
+            let isActiveMusicFrame = currentFrameEnergy > quietThreshold
+                && currentFrameEnergy >= activeMusicThreshold
+            let isDecayMusicFrame = currentFrameEnergy > quietThreshold
+                && currentFrameEnergy < activeMusicThreshold
             let transientRatio = frameEnergy[frameIndex] / max(smoothedFrameEnergy[frameIndex], 1e-6)
             let frameTransientLift = max(0, min(0.35, (transientRatio - 1) * tuning.transientProtection))
             let frameStart = frameIndex * binCount
@@ -1909,17 +1976,26 @@ private struct SpectralGateDenoiser: Sendable {
                     isActiveMusicFrame: isActiveMusicFrame,
                     minimumFloor: activeMusicLowBandFloor
                 )
+                let decayAwareFloor = DenoiseMaskCoefficients.decayMusicLowBandFloor(
+                    baseFloor: floor,
+                    frequency: frequency,
+                    magnitude: magnitude,
+                    noiseLevel: noiseProfile[binIndex],
+                    isDecayMusicFrame: isDecayMusicFrame,
+                    minimumLowBodyFloor: decayMusicLowBodyFloor,
+                    minimumLowMidFloor: decayMusicLowMidFloor
+                )
                 let highFloorLiftActiveIndex = highFloorLiftActiveIndexByBin[binIndex]
                 let highFloorLift = highFloorLiftActiveIndex < 0
                     ? 0
                     : highFloorLiftValues[frameIndex * highFloorLiftActiveBinCount + highFloorLiftActiveIndex]
                 let protectedRawFloor = min(
                     0.995,
-                    floor + highFloorLift
+                    decayAwareFloor + highFloorLift
                 )
-                let rawMask = max(floor, min(1.0, (magnitude - threshold) / max(magnitude, 1e-6)))
+                let rawMask = max(decayAwareFloor, min(1.0, (magnitude - threshold) / max(magnitude, 1e-6)))
                 let granularMask = max(
-                    floor,
+                    decayAwareFloor,
                     1 - min(0.72, granularExcess / max(magnitude + granularThreshold, 1e-6)) * tuning.granularReduction
                 )
                 let shimmerMask: Float
@@ -1940,12 +2016,12 @@ private struct SpectralGateDenoiser: Sendable {
                 let highBandWeight = highBandWeightByBin[binIndex]
                 let highProtectionWeight = min(1, highFloorLift / 0.30)
                 let nonTonalHighReduction = highBandWeight * (1 - highProtectionWeight) * 0.03
-                let nonTonalAwareRawMask = max(floor, rawMask - nonTonalHighReduction)
+                let nonTonalAwareRawMask = max(decayAwareFloor, rawMask - nonTonalHighReduction)
                 let protectedRawMask = max(protectedRawFloor, nonTonalAwareRawMask)
                 let combinedNoiseMask = protectedRawMask * (1 - highBandWeight) + min(protectedRawMask, granularMask) * highBandWeight
                 let mask = min(
                     1.0,
-                    max(floor, min(combinedNoiseMask, shimmerMask))
+                    max(decayAwareFloor, min(combinedNoiseMask, shimmerMask))
                         + frameTransientLift * transientLiftScaleByBin[binIndex]
                 )
                 if !maskBreakdowns.isEmpty {
@@ -1998,6 +2074,17 @@ private struct SpectralGateDenoiser: Sendable {
             return 0.60
         case .strong:
             return 0
+        }
+    }
+
+    private static func decayMusicLowBandFinalFloors(for profile: DenoiseStrength) -> (lowBody: Float, lowMid: Float) {
+        switch profile {
+        case .gentle:
+            return (lowBody: 0.78, lowMid: 0.82)
+        case .balanced:
+            return (lowBody: 0.60, lowMid: 0.65)
+        case .strong:
+            return (lowBody: 0, lowMid: 0)
         }
     }
 
@@ -2371,6 +2458,28 @@ struct DenoiseMaskCoefficients: Sendable {
         }
 
         return max(baseFloor, minimumFloor)
+    }
+
+    static func decayMusicLowBandFloor(
+        baseFloor: Float,
+        frequency: Double,
+        magnitude: Float,
+        noiseLevel: Float,
+        isDecayMusicFrame: Bool,
+        minimumLowBodyFloor: Float,
+        minimumLowMidFloor: Float
+    ) -> Float {
+        guard isDecayMusicFrame, magnitude > noiseLevel * 1.2 else {
+            return baseFloor
+        }
+
+        if frequency >= 60, frequency < 150 {
+            return max(baseFloor, minimumLowBodyFloor)
+        }
+        if frequency >= 150, frequency < 250 {
+            return max(baseFloor, minimumLowMidFloor)
+        }
+        return baseFloor
     }
 }
 
