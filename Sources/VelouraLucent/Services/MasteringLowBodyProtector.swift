@@ -30,9 +30,11 @@ enum MasteringLowBodyProtector {
         let channels = (0..<channelCount).map { channelIndex in
             let result = process(
                 channel: signal.channels[channelIndex],
-                reference: lowBodyReference.channels[channelIndex],
+                correctedReference: reference.channels[channelIndex],
+                lowBodyReference: lowBodyReference.channels[channelIndex],
                 activityReference: activitySignal.channels[channelIndex],
                 usesSeparateActivityReference: activityReference != nil,
+                usesSeparateLowBodyReference: musicalReference != nil,
                 sampleRate: signal.sampleRate
             )
             didChange = didChange || result.didChange
@@ -42,14 +44,43 @@ enum MasteringLowBodyProtector {
         return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
     }
 
+    static func protectActiveLowMidMinimum(
+        signal: AudioSignal,
+        activityReference: AudioSignal
+    ) -> AudioSignal? {
+        let channelCount = signal.channels.count
+        guard channelCount > 0,
+              channelCount == activityReference.channels.count,
+              signal.sampleRate == activityReference.sampleRate
+        else { return nil }
+
+        var didChange = false
+        let channels = (0..<channelCount).map { channelIndex in
+            let result = protectActiveLowMidMinimum(
+                channel: signal.channels[channelIndex],
+                activityReference: activityReference.channels[channelIndex],
+                sampleRate: signal.sampleRate
+            )
+            didChange = didChange || result.didChange
+            return result.channel
+        }
+        guard didChange else { return nil }
+        return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+    }
+
     private static func process(
         channel: [Float],
-        reference: [Float],
+        correctedReference: [Float],
+        lowBodyReference: [Float],
         activityReference: [Float],
         usesSeparateActivityReference: Bool,
+        usesSeparateLowBodyReference: Bool,
         sampleRate: Double
     ) -> (channel: [Float], didChange: Bool) {
-        guard !channel.isEmpty, channel.count == reference.count else {
+        guard !channel.isEmpty,
+              channel.count == correctedReference.count,
+              channel.count == lowBodyReference.count
+        else {
             return (channel, false)
         }
         let activityChannel = activityReference
@@ -58,9 +89,15 @@ enum MasteringLowBodyProtector {
         }
 
         var currentSpectrogram = SpectralDSP.stft(channel)
-        let referenceSpectrogram = SpectralDSP.stft(reference)
-        let activitySpectrogram = usesSeparateActivityReference ? SpectralDSP.stft(activityChannel) : referenceSpectrogram
-        let frameCount = min(currentSpectrogram.frameCount, referenceSpectrogram.frameCount)
+        let correctedReferenceSpectrogram = SpectralDSP.stft(correctedReference)
+        let lowBodyReferenceSpectrogram = usesSeparateLowBodyReference
+            ? SpectralDSP.stft(lowBodyReference)
+            : correctedReferenceSpectrogram
+        let activitySpectrogram = usesSeparateActivityReference ? SpectralDSP.stft(activityChannel) : correctedReferenceSpectrogram
+        let frameCount = min(
+            min(currentSpectrogram.frameCount, activitySpectrogram.frameCount),
+            min(correctedReferenceSpectrogram.frameCount, lowBodyReferenceSpectrogram.frameCount)
+        )
         guard frameCount > 0 else {
             return (channel, false)
         }
@@ -89,7 +126,7 @@ enum MasteringLowBodyProtector {
 
             if applyActiveLowMidBodyLift(
                 to: &currentSpectrogram,
-                reference: referenceSpectrogram,
+                reference: correctedReferenceSpectrogram,
                 frameIndex: frameIndex,
                 frequencyStep: frequencyStep
             ) {
@@ -108,7 +145,7 @@ enum MasteringLowBodyProtector {
                     endBin: endBin
                 )
                 let referenceLevelDB = frameBandLevelDB(
-                    referenceSpectrogram,
+                    lowBodyReferenceSpectrogram,
                     frameIndex: frameIndex,
                     startBin: startBin,
                     endBin: endBin
@@ -162,6 +199,81 @@ enum MasteringLowBodyProtector {
             spectrogram.scaleBin(frameIndex: frameIndex, binIndex: binIndex, by: gain)
         }
         return true
+    }
+
+    private static func protectActiveLowMidMinimum(
+        channel: [Float],
+        activityReference: [Float],
+        sampleRate: Double
+    ) -> (channel: [Float], didChange: Bool) {
+        guard !channel.isEmpty, channel.count == activityReference.count else {
+            return (channel, false)
+        }
+
+        var spectrogram = SpectralDSP.stft(channel)
+        let activitySpectrogram = SpectralDSP.stft(activityReference)
+        let frameCount = min(spectrogram.frameCount, activitySpectrogram.frameCount)
+        guard frameCount > 0 else {
+            return (channel, false)
+        }
+
+        let frameEnergy = activitySpectrogram.frameAverageMagnitudes()
+        let quietThreshold = SpectralDSP.percentile(frameEnergy, 20)
+        let activeThreshold = SpectralDSP.percentile(frameEnergy, 35)
+        let hasDynamicActivity = activeThreshold > quietThreshold * minimumActiveFrameRatio
+        let hasSustainedActivity = rootMeanSquareDB(activityReference) > sustainedMusicFloorDB
+        guard hasDynamicActivity || hasSustainedActivity else {
+            return (channel, false)
+        }
+
+        let frequencyStep = sampleRate / Double(spectrogram.fftSize)
+        let startBin = max(1, Int(activeLowMidBodyLowerFrequency / frequencyStep))
+        let endBin = min(spectrogram.binCount - 1, Int(activeLowMidBodyUpperFrequency / frequencyStep))
+        guard endBin >= startBin else {
+            return (channel, false)
+        }
+        let currentLevelDB = bandLevelDB(spectrogram, startBin: startBin, endBin: endBin)
+        let referenceLevelDB = bandLevelDB(activitySpectrogram, startBin: startBin, endBin: endBin)
+        guard referenceLevelDB - currentLevelDB > activeLowMidBodyMaxDropDB else {
+            return (channel, false)
+        }
+
+        let gain = powf(10, activeLowMidBodyLiftDB / 20)
+        var didChange = false
+        for frameIndex in 0..<frameCount {
+            guard frameEnergy[frameIndex] >= activeThreshold,
+                  hasSustainedActivity || frameEnergy[frameIndex] > quietThreshold * minimumActiveFrameRatio
+            else { continue }
+            for binIndex in startBin...endBin {
+                spectrogram.scaleBin(frameIndex: frameIndex, binIndex: binIndex, by: gain)
+            }
+            didChange = true
+        }
+
+        guard didChange else {
+            return (channel, false)
+        }
+        return (SpectralDSP.istft(spectrogram), true)
+    }
+
+    private static func bandLevelDB(
+        _ spectrogram: Spectrogram,
+        startBin: Int,
+        endBin: Int
+    ) -> Double {
+        guard spectrogram.frameCount > 0, endBin >= startBin else { return -120 }
+
+        var sumSquares = 0.0
+        for frameIndex in 0..<spectrogram.frameCount {
+            for binIndex in startBin...endBin {
+                let magnitude = spectrogram.magnitude(frameIndex: frameIndex, binIndex: binIndex)
+                sumSquares += Double(magnitude * magnitude)
+            }
+        }
+
+        return 10 * log10(
+            max(sumSquares / Double(spectrogram.frameCount * (endBin - startBin + 1)), 1e-12)
+        )
     }
 
     private static func frameBandLevelDB(

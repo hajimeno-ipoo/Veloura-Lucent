@@ -245,11 +245,48 @@ struct MasteringProcessor {
             )
         }
         saveDiagnostic(finalNoiseConfirmed, to: diagnosticOutputDirectory, order: 14, id: "finalNoiseConfirm", label: "最終ノイズ確認後", logger: logger)
+        let finalLowMidProtected = measure(label: "マスタリング/計測: 最終低中域保護", logger: logger) {
+            let activityReference = loudnessMatchedFinalLowMidReference(
+                reference: signal,
+                target: finalNoiseConfirmed
+            )
+            guard let protected = MasteringLowBodyProtector.protectActiveLowMidMinimum(
+                signal: finalNoiseConfirmed,
+                activityReference: activityReference
+            ) else {
+                logger?.log("最終低中域保護: 対象なし")
+                return finalNoiseConfirmed
+            }
+            let candidate = enforcePeakCeiling(
+                signal: protected,
+                peakCeilingDB: settings.peakCeilingDB
+            )
+            let probePlan = noiseReturnProbePlan(for: finalNoiseConfirmed)
+            let baseProbe = noiseReturnProbe(signal: finalNoiseConfirmed, plan: probePlan)
+            let candidateProbe = noiseReturnProbe(signal: candidate, plan: probePlan)
+            guard isFinalLoudnessRestoreNoiseSafe(
+                baseProbe: baseProbe,
+                candidateProbe: candidateProbe,
+                referenceMeasurements: referenceNoiseMeasurements,
+                originalReferenceMeasurements: originalReferenceNoiseMeasurements
+            ), isFinalLowMidBodyNoiseSafe(
+                base: finalNoiseConfirmed,
+                candidate: candidate,
+                referenceMeasurements: referenceNoiseMeasurements,
+                originalReferenceMeasurements: originalReferenceNoiseMeasurements
+            ), isFinalLoudnessRestoreMudBalanceSafe(base: finalNoiseConfirmed, candidate: candidate) else {
+                logger?.log("最終低中域保護: ノイズ保護で見送り")
+                return finalNoiseConfirmed
+            }
+            logger?.log("最終低中域保護: 演奏中の150Hz〜500Hzを最大+0.5dB")
+            return candidate
+        }
+        saveDiagnostic(finalLowMidProtected, to: diagnosticOutputDirectory, order: 15, id: "finalLowMidBody", label: "最終低中域保護後", logger: logger)
         logger?.start(.finalLoudnessBounds)
         logger?.log(MasteringStep.finalLoudnessBounds.rawValue)
         let finalLoudnessBounded = measure(label: "マスタリング/計測: 最終音量上限", logger: logger, progressStep: .finalLoudnessBounds) {
             enforceFinalLoudnessPolicyBounds(
-                signal: finalNoiseConfirmed,
+                signal: finalLowMidProtected,
                 baselineLoudness: loudnessBaseline,
                 referenceNoiseMeasurements: referenceNoiseMeasurements,
                 originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
@@ -258,7 +295,7 @@ struct MasteringProcessor {
                 logger: logger
             )
         }
-        saveDiagnostic(finalLoudnessBounded, to: diagnosticOutputDirectory, order: 15, id: "finalLoudnessBounds", label: "マスタリング最終", logger: logger)
+        saveDiagnostic(finalLoudnessBounded, to: diagnosticOutputDirectory, order: 16, id: "finalLoudnessBounds", label: "マスタリング最終", logger: logger)
         logger?.log("ルート/マスタリング/実行工程数: \(routePlan.runLikeCount)/\(MasteringRouteStep.allCases.count)")
         logger?.log("ルート/マスタリング/スキップ工程数: \(MasteringRouteStep.allCases.count - routePlan.runLikeCount)/\(MasteringRouteStep.allCases.count)")
         return finalLoudnessBounded
@@ -1589,6 +1626,54 @@ struct MasteringProcessor {
             }
             if let originalLevel = originalReferenceMeasurements?.comparableLevel(for: rule.id) {
                 let originalLimit = originalLevel + max(0.75, rule.allowedReturnDB)
+                if baseLevel <= originalLimit, candidateLevel > originalLimit {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
+    func loudnessMatchedFinalLowMidReference(reference: AudioSignal, target: AudioSignal) -> AudioSignal {
+        let referenceLoudness = MasteringAnalysisService.integratedLoudness(signal: reference)
+        let targetLoudness = MasteringAnalysisService.integratedLoudness(signal: target)
+        guard referenceLoudness.isFinite,
+              targetLoudness.isFinite,
+              referenceLoudness > -69,
+              targetLoudness > -69
+        else {
+            return reference
+        }
+        return applyGain(signal: reference, gainDB: Double(targetLoudness - referenceLoudness))
+    }
+
+    func isFinalLowMidBodyNoiseSafe(
+        base: AudioSignal,
+        candidate: AudioSignal,
+        referenceMeasurements: NoiseMeasurementSnapshot?,
+        originalReferenceMeasurements: NoiseMeasurementSnapshot?
+    ) -> Bool {
+        let checkedIDs = [NoiseMeasurementID.hum, NoiseMeasurementID.rumble]
+        let baseMeasurements = NoiseMeasurementService.analyze(signal: base, ids: checkedIDs)
+        let candidateMeasurements = NoiseMeasurementService.analyze(signal: candidate, ids: checkedIDs)
+
+        for id in checkedIDs {
+            guard let baseLevel = baseMeasurements.comparableLevel(for: id),
+                  let candidateLevel = candidateMeasurements.comparableLevel(for: id)
+            else {
+                continue
+            }
+            if candidateLevel > baseLevel + 0.35 {
+                return false
+            }
+            if let referenceLevel = referenceMeasurements?.comparableLevel(for: id) {
+                let referenceLimit = referenceLevel + 0.75
+                if baseLevel <= referenceLimit, candidateLevel > referenceLimit {
+                    return false
+                }
+            }
+            if let originalLevel = originalReferenceMeasurements?.comparableLevel(for: id) {
+                let originalLimit = originalLevel + 0.75
                 if baseLevel <= originalLimit, candidateLevel > originalLimit {
                     return false
                 }

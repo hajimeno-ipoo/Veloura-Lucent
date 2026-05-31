@@ -45,6 +45,63 @@ struct MasteringLowBodyProtectorTests {
     }
 
     @Test
+    func restoresActiveLowMidBodyAgainstCorrectedReferenceWhenOriginalIsLower() {
+        let correctedReference = activeLowMidBodySignal()
+        let original = attenuateBand(signal: correctedReference, lower: 150, upper: 500, gainDB: -2.0)
+        let mastered = attenuateBand(signal: correctedReference, lower: 150, upper: 500, gainDB: -0.7)
+
+        let protected = MasteringLowBodyProtector.process(
+            signal: mastered,
+            reference: correctedReference,
+            activityReference: correctedReference,
+            musicalReference: original
+        )
+
+        #expect(bandRMSDB(signal: protected, lower: 150, upper: 400) >= bandRMSDB(signal: mastered, lower: 150, upper: 400) + 0.20)
+        #expect(bandRMSDB(signal: protected, lower: 250, upper: 500) >= bandRMSDB(signal: mastered, lower: 250, upper: 500) + 0.20)
+        #expect(bandRMSDB(signal: protected, lower: 6_000, upper: 12_000) <= bandRMSDB(signal: mastered, lower: 6_000, upper: 12_000) + 0.15)
+    }
+
+    @Test
+    func protectsActiveLowMidMinimumWithoutChangingQuietFloor() throws {
+        let activityReference = activeLowMidBodySignal()
+        let signal = attenuateBand(signal: activityReference, lower: 150, upper: 500, gainDB: -1.0)
+        let protected = try #require(MasteringLowBodyProtector.protectActiveLowMidMinimum(
+            signal: signal,
+            activityReference: activityReference
+        ))
+        let quietSignal = try excerpt(from: signal, startSeconds: 0.10, durationSeconds: 0.45)
+        let quietProtected = try excerpt(from: protected, startSeconds: 0.10, durationSeconds: 0.45)
+
+        #expect(bandRMSDB(signal: protected, lower: 150, upper: 400) >= bandRMSDB(signal: signal, lower: 150, upper: 400) + 0.20)
+        #expect(bandRMSDB(signal: protected, lower: 250, upper: 500) >= bandRMSDB(signal: signal, lower: 250, upper: 500) + 0.20)
+        #expect(bandRMSDB(signal: quietProtected, lower: 150, upper: 400) <= bandRMSDB(signal: quietSignal, lower: 150, upper: 400) + 0.02)
+        #expect(bandRMSDB(signal: quietProtected, lower: 250, upper: 500) <= bandRMSDB(signal: quietSignal, lower: 250, upper: 500) + 0.02)
+    }
+
+    @Test
+    func doesNotProtectActiveLowMidMinimumWhenItDidNotDrop() {
+        let signal = activeLowMidBodySignal()
+        let protected = MasteringLowBodyProtector.protectActiveLowMidMinimum(
+            signal: signal,
+            activityReference: signal
+        )
+
+        #expect(protected == nil)
+    }
+
+    @Test
+    func doesNotProtectActiveLowMidMinimumForFlatQuietFloor() {
+        let signal = flatQuietLowFloorSignal()
+        let protected = MasteringLowBodyProtector.protectActiveLowMidMinimum(
+            signal: signal,
+            activityReference: signal
+        )
+
+        #expect(protected == nil)
+    }
+
+    @Test
     func doesNotLiftActiveLowMidWhenItDidNotDrop() {
         let reference = activeMidBodySignalWithoutLowFoundation()
 
@@ -105,6 +162,60 @@ struct MasteringLowBodyProtectorTests {
         #expect(bandRMSDB(signal: protected, lower: 300, upper: 1_000) >= bandRMSDB(signal: processed, lower: 300, upper: 1_000) + 0.08)
     }
 
+    @Test
+    func finalLowMidBodyNoiseSafetyRejectsHumReturn() {
+        let base = lowMidBodyNoiseSafetySignal(humAmplitude: 0.002)
+        let candidate = lowMidBodyNoiseSafetySignal(humAmplitude: 0.020)
+
+        let isSafe = MasteringProcessor().isFinalLowMidBodyNoiseSafe(
+            base: base,
+            candidate: candidate,
+            referenceMeasurements: nil,
+            originalReferenceMeasurements: nil
+        )
+
+        #expect(isSafe == false)
+    }
+
+    @Test
+    func finalLowMidBodyNoiseSafetyAcceptsUnchangedLowNoiseFloor() {
+        let signal = lowMidBodyNoiseSafetySignal(humAmplitude: 0.002)
+
+        let isSafe = MasteringProcessor().isFinalLowMidBodyNoiseSafe(
+            base: signal,
+            candidate: signal,
+            referenceMeasurements: nil,
+            originalReferenceMeasurements: nil
+        )
+
+        #expect(isSafe == true)
+    }
+
+    @Test
+    func finalLowMidBodyReferenceMatchesTargetLoudnessBeforeProtection() throws {
+        let processor = MasteringProcessor()
+        let reference = activeLowMidBodySignal()
+        let louderTarget = applyGain(
+            signal: attenuateBand(signal: reference, lower: 150, upper: 500, gainDB: -1.0),
+            gainDB: 6.0
+        )
+
+        let matchedReference = processor.loudnessMatchedFinalLowMidReference(
+            reference: reference,
+            target: louderTarget
+        )
+        let protected = try #require(MasteringLowBodyProtector.protectActiveLowMidMinimum(
+            signal: louderTarget,
+            activityReference: matchedReference
+        ))
+
+        let matchedLoudness = MasteringAnalysisService.integratedLoudness(signal: matchedReference)
+        let targetLoudness = MasteringAnalysisService.integratedLoudness(signal: louderTarget)
+        #expect(abs(matchedLoudness - targetLoudness) < 0.05)
+        #expect(bandRMSDB(signal: protected, lower: 150, upper: 400) >= bandRMSDB(signal: louderTarget, lower: 150, upper: 400) + 0.20)
+        #expect(bandRMSDB(signal: protected, lower: 250, upper: 500) >= bandRMSDB(signal: louderTarget, lower: 250, upper: 500) + 0.20)
+    }
+
     private func activeLowBodySignal() -> AudioSignal {
         let sampleRate = 48_000.0
         let frameCount = Int(sampleRate * 3)
@@ -117,6 +228,39 @@ struct MasteringLowBodyProtectorTests {
             let high = (sin(2 * Double.pi * 7_200 * t) * 0.010
                 + sin(2 * Double.pi * 13_000 * t) * 0.006) * activity
             return Float(lowBody + high)
+        }
+        let right = left.map { $0 * 0.96 }
+        return AudioSignal(channels: [left, right], sampleRate: sampleRate)
+    }
+
+    private func activeLowMidBodySignal() -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 3)
+        let left = (0..<frameCount).map { index -> Float in
+            let t = Double(index) / sampleRate
+            let activity = t < 0.90 ? 0.12 : 1.0
+            let lowBody = (sin(2 * Double.pi * 82 * t) * 0.08
+                + sin(2 * Double.pi * 220 * t) * 0.06
+                + sin(2 * Double.pi * 360 * t) * 0.055
+                + sin(2 * Double.pi * 620 * t) * 0.025) * activity
+            let high = (sin(2 * Double.pi * 7_200 * t) * 0.010
+                + sin(2 * Double.pi * 13_000 * t) * 0.006) * activity
+            return Float(lowBody + high)
+        }
+        let right = left.map { $0 * 0.96 }
+        return AudioSignal(channels: [left, right], sampleRate: sampleRate)
+    }
+
+    private func lowMidBodyNoiseSafetySignal(humAmplitude: Double) -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 2)
+        let left = (0..<frameCount).map { index -> Float in
+            let t = Double(index) / sampleRate
+            let musicalBody = sin(2 * Double.pi * 260 * t) * 0.055
+                + sin(2 * Double.pi * 440 * t) * 0.060
+            let hum = sin(2 * Double.pi * 60 * t) * humAmplitude
+                + sin(2 * Double.pi * 180 * t) * humAmplitude * 0.65
+            return Float(musicalBody + hum)
         }
         let right = left.map { $0 * 0.96 }
         return AudioSignal(channels: [left, right], sampleRate: sampleRate)
