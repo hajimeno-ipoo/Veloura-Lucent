@@ -4,7 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @State private var job = ProcessingJob()
+    @State private var job = ProcessingJob(notificationReporter: NotificationService.shared)
     @State private var preview = AudioPreviewController()
     @State private var inputSelectionID = UUID()
     @State private var displayAnalysisTasks: [DisplayAnalysisTarget: Task<Void, Never>] = [:]

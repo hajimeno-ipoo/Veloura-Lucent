@@ -167,6 +167,10 @@ enum DisplayAnalysisState: Hashable, Sendable {
 @MainActor
 @Observable
 final class ProcessingJob {
+    @ObservationIgnored private let notificationReporter: CompletionNotificationReporting
+    @ObservationIgnored private var didSendCorrectionCompletion = false
+    @ObservationIgnored private var didSendMasteringCompletion = false
+
     var inputFile: URL?
     var outputFile: URL?
     var masteredOutputFile: URL?
@@ -236,6 +240,10 @@ final class ProcessingJob {
     var appliedCorrectionSettings: CorrectionSettings?
     var appliedMasteringSettings: MasteringSettings?
     var selectedAnalysisMode: AudioAnalysisMode = .auto
+
+    init(notificationReporter: CompletionNotificationReporting = NoOpCompletionNotificationReporter.shared) {
+        self.notificationReporter = notificationReporter
+    }
 
     var statusColor: Color {
         if isProcessing {
@@ -354,6 +362,8 @@ final class ProcessingJob {
     }
 
     func beginProcessing(appliedSettings: CorrectionSettings? = nil) {
+        didSendCorrectionCompletion = false
+        didSendMasteringCompletion = false
         isProcessing = true
         lastError = nil
         logLines.removeAll()
@@ -393,6 +403,7 @@ final class ProcessingJob {
 
     func beginMastering(appliedSettings: MasteringSettings? = nil) {
         guard outputFile != nil else { return }
+        didSendMasteringCompletion = false
         isMastering = true
         masteringLastError = nil
         masteringLogLines.removeAll()
@@ -598,6 +609,10 @@ final class ProcessingJob {
         activeStepDetail = nil
         masteringStatusMessage = hasExistingOutput ? "補正後の解析中" : "補正後に実行できます"
         appliedCorrectionSettings = appliedSettings ?? appliedCorrectionSettings ?? editableCorrectionSettings
+        if !didSendCorrectionCompletion {
+            didSendCorrectionCompletion = true
+            notificationReporter.notifyCompletion(for: .correction)
+        }
     }
 
     func finishMasteringSuccess(_ outputURL: URL, appliedSettings: MasteringSettings? = nil) {
@@ -610,6 +625,10 @@ final class ProcessingJob {
         masteringActiveStep = nil
         masteringActiveStepDetail = nil
         appliedMasteringSettings = appliedSettings ?? appliedMasteringSettings ?? editableMasteringSettings
+        if !didSendMasteringCompletion {
+            didSendMasteringCompletion = true
+            notificationReporter.notifyCompletion(for: .mastering)
+        }
     }
 
     func finishCorrectedExport(_ url: URL) {

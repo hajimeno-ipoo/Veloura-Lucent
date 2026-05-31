@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyDockIcon()
+        NotificationService.shared.requestAuthorization()
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }

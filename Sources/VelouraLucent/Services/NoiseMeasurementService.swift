@@ -339,11 +339,17 @@ enum NoiseMeasurementService {
         var real = 0.0
         var imag = 0.0
         let angular = 2 * Double.pi * frequency / sampleRate
-        for index in samples.indices {
-            let phase = angular * Double(index)
-            let sample = Double(samples[index])
-            real += sample * cos(phase)
-            imag -= sample * sin(phase)
+        let cosStep = cos(angular)
+        let sinStep = sin(angular)
+        var cosine = 1.0
+        var sine = 0.0
+        for sampleValue in samples {
+            let sample = Double(sampleValue)
+            real += sample * cosine
+            imag -= sample * sine
+            let nextCosine = cosine * cosStep - sine * sinStep
+            sine = sine * cosStep + cosine * sinStep
+            cosine = nextCosine
         }
         let magnitude = sqrt(real * real + imag * imag) * 2 / Double(samples.count)
         return 20 * log10(max(magnitude, 1e-12))

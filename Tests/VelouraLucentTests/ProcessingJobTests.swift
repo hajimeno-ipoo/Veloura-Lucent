@@ -4,6 +4,19 @@ import Testing
 
 @MainActor
 struct ProcessingJobTests {
+    final class CompletionNotificationReporterSpy: CompletionNotificationReporting {
+        var authorizationRequestCount = 0
+        var completions: [CompletionNotificationDomain] = []
+
+        func requestAuthorization() {
+            authorizationRequestCount += 1
+        }
+
+        func notifyCompletion(for domain: CompletionNotificationDomain) {
+            completions.append(domain)
+        }
+    }
+
     @Test
     func selectingInputDoesNotExposeOldOutputs() {
         let job = ProcessingJob()
@@ -57,6 +70,36 @@ struct ProcessingJobTests {
         #expect(job.activeStep == .analyze)
         #expect(job.completedSteps.contains(.loadAudio))
         #expect(job.progressValue > 0)
+    }
+
+    @Test
+    func correctionCompletionNotificationIsSentOncePerRun() {
+        let reporter = CompletionNotificationReporterSpy()
+        let job = ProcessingJob(notificationReporter: reporter)
+        let output = URL(fileURLWithPath: "/tmp/output.wav")
+
+        job.beginProcessing()
+        job.finishSuccess(output)
+        job.finishSuccess(output)
+
+        #expect(reporter.completions.count == 1)
+        #expect(reporter.completions.first == .correction)
+    }
+
+    @Test
+    func masteringCompletionNotificationIsSentOncePerRun() {
+        let reporter = CompletionNotificationReporterSpy()
+        let job = ProcessingJob(notificationReporter: reporter)
+        let corrected = URL(fileURLWithPath: "/tmp/output.wav")
+        let mastered = URL(fileURLWithPath: "/tmp/output_mastered.wav")
+
+        job.outputFile = corrected
+        job.beginMastering()
+        job.finishMasteringSuccess(mastered)
+        job.finishMasteringSuccess(mastered)
+
+        #expect(reporter.completions.count == 1)
+        #expect(reporter.completions.first == .mastering)
     }
 
     @Test
