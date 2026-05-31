@@ -64,6 +64,25 @@ struct LoudnessMeasurementServiceTests {
         #expect(changingLRA > flatLRA + 3.0)
     }
 
+    @Test
+    func integratedLoudnessOnlyMatchesFullMeasurement() {
+        let mono = sineSignal(amplitude: 0.1, duration: 2.0)
+        let signals = [
+            AudioSignal(channels: [], sampleRate: 48_000),
+            AudioSignal(channels: [[]], sampleRate: 48_000),
+            mono,
+            AudioSignal(channels: [mono.channels[0], mono.channels[0]], sampleRate: mono.sampleRate),
+            changingLevelSignal()
+        ]
+
+        for signal in signals {
+            let fullMeasurement = LoudnessMeasurementService.measure(signal: signal)
+            let loudnessOnly = LoudnessMeasurementService.integratedLoudness(signal: signal)
+
+            #expect(loudnessOnly.bitPattern == Float(fullMeasurement.integratedLoudnessLUFS).bitPattern)
+        }
+    }
+
     private func changingLevelSignal() -> AudioSignal {
         let sampleRate = 48_000.0
         let quiet = sineSamples(amplitude: 0.01, duration: 2.0, sampleRate: sampleRate)

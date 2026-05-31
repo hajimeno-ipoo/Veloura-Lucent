@@ -36,7 +36,12 @@ enum LoudnessMeasurementService {
     }
 
     static func integratedLoudness(signal: AudioSignal) -> Float {
-        Float(measure(signal: signal).integratedLoudnessLUFS)
+        let channels = signal.channels.filter { !$0.isEmpty }
+        guard !channels.isEmpty else { return -70 }
+
+        let energyPrefixes = channels.map { energyPrefix(for: kWeighted($0, sampleRate: signal.sampleRate)) }
+        let gatedBlocks = gatedBlockLoudness(forEnergyPrefixes: energyPrefixes, sampleRate: signal.sampleRate)
+        return Float(integratedLoudness(from: gatedBlocks))
     }
 
     static func truePeakLinear(_ channels: [[Float]]) -> Float {
