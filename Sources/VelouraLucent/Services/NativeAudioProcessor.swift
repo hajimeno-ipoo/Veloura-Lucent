@@ -607,9 +607,10 @@ struct NativeAudioProcessor {
         }
 
         var current = signal
+        var currentMono = current.monoMixdown()
         var didApply = false
         for (ruleIndex, rule) in rules.enumerated() {
-            let currentDB = bandRMSDB(signal: current, lower: rule.lower, upper: rule.upper)
+            let currentDB = bandRMSDB(mono: currentMono, sampleRate: current.sampleRate, lower: rule.lower, upper: rule.upper)
             let referenceDB = referenceBandRMSDB[ruleIndex]
             guard currentDB.isFinite, referenceDB.isFinite else { continue }
 
@@ -624,6 +625,9 @@ struct NativeAudioProcessor {
                 scaleCorrectionBand($0, sampleRate: sampleRate, lower: rule.lower, upper: rule.upper, gain: gain)
             }
             current = AudioSignal(channels: channels, sampleRate: sampleRate)
+            if ruleIndex + 1 < rules.count {
+                currentMono = current.monoMixdown()
+            }
             didApply = true
             logger?.log("補正後高域保持/\(rule.label): +\(String(format: "%.1f", boostDB)) dB")
         }
