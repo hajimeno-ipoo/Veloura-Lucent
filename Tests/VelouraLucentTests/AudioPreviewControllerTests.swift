@@ -93,6 +93,36 @@ struct AudioPreviewControllerTests {
     }
 
     @Test
+    func preparePreviewPlaceholderClearsSnapshotWithoutLoadingAudio() {
+        let controller = AudioPreviewController()
+        let oldSnapshot = AudioPreviewSnapshot(
+            waveform: [0, 0.25, 0],
+            duration: 1,
+            bandLevels: [:],
+            bandLevelDBs: [:]
+        )
+        let oldURL = URL(filePath: "/tmp/old-input.wav")
+        let newURL = URL(filePath: "/tmp/missing-input.wav")
+
+        controller.setPreviewSnapshot(oldSnapshot, for: .input, sourceURL: oldURL, integratedLoudnessLUFS: -18)
+        controller.cardState(for: .input).playbackProgress = 0.5
+        controller.cardState(for: .input).playbackPosition = 0.5
+
+        controller.preparePreviewPlaceholder(for: newURL, target: .input)
+
+        #expect(controller.cardState(for: .input).sourceURL == newURL)
+        #expect(controller.cardState(for: .input).snapshot == nil)
+        #expect(controller.cardState(for: .input).liveBandLevels.isEmpty)
+        #expect(controller.integratedLoudnessLUFS(for: .input) == nil)
+        #expect(controller.cardState(for: .input).playbackProgress == 0)
+        #expect(controller.cardState(for: .input).playbackPosition == 0)
+        guard case .stopped = controller.cardState(for: .input).playbackState else {
+            Issue.record("Placeholder should stop input playback state")
+            return
+        }
+    }
+
+    @Test
     func stoppingOnePreviewCardDoesNotResetOtherCardState() {
         let controller = AudioPreviewController()
         let snapshot = AudioPreviewSnapshot(

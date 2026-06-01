@@ -2298,7 +2298,7 @@ struct ContentView: View {
             for: url,
             target: target,
             selectionID: selectionID,
-            includePreview: false,
+            includePreview: target == .input,
             includeMasteringAnalysis: target == .corrected,
             correctionAnalysisMode: target == .input ? job.selectedAnalysisMode.resolvedMode : nil,
             logHandler: displayAnalysisLogHandler(for: target)
@@ -2557,8 +2557,12 @@ struct ContentView: View {
         return Double(end - start) / 1_000_000_000
     }
 
-    private func preparePreviewCards() {
-        preview.preparePreview(for: job.inputFile, target: .input, measureLoudness: false)
+    private func preparePreviewCards(loadInputPreview: Bool = true) {
+        if loadInputPreview {
+            preview.preparePreview(for: job.inputFile, target: .input, measureLoudness: false)
+        } else {
+            preview.preparePreviewPlaceholder(for: job.inputFile, target: .input)
+        }
         if let inputMetrics = job.inputMetrics {
             preview.setIntegratedLoudnessLUFS(inputMetrics.integratedLoudnessLUFS, for: .input)
         }
@@ -2698,7 +2702,7 @@ struct ContentView: View {
         PreviewFileStore.removeAllPreviewFiles()
         job.prepareForSelection(url)
         preview.stopPlayback()
-        preparePreviewCards()
+        preparePreviewCards(loadInputPreview: false)
         return selectionID
     }
 

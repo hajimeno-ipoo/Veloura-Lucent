@@ -195,18 +195,7 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         previewTasks[target]?.cancel()
 
         guard let url else {
-            previewTasks[target] = nil
-            let targetState = cardState(for: target)
-            targetState.sourceURL = nil
-            targetState.snapshot = nil
-            targetState.liveBandLevels = []
-            integratedLoudnessByTarget[target] = nil
-            targetState.playbackPosition = 0
-            targetState.playbackProgress = 0
-            targetState.playbackState = .stopped
-            if activeTarget == target {
-                activeTarget = nil
-            }
+            clearPreviewState(for: target)
             return
         }
 
@@ -243,6 +232,27 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         }
     }
 
+    func preparePreviewPlaceholder(for url: URL?, target: AudioPreviewTarget) {
+        previewTasks[target]?.cancel()
+        guard let url else {
+            clearPreviewState(for: target)
+            return
+        }
+
+        let targetState = cardState(for: target)
+        targetState.sourceURL = url
+        targetState.snapshot = nil
+        targetState.liveBandLevels = []
+        integratedLoudnessByTarget[target] = nil
+        targetState.playbackPosition = 0
+        targetState.playbackProgress = 0
+        targetState.playbackState = .stopped
+        if activeTarget == target {
+            activeTarget = nil
+        }
+        previewTasks[target] = nil
+    }
+
     private func prepareLoudness(for url: URL, target: AudioPreviewTarget) {
         previewTasks[target] = Task {
             let loudness = try? await Task.detached(priority: .utility) {
@@ -257,6 +267,21 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
                 refreshPlaybackVolumeIfNeeded()
             }
             previewTasks[target] = nil
+        }
+    }
+
+    private func clearPreviewState(for target: AudioPreviewTarget) {
+        previewTasks[target] = nil
+        let targetState = cardState(for: target)
+        targetState.sourceURL = nil
+        targetState.snapshot = nil
+        targetState.liveBandLevels = []
+        integratedLoudnessByTarget[target] = nil
+        targetState.playbackPosition = 0
+        targetState.playbackProgress = 0
+        targetState.playbackState = .stopped
+        if activeTarget == target {
+            activeTarget = nil
         }
     }
 
