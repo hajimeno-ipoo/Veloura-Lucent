@@ -189,12 +189,14 @@ struct MasteringProcessor {
             )
         }
         saveDiagnostic(mastered, to: diagnosticOutputDirectory, order: 10, id: "highPreserve", label: "高域保持後", logger: logger)
+        var finalNoiseReturnReferenceLevels: [NoiseReturnHighBandReferenceLevel]?
         logger?.start(.finalNoiseCeiling)
         logger?.log(MasteringStep.finalNoiseCeiling.rawValue)
         let finalGuarded = measure(label: "マスタリング/計測: 最終ノイズ上限", logger: logger, progressStep: .finalNoiseCeiling) {
             applyFinalNoiseReturnCeiling(
                 signal: mastered,
                 reference: signal,
+                referenceHighBandLevels: &finalNoiseReturnReferenceLevels,
                 referenceNoiseMeasurements: referenceNoiseMeasurements,
                 originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
                 peakCeilingDB: settings.peakCeilingDB,
@@ -238,6 +240,7 @@ struct MasteringProcessor {
             applyFinalNoiseReturnCeiling(
                 signal: finalLoudnessRestored,
                 reference: signal,
+                referenceHighBandLevels: &finalNoiseReturnReferenceLevels,
                 referenceNoiseMeasurements: referenceNoiseMeasurements,
                 originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
                 peakCeilingDB: settings.peakCeilingDB,
@@ -718,6 +721,7 @@ struct MasteringProcessor {
         var measurementCount = 0
         var completionLog = "ノイズ戻り: 安全上限に到達"
         let adaptivePasses = min(maxPasses, 3)
+        var referenceHighBandLevels: [NoiseReturnHighBandReferenceLevel]?
 
         logger?.log("ノイズ戻り: 一括判定を開始")
         if probePlan.usesRepresentativeWindows {
@@ -756,7 +760,10 @@ struct MasteringProcessor {
             let gain = noiseReturnGain(for: strongestExcess.rule, excessDB: strongestExcess.excessDB)
             guard let candidate = constrainedNoiseReturnCandidate(
                 signal: currentSignal,
-                guardReference: signal,
+                guardReferenceLevels: resolvedNoiseReturnHighBandReferenceLevels(
+                    &referenceHighBandLevels,
+                    signal: signal
+                ),
                 rule: strongestExcess.rule,
                 gain: gain,
                 logger: logger
@@ -781,7 +788,10 @@ struct MasteringProcessor {
             logger?.log("ノイズ戻り: 最終確認で追加補正")
             if let candidate = constrainedNoiseReturnCandidate(
                 signal: currentSignal,
-                guardReference: signal,
+                guardReferenceLevels: resolvedNoiseReturnHighBandReferenceLevels(
+                    &referenceHighBandLevels,
+                    signal: signal
+                ),
                 rule: finalCorrection.rule,
                 gain: finalCorrection.gain,
                 logger: logger
@@ -829,7 +839,7 @@ struct MasteringProcessor {
 
     private func constrainedNoiseReturnCandidate(
         signal: AudioSignal,
-        guardReference: AudioSignal,
+        guardReferenceLevels: [NoiseReturnHighBandReferenceLevel],
         rule: NoiseReturnLimit,
         gain: Float,
         logger: AudioProcessingLogger?
@@ -847,7 +857,7 @@ struct MasteringProcessor {
                 )
             }
             let candidate = AudioSignal(channels: channels, sampleRate: sampleRate)
-            guard noiseReturnHighBandDropIsAllowed(candidate: candidate, reference: guardReference) else {
+            guard noiseReturnHighBandDropIsAllowed(candidate: candidate, referenceLevels: guardReferenceLevels) else {
                 continue
             }
             if mix < 1 {
@@ -859,16 +869,47 @@ struct MasteringProcessor {
         return nil
     }
 
-    private func noiseReturnHighBandDropIsAllowed(candidate: AudioSignal, reference: AudioSignal) -> Bool {
-        let bands = [
+    private struct NoiseReturnHighBandReferenceLevel {
+        let lower: Double
+        let upper: Double
+        let maxDropDB: Double
+        let referenceDB: Double
+    }
+
+    private func noiseReturnHighBandReferenceLevels(signal: AudioSignal) -> [NoiseReturnHighBandReferenceLevel] {
+        [
             (lower: 8_000.0, upper: 12_000.0, maxDropDB: 0.50),
             (lower: 12_000.0, upper: 16_000.0, maxDropDB: 0.50),
             (lower: 16_000.0, upper: 20_000.0, maxDropDB: 0.60)
-        ]
-        return bands.allSatisfy { band in
-            let referenceDB = bandRMSDB(signal: reference, lower: band.lower, upper: band.upper)
+        ].map { band in
+            NoiseReturnHighBandReferenceLevel(
+                lower: band.lower,
+                upper: band.upper,
+                maxDropDB: band.maxDropDB,
+                referenceDB: bandRMSDB(signal: signal, lower: band.lower, upper: band.upper)
+            )
+        }
+    }
+
+    private func resolvedNoiseReturnHighBandReferenceLevels(
+        _ levels: inout [NoiseReturnHighBandReferenceLevel]?,
+        signal: AudioSignal
+    ) -> [NoiseReturnHighBandReferenceLevel] {
+        if let levels {
+            return levels
+        }
+        let measuredLevels = noiseReturnHighBandReferenceLevels(signal: signal)
+        levels = measuredLevels
+        return measuredLevels
+    }
+
+    private func noiseReturnHighBandDropIsAllowed(
+        candidate: AudioSignal,
+        referenceLevels: [NoiseReturnHighBandReferenceLevel]
+    ) -> Bool {
+        referenceLevels.allSatisfy { band in
             let candidateDB = bandRMSDB(signal: candidate, lower: band.lower, upper: band.upper)
-            return candidateDB >= referenceDB - band.maxDropDB
+            return candidateDB >= band.referenceDB - band.maxDropDB
         }
     }
 
@@ -1303,6 +1344,7 @@ struct MasteringProcessor {
     private func applyFinalNoiseReturnCeiling(
         signal: AudioSignal,
         reference: AudioSignal,
+        referenceHighBandLevels: inout [NoiseReturnHighBandReferenceLevel]?,
         referenceNoiseMeasurements: NoiseMeasurementSnapshot?,
         originalReferenceNoiseMeasurements: NoiseMeasurementSnapshot?,
         peakCeilingDB: Float,
@@ -1359,7 +1401,10 @@ struct MasteringProcessor {
                 )
                 if let candidate = constrainedNoiseReturnCandidate(
                     signal: current,
-                    guardReference: reference,
+                    guardReferenceLevels: resolvedNoiseReturnHighBandReferenceLevels(
+                        &referenceHighBandLevels,
+                        signal: reference
+                    ),
                     rule: strongestHighFloorExcess.rule,
                     gain: gain,
                     logger: logger
