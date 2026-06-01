@@ -1,7 +1,6 @@
 import AppKit
 import Charts
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct ContentView: View {
     @State private var job = ProcessingJob(notificationReporter: NotificationService.shared)
@@ -215,7 +214,7 @@ struct ContentView: View {
         onPrimary: @escaping () -> Void,
         primaryDisabled: Bool,
         exportTitle: String,
-        onExport: @escaping () -> Void,
+        onExport: @escaping (AudioExportFormat) -> Void,
         exportDisabled: Bool,
         previewTitle: String,
         onPreview: @escaping () -> Void,
@@ -228,7 +227,13 @@ struct ContentView: View {
             Button(primaryTitle, action: onPrimary)
                 .disabled(primaryDisabled)
 
-            Button(exportTitle, action: onExport)
+            Menu(exportTitle) {
+                ForEach(AudioExportFormat.allCases) { format in
+                    Button(format.menuTitle) {
+                        onExport(format)
+                    }
+                }
+            }
                 .disabled(exportDisabled)
 
             Button(previewTitle, action: onPreview)
@@ -2697,47 +2702,37 @@ struct ContentView: View {
         return selectionID
     }
 
-    private func exportCorrectedAudio() {
+    private func exportCorrectedAudio(as format: AudioExportFormat) {
         guard let sourceURL = job.outputFile, let inputFile = job.inputFile else { return }
-        let suggestedName = AudioProcessingService.defaultOutputURL(for: inputFile).lastPathComponent
-        let allowedTypes = allowedAudioTypes(for: sourceURL.pathExtension)
-        guard let destinationURL = FilePanelService.chooseSaveLocation(suggestedFileName: suggestedName, allowedContentTypes: allowedTypes) else {
+        let suggestedName = exportFileName(baseURL: AudioProcessingService.defaultOutputURL(for: inputFile), format: format)
+        guard let destinationURL = FilePanelService.chooseSaveLocation(suggestedFileName: suggestedName, allowedContentTypes: [format.contentType]) else {
             return
         }
         do {
-            try replaceFile(from: sourceURL, to: destinationURL)
+            try AudioFileService.exportAudio(from: sourceURL, to: destinationURL, format: format)
             job.finishCorrectedExport(destinationURL)
         } catch {
             job.finishFailure(error.localizedDescription)
         }
     }
 
-    private func exportMasteredAudio() {
+    private func exportMasteredAudio(as format: AudioExportFormat) {
         guard let sourceURL = job.masteredOutputFile else { return }
         let baseURL = job.inputFile.map { MasteringService.defaultOutputURL(for: $0) } ?? sourceURL
-        let suggestedName = baseURL.lastPathComponent
-        let allowedTypes = allowedAudioTypes(for: sourceURL.pathExtension)
-        guard let destinationURL = FilePanelService.chooseSaveLocation(suggestedFileName: suggestedName, allowedContentTypes: allowedTypes) else {
+        let suggestedName = exportFileName(baseURL: baseURL, format: format)
+        guard let destinationURL = FilePanelService.chooseSaveLocation(suggestedFileName: suggestedName, allowedContentTypes: [format.contentType]) else {
             return
         }
         do {
-            try replaceFile(from: sourceURL, to: destinationURL)
+            try AudioFileService.exportAudio(from: sourceURL, to: destinationURL, format: format)
             job.finishMasteredExport(destinationURL)
         } catch {
             job.finishMasteringFailure(error.localizedDescription)
         }
     }
 
-    private func replaceFile(from sourceURL: URL, to destinationURL: URL) throws {
-        let fileManager = FileManager.default
-        if fileManager.fileExists(atPath: destinationURL.path(percentEncoded: false)) {
-            try fileManager.removeItem(at: destinationURL)
-        }
-        try fileManager.copyItem(at: sourceURL, to: destinationURL)
-    }
-
-    private func allowedAudioTypes(for fileExtension: String) -> [UTType] {
-        [UTType(filenameExtension: fileExtension), AudioFileService.outputContentType, .audio].compactMap { $0 }
+    private func exportFileName(baseURL: URL, format: AudioExportFormat) -> String {
+        baseURL.deletingPathExtension().appendingPathExtension(format.fileExtension).lastPathComponent
     }
 
     private func isCurrentInputSelection(_ selectionID: UUID, inputFile: URL) -> Bool {

@@ -3,6 +3,63 @@ import Accelerate
 import Foundation
 import UniformTypeIdentifiers
 
+enum AudioExportFormat: String, CaseIterable, Identifiable, Sendable {
+    case highQualityWAV
+    case deliveryWAV
+    case cdWAV
+    case sharingAAC
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .highQualityWAV:
+            return "高品質保存"
+        case .deliveryWAV:
+            return "配信・納品用"
+        case .cdWAV:
+            return "CD用"
+        case .sharingAAC:
+            return "試聴共有用"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .highQualityWAV:
+            return "32-bit float WAV / 48 kHz"
+        case .deliveryWAV:
+            return "24-bit PCM WAV / 48 kHz"
+        case .cdWAV:
+            return "16-bit PCM WAV / 44.1 kHz + TPDFディザ"
+        case .sharingAAC:
+            return "AAC .m4a / 48 kHz / 256 kbps"
+        }
+    }
+
+    var menuTitle: String {
+        "\(title)（\(detail)）"
+    }
+
+    var fileExtension: String {
+        switch self {
+        case .highQualityWAV, .deliveryWAV, .cdWAV:
+            return "wav"
+        case .sharingAAC:
+            return "m4a"
+        }
+    }
+
+    var contentType: UTType {
+        switch self {
+        case .highQualityWAV, .deliveryWAV, .cdWAV:
+            return .wav
+        case .sharingAAC:
+            return .mpeg4Audio
+        }
+    }
+}
+
 enum AudioFileService {
     struct AudioDisplaySnapshots: Sendable {
         let previewSnapshot: AudioPreviewSnapshot
@@ -12,7 +69,6 @@ enum AudioFileService {
     static let targetSampleRate = 48_000.0
     static let previewBucketCount = 384
     static let outputFileExtension = "wav"
-    static let outputContentType = UTType.wav
     private static let previewFFTSize = 1024
     private static let previewHopSize = 1024
     private static let spectrogramTimeBuckets = 72
@@ -32,6 +88,57 @@ enum AudioFileService {
     }
 
     static func saveAudio(_ signal: AudioSignal, to url: URL) throws {
+        try saveAudio(signal, to: url, settings: interleavedFileSettings(sampleRate: signal.sampleRate, channels: signal.channels.count))
+    }
+
+    static func exportAudio(from sourceURL: URL, to destinationURL: URL, format: AudioExportFormat) throws {
+        let temporaryURL = destinationURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(".veloura-export-\(UUID().uuidString)")
+            .appendingPathExtension(format.fileExtension)
+
+        defer {
+            try? FileManager.default.removeItem(at: temporaryURL)
+        }
+
+        switch format {
+        case .highQualityWAV:
+            try FileManager.default.copyItem(at: sourceURL, to: temporaryURL)
+        case .deliveryWAV:
+            let signal = try validatedEncodedSignal(from: sourceURL)
+            try saveAudio(signal, to: temporaryURL, settings: pcmFileSettings(sampleRate: signal.sampleRate, channels: signal.channels.count, bitDepth: 24))
+        case .cdWAV:
+            let signal = try validatedEncodedSignal(from: sourceURL)
+            let resampled = try convertedSampleRate(signal: signal, to: 44_100)
+            let dithered = applyTPDFDither(to: resampled, bitDepth: 16)
+            try saveAudio(dithered, to: temporaryURL, settings: pcmFileSettings(sampleRate: dithered.sampleRate, channels: dithered.channels.count, bitDepth: 16))
+        case .sharingAAC:
+            let signal = try validatedEncodedSignal(from: sourceURL)
+            try saveAudio(signal, to: temporaryURL, settings: aacFileSettings(sampleRate: signal.sampleRate, channels: signal.channels.count))
+        }
+
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: destinationURL.path(percentEncoded: false)) {
+            _ = try fileManager.replaceItemAt(destinationURL, withItemAt: temporaryURL)
+        } else {
+            try fileManager.moveItem(at: temporaryURL, to: destinationURL)
+        }
+    }
+
+    static func applyTPDFDither(to signal: AudioSignal, bitDepth: Int, seed: UInt64 = UInt64.random(in: UInt64.min...UInt64.max)) -> AudioSignal {
+        let leastSignificantBit = Float(1.0 / pow(2.0, Double(bitDepth - 1)))
+        let maximumSample = Float(1).nextDown
+        var generator = TPDFRandomNumberGenerator(state: seed)
+        let channels = signal.channels.map { channel in
+            channel.map { sample in
+                let noise = (generator.nextUnitFloat() + generator.nextUnitFloat() - 1) * leastSignificantBit
+                return min(max(sample + noise, -1), maximumSample)
+            }
+        }
+        return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+    }
+
+    private static func saveAudio(_ signal: AudioSignal, to url: URL, settings: [String: Any]) throws {
         let format = AVAudioFormat(standardFormatWithSampleRate: signal.sampleRate, channels: AVAudioChannelCount(signal.channels.count))!
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(signal.frameCount))!
         buffer.frameLength = AVAudioFrameCount(signal.frameCount)
@@ -40,8 +147,68 @@ enum AudioFileService {
             destination.update(from: channel, count: channel.count)
         }
 
-        let file = try AVAudioFile(forWriting: url, settings: interleavedFileSettings(sampleRate: signal.sampleRate, channels: signal.channels.count))
+        let file = try AVAudioFile(forWriting: url, settings: settings)
         try file.write(from: buffer)
+    }
+
+    private static func validatedEncodedSignal(from url: URL) throws -> AudioSignal {
+        let signal = try loadAudio(from: url)
+        guard signal.channels.allSatisfy({ channel in channel.allSatisfy(\.isFinite) }) else {
+            throw AppError.audioWriteFailed
+        }
+        let maximumSample = Float(1).nextDown
+        let channels = signal.channels.map { channel in
+            channel.map { min(max($0, -1), maximumSample) }
+        }
+        return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+    }
+
+    private static func convertedSampleRate(signal sourceSignal: AudioSignal, to sampleRate: Double) throws -> AudioSignal {
+        guard abs(sourceSignal.sampleRate - sampleRate) >= 0.5 else { return sourceSignal }
+        let channelCount = AVAudioChannelCount(sourceSignal.channels.count)
+        guard
+            let inputFormat = AVAudioFormat(standardFormatWithSampleRate: sourceSignal.sampleRate, channels: channelCount),
+            let outputFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: channelCount),
+            let converter = AVAudioConverter(from: inputFormat, to: outputFormat)
+        else {
+            throw AppError.audioWriteFailed
+        }
+
+        let inputBuffer = try pcmBuffer(from: sourceSignal, format: inputFormat)
+        let outputCapacity = AVAudioFrameCount(ceil(Double(sourceSignal.frameCount) * sampleRate / sourceSignal.sampleRate)) + 64
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outputCapacity) else {
+            throw AppError.audioWriteFailed
+        }
+
+        let inputState = AudioConverterInputState(buffer: inputBuffer)
+        var conversionError: NSError?
+        let status = converter.convert(to: outputBuffer, error: &conversionError) { _, inputStatus in
+            if inputState.didProvideInput {
+                inputStatus.pointee = .endOfStream
+                return nil
+            }
+            inputState.didProvideInput = true
+            inputStatus.pointee = .haveData
+            return inputState.buffer
+        }
+        guard status != .error, conversionError == nil else {
+            throw conversionError ?? AppError.audioWriteFailed
+        }
+        return signal(from: outputBuffer)
+    }
+
+    private static func pcmBuffer(from signal: AudioSignal, format: AVAudioFormat) throws -> AVAudioPCMBuffer {
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(signal.frameCount)) else {
+            throw AppError.audioWriteFailed
+        }
+        buffer.frameLength = AVAudioFrameCount(signal.frameCount)
+        for (channelIndex, channel) in signal.channels.enumerated() {
+            guard let destination = buffer.floatChannelData?[channelIndex] else {
+                throw AppError.audioWriteFailed
+            }
+            destination.update(from: channel, count: channel.count)
+        }
+        return buffer
     }
 
     private static func signal(from buffer: AVAudioPCMBuffer) -> AudioSignal {
@@ -316,14 +483,45 @@ enum AudioFileService {
     }
 
     static func interleavedFileSettings(sampleRate: Double, channels: Int) -> [String: Any] {
+        pcmFileSettings(sampleRate: sampleRate, channels: channels, bitDepth: 32, isFloat: true)
+    }
+
+    private static func pcmFileSettings(sampleRate: Double, channels: Int, bitDepth: Int, isFloat: Bool = false) -> [String: Any] {
         [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: sampleRate,
             AVNumberOfChannelsKey: channels,
-            AVLinearPCMBitDepthKey: 32,
-            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMBitDepthKey: bitDepth,
+            AVLinearPCMIsFloatKey: isFloat,
             AVLinearPCMIsBigEndianKey: false,
             AVLinearPCMIsNonInterleaved: false
         ]
+    }
+
+    private static func aacFileSettings(sampleRate: Double, channels: Int) -> [String: Any] {
+        [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: channels,
+            AVEncoderBitRateKey: 256_000
+        ]
+    }
+}
+
+private struct TPDFRandomNumberGenerator {
+    var state: UInt64
+
+    mutating func nextUnitFloat() -> Float {
+        state = state &* 6_364_136_223_846_793_005 &+ 1
+        return Float(state >> 40) / Float(1 << 24)
+    }
+}
+
+private final class AudioConverterInputState: @unchecked Sendable {
+    let buffer: AVAudioPCMBuffer
+    var didProvideInput = false
+
+    init(buffer: AVAudioPCMBuffer) {
+        self.buffer = buffer
     }
 }
