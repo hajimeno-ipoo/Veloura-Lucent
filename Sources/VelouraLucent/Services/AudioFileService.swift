@@ -84,7 +84,7 @@ enum AudioFileService {
         if abs(signal.sampleRate - targetSampleRate) < 0.5 {
             return signal
         }
-        return resample(signal: signal, to: targetSampleRate)
+        return try convertedSampleRate(signal: signal, to: targetSampleRate)
     }
 
     static func saveAudio(_ signal: AudioSignal, to url: URL) throws {
@@ -218,21 +218,6 @@ enum AudioFileService {
             Array(UnsafeBufferPointer(start: buffer.floatChannelData![channelIndex], count: frameLength))
         }
         return AudioSignal(channels: channels, sampleRate: buffer.format.sampleRate)
-    }
-
-    private static func resample(signal: AudioSignal, to targetRate: Double) -> AudioSignal {
-        let ratio = targetRate / signal.sampleRate
-        let newLength = max(1, Int((Double(signal.frameCount) * ratio).rounded()))
-        let channels = signal.channels.map { channel in
-            (0..<newLength).map { index in
-                let sourcePosition = Double(index) / ratio
-                let lower = Int(sourcePosition.rounded(.down))
-                let upper = min(lower + 1, channel.count - 1)
-                let fraction = Float(sourcePosition - Double(lower))
-                return channel[lower] * (1 - fraction) + channel[upper] * fraction
-            }
-        }
-        return AudioSignal(channels: channels, sampleRate: targetRate)
     }
 
     static func makePreviewSnapshot(for url: URL, bucketCount: Int = previewBucketCount) throws -> AudioPreviewSnapshot {
