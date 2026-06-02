@@ -3,6 +3,7 @@ import SwiftUI
 private enum DetailedSettingsSection: String, CaseIterable, Identifiable {
     case correction
     case mastering
+    case app
 
     var id: String { rawValue }
 
@@ -12,6 +13,8 @@ private enum DetailedSettingsSection: String, CaseIterable, Identifiable {
             return "補正"
         case .mastering:
             return "マスタリング"
+        case .app:
+            return "アプリ"
         }
     }
 }
@@ -26,7 +29,7 @@ struct DetailedSettingsPanel: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("詳細設定")
                         .font(.headline)
-                    Text("補正とマスタリングを切り替えて、必要な項目だけ調整します。")
+                    Text("補正、マスタリング、アプリ設定を切り替えて調整します。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -47,6 +50,8 @@ struct DetailedSettingsPanel: View {
                     CorrectionSettingsPanel(job: job)
                 case .mastering:
                     MasteringSettingsPanel(job: job)
+                case .app:
+                    AppSettingsPanel()
                 }
             }
             .disabled(job.isProcessing || job.isMastering)

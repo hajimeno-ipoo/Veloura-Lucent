@@ -5,6 +5,8 @@
 ## 通知機能
 - [x] アプリ起動時の通知許可申請 (`VelouraLucentApp.swift`)
 - [x] 音付きローカル通知送信 (`NotificationService.swift`)
+- [x] 通知登録失敗時のログ記録 (`NotificationService.swift`)
+- [x] 完了通知ON/OFF設定 (`DetailedSettingsPanel.swift`, `AppSettingsPanel.swift`)
 
 ## 処理完了との結合
 - [x] 補正完了時のローカル通知送信 (`ProcessingJob.swift`)
@@ -14,4 +16,6 @@
 ## テストと動作検証
 - [x] 補正完了通知が1回だけ送られることの単体テスト
 - [x] マスタリング完了通知が1回だけ送られることの単体テスト
+- [x] 完了通知OFF時に通知登録されないことの単体テスト
+- [x] 完了通知ON時に通知登録されることの単体テスト
 - [ ] バックグラウンド状態でOS通知バナーと通知音が出ることの目視確認
