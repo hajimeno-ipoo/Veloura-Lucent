@@ -37,6 +37,7 @@ struct MasteringPipelineTests {
         #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 高域保持: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 最終ノイズ上限: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 最終高域保持: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains("高域保持/基準測定: 2工程で再利用"))
         #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 最終音量復帰: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 最終ノイズ確認: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 最終音量上限: ") && $0.hasSuffix("秒") })

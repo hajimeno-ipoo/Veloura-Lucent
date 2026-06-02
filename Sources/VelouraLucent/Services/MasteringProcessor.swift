@@ -177,15 +177,23 @@ struct MasteringProcessor {
         saveDiagnostic(noiseGuarded, to: diagnosticOutputDirectory, order: 9, id: "noiseReturnGuard", label: "ノイズ戻りガード後", logger: logger)
         logger?.start(.highPreserve)
         logger?.log(MasteringStep.highPreserve.rawValue)
-        let mastered = measure(label: "マスタリング/計測: 高域保持", logger: logger, progressStep: .highPreserve) {
-            preserveMasteringHighFloor(
-                signal: noiseGuarded,
+        let (mastered, highFloorReferenceLevels) = measure(label: "マスタリング/計測: 高域保持", logger: logger, progressStep: .highPreserve) {
+            let referenceLevels = makeHighFloorReferenceLevels(
                 reference: signal,
-                originalReference: originalReferenceSignal,
-                referenceNoiseMeasurements: referenceNoiseMeasurements,
-                originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
-                peakCeilingDB: settings.peakCeilingDB,
-                logger: logger
+                originalReference: originalReferenceSignal
+            )
+            logger?.log("高域保持/基準測定: 2工程で再利用")
+            return (
+                preserveMasteringHighFloor(
+                    signal: noiseGuarded,
+                    reference: signal,
+                    referenceLevels: referenceLevels,
+                    referenceNoiseMeasurements: referenceNoiseMeasurements,
+                    originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
+                    peakCeilingDB: settings.peakCeilingDB,
+                    logger: logger
+                ),
+                referenceLevels
             )
         }
         saveDiagnostic(mastered, to: diagnosticOutputDirectory, order: 10, id: "highPreserve", label: "高域保持後", logger: logger)
@@ -210,7 +218,7 @@ struct MasteringProcessor {
             preserveMasteringHighFloor(
                 signal: finalGuarded,
                 reference: signal,
-                originalReference: originalReferenceSignal,
+                referenceLevels: highFloorReferenceLevels,
                 referenceNoiseMeasurements: referenceNoiseMeasurements,
                 originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
                 peakCeilingDB: settings.peakCeilingDB,
@@ -1137,27 +1145,60 @@ struct MasteringProcessor {
         let maxBoostDB: Double
     }
 
-    private func preserveMasteringHighFloor(
-        signal: AudioSignal,
-        reference: AudioSignal,
-        originalReference: AudioSignal?,
-        referenceNoiseMeasurements: NoiseMeasurementSnapshot?,
-        originalReferenceNoiseMeasurements: NoiseMeasurementSnapshot?,
-        peakCeilingDB: Float,
-        logger: AudioProcessingLogger?
-    ) -> AudioSignal {
-        let rules = [
+    private struct HighFloorReferenceLevels {
+        let referenceDB: [Double]
+        let originalReferenceDB: [Double]?
+    }
+
+    private var highFloorRules: [HighFloorRule] {
+        [
             HighFloorRule(label: "5-8kHz", lower: 5_000, upper: 8_000, maxDropDB: 4.0, maxBoostDB: 8.0),
             HighFloorRule(label: "8-12kHz", lower: 8_000, upper: 12_000, maxDropDB: 4.5, maxBoostDB: 9.0),
             HighFloorRule(label: "12-16kHz", lower: 12_000, upper: 16_000, maxDropDB: 4.5, maxBoostDB: 8.0),
             HighFloorRule(label: "16kHz以上", lower: 16_000, upper: 24_000, maxDropDB: 5.5, maxBoostDB: 7.0)
         ]
+    }
+
+    private var originalHighFloorRules: [HighFloorRule] {
+        [
+            HighFloorRule(label: "原音基準 5-8kHz", lower: 5_000, upper: 8_000, maxDropDB: 5.5, maxBoostDB: 8.0),
+            HighFloorRule(label: "原音基準 8-12kHz", lower: 8_000, upper: 12_000, maxDropDB: 4.5, maxBoostDB: 12.0),
+            HighFloorRule(label: "原音基準 12-16kHz", lower: 12_000, upper: 16_000, maxDropDB: 4.5, maxBoostDB: 12.0),
+            HighFloorRule(label: "原音基準 16kHz以上", lower: 16_000, upper: 24_000, maxDropDB: 6.0, maxBoostDB: 8.0)
+        ]
+    }
+
+    private func makeHighFloorReferenceLevels(
+        reference: AudioSignal,
+        originalReference: AudioSignal?
+    ) -> HighFloorReferenceLevels {
+        HighFloorReferenceLevels(
+            referenceDB: highFloorRules.map {
+                bandRMSDB(signal: reference, lower: $0.lower, upper: $0.upper)
+            },
+            originalReferenceDB: originalReference.map { signal in
+                originalHighFloorRules.map {
+                    bandBalanceDB(signal: signal, lower: $0.lower, upper: $0.upper)
+                }
+            }
+        )
+    }
+
+    private func preserveMasteringHighFloor(
+        signal: AudioSignal,
+        reference: AudioSignal,
+        referenceLevels: HighFloorReferenceLevels,
+        referenceNoiseMeasurements: NoiseMeasurementSnapshot?,
+        originalReferenceNoiseMeasurements: NoiseMeasurementSnapshot?,
+        peakCeilingDB: Float,
+        logger: AudioProcessingLogger?
+    ) -> AudioSignal {
         var current = signal
         var didApply = false
 
-        for rule in rules {
+        for (index, rule) in highFloorRules.enumerated() {
             let currentDB = bandRMSDB(signal: current, lower: rule.lower, upper: rule.upper)
-            let referenceDB = bandRMSDB(signal: reference, lower: rule.lower, upper: rule.upper)
+            let referenceDB = referenceLevels.referenceDB[index]
             guard currentDB.isFinite, referenceDB.isFinite else { continue }
 
             let targetDB = referenceDB - rule.maxDropDB
@@ -1181,16 +1222,10 @@ struct MasteringProcessor {
             logger?.log("高域保持: \(rule.label) +\(String(format: "%.1f", boostDB)) dB")
         }
 
-        if let originalReference {
-            let originalRules = [
-                HighFloorRule(label: "原音基準 5-8kHz", lower: 5_000, upper: 8_000, maxDropDB: 5.5, maxBoostDB: 8.0),
-                HighFloorRule(label: "原音基準 8-12kHz", lower: 8_000, upper: 12_000, maxDropDB: 4.5, maxBoostDB: 12.0),
-                HighFloorRule(label: "原音基準 12-16kHz", lower: 12_000, upper: 16_000, maxDropDB: 4.5, maxBoostDB: 12.0),
-                HighFloorRule(label: "原音基準 16kHz以上", lower: 16_000, upper: 24_000, maxDropDB: 6.0, maxBoostDB: 8.0)
-            ]
-            for rule in originalRules {
+        if let originalReferenceDB = referenceLevels.originalReferenceDB {
+            for (index, rule) in originalHighFloorRules.enumerated() {
                 let currentDB = bandBalanceDB(signal: current, lower: rule.lower, upper: rule.upper)
-                let originalDB = bandBalanceDB(signal: originalReference, lower: rule.lower, upper: rule.upper)
+                let originalDB = originalReferenceDB[index]
                 guard currentDB.isFinite, originalDB.isFinite else { continue }
 
                 let targetDB = originalDB - rule.maxDropDB
