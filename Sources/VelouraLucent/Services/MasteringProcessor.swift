@@ -251,6 +251,7 @@ struct MasteringProcessor {
                 referenceHighBandLevels: &finalNoiseReturnReferenceLevels,
                 referenceNoiseMeasurements: referenceNoiseMeasurements,
                 originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
+                loudnessRestoreFallback: finalHighPreserved,
                 peakCeilingDB: settings.peakCeilingDB,
                 logger: logger
             )
@@ -1382,6 +1383,7 @@ struct MasteringProcessor {
         referenceHighBandLevels: inout [NoiseReturnHighBandReferenceLevel]?,
         referenceNoiseMeasurements: NoiseMeasurementSnapshot?,
         originalReferenceNoiseMeasurements: NoiseMeasurementSnapshot?,
+        loudnessRestoreFallback: AudioSignal? = nil,
         peakCeilingDB: Float,
         logger: AudioProcessingLogger?
     ) -> AudioSignal {
@@ -1398,8 +1400,29 @@ struct MasteringProcessor {
         )
 
         let maxPasses = 5
+        var loudnessRestoreFallbackNoise: NoiseMeasurementSnapshot?
         for pass in 1...maxPasses {
             let currentNoise = NoiseMeasurementService.analyze(signal: current, ids: requiredIDs)
+            if let loudnessRestoreFallback,
+               Self.finalLoudnessRestoreHissReturnExceedsLimit(
+                referenceMeasurements: referenceNoise,
+                currentMeasurements: currentNoise
+               ) {
+                let fallbackNoise = loudnessRestoreFallbackNoise ?? NoiseMeasurementService.analyze(
+                    signal: loudnessRestoreFallback,
+                    ids: [NoiseMeasurementID.hiss]
+                )
+                loudnessRestoreFallbackNoise = fallbackNoise
+                if Self.shouldUseFinalLoudnessRestoreFallback(
+                    referenceMeasurements: referenceNoise,
+                    restoredMeasurements: currentNoise,
+                    fallbackMeasurements: fallbackNoise
+                ) {
+                    logger?.log("最終音量復帰: ヒス上限超過のため復帰前へ戻します")
+                    return loudnessRestoreFallback
+                }
+                logger?.log("最終音量復帰: 復帰前もヒス上限超過のため緊急上限確認を続けます")
+            }
             let strongestHighFloorExcess = [NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer]
                 .compactMap { id -> (rule: NoiseReturnLimit, excessDB: Double)? in
                     let returnDB = noiseReturn(id: id, reference: referenceNoise, current: currentNoise)
@@ -1472,6 +1495,32 @@ struct MasteringProcessor {
         }
 
         return enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
+    }
+
+    static func finalLoudnessRestoreHissReturnExceedsLimit(
+        referenceMeasurements: NoiseMeasurementSnapshot,
+        currentMeasurements: NoiseMeasurementSnapshot
+    ) -> Bool {
+        guard let referenceHiss = referenceMeasurements.comparableLevel(for: NoiseMeasurementID.hiss),
+              let currentHiss = currentMeasurements.comparableLevel(for: NoiseMeasurementID.hiss)
+        else {
+            return false
+        }
+        return currentHiss > referenceHiss + InternalAudioJudgementPolicy.finalLoudnessRestoreMaxHissReturnDB
+    }
+
+    static func shouldUseFinalLoudnessRestoreFallback(
+        referenceMeasurements: NoiseMeasurementSnapshot,
+        restoredMeasurements: NoiseMeasurementSnapshot,
+        fallbackMeasurements: NoiseMeasurementSnapshot
+    ) -> Bool {
+        finalLoudnessRestoreHissReturnExceedsLimit(
+            referenceMeasurements: referenceMeasurements,
+            currentMeasurements: restoredMeasurements
+        ) && !finalLoudnessRestoreHissReturnExceedsLimit(
+            referenceMeasurements: referenceMeasurements,
+            currentMeasurements: fallbackMeasurements
+        )
     }
 
     private func limitSibilanceTransients(

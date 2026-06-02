@@ -446,6 +446,34 @@ struct MasteringPipelineTests {
     }
 
     @Test
+    func finalLoudnessRestoreRejectsHissReturnBeyondLimit() {
+        let reference = noiseSnapshot(hiss: -113.388256)
+        let atLimit = noiseSnapshot(hiss: -110.888256)
+        let beyondLimit = noiseSnapshot(hiss: -110.462557)
+        let safeFallback = noiseSnapshot(hiss: -111.055067)
+
+        #expect(InternalAudioJudgementPolicy.finalLoudnessRestoreMaxHissReturnDB == 2.5)
+        #expect(!MasteringProcessor.finalLoudnessRestoreHissReturnExceedsLimit(
+            referenceMeasurements: reference,
+            currentMeasurements: atLimit
+        ))
+        #expect(MasteringProcessor.finalLoudnessRestoreHissReturnExceedsLimit(
+            referenceMeasurements: reference,
+            currentMeasurements: beyondLimit
+        ))
+        #expect(MasteringProcessor.shouldUseFinalLoudnessRestoreFallback(
+            referenceMeasurements: reference,
+            restoredMeasurements: beyondLimit,
+            fallbackMeasurements: safeFallback
+        ))
+        #expect(!MasteringProcessor.shouldUseFinalLoudnessRestoreFallback(
+            referenceMeasurements: reference,
+            restoredMeasurements: beyondLimit,
+            fallbackMeasurements: beyondLimit
+        ))
+    }
+
+    @Test
     func noiseReturnGuardPreservesSustainedMusicalHighBands() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
@@ -519,6 +547,17 @@ struct MasteringPipelineTests {
             settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 2)
         )
         try file.write(from: buffer)
+    }
+
+    private func noiseSnapshot(hiss: Double) -> NoiseMeasurementSnapshot {
+        NoiseMeasurementSnapshot(values: [
+            NoiseMeasurementValue(
+                id: NoiseMeasurementID.hiss,
+                label: "ヒス・シュワシュワ",
+                comparableLevelDB: hiss,
+                measuredLevelDB: hiss
+            )
+        ])
     }
 
     private func makeCleanHeadroomTone(at url: URL) throws {
