@@ -21,8 +21,15 @@ enum LoudnessMeasurementService {
             )
         }
 
+        let sampleCount = channels.map(\.count).min() ?? 0
+        let integratedEnergyPrefixes = channels.map {
+            officialKWeightedEnergyPrefix(for: $0, sampleCount: sampleCount, trailingSilenceCount: 0)
+        }
+        let gatedBlocks = officialGatedBlockLoudness(
+            forEnergyPrefixes: integratedEnergyPrefixes,
+            sampleRate: signal.sampleRate
+        )
         let energyPrefixes = channels.map { energyPrefix(for: kWeighted($0, sampleRate: signal.sampleRate)) }
-        let gatedBlocks = gatedBlockLoudness(forEnergyPrefixes: energyPrefixes, sampleRate: signal.sampleRate)
         let shortTerm = shortTermLoudnessTimeline(forEnergyPrefixes: energyPrefixes, sampleRate: signal.sampleRate)
         let truePeak = truePeakLinear(signal.channels)
 
@@ -39,8 +46,11 @@ enum LoudnessMeasurementService {
         let channels = signal.channels.filter { !$0.isEmpty }
         guard !channels.isEmpty else { return -70 }
 
-        let energyPrefixes = channels.map { energyPrefix(for: kWeighted($0, sampleRate: signal.sampleRate)) }
-        let gatedBlocks = gatedBlockLoudness(forEnergyPrefixes: energyPrefixes, sampleRate: signal.sampleRate)
+        let sampleCount = channels.map(\.count).min() ?? 0
+        let energyPrefixes = channels.map {
+            officialKWeightedEnergyPrefix(for: $0, sampleCount: sampleCount, trailingSilenceCount: 0)
+        }
+        let gatedBlocks = officialGatedBlockLoudness(forEnergyPrefixes: energyPrefixes, sampleRate: signal.sampleRate)
         return Float(integratedLoudness(from: gatedBlocks))
     }
 
@@ -52,7 +62,11 @@ enum LoudnessMeasurementService {
         return peak
     }
 
-    private static func gatedBlockLoudness(forEnergyPrefixes prefixes: [[Double]], sampleRate: Double) -> [Double] {
+    private static func integratedLoudness(from gatedBlocks: [Double]) -> Double {
+        gatedBlocks.isEmpty ? -70 : energyAverage(gatedBlocks)
+    }
+
+    private static func officialGatedBlockLoudness(forEnergyPrefixes prefixes: [[Double]], sampleRate: Double) -> [Double] {
         let sampleCount = prefixes.map { max($0.count - 1, 0) }.min() ?? 0
         guard sampleCount > 0 else { return [] }
 
@@ -61,24 +75,19 @@ enum LoudnessMeasurementService {
         var blockLoudness: [Double] = []
         var start = 0
 
-        while start < sampleCount {
-            let end = min(sampleCount, start + windowSize)
+        while start + windowSize <= sampleCount {
+            let end = start + windowSize
             let meanEnergy = prefixes.reduce(0.0) { $0 + meanSquare(in: $1, start: start, end: end) }
-            let rms = sqrt(max(meanEnergy, 1e-9))
-            blockLoudness.append(20 * log10(max(rms, 1e-12)))
+            blockLoudness.append(-0.691 + 10 * log10(max(meanEnergy, 1e-12)))
             start += hopSize
         }
 
-        let absoluteGated = blockLoudness.filter { $0 > -70 }
+        let absoluteGated = blockLoudness.filter { $0 >= -70 }
         guard !absoluteGated.isEmpty else { return [] }
         let preliminary = energyAverage(absoluteGated)
         let relativeGate = preliminary - 10
         let relativeGated = absoluteGated.filter { $0 >= relativeGate }
         return relativeGated.isEmpty ? absoluteGated : relativeGated
-    }
-
-    private static func integratedLoudness(from gatedBlocks: [Double]) -> Double {
-        gatedBlocks.isEmpty ? -70 : energyAverage(gatedBlocks)
     }
 
     static func loudnessRange(signal: AudioSignal) -> Double? {

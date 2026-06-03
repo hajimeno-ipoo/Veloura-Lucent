@@ -59,6 +59,7 @@
 - 比較メトリクスでは、マスタリング解析を丸ごと再実行せず、必要な数値だけを直接計算します。
 - 比較メトリクスでは、音量窓の計算に累積エネルギーを使い、同じ波形を何度もなめないようにしています。
 - LUFS、True Peak、LRA、短い時間ごとの音量は `LoudnessMeasurementService` でまとめて測ります。表、グラフ、品質チェックで別々の基準にならないようにするためです。
+- Integrated LUFSは、公式K-weighting係数、400ms窓、100ms間隔、絶対ゲート、相対ゲートを使って測ります。外部のEBU R128系メーターとの差を小さくするためです。
 - 比較表のLRAは、48kHzのモノラルとステレオだけを対象に、3秒窓、0.1秒間隔、末尾1.5秒の無音、絶対ゲート、相対ゲートを使って測ります。正式な条件で測れない時は `--` と表示します。再生音声と保存WAVへ無音は追加しません。
 - LUFSだけが必要な処理では、True Peak、LRA、短い時間ごとの音量を同時に計算せず、LUFSに必要な計算だけを実行します。
 - FFT処理では、フレームごとの作業配列を使い回して、短い配列を何度も作らないようにしています。
@@ -161,7 +162,7 @@ Macアプリ(SwiftUI)
       -> ピーク保護
     -> MasteringService
       -> LoudnessMeasurementService
-        -> LUFS / True Peak / 正式条件のLRA / 表示用の短期ラウドネスを測定
+        -> 公式K-weighting係数のLUFS / True Peak / 正式条件のLRA / 表示用の短期ラウドネスを測定
       -> MasteringAnalysisService
         -> 1回のFFT結果を帯域解析と刺さり感解析で共有
       -> ProcessingRoutePlanでマスタリングルートを決定

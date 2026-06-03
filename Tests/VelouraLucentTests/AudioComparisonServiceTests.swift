@@ -53,7 +53,7 @@ struct AudioComparisonServiceTests {
         expectClose(metrics.rmsDBFS, -22.05, tolerance: 0.20)
         expectClose(metrics.crestFactorDB, 4.45, tolerance: 0.20)
         expectClose(try #require(metrics.loudnessRangeLU), 0.97, tolerance: 0.05)
-        expectClose(metrics.integratedLoudnessLUFS, -18.73, tolerance: 0.30)
+        expectClose(metrics.integratedLoudnessLUFS, -19.40, tolerance: 0.30)
         expectClose(metrics.truePeakDBFS, -16.77, tolerance: 0.30)
         expectClose(metrics.stereoWidth, 0.134, tolerance: 0.02)
         expectClose(metrics.stereoCorrelation, 0.981, tolerance: 0.02)
