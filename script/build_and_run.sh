@@ -140,8 +140,8 @@ generate_app_icon_assets() {
 
 pkill -x "$BUILD_PRODUCT_NAME" >/dev/null 2>&1 || true
 
-swift build
-BUILD_BINARY="$(swift build --show-bin-path)/$BUILD_PRODUCT_NAME"
+swift build -c release
+BUILD_BINARY="$(swift build -c release --show-bin-path)/$BUILD_PRODUCT_NAME"
 
 rm -rf "$APP_BUNDLE"
 if [[ "$LEGACY_APP_BUNDLE" != "$APP_BUNDLE" ]]; then

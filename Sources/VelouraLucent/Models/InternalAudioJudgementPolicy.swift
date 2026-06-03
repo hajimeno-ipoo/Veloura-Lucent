@@ -58,6 +58,8 @@ enum InternalAudioJudgementPolicy {
     static let masteringNoiseCleanHissDB = -58.0
     static let masteringNoiseCleanShimmerDB = -46.0
     static let finalLoudnessRestoreMaxHissReturnDB = 2.5
+    static let finalOutputMaxHighNoiseReturnDB = 2.5
+    static let finalOutputHighNoiseReturnSafetyMarginDB = 0.5
 
     static let noiseSeverityLimits: [NoiseSeverityLimit] = [
         NoiseSeverityLimit(id: NoiseMeasurementID.hiss, cautionDB: -65, warningDB: -58, masteringWorseningCautionDB: 2.0),

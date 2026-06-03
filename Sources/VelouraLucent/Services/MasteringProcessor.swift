@@ -198,6 +198,7 @@ struct MasteringProcessor {
         }
         saveDiagnostic(mastered, to: diagnosticOutputDirectory, order: 10, id: "highPreserve", label: "高域保持後", logger: logger)
         var finalNoiseReturnReferenceLevels: [NoiseReturnHighBandReferenceLevel]?
+        let allowsOriginalReferenceHighRecovery = originalReferenceNeedsHighRecovery(highFloorReferenceLevels)
         logger?.start(.finalNoiseCeiling)
         logger?.log(MasteringStep.finalNoiseCeiling.rawValue)
         let finalGuarded = measure(label: "マスタリング/計測: 最終ノイズ上限", logger: logger, progressStep: .finalNoiseCeiling) {
@@ -207,6 +208,7 @@ struct MasteringProcessor {
                 referenceHighBandLevels: &finalNoiseReturnReferenceLevels,
                 referenceNoiseMeasurements: referenceNoiseMeasurements,
                 originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
+                allowsOriginalReferenceHighRecovery: allowsOriginalReferenceHighRecovery,
                 peakCeilingDB: settings.peakCeilingDB,
                 logger: logger
             )
@@ -252,6 +254,7 @@ struct MasteringProcessor {
                 referenceNoiseMeasurements: referenceNoiseMeasurements,
                 originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
                 loudnessRestoreFallback: finalHighPreserved,
+                allowsOriginalReferenceHighRecovery: allowsOriginalReferenceHighRecovery,
                 peakCeilingDB: settings.peakCeilingDB,
                 logger: logger
             )
@@ -1148,6 +1151,7 @@ struct MasteringProcessor {
 
     private struct HighFloorReferenceLevels {
         let referenceDB: [Double]
+        let referenceBalanceDB: [Double]?
         let originalReferenceDB: [Double]?
     }
 
@@ -1177,12 +1181,32 @@ struct MasteringProcessor {
             referenceDB: highFloorRules.map {
                 bandRMSDB(signal: reference, lower: $0.lower, upper: $0.upper)
             },
+            referenceBalanceDB: originalReference.map { _ in
+                originalHighFloorRules.map {
+                    bandBalanceDB(signal: reference, lower: $0.lower, upper: $0.upper)
+                }
+            },
             originalReferenceDB: originalReference.map { signal in
                 originalHighFloorRules.map {
                     bandBalanceDB(signal: signal, lower: $0.lower, upper: $0.upper)
                 }
             }
         )
+    }
+
+    private func originalReferenceNeedsHighRecovery(_ referenceLevels: HighFloorReferenceLevels) -> Bool {
+        guard let referenceBalanceDB = referenceLevels.referenceBalanceDB,
+              let originalReferenceDB = referenceLevels.originalReferenceDB
+        else { return false }
+        let count = min(referenceBalanceDB.count, originalReferenceDB.count, originalHighFloorRules.count)
+        guard count > 0 else { return false }
+
+        return (0..<count).contains { index in
+            let referenceDB = referenceBalanceDB[index]
+            let originalDB = originalReferenceDB[index]
+            guard referenceDB.isFinite, originalDB.isFinite else { return false }
+            return originalDB - referenceDB > 2.5
+        }
     }
 
     private func preserveMasteringHighFloor(
@@ -1345,6 +1369,27 @@ struct MasteringProcessor {
         InternalAudioJudgementPolicy.severityLimit(for: id)?.masteringWorseningCautionDB ?? 2.0
     }
 
+    private func finalHighNoiseReturnTarget(
+        for id: String,
+        returnDB: Double,
+        originalReturnDB: Double,
+        appliesCorrectedReferenceLimit: Bool
+    ) -> Double? {
+        let limit = finalNoiseReturnLimit(for: id)
+        let ruleLimit = InternalAudioJudgementPolicy.masteringNoiseReturnLimits.first(where: { $0.id == id })?.allowedReturnDB ?? limit
+        if returnDB > limit, originalReturnDB > 0.5 {
+            return min(limit - 0.15, ruleLimit)
+        }
+        guard appliesCorrectedReferenceLimit else {
+            return nil
+        }
+        let correctedReferenceLimit = InternalAudioJudgementPolicy.finalOutputMaxHighNoiseReturnDB
+        guard returnDB > correctedReferenceLimit else {
+            return nil
+        }
+        return correctedReferenceLimit - InternalAudioJudgementPolicy.finalOutputHighNoiseReturnSafetyMarginDB
+    }
+
     private func finalNoiseReturnRule(for id: String, allowedReturnDB: Double) -> NoiseReturnLimit? {
         guard let rule = InternalAudioJudgementPolicy.masteringNoiseReturnLimits.first(where: { $0.id == id }) else {
             return nil
@@ -1384,6 +1429,7 @@ struct MasteringProcessor {
         referenceNoiseMeasurements: NoiseMeasurementSnapshot?,
         originalReferenceNoiseMeasurements: NoiseMeasurementSnapshot?,
         loudnessRestoreFallback: AudioSignal? = nil,
+        allowsOriginalReferenceHighRecovery: Bool = false,
         peakCeilingDB: Float,
         logger: AudioProcessingLogger?
     ) -> AudioSignal {
@@ -1429,13 +1475,13 @@ struct MasteringProcessor {
                     let originalReturnDB = originalNoise.map {
                         noiseReturn(id: id, reference: $0, current: currentNoise)
                     } ?? Double.greatestFiniteMagnitude
-                    let limit = finalNoiseReturnLimit(for: id)
-                    let target = min(
-                        limit - 0.15,
-                        InternalAudioJudgementPolicy.masteringNoiseReturnLimits.first(where: { $0.id == id })?.allowedReturnDB ?? limit
-                    )
-                    guard returnDB > limit,
-                          originalReturnDB > 0.5,
+                    guard let target = finalHighNoiseReturnTarget(
+                        for: id,
+                        returnDB: returnDB,
+                        originalReturnDB: originalReturnDB,
+                        appliesCorrectedReferenceLimit: loudnessRestoreFallback != nil
+                            && !allowsOriginalReferenceHighRecovery
+                    ),
                           let rule = finalNoiseReturnRule(for: id, allowedReturnDB: target)
                     else { return nil }
                     return (rule, returnDB - target)
