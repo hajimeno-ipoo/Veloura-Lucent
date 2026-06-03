@@ -5,18 +5,18 @@ enum LoudnessMeasurementService {
         let integratedLoudnessLUFS: Double
         let truePeakDBFS: Double
         let truePeakLinear: Float
-        let loudnessRangeLU: Double
+        let loudnessRangeLU: Double?
         let shortTermLoudness: [TimedLevelMetric]
     }
 
-    static func measure(signal: AudioSignal) -> Measurement {
+    static func measure(signal: AudioSignal, includeLoudnessRange: Bool = true) -> Measurement {
         let channels = signal.channels.filter { !$0.isEmpty }
         guard !channels.isEmpty else {
             return Measurement(
                 integratedLoudnessLUFS: -70,
                 truePeakDBFS: -120,
                 truePeakLinear: 0,
-                loudnessRangeLU: 0,
+                loudnessRangeLU: nil,
                 shortTermLoudness: []
             )
         }
@@ -30,7 +30,7 @@ enum LoudnessMeasurementService {
             integratedLoudnessLUFS: integratedLoudness(from: gatedBlocks),
             truePeakDBFS: 20 * log10(max(Double(truePeak), 1e-12)),
             truePeakLinear: truePeak,
-            loudnessRangeLU: loudnessRange(from: shortTerm.map(\.levelDB)),
+            loudnessRangeLU: includeLoudnessRange ? loudnessRange(signal: signal) : nil,
             shortTermLoudness: shortTerm
         )
     }
@@ -81,10 +81,63 @@ enum LoudnessMeasurementService {
         gatedBlocks.isEmpty ? -70 : energyAverage(gatedBlocks)
     }
 
-    private static func loudnessRange(from shortTermLoudness: [Double]) -> Double {
-        let gated = shortTermLoudness.filter { $0 > -70 }.sorted()
-        guard gated.count > 5 else { return 0 }
-        return percentile(gated, 0.95) - percentile(gated, 0.10)
+    static func loudnessRange(signal: AudioSignal) -> Double? {
+        guard abs(signal.sampleRate - 48_000) < 0.5,
+              (1...2).contains(signal.channels.count),
+              let sampleCount = signal.channels.map(\.count).min(),
+              sampleCount > 0
+        else {
+            return nil
+        }
+
+        let trailingSilenceCount = Int(signal.sampleRate * 1.5)
+        let prefixes = signal.channels.map {
+            officialKWeightedEnergyPrefix(
+                for: $0,
+                sampleCount: sampleCount,
+                trailingSilenceCount: trailingSilenceCount
+            )
+        }
+        let totalSampleCount = sampleCount + trailingSilenceCount
+        let windowSize = Int(signal.sampleRate * 3.0)
+        let hopSize = Int(signal.sampleRate * 0.1)
+        guard totalSampleCount >= windowSize else { return nil }
+
+        var loudnessValues: [Double] = []
+        var start = 0
+        while start + windowSize <= totalSampleCount {
+            let end = start + windowSize
+            let meanEnergy = prefixes.reduce(0.0) {
+                $0 + meanSquare(in: $1, start: start, end: end)
+            }
+            loudnessValues.append(-0.691 + 10 * log10(max(meanEnergy, 1e-12)))
+            start += hopSize
+        }
+
+        let absoluteGated = loudnessValues.filter { $0 >= -70 }
+        guard !absoluteGated.isEmpty else { return nil }
+        let relativeGate = energyAverage(absoluteGated) - 20
+        let relativeGated = absoluteGated.filter { $0 >= relativeGate }.sorted()
+        guard !relativeGated.isEmpty else { return nil }
+        return percentile(relativeGated, 0.95) - percentile(relativeGated, 0.10)
+    }
+
+    private static func officialKWeightedEnergyPrefix(
+        for channel: [Float],
+        sampleCount: Int,
+        trailingSilenceCount: Int
+    ) -> [Double] {
+        var preFilter = BiquadFilter(coefficients: officialPreFilterCoefficients)
+        var rlbFilter = BiquadFilter(coefficients: officialRLBFilterCoefficients)
+        let totalSampleCount = sampleCount + trailingSilenceCount
+        var prefix = Array(repeating: 0.0, count: totalSampleCount + 1)
+
+        for index in 0..<totalSampleCount {
+            let sample = index < sampleCount ? Double(channel[index]) : 0
+            let weighted = rlbFilter.process(preFilter.process(sample))
+            prefix[index + 1] = prefix[index] + weighted * weighted
+        }
+        return prefix
     }
 
     private static func shortTermLoudnessTimeline(forEnergyPrefixes prefixes: [[Double]], sampleRate: Double) -> [TimedLevelMetric] {
@@ -142,6 +195,51 @@ enum LoudnessMeasurementService {
         let index = max(0, min(values.count - 1, Int(round(Double(values.count - 1) * percentile))))
         return values[index]
     }
+
+    private struct BiquadCoefficients {
+        let b0: Double
+        let b1: Double
+        let b2: Double
+        let a1: Double
+        let a2: Double
+    }
+
+    private struct BiquadFilter {
+        let coefficients: BiquadCoefficients
+        var x1 = 0.0
+        var x2 = 0.0
+        var y1 = 0.0
+        var y2 = 0.0
+
+        mutating func process(_ input: Double) -> Double {
+            let output = coefficients.b0 * input
+                + coefficients.b1 * x1
+                + coefficients.b2 * x2
+                - coefficients.a1 * y1
+                - coefficients.a2 * y2
+            x2 = x1
+            x1 = input
+            y2 = y1
+            y1 = output
+            return output
+        }
+    }
+
+    private static let officialPreFilterCoefficients = BiquadCoefficients(
+        b0: 1.53512485958697,
+        b1: -2.69169618940638,
+        b2: 1.19839281085285,
+        a1: -1.69065929318241,
+        a2: 0.73248077421585
+    )
+
+    private static let officialRLBFilterCoefficients = BiquadCoefficients(
+        b0: 1,
+        b1: -2,
+        b2: 1,
+        a1: -1.99004745483398,
+        a2: 0.99007225036621
+    )
 
     private static func oversampledPeak(_ channel: [Float]) -> Float {
         guard channel.count > 1 else { return channel.map { abs($0) }.max() ?? 0 }

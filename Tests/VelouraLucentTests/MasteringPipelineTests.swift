@@ -178,7 +178,7 @@ struct MasteringPipelineTests {
         let output = try await MasteringService().process(inputFile: inputURL, profile: .forward) { _ in }
         let after = try AudioComparisonService.analyze(fileURL: output)
 
-        #expect(after.loudnessRangeLU >= before.loudnessRangeLU * 0.60)
+        #expect(try #require(after.loudnessRangeLU) >= (try #require(before.loudnessRangeLU)) * 0.60)
         #expect(after.crestFactorDB >= before.crestFactorDB * 0.60)
     }
 

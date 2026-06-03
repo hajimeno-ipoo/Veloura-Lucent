@@ -218,7 +218,7 @@ struct AudioMetricSnapshot: Sendable {
     let peakDBFS: Double
     let rmsDBFS: Double
     let crestFactorDB: Double
-    let loudnessRangeLU: Double
+    let loudnessRangeLU: Double?
     let integratedLoudnessLUFS: Double
     let truePeakDBFS: Double
     let stereoWidth: Double

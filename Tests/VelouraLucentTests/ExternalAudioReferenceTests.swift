@@ -89,13 +89,14 @@ struct ExternalAudioReferenceTests {
         label: String,
         lraTolerance: Double
     ) throws {
-        let external = try FFmpegEBUR128Reference.measure(fileURL: fileURL)
+        let external = try FFmpegEBUR128Reference.measure(fileURL: fileURL, padTrailingSilenceForLRA: true)
         let app = try AudioComparisonService.analyze(fileURL: fileURL)
-        let lraDelta = app.loudnessRangeLU - external.loudnessRangeLU
+        let appLRA = try #require(app.loudnessRangeLU)
+        let lraDelta = appLRA - external.loudnessRangeLU
 
         #expect(
             abs(lraDelta) <= lraTolerance,
-            "\(label) LRA delta \(format(lraDelta)); app \(format(app.loudnessRangeLU)), ffmpeg \(format(external.loudnessRangeLU))"
+            "\(label) LRA delta \(format(lraDelta)); app \(format(appLRA)), ffmpeg \(format(external.loudnessRangeLU))"
         )
     }
 
@@ -107,9 +108,11 @@ struct ExternalAudioReferenceTests {
         truePeakTolerance: Double
     ) throws {
         let external = try FFmpegEBUR128Reference.measure(fileURL: fileURL)
+        let externalLRA = try FFmpegEBUR128Reference.measure(fileURL: fileURL, padTrailingSilenceForLRA: true)
         let app = try AudioComparisonService.analyze(fileURL: fileURL)
+        let appLRA = try #require(app.loudnessRangeLU)
         let lufsDelta = app.integratedLoudnessLUFS - external.integratedLoudnessLUFS
-        let lraDelta = app.loudnessRangeLU - external.loudnessRangeLU
+        let lraDelta = appLRA - externalLRA.loudnessRangeLU
         let truePeakDelta = app.truePeakDBFS - external.truePeakDBFS
 
         #expect(
@@ -118,7 +121,7 @@ struct ExternalAudioReferenceTests {
         )
         #expect(
             abs(lraDelta) <= lraTolerance,
-            "\(label) LRA delta \(format(lraDelta)); app \(format(app.loudnessRangeLU)), ffmpeg \(format(external.loudnessRangeLU))"
+            "\(label) LRA delta \(format(lraDelta)); app \(format(appLRA)), ffmpeg \(format(externalLRA.loudnessRangeLU))"
         )
         #expect(
             abs(truePeakDelta) <= truePeakTolerance,
@@ -143,7 +146,7 @@ private struct FFmpegEBUR128Measurement {
 }
 
 private enum FFmpegEBUR128Reference {
-    static func measure(fileURL: URL) throws -> FFmpegEBUR128Measurement {
+    static func measure(fileURL: URL, padTrailingSilenceForLRA: Bool = false) throws -> FFmpegEBUR128Measurement {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
         process.arguments = [
@@ -152,7 +155,7 @@ private enum FFmpegEBUR128Reference {
             "-i",
             fileURL.path(percentEncoded: false),
             "-filter_complex",
-            "ebur128=peak=true",
+            padTrailingSilenceForLRA ? "apad=pad_dur=1.5,ebur128=peak=true" : "ebur128=peak=true",
             "-f",
             "null",
             "-"

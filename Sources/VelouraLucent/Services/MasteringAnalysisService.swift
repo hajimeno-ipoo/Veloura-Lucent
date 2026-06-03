@@ -75,7 +75,7 @@ enum MasteringAnalysisService {
             SpectralDSP.stft(mono)
         }
         let loudnessMeasurement = recorder.measure("loudness") {
-            LoudnessMeasurementService.measure(signal: signal)
+            LoudnessMeasurementService.measure(signal: signal, includeLoudnessRange: false)
         }
         let peak = recorder.measure("truePeak") {
             loudnessMeasurement.truePeakDBFS

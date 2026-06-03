@@ -89,7 +89,7 @@ enum AudioComparisonService {
             peakDBFS: -120,
             rmsDBFS: -120,
             crestFactorDB: 0,
-            loudnessRangeLU: 0,
+            loudnessRangeLU: nil,
             integratedLoudnessLUFS: -70,
             truePeakDBFS: -120,
             stereoWidth: 0,
@@ -299,7 +299,7 @@ enum AudioComparisonService {
     private struct WaveformMetrics: Sendable {
         let peakDBFS: Double
         let rmsDBFS: Double
-        let loudnessRangeLU: Double
+        let loudnessRangeLU: Double?
         let integratedLoudnessLUFS: Double
         let shortTermLoudness: [TimedLevelMetric]
         let dynamics: [DynamicsMetric]
