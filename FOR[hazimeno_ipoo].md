@@ -188,6 +188,8 @@ Macアプリ(SwiftUI)
   - 画面の状態、ノイズ除去の強さ、マスタリング設定、処理ルート判定です。
 - `Sources/VelouraLucent/Services/`
   - 補正処理、倍音解析、Neural foldover 推定、ノイズ除去、マスタリング処理、工程別診断WAVの書き出し、音量系の共通測定、比較用メトリクス計算、時間ごとの音量、平均スペクトル、左右相関の計算、音声ファイルの読み書き、ファイル選択、完了通知などです。
+  - `NativeAudioProcessor.swift` は、補正パイプラインの順番、工程ログ、診断WAVの保存を担当します。
+  - `AudioAnalysisMode.swift`、`AudioAnalyzer.swift`、`HumRemover.swift`、`DenoiseMaskCoefficients.swift`、`DenoiseShimmerStabilizer.swift` は、補正パイプライン内で使う解析、ハム除去、ノイズ除去係数、シマー安定化を分けて置いています。
 - `Sources/VelouraLucent/Support/`
   - FFT まわりなどの共通処理です。
 - `Tests/VelouraLucentTests/`
