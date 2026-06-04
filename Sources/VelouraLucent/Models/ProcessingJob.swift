@@ -306,18 +306,7 @@ final class ProcessingJob {
         masteredOutputFile = outputFile.map { MasteringService.defaultOutputURL(for: $0) }
         exportedCorrectedFile = nil
         exportedMasteredFile = nil
-        inputMetrics = nil
-        outputMetrics = nil
-        masteredMetrics = nil
-        inputCorrectionAnalysis = nil
-        inputCorrectionAnalysisMode = nil
-        outputMasteringAnalysis = nil
-        inputNoiseMeasurements = nil
-        outputNoiseMeasurements = nil
-        masteredNoiseMeasurements = nil
-        inputSpectrogram = nil
-        outputSpectrogram = nil
-        masteredSpectrogram = nil
+        resetAllAnalysisResults()
         correctionLog.reset()
         masteringLog.reset()
         statusMessage = "処理待ち"
@@ -351,13 +340,8 @@ final class ProcessingJob {
         processingFinishedAt = nil
         correctionProgress.reset()
         masteredOutputFile = outputFile.map { MasteringService.defaultOutputURL(for: $0) }
-        outputMetrics = nil
-        masteredMetrics = nil
-        outputMasteringAnalysis = nil
-        outputNoiseMeasurements = nil
-        masteredNoiseMeasurements = nil
-        outputSpectrogram = nil
-        masteredSpectrogram = nil
+        resetCorrectedAnalysisResults()
+        resetMasteredAnalysisResults()
         resetDisplayAnalysisStates(for: .corrected)
         resetDisplayAnalysisStates(for: .mastered)
         masteringLog.reset()
@@ -382,9 +366,7 @@ final class ProcessingJob {
         masteringFinishedAt = nil
         masteringProgress.reset()
         masteredOutputFile = nil
-        masteredMetrics = nil
-        masteredNoiseMeasurements = nil
-        masteredSpectrogram = nil
+        resetMasteredAnalysisResults()
         resetDisplayAnalysisStates(for: .mastered)
         hasExistingMasteredOutput = false
         appliedMasteringSettings = nil
@@ -497,6 +479,33 @@ final class ProcessingJob {
 
     func resetDisplayAnalysisStates(for target: DisplayAnalysisTarget) {
         displayAnalysisStates.reset(for: target)
+    }
+
+    private func resetAllAnalysisResults() {
+        resetInputAnalysisResults()
+        resetCorrectedAnalysisResults()
+        resetMasteredAnalysisResults()
+    }
+
+    private func resetInputAnalysisResults() {
+        inputMetrics = nil
+        inputCorrectionAnalysis = nil
+        inputCorrectionAnalysisMode = nil
+        inputNoiseMeasurements = nil
+        inputSpectrogram = nil
+    }
+
+    private func resetCorrectedAnalysisResults() {
+        outputMetrics = nil
+        outputMasteringAnalysis = nil
+        outputNoiseMeasurements = nil
+        outputSpectrogram = nil
+    }
+
+    private func resetMasteredAnalysisResults() {
+        masteredMetrics = nil
+        masteredNoiseMeasurements = nil
+        masteredSpectrogram = nil
     }
 
     private func resetAllDisplayAnalysisStates() {

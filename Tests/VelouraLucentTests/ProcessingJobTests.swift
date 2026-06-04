@@ -18,6 +18,24 @@ struct ProcessingJobTests {
         }
     }
 
+    final class ObservationFlag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = false
+
+        func set() {
+            lock.lock()
+            value = true
+            lock.unlock()
+        }
+
+        var isSet: Bool {
+            lock.lock()
+            let result = value
+            lock.unlock()
+            return result
+        }
+    }
+
     @Test
     func selectingInputDoesNotExposeOldOutputs() {
         let job = ProcessingJob()
@@ -117,6 +135,22 @@ struct ProcessingJobTests {
             }
             job.appendMasteringLog("マスタリングログ")
         }
+    }
+
+    @Test
+    func inputMetricObservationDoesNotChangeWhenOutputMetricChanges() {
+        let job = ProcessingJob()
+        let didNotifyInputMetricReader = ObservationFlag()
+
+        withObservationTracking {
+            _ = job.inputMetrics
+        } onChange: {
+            didNotifyInputMetricReader.set()
+        }
+
+        job.finishOutputMetricAnalysis(makeSnapshot())
+
+        #expect(didNotifyInputMetricReader.isSet == false)
     }
 
     @Test
@@ -604,6 +638,70 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func processingClearsCorrectedAndMasteredAnalysisResultsButKeepsInputAnalysisResults() {
+        let job = ProcessingJob()
+        populateAllAnalysisResults(job)
+
+        job.beginProcessing(appliedSettings: DenoiseStrength.balanced.settings)
+
+        #expect(job.inputMetrics != nil)
+        #expect(job.inputCorrectionAnalysis != nil)
+        #expect(job.inputCorrectionAnalysisMode == .cpu)
+        #expect(job.inputNoiseMeasurements != nil)
+        #expect(job.inputSpectrogram != nil)
+        #expect(job.outputMetrics == nil)
+        #expect(job.outputMasteringAnalysis == nil)
+        #expect(job.outputNoiseMeasurements == nil)
+        #expect(job.outputSpectrogram == nil)
+        #expect(job.masteredMetrics == nil)
+        #expect(job.masteredNoiseMeasurements == nil)
+        #expect(job.masteredSpectrogram == nil)
+    }
+
+    @Test
+    func masteringClearsOnlyMasteredAnalysisResults() {
+        let job = ProcessingJob()
+        job.outputFile = URL(fileURLWithPath: "/tmp/output.wav")
+        populateAllAnalysisResults(job)
+
+        job.beginMastering()
+
+        #expect(job.inputMetrics != nil)
+        #expect(job.inputCorrectionAnalysis != nil)
+        #expect(job.inputCorrectionAnalysisMode == .cpu)
+        #expect(job.inputNoiseMeasurements != nil)
+        #expect(job.inputSpectrogram != nil)
+        #expect(job.outputMetrics != nil)
+        #expect(job.outputMasteringAnalysis != nil)
+        #expect(job.outputNoiseMeasurements != nil)
+        #expect(job.outputSpectrogram != nil)
+        #expect(job.masteredMetrics == nil)
+        #expect(job.masteredNoiseMeasurements == nil)
+        #expect(job.masteredSpectrogram == nil)
+    }
+
+    @Test
+    func selectingInputClearsAllAnalysisResults() {
+        let job = ProcessingJob()
+        populateAllAnalysisResults(job)
+
+        job.prepareForSelection(URL(fileURLWithPath: "/tmp/input.wav"))
+
+        #expect(job.inputMetrics == nil)
+        #expect(job.inputCorrectionAnalysis == nil)
+        #expect(job.inputCorrectionAnalysisMode == nil)
+        #expect(job.inputNoiseMeasurements == nil)
+        #expect(job.inputSpectrogram == nil)
+        #expect(job.outputMetrics == nil)
+        #expect(job.outputMasteringAnalysis == nil)
+        #expect(job.outputNoiseMeasurements == nil)
+        #expect(job.outputSpectrogram == nil)
+        #expect(job.masteredMetrics == nil)
+        #expect(job.masteredNoiseMeasurements == nil)
+        #expect(job.masteredSpectrogram == nil)
+    }
+
+    @Test
     func displayAnalysisStateSeparatesMetricsAndNoise() {
         let job = ProcessingJob()
 
@@ -674,6 +772,30 @@ struct ProcessingJobTests {
 
         #expect(job.canUseCorrectedAnalysisForMastering)
         #expect(job.masteringStatusMessage == "実行できます")
+    }
+
+    private func populateAllAnalysisResults(_ job: ProcessingJob) {
+        let metrics = makeSnapshot()
+        let noise = makeNoiseSnapshot(
+            hiss: -70,
+            sibilance: -68,
+            shimmer: -72,
+            mud: -65,
+            hum: -80,
+            rumble: -78
+        )
+
+        job.finishInputMetricAnalysis(metrics)
+        job.finishInputCorrectionAnalysis(makeAnalysis(), mode: .cpu)
+        job.finishInputNoiseMeasurement(noise)
+        job.finishInputSpectrogram(.empty)
+        job.finishOutputMetricAnalysis(metrics)
+        job.finishOutputMasteringAnalysis(makeMasteringAnalysis())
+        job.finishOutputNoiseMeasurement(noise)
+        job.finishOutputSpectrogram(.empty)
+        job.finishMasteredMetricAnalysis(metrics)
+        job.finishMasteredNoiseMeasurement(noise)
+        job.finishMasteredSpectrogram(.empty)
     }
 
     private func makeSnapshot() -> AudioMetricSnapshot {
