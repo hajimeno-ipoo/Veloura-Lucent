@@ -73,6 +73,42 @@ struct MetalAudioAnalysisProcessor: Sendable {
         return nil
         #endif
     }
+
+    func masteringSpectralFrameSums(
+        realValues: [Float],
+        imagValues: [Float],
+        frameCount: Int,
+        binCount: Int,
+        fftSize: Int,
+        sampleRate: Double
+    ) -> [Float]? {
+        #if canImport(Metal)
+        guard frameCount > 0, binCount > 0, realValues.count == frameCount * binCount, imagValues.count == realValues.count else {
+            return nil
+        }
+
+        let frequencyStep = sampleRate / Double(fftSize)
+        let lowRange = metalBinRange(20...180, frequencyStep: frequencyStep, binCount: binCount)
+        let midRange = metalBinRange(180...5_000, frequencyStep: frequencyStep, binCount: binCount)
+        let highRange = metalBinRange(5_000...20_000, frequencyStep: frequencyStep, binCount: binCount)
+        let harshUpperMidRange = metalBinRange(3_000...8_000, frequencyStep: frequencyStep, binCount: binCount)
+        let harshAirRange = metalBinRange(12_000...(sampleRate * 0.5), frequencyStep: frequencyStep, binCount: binCount)
+
+        return makeMasteringSpectralFrameSums(
+            realValues: realValues,
+            imagValues: imagValues,
+            frameCount: frameCount,
+            binCount: binCount,
+            lowRange: lowRange,
+            midRange: midRange,
+            highRange: highRange,
+            harshUpperMidRange: harshUpperMidRange,
+            harshAirRange: harshAirRange
+        )
+        #else
+        return nil
+        #endif
+    }
 }
 
 extension MetalAudioAnalysisProcessor {
@@ -197,14 +233,38 @@ extension MetalAudioAnalysisProcessor {
         harshUpperMidRange: MetalBinRange,
         harshAirRange: MetalBinRange
     ) -> [Float]? {
+        makeMasteringSpectralFrameSums(
+            realValues: spectrogram.real,
+            imagValues: spectrogram.imag,
+            frameCount: spectrogram.frameCount,
+            binCount: spectrogram.binCount,
+            lowRange: lowRange,
+            midRange: midRange,
+            highRange: highRange,
+            harshUpperMidRange: harshUpperMidRange,
+            harshAirRange: harshAirRange
+        )
+    }
+
+    private func makeMasteringSpectralFrameSums(
+        realValues: [Float],
+        imagValues: [Float],
+        frameCount: Int,
+        binCount: Int,
+        lowRange: MetalBinRange,
+        midRange: MetalBinRange,
+        highRange: MetalBinRange,
+        harshUpperMidRange: MetalBinRange,
+        harshAirRange: MetalBinRange
+    ) -> [Float]? {
         #if canImport(Metal)
-        let valueCount = spectrogram.frameCount * spectrogram.binCount
-        let outputCount = spectrogram.frameCount * 5
+        let valueCount = frameCount * binCount
+        let outputCount = frameCount * 5
         guard valueCount > 0,
               outputCount > 0,
               let context = Self.cache.context(),
-              let realBuffer = context.device.makeBuffer(bytes: spectrogram.real, length: valueCount * MemoryLayout<Float>.stride),
-              let imagBuffer = context.device.makeBuffer(bytes: spectrogram.imag, length: valueCount * MemoryLayout<Float>.stride),
+              let realBuffer = context.device.makeBuffer(bytes: realValues, length: valueCount * MemoryLayout<Float>.stride),
+              let imagBuffer = context.device.makeBuffer(bytes: imagValues, length: valueCount * MemoryLayout<Float>.stride),
               let outputBuffer = context.device.makeBuffer(length: outputCount * MemoryLayout<Float>.stride),
               let commandBuffer = context.commandQueue.makeCommandBuffer(),
               let encoder = commandBuffer.makeComputeCommandEncoder() else {
@@ -212,8 +272,8 @@ extension MetalAudioAnalysisProcessor {
         }
 
         var parameters = MetalSpectralSummaryParameters(
-            frameCount: UInt32(spectrogram.frameCount),
-            binCount: UInt32(spectrogram.binCount),
+            frameCount: UInt32(frameCount),
+            binCount: UInt32(binCount),
             lowLower: lowRange.lower,
             lowUpper: lowRange.upper,
             midLower: midRange.lower,
@@ -234,7 +294,7 @@ extension MetalAudioAnalysisProcessor {
 
         let threadCount = min(context.masteringSpectralSummaryPipeline.maxTotalThreadsPerThreadgroup, max(context.masteringSpectralSummaryPipeline.threadExecutionWidth, 1))
         let threadsPerGroup = MTLSize(width: threadCount, height: 1, depth: 1)
-        let grid = MTLSize(width: spectrogram.frameCount, height: 1, depth: 1)
+        let grid = MTLSize(width: frameCount, height: 1, depth: 1)
         encoder.dispatchThreads(grid, threadsPerThreadgroup: threadsPerGroup)
         encoder.endEncoding()
         commandBuffer.commit()

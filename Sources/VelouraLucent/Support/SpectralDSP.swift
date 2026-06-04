@@ -148,6 +148,39 @@ enum SpectralDSP {
         )
     }
 
+    static func forEachSTFTFrame(
+        _ signal: [Float],
+        fftSize: Int = fftSize,
+        hopSize: Int = hopSize,
+        body: (_ frameIndex: Int, _ binCount: Int, _ real: [Float], _ imag: [Float]) -> Void
+    ) {
+        let source = signal.isEmpty ? [Float.zero] : signal
+        let padding = fftSize / 2
+        let paddedSource = reflectPad(signal: source, count: padding)
+        let remainder = max(0, (paddedSource.count - fftSize) % hopSize)
+        let trailingPadding = remainder == 0 ? 0 : (hopSize - remainder)
+        let workingSource = trailingPadding > 0 ? paddedSource + Array(repeating: Float.zero, count: trailingPadding) : paddedSource
+        let frameCount = max(1, Int(ceil(Double(max(workingSource.count - fftSize, 0)) / Double(hopSize))) + 1)
+        let resources = resourceCache.resources(for: fftSize)
+        let window = resources.window
+        let dft = resources.forward
+
+        let binCount = fftSize / 2 + 1
+        let inputImag = Array(repeating: Float.zero, count: fftSize)
+        var frame = Array(repeating: Float.zero, count: fftSize)
+        var outputReal = Array(repeating: Float.zero, count: fftSize)
+        var outputImag = Array(repeating: Float.zero, count: fftSize)
+
+        for frameIndex in 0..<frameCount {
+            let start = frameIndex * hopSize
+            frame[0..<fftSize] = workingSource[start..<(start + fftSize)]
+            vDSP.multiply(frame, window, result: &frame)
+
+            dft.transform(inputReal: frame, inputImaginary: inputImag, outputReal: &outputReal, outputImaginary: &outputImag)
+            body(frameIndex, binCount, outputReal, outputImag)
+        }
+    }
+
     static func istft(_ spectrogram: Spectrogram) -> [Float] {
         let fftSize = spectrogram.fftSize
         let hopSize = spectrogram.hopSize

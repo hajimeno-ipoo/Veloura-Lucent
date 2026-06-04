@@ -21,11 +21,33 @@ enum MasteringAnalysisService {
                 "spectralSummaryMetal"
             }
         }
+
+        var streamingStageName: String {
+            switch self {
+            case .cpu:
+                "streamingSTFTAndSpectralSummaryCPU"
+            case .metal:
+                "streamingSTFTAndSpectralSummaryMetal"
+            }
+        }
     }
 
     private struct SpectralSummaryResult: Sendable, Equatable {
         let summary: MasteringSpectralSummary
         let backend: SpectralSummaryBackend
+    }
+
+    private struct SpectralFrameSummary {
+        var lowEnergy: Float = 0
+        var midEnergy: Float = 0
+        var highEnergy: Float = 0
+        var harshUpperMid: Float = 0
+        var harshAir: Float = 0
+        var lowCount = 0
+        var midCount = 0
+        var highCount = 0
+        var frameCount = 0
+        var backend: SpectralSummaryBackend = .cpu
     }
 
     struct Benchmark: Sendable {
@@ -71,8 +93,8 @@ enum MasteringAnalysisService {
             return Benchmark(analysis: analysis, stages: [])
         }
 
-        let spectrogram = recorder.measure("stft") {
-            SpectralDSP.stft(mono)
+        let frameSummary = recorder.measureSpectralFrameSummary {
+            spectralFrameSummary(for: mono, sampleRate: signal.sampleRate)
         }
         let loudnessMeasurement = recorder.measure("loudness") {
             LoudnessMeasurementService.measure(signal: signal, includeLoudnessRange: false)
@@ -81,7 +103,7 @@ enum MasteringAnalysisService {
             loudnessMeasurement.truePeakDBFS
         }
         let spectralSummaryResult = recorder.measureSpectralSummary {
-            spectralSummary(for: spectrogram, sampleRate: signal.sampleRate)
+            spectralSummary(from: frameSummary)
         }
         let width = recorder.measure("stereoWidth") {
             stereoWidth(for: signal)
@@ -116,34 +138,76 @@ enum MasteringAnalysisService {
         }
     }
 
-    private static func spectralSummary(for spectrogram: Spectrogram, sampleRate: Double) -> SpectralSummaryResult {
-        if let metalSummary = MetalAudioAnalysisProcessor().masteringSpectralSummary(spectrogram: spectrogram, sampleRate: sampleRate) {
-            return SpectralSummaryResult(summary: metalSummary, backend: .metal)
-        }
-        return SpectralSummaryResult(summary: cpuSpectralSummary(for: spectrogram, sampleRate: sampleRate), backend: .cpu)
+    private static func spectralFrameSummary(for mono: [Float], sampleRate: Double) -> SpectralFrameSummary {
+        metalSpectralFrameSummary(for: mono, sampleRate: sampleRate) ?? cpuSpectralFrameSummary(for: mono, sampleRate: sampleRate)
     }
 
-    private static func cpuSpectralSummary(for spectrogram: Spectrogram, sampleRate: Double) -> MasteringSpectralSummary {
-        guard spectrogram.frameCount > 0 else {
-            return MasteringSpectralSummary(lowBandLevelDB: -120, midBandLevelDB: -120, highBandLevelDB: -120, harshnessScore: 0)
+    private static func metalSpectralFrameSummary(for mono: [Float], sampleRate: Double) -> SpectralFrameSummary? {
+        let processor = MetalAudioAnalysisProcessor()
+        guard processor.isAvailable else { return nil }
+
+        let fftSize = SpectralDSP.fftSize
+        let binCount = fftSize / 2 + 1
+        let frequencyStep = sampleRate / Double(fftSize)
+        let lowRange = binRange(20...180, frequencyStep: frequencyStep, binCount: binCount)
+        let midRange = binRange(180...5_000, frequencyStep: frequencyStep, binCount: binCount)
+        let highRange = binRange(5_000...20_000, frequencyStep: frequencyStep, binCount: binCount)
+
+        let chunkFrameCapacity = 512
+        var summary = SpectralFrameSummary(backend: .metal)
+        var chunkReal: [Float] = []
+        var chunkImag: [Float] = []
+        var chunkFrameCount = 0
+        chunkReal.reserveCapacity(chunkFrameCapacity * binCount)
+        chunkImag.reserveCapacity(chunkFrameCapacity * binCount)
+
+        func flushChunk() -> Bool {
+            guard chunkFrameCount > 0 else { return true }
+            guard let frameSums = processor.masteringSpectralFrameSums(
+                realValues: chunkReal,
+                imagValues: chunkImag,
+                frameCount: chunkFrameCount,
+                binCount: binCount,
+                fftSize: fftSize,
+                sampleRate: sampleRate
+            ) else {
+                return false
+            }
+
+            accumulateFrameSums(frameSums, frameCount: chunkFrameCount, into: &summary)
+            chunkReal.removeAll(keepingCapacity: true)
+            chunkImag.removeAll(keepingCapacity: true)
+            chunkFrameCount = 0
+            return true
         }
 
-        let frequencyStep = sampleRate / Double(spectrogram.fftSize)
-        let lowRange = binRange(20...180, frequencyStep: frequencyStep, binCount: spectrogram.binCount)
-        let midRange = binRange(180...5_000, frequencyStep: frequencyStep, binCount: spectrogram.binCount)
-        let highRange = binRange(5_000...20_000, frequencyStep: frequencyStep, binCount: spectrogram.binCount)
-        let harshUpperMidRange = binRange(3_000...8_000, frequencyStep: frequencyStep, binCount: spectrogram.binCount)
-        let harshAirRange = binRange(12_000...(sampleRate * 0.5), frequencyStep: frequencyStep, binCount: spectrogram.binCount)
+        var failed = false
+        SpectralDSP.forEachSTFTFrame(mono, fftSize: fftSize, hopSize: SpectralDSP.hopSize) { _, _, real, imag in
+            guard !failed else { return }
+            chunkReal.append(contentsOf: real.prefix(binCount))
+            chunkImag.append(contentsOf: imag.prefix(binCount))
+            chunkFrameCount += 1
+            if chunkFrameCount == chunkFrameCapacity {
+                failed = !flushChunk()
+            }
+        }
+        guard !failed, flushChunk() else { return nil }
 
-        var lowEnergy: Float = 0
-        var midEnergy: Float = 0
-        var highEnergy: Float = 0
-        var harshUpperMid: Float = 0
-        var harshAir: Float = 0
-        var lowCount = 0
-        var midCount = 0
-        var highCount = 0
+        summary.lowCount = summary.frameCount * (lowRange.upperInclusive - lowRange.lower + 1)
+        summary.midCount = summary.frameCount * (midRange.upperInclusive - midRange.lower + 1)
+        summary.highCount = summary.frameCount * (highRange.upperInclusive - highRange.lower + 1)
+        return summary
+    }
 
+    private static func cpuSpectralFrameSummary(for mono: [Float], sampleRate: Double) -> SpectralFrameSummary {
+        let fftSize = SpectralDSP.fftSize
+        let binCount = fftSize / 2 + 1
+        let frequencyStep = sampleRate / Double(fftSize)
+        let lowRange = binRange(20...180, frequencyStep: frequencyStep, binCount: binCount)
+        let midRange = binRange(180...5_000, frequencyStep: frequencyStep, binCount: binCount)
+        let highRange = binRange(5_000...20_000, frequencyStep: frequencyStep, binCount: binCount)
+        let harshUpperMidRange = binRange(3_000...8_000, frequencyStep: frequencyStep, binCount: binCount)
+        let harshAirRange = binRange(12_000...(sampleRate * 0.5), frequencyStep: frequencyStep, binCount: binCount)
         let maxBin = max(
             lowRange.upperInclusive,
             midRange.upperInclusive,
@@ -151,27 +215,28 @@ enum MasteringAnalysisService {
             harshUpperMidRange.upperInclusive,
             harshAirRange.upperInclusive
         )
-        for frameIndex in 0..<spectrogram.frameCount {
-            let frameStart = frameIndex * spectrogram.binCount
+
+        var summary = SpectralFrameSummary()
+        SpectralDSP.forEachSTFTFrame(mono, fftSize: fftSize, hopSize: SpectralDSP.hopSize) { _, _, real, imag in
+            summary.frameCount += 1
+            var frameLowEnergy: Float = 0
+            var frameMidEnergy: Float = 0
+            var frameHighEnergy: Float = 0
             var frameHarshUpperMid: Float = 0
             var frameHarshAir: Float = 0
 
             for binIndex in 0...maxBin {
-                let storageIndex = frameStart + binIndex
-                let magnitude = hypotf(spectrogram.real[storageIndex], spectrogram.imag[storageIndex])
+                let magnitude = stableMagnitude(real: real[binIndex], imag: imag[binIndex])
                 let energy = magnitude * magnitude
 
                 if lowRange.contains(binIndex) {
-                    lowEnergy += energy
-                    lowCount += 1
+                    frameLowEnergy += energy
                 }
                 if midRange.contains(binIndex) {
-                    midEnergy += energy
-                    midCount += 1
+                    frameMidEnergy += energy
                 }
                 if highRange.contains(binIndex) {
-                    highEnergy += energy
-                    highCount += 1
+                    frameHighEnergy += energy
                 }
                 if harshUpperMidRange.contains(binIndex) {
                     frameHarshUpperMid += magnitude
@@ -181,16 +246,47 @@ enum MasteringAnalysisService {
                 }
             }
 
-            harshUpperMid += frameHarshUpperMid
-            harshAir += frameHarshAir
+            summary.lowEnergy += frameLowEnergy
+            summary.midEnergy += frameMidEnergy
+            summary.highEnergy += frameHighEnergy
+            summary.harshUpperMid += frameHarshUpperMid
+            summary.harshAir += frameHarshAir
+        }
+        summary.lowCount = summary.frameCount * (lowRange.upperInclusive - lowRange.lower + 1)
+        summary.midCount = summary.frameCount * (midRange.upperInclusive - midRange.lower + 1)
+        summary.highCount = summary.frameCount * (highRange.upperInclusive - highRange.lower + 1)
+        return summary
+    }
+
+    private static func spectralSummary(from frameSummary: SpectralFrameSummary) -> SpectralSummaryResult {
+        guard frameSummary.frameCount > 0 else {
+            return SpectralSummaryResult(
+                summary: MasteringSpectralSummary(lowBandLevelDB: -120, midBandLevelDB: -120, highBandLevelDB: -120, harshnessScore: 0),
+                backend: frameSummary.backend
+            )
         }
 
-        return MasteringSpectralSummary(
-            lowBandLevelDB: bandLevelDB(energy: lowEnergy, count: lowCount),
-            midBandLevelDB: bandLevelDB(energy: midEnergy, count: midCount),
-            highBandLevelDB: bandLevelDB(energy: highEnergy, count: highCount),
-            harshnessScore: min(1.0, harshUpperMid / max(harshUpperMid + harshAir, 1e-6))
+        return SpectralSummaryResult(
+            summary: MasteringSpectralSummary(
+                lowBandLevelDB: bandLevelDB(energy: frameSummary.lowEnergy, count: frameSummary.lowCount),
+                midBandLevelDB: bandLevelDB(energy: frameSummary.midEnergy, count: frameSummary.midCount),
+                highBandLevelDB: bandLevelDB(energy: frameSummary.highEnergy, count: frameSummary.highCount),
+                harshnessScore: min(1.0, frameSummary.harshUpperMid / max(frameSummary.harshUpperMid + frameSummary.harshAir, 1e-6))
+            ),
+            backend: frameSummary.backend
         )
+    }
+
+    private static func accumulateFrameSums(_ frameSums: [Float], frameCount: Int, into summary: inout SpectralFrameSummary) {
+        for frameIndex in 0..<frameCount {
+            let outputStart = frameIndex * 5
+            summary.lowEnergy += frameSums[outputStart]
+            summary.midEnergy += frameSums[outputStart + 1]
+            summary.highEnergy += frameSums[outputStart + 2]
+            summary.harshUpperMid += frameSums[outputStart + 3]
+            summary.harshAir += frameSums[outputStart + 4]
+        }
+        summary.frameCount += frameCount
     }
 
     static func stereoWidth(for signal: AudioSignal) -> Float {
@@ -227,6 +323,16 @@ enum MasteringAnalysisService {
         return 20 * log10(max(Double(rms), 1e-12))
     }
 
+    private static func stableMagnitude(real: Float, imag: Float) -> Float {
+        let realValue = abs(real)
+        let imagValue = abs(imag)
+        let larger = max(realValue, imagValue)
+        guard larger > 0 else { return 0 }
+        let smaller = min(realValue, imagValue)
+        let ratio = smaller / larger
+        return larger * sqrtf(1 + ratio * ratio)
+    }
+
     private struct AnalysisBenchmarkRecorder {
         private(set) var stages: [AudioProcessingStageBenchmark] = []
 
@@ -250,6 +356,19 @@ enum MasteringAnalysisService {
             stages.append(
                 AudioProcessingStageBenchmark(
                     name: result.backend.stageName,
+                    durationSeconds: Double(end - start) / 1_000_000_000
+                )
+            )
+            return result
+        }
+
+        mutating func measureSpectralFrameSummary(_ work: () -> SpectralFrameSummary) -> SpectralFrameSummary {
+            let start = DispatchTime.now().uptimeNanoseconds
+            let result = work()
+            let end = DispatchTime.now().uptimeNanoseconds
+            stages.append(
+                AudioProcessingStageBenchmark(
+                    name: result.backend.streamingStageName,
                     durationSeconds: Double(end - start) / 1_000_000_000
                 )
             )

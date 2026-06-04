@@ -127,6 +127,10 @@ private func masteringAnalysisStageDisplayName(_ name: String) -> String {
     switch name {
     case "stft":
         "STFT"
+    case "streamingSTFTAndSpectralSummaryCPU":
+        "STFT+帯域集計(CPU)"
+    case "streamingSTFTAndSpectralSummaryMetal":
+        "STFT+帯域集計(Metal)"
     case "loudness":
         "ラウドネス"
     case "truePeak":

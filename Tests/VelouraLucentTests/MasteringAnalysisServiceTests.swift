@@ -33,7 +33,8 @@ struct MasteringAnalysisServiceTests {
         let plainAnalysis = try MasteringAnalysisService.analyze(fileURL: fileURL)
         let benchmark = try MasteringAnalysisService.analyzeWithBenchmark(fileURL: fileURL)
         let expectedSpectralStage = MetalAudioAnalysisProcessor().isAvailable ? "spectralSummaryMetal" : "spectralSummaryCPU"
-        let expectedStages = ["stft", "loudness", "truePeak", expectedSpectralStage, "stereoWidth"]
+        let expectedStreamingStage = MetalAudioAnalysisProcessor().isAvailable ? "streamingSTFTAndSpectralSummaryMetal" : "streamingSTFTAndSpectralSummaryCPU"
+        let expectedStages = [expectedStreamingStage, "loudness", "truePeak", expectedSpectralStage, "stereoWidth"]
 
         #expect(benchmark.analysis.integratedLoudness == plainAnalysis.integratedLoudness)
         #expect(benchmark.analysis.truePeakDBFS == plainAnalysis.truePeakDBFS)
@@ -90,7 +91,8 @@ struct MasteringAnalysisServiceTests {
         let cpuSpectralSummary = measureReferenceSpectralSummary(spectrogram: spectrogram, sampleRate: signal.sampleRate)
         let metalSpectralSummary = measureMetalSpectralSummary(spectrogram: spectrogram, sampleRate: signal.sampleRate)
         let expectedSpectralStage = MetalAudioAnalysisProcessor().isAvailable ? "spectralSummaryMetal" : "spectralSummaryCPU"
-        #expect(benchmark.stages.map(\.name) == ["stft", "loudness", "truePeak", expectedSpectralStage, "stereoWidth"])
+        let expectedStreamingStage = MetalAudioAnalysisProcessor().isAvailable ? "streamingSTFTAndSpectralSummaryMetal" : "streamingSTFTAndSpectralSummaryCPU"
+        #expect(benchmark.stages.map(\.name) == [expectedStreamingStage, "loudness", "truePeak", expectedSpectralStage, "stereoWidth"])
         #expect(benchmark.stages.allSatisfy { $0.durationSeconds >= 0 })
         #expect(benchmark.analysis.integratedLoudness.isFinite)
         #expect(benchmark.analysis.truePeakDBFS.isFinite)
@@ -130,26 +132,23 @@ struct MasteringAnalysisServiceTests {
     }
 
     @Test
-    func masteringAnalysisUsesMetalSpectralSummaryWhenAvailable() throws {
-        let processor = MetalAudioAnalysisProcessor()
-        guard processor.isAvailable else { return }
-
+    func masteringAnalysisAvoidsFullSpectrogramAndMatchesReference() throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
-        let fileURL = tempDirectory.appending(path: "metal-mastering-analysis-path.wav")
+        let fileURL = tempDirectory.appending(path: "streaming-mastering-analysis-path.wav")
 
         try makeStereoTone(at: fileURL)
 
         let signal = try AudioFileService.loadAudio(from: fileURL)
-        let spectrogram = SpectralDSP.stft(signal.monoMixdown())
-        let metal = try #require(processor.masteringSpectralSummary(spectrogram: spectrogram, sampleRate: signal.sampleRate))
+        let reference = referenceAnalysis(signal: signal)
         let benchmark = MasteringAnalysisService.analyzeWithBenchmark(signal: signal)
 
-        #expect(benchmark.stages.map(\.name).contains("spectralSummaryMetal"))
-        expectClose(benchmark.analysis.lowBandLevelDB, metal.lowBandLevelDB, tolerance: 0.001)
-        expectClose(benchmark.analysis.midBandLevelDB, metal.midBandLevelDB, tolerance: 0.001)
-        expectClose(benchmark.analysis.highBandLevelDB, metal.highBandLevelDB, tolerance: 0.001)
-        expectClose(benchmark.analysis.harshnessScore, metal.harshnessScore, tolerance: 0.0001)
+        let expectedSpectralStage = MetalAudioAnalysisProcessor().isAvailable ? "spectralSummaryMetal" : "spectralSummaryCPU"
+        #expect(benchmark.stages.map(\.name).contains(expectedSpectralStage))
+        expectClose(benchmark.analysis.lowBandLevelDB, reference.lowBandLevelDB, tolerance: 0.001)
+        expectClose(benchmark.analysis.midBandLevelDB, reference.midBandLevelDB, tolerance: 0.001)
+        expectClose(benchmark.analysis.highBandLevelDB, reference.highBandLevelDB, tolerance: 0.001)
+        expectClose(benchmark.analysis.harshnessScore, reference.harshnessScore, tolerance: 0.0001)
     }
 
     @Test
