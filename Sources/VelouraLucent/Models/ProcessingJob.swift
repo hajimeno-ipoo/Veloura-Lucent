@@ -149,20 +149,26 @@ final class ProcessingJob {
     var inputSpectrogram: SpectrogramSnapshot?
     var outputSpectrogram: SpectrogramSnapshot?
     var masteredSpectrogram: SpectrogramSnapshot?
-    static let visibleLogLineLimit = 80
-    private(set) var logLines: [String] = []
-    private(set) var masteringLogLines: [String] = []
+    static let visibleLogLineLimit = ProcessingLogStateStore.visibleLineLimit
+    private var correctionLog = ProcessingLogStateStore()
+    private var masteringLog = ProcessingLogStateStore()
+    var logLines: [String] {
+        correctionLog.lines
+    }
+    var masteringLogLines: [String] {
+        masteringLog.lines
+    }
     var logText: String {
-        logLines.joined(separator: "\n")
+        correctionLog.text
     }
     var masteringLogText: String {
-        masteringLogLines.joined(separator: "\n")
+        masteringLog.text
     }
     var visibleLogLines: [String] {
-        Array(logLines.suffix(Self.visibleLogLineLimit))
+        correctionLog.visibleLines
     }
     var visibleMasteringLogLines: [String] {
-        Array(masteringLogLines.suffix(Self.visibleLogLineLimit))
+        masteringLog.visibleLines
     }
     var statusMessage = "待機中"
     var masteringStatusMessage = "待機中"
@@ -312,8 +318,8 @@ final class ProcessingJob {
         inputSpectrogram = nil
         outputSpectrogram = nil
         masteredSpectrogram = nil
-        logLines.removeAll()
-        masteringLogLines.removeAll()
+        correctionLog.reset()
+        masteringLog.reset()
         statusMessage = "処理待ち"
         masteringStatusMessage = "補正後に実行できます"
         processingStartedAt = nil
@@ -339,7 +345,7 @@ final class ProcessingJob {
         didSendMasteringCompletion = false
         isProcessing = true
         lastError = nil
-        logLines.removeAll()
+        correctionLog.reset()
         statusMessage = "処理中"
         processingStartedAt = Date()
         processingFinishedAt = nil
@@ -354,7 +360,7 @@ final class ProcessingJob {
         masteredSpectrogram = nil
         resetDisplayAnalysisStates(for: .corrected)
         resetDisplayAnalysisStates(for: .mastered)
-        masteringLogLines.removeAll()
+        masteringLog.reset()
         masteringStatusMessage = "補正後に実行できます"
         masteringStartedAt = nil
         masteringFinishedAt = nil
@@ -370,7 +376,7 @@ final class ProcessingJob {
         didSendMasteringCompletion = false
         isMastering = true
         masteringLastError = nil
-        masteringLogLines.removeAll()
+        masteringLog.reset()
         masteringStatusMessage = "マスタリング中"
         masteringStartedAt = Date()
         masteringFinishedAt = nil
@@ -504,7 +510,7 @@ final class ProcessingJob {
             applyProgressEvent(event)
             return
         }
-        logLines.append(trimmed)
+        correctionLog.append(trimmed)
     }
 
     func appendMasteringLog(_ message: String) {
@@ -515,7 +521,7 @@ final class ProcessingJob {
             return
         }
 
-        masteringLogLines.append(trimmed)
+        masteringLog.append(trimmed)
     }
 
     func finishSuccess(_ outputURL: URL, appliedSettings: CorrectionSettings? = nil) {

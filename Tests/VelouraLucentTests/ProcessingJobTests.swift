@@ -97,6 +97,29 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func logChangesNotifyObservationReaders() async {
+        let job = ProcessingJob()
+
+        await confirmation("補正ログの変更通知") { confirmation in
+            withObservationTracking {
+                _ = job.visibleLogLines
+            } onChange: {
+                confirmation()
+            }
+            job.appendLog("補正ログ")
+        }
+
+        await confirmation("マスタリングログの変更通知") { confirmation in
+            withObservationTracking {
+                _ = job.visibleMasteringLogLines
+            } onChange: {
+                confirmation()
+            }
+            job.appendMasteringLog("マスタリングログ")
+        }
+    }
+
+    @Test
     func correctionCompletionNotificationIsSentOncePerRun() {
         let reporter = CompletionNotificationReporterSpy()
         let job = ProcessingJob(notificationReporter: reporter)
