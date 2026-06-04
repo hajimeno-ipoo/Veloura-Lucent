@@ -125,45 +125,6 @@ enum ProcessingProgressEvent: Sendable, Equatable {
     }
 }
 
-enum DisplayAnalysisTarget: Hashable, Sendable {
-    case input
-    case corrected
-    case mastered
-
-    static let allDisplayTargets: [DisplayAnalysisTarget] = [.input, .corrected, .mastered]
-}
-
-enum DisplayAnalysisKind: String, CaseIterable, Hashable, Sendable {
-    case metrics
-    case spectrogram
-    case preview
-    case noise
-    case correctionAnalysis
-    case masteringAnalysis
-
-    var title: String {
-        switch self {
-        case .metrics: "比較"
-        case .spectrogram: "スペクトログラム"
-        case .preview: "プレビュー"
-        case .noise: "ノイズ確認"
-        case .correctionAnalysis: "補正解析"
-        case .masteringAnalysis: "マスタリング解析"
-        }
-    }
-
-    static func initialStates() -> [DisplayAnalysisKind: DisplayAnalysisState] {
-        Dictionary(uniqueKeysWithValues: allCases.map { ($0, .idle) })
-    }
-}
-
-enum DisplayAnalysisState: Hashable, Sendable {
-    case idle
-    case running
-    case completed
-    case failed
-}
-
 @MainActor
 @Observable
 final class ProcessingJob {
@@ -226,9 +187,7 @@ final class ProcessingJob {
     var skippedMasteringSteps: Set<MasteringStep> = []
     var failedMasteringSteps: Set<MasteringStep> = []
     var masteringActiveStepDetail: String?
-    var inputAnalysisStates = DisplayAnalysisKind.initialStates()
-    var outputAnalysisStates = DisplayAnalysisKind.initialStates()
-    var masteredAnalysisStates = DisplayAnalysisKind.initialStates()
+    private var displayAnalysisStates = DisplayAnalysisStateStore()
     var selectedMasteringProfile: MasteringProfile = .streaming
     var editableMasteringSettings: MasteringSettings = MasteringProfile.streaming.settings
     var isUsingCustomMasteringSettings = false
@@ -277,19 +236,19 @@ final class ProcessingJob {
     }
 
     var isAnalyzingMetrics: Bool {
-        isAnalysisRunning(.metrics)
+        displayAnalysisStates.isRunning(.metrics)
     }
 
     var isAnalyzingSpectrogram: Bool {
-        isAnalysisRunning(.spectrogram)
+        displayAnalysisStates.isRunning(.spectrogram)
     }
 
     var isAnalyzingNoise: Bool {
-        isAnalysisRunning(.noise)
+        displayAnalysisStates.isRunning(.noise)
     }
 
     var isAnalyzingDisplayAnalysis: Bool {
-        DisplayAnalysisKind.allCases.contains { isAnalysisRunning($0) }
+        displayAnalysisStates.isRunningAny
     }
 
     var canUseCorrectedAnalysisForMastering: Bool {
@@ -297,19 +256,11 @@ final class ProcessingJob {
     }
 
     var displayAnalysisStatusText: String? {
-        let running = DisplayAnalysisKind.allCases
-            .filter { isAnalysisRunning($0) }
-            .map(\.title)
-        guard !running.isEmpty else { return nil }
-        return "\(running.joined(separator: "・"))を更新中"
+        displayAnalysisStates.runningStatusText
     }
 
     var failedDisplayAnalysisText: String? {
-        let failed = DisplayAnalysisKind.allCases
-            .filter { isAnalysisFailed($0) }
-            .map(\.title)
-        guard !failed.isEmpty else { return nil }
-        return "一部の表示解析を完了できませんでした: \(failed.joined(separator: "・"))"
+        displayAnalysisStates.failedStatusText
     }
 
     func prepareForSelection(_ inputURL: URL) {
@@ -514,64 +465,27 @@ final class ProcessingJob {
     }
 
     func beginDisplayAnalysis(_ kind: DisplayAnalysisKind, for target: DisplayAnalysisTarget) {
-        setDisplayAnalysisState(.running, for: target, kind: kind)
+        displayAnalysisStates.begin(kind, for: target)
     }
 
     func finishDisplayAnalysis(_ kind: DisplayAnalysisKind, for target: DisplayAnalysisTarget) {
-        setDisplayAnalysisState(.completed, for: target, kind: kind)
+        displayAnalysisStates.finish(kind, for: target)
     }
 
     func failDisplayAnalysis(_ kind: DisplayAnalysisKind, for target: DisplayAnalysisTarget) {
-        setDisplayAnalysisState(.failed, for: target, kind: kind)
+        displayAnalysisStates.fail(kind, for: target)
     }
 
     func displayAnalysisState(_ kind: DisplayAnalysisKind, for target: DisplayAnalysisTarget) -> DisplayAnalysisState {
-        switch target {
-        case .input:
-            inputAnalysisStates[kind] ?? .idle
-        case .corrected:
-            outputAnalysisStates[kind] ?? .idle
-        case .mastered:
-            masteredAnalysisStates[kind] ?? .idle
-        }
+        displayAnalysisStates.state(kind, for: target)
     }
 
     func resetDisplayAnalysisStates(for target: DisplayAnalysisTarget) {
-        switch target {
-        case .input:
-            inputAnalysisStates = DisplayAnalysisKind.initialStates()
-        case .corrected:
-            outputAnalysisStates = DisplayAnalysisKind.initialStates()
-        case .mastered:
-            masteredAnalysisStates = DisplayAnalysisKind.initialStates()
-        }
+        displayAnalysisStates.reset(for: target)
     }
 
     private func resetAllDisplayAnalysisStates() {
-        DisplayAnalysisTarget.allDisplayTargets.forEach { resetDisplayAnalysisStates(for: $0) }
-    }
-
-    private func setDisplayAnalysisState(_ state: DisplayAnalysisState, for target: DisplayAnalysisTarget, kind: DisplayAnalysisKind) {
-        switch target {
-        case .input:
-            inputAnalysisStates[kind] = state
-        case .corrected:
-            outputAnalysisStates[kind] = state
-        case .mastered:
-            masteredAnalysisStates[kind] = state
-        }
-    }
-
-    private func isAnalysisRunning(_ kind: DisplayAnalysisKind) -> Bool {
-        DisplayAnalysisTarget.allDisplayTargets.contains {
-            displayAnalysisState(kind, for: $0) == .running
-        }
-    }
-
-    private func isAnalysisFailed(_ kind: DisplayAnalysisKind) -> Bool {
-        DisplayAnalysisTarget.allDisplayTargets.contains {
-            displayAnalysisState(kind, for: $0) == .failed
-        }
+        displayAnalysisStates.resetAll()
     }
 
     func appendLog(_ message: String) {
