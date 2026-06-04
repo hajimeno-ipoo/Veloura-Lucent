@@ -154,6 +154,56 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func correctionProfileObservationDoesNotChangeWhenMasteringSettingsChange() {
+        let job = ProcessingJob()
+        let didNotifyCorrectionProfileReader = ObservationFlag()
+
+        withObservationTracking {
+            _ = job.selectedDenoiseStrength
+        } onChange: {
+            didNotifyCorrectionProfileReader.set()
+        }
+
+        job.updateMasteringSettings { settings in
+            settings.targetLoudness = -15
+        }
+
+        #expect(didNotifyCorrectionProfileReader.isSet == false)
+    }
+
+    @Test
+    func correctionProfileObservationChangesWhenCorrectionProfileChanges() async {
+        let job = ProcessingJob()
+
+        await confirmation("補正プロファイルの変更通知") { confirmation in
+            withObservationTracking {
+                _ = job.selectedDenoiseStrength
+            } onChange: {
+                confirmation()
+            }
+            job.applyCorrectionProfile(.strong)
+        }
+    }
+
+    @Test
+    func masteringSettingsObservationDoesNotChangeWhenCorrectionSettingsChange() {
+        let job = ProcessingJob()
+        let didNotifyMasteringSettingsReader = ObservationFlag()
+
+        withObservationTracking {
+            _ = job.editableMasteringSettings.targetLoudness
+        } onChange: {
+            didNotifyMasteringSettingsReader.set()
+        }
+
+        job.updateCorrectionSettings { settings in
+            settings.highNaturalness = 0.9
+        }
+
+        #expect(didNotifyMasteringSettingsReader.isSet == false)
+    }
+
+    @Test
     func correctionCompletionNotificationIsSentOncePerRun() {
         let reporter = CompletionNotificationReporterSpy()
         let job = ProcessingJob(notificationReporter: reporter)

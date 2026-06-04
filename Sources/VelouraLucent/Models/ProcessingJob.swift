@@ -185,17 +185,51 @@ final class ProcessingJob {
     private var correctionProgress = ProcessingProgressStateStore<ProcessingStep>()
     private var masteringProgress = ProcessingProgressStateStore<MasteringStep>()
     private var displayAnalysisStates = DisplayAnalysisStateStore()
-    var selectedMasteringProfile: MasteringProfile = .streaming
-    var editableMasteringSettings: MasteringSettings = MasteringProfile.streaming.settings
-    var isUsingCustomMasteringSettings = false
-    var showAdvancedMasteringSettings = false
-    var selectedDenoiseStrength: DenoiseStrength = .balanced
-    var editableCorrectionSettings: CorrectionSettings = DenoiseStrength.balanced.settings
-    var isUsingCustomCorrectionSettings = false
-    var showAdvancedCorrectionSettings = false
-    var appliedCorrectionSettings: CorrectionSettings?
-    var appliedMasteringSettings: MasteringSettings?
-    var selectedAnalysisMode: AudioAnalysisMode = .auto
+    @ObservationIgnored private let settingsState = ProcessingSettingsState()
+    var selectedMasteringProfile: MasteringProfile {
+        get { settingsState.selectedMasteringProfile }
+        set { settingsState.selectedMasteringProfile = newValue }
+    }
+    var editableMasteringSettings: MasteringSettings {
+        get { settingsState.editableMasteringSettings }
+        set { settingsState.editableMasteringSettings = newValue }
+    }
+    var isUsingCustomMasteringSettings: Bool {
+        get { settingsState.isUsingCustomMasteringSettings }
+        set { settingsState.isUsingCustomMasteringSettings = newValue }
+    }
+    var showAdvancedMasteringSettings: Bool {
+        get { settingsState.showAdvancedMasteringSettings }
+        set { settingsState.showAdvancedMasteringSettings = newValue }
+    }
+    var selectedDenoiseStrength: DenoiseStrength {
+        get { settingsState.selectedDenoiseStrength }
+        set { settingsState.selectedDenoiseStrength = newValue }
+    }
+    var editableCorrectionSettings: CorrectionSettings {
+        get { settingsState.editableCorrectionSettings }
+        set { settingsState.editableCorrectionSettings = newValue }
+    }
+    var isUsingCustomCorrectionSettings: Bool {
+        get { settingsState.isUsingCustomCorrectionSettings }
+        set { settingsState.isUsingCustomCorrectionSettings = newValue }
+    }
+    var showAdvancedCorrectionSettings: Bool {
+        get { settingsState.showAdvancedCorrectionSettings }
+        set { settingsState.showAdvancedCorrectionSettings = newValue }
+    }
+    var appliedCorrectionSettings: CorrectionSettings? {
+        get { settingsState.appliedCorrectionSettings }
+        set { settingsState.appliedCorrectionSettings = newValue }
+    }
+    var appliedMasteringSettings: MasteringSettings? {
+        get { settingsState.appliedMasteringSettings }
+        set { settingsState.appliedMasteringSettings = newValue }
+    }
+    var selectedAnalysisMode: AudioAnalysisMode {
+        get { settingsState.selectedAnalysisMode }
+        set { settingsState.selectedAnalysisMode = newValue }
+    }
 
     init(notificationReporter: CompletionNotificationReporting = NoOpCompletionNotificationReporter.shared) {
         self.notificationReporter = notificationReporter
@@ -323,8 +357,7 @@ final class ProcessingJob {
         correctionProgress.reset()
         masteringProgress.reset()
         resetAllDisplayAnalysisStates()
-        appliedCorrectionSettings = nil
-        appliedMasteringSettings = nil
+        settingsState.resetAppliedSettings()
         applyCorrectionProfile(selectedDenoiseStrength)
         applyMasteringProfile(selectedMasteringProfile)
     }
@@ -351,8 +384,7 @@ final class ProcessingJob {
         masteringLastError = nil
         hasExistingMasteredOutput = false
         masteringProgress.reset()
-        appliedCorrectionSettings = nil
-        appliedMasteringSettings = nil
+        settingsState.resetAppliedSettings()
     }
 
     func beginMastering(appliedSettings: MasteringSettings? = nil) {
@@ -369,38 +401,31 @@ final class ProcessingJob {
         resetMasteredAnalysisResults()
         resetDisplayAnalysisStates(for: .mastered)
         hasExistingMasteredOutput = false
-        appliedMasteringSettings = nil
+        settingsState.resetAppliedMasteringSettings()
     }
 
     func applyMasteringProfile(_ profile: MasteringProfile) {
-        selectedMasteringProfile = profile
-        editableMasteringSettings = profile.settings
-        isUsingCustomMasteringSettings = false
+        settingsState.applyMasteringProfile(profile)
     }
 
     func resetMasteringSettingsToProfile() {
-        applyMasteringProfile(selectedMasteringProfile)
+        settingsState.resetMasteringSettingsToProfile()
     }
 
     func updateMasteringSettings(_ update: (inout MasteringSettings) -> Void) {
-        update(&editableMasteringSettings)
-        isUsingCustomMasteringSettings = true
+        settingsState.updateMasteringSettings(update)
     }
 
     func applyCorrectionProfile(_ profile: DenoiseStrength) {
-        selectedDenoiseStrength = profile
-        editableCorrectionSettings = profile.settings
-        isUsingCustomCorrectionSettings = false
+        settingsState.applyCorrectionProfile(profile)
     }
 
     func resetCorrectionSettingsToProfile() {
-        applyCorrectionProfile(selectedDenoiseStrength)
+        settingsState.resetCorrectionSettingsToProfile()
     }
 
     func updateCorrectionSettings(_ update: (inout CorrectionSettings) -> Void) {
-        update(&editableCorrectionSettings)
-        editableCorrectionSettings.profile = selectedDenoiseStrength
-        isUsingCustomCorrectionSettings = true
+        settingsState.updateCorrectionSettings(update)
     }
 
     func finishInputMetricAnalysis(_ metrics: AudioMetricSnapshot) {
@@ -542,7 +567,7 @@ final class ProcessingJob {
         hasExistingOutput = FileManager.default.fileExists(atPath: outputURL.path(percentEncoded: false))
         correctionProgress.completeAll(ProcessingStep.allCases)
         masteringStatusMessage = hasExistingOutput ? "補正後の解析中" : "補正後に実行できます"
-        appliedCorrectionSettings = appliedSettings ?? appliedCorrectionSettings ?? editableCorrectionSettings
+        settingsState.storeAppliedCorrectionSettings(appliedSettings)
         if !didSendCorrectionCompletion {
             didSendCorrectionCompletion = true
             notificationReporter.notifyCompletion(for: .correction)
@@ -556,7 +581,7 @@ final class ProcessingJob {
         masteringFinishedAt = Date()
         hasExistingMasteredOutput = FileManager.default.fileExists(atPath: outputURL.path(percentEncoded: false))
         masteringProgress.completeAll(MasteringStep.allCases)
-        appliedMasteringSettings = appliedSettings ?? appliedMasteringSettings ?? editableMasteringSettings
+        settingsState.storeAppliedMasteringSettings(appliedSettings)
         if !didSendMasteringCompletion {
             didSendMasteringCompletion = true
             notificationReporter.notifyCompletion(for: .mastering)
