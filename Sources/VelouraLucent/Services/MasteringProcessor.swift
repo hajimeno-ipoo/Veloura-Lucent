@@ -276,9 +276,9 @@ struct MasteringProcessor {
                 signal: protected,
                 peakCeilingDB: settings.peakCeilingDB
             )
-            let probePlan = noiseReturnProbePlan(for: finalNoiseConfirmed)
-            let baseProbe = noiseReturnProbe(signal: finalNoiseConfirmed, plan: probePlan)
-            let candidateProbe = noiseReturnProbe(signal: candidate, plan: probePlan)
+            let probePlan = MasteringNoiseReturnSupport.noiseReturnProbePlan(for: finalNoiseConfirmed)
+            let baseProbe = MasteringNoiseReturnSupport.noiseReturnProbe(signal: finalNoiseConfirmed, plan: probePlan)
+            let candidateProbe = MasteringNoiseReturnSupport.noiseReturnProbe(signal: candidate, plan: probePlan)
             guard isFinalLoudnessRestoreNoiseSafe(
                 baseProbe: baseProbe,
                 candidateProbe: candidateProbe,
@@ -702,8 +702,8 @@ struct MasteringProcessor {
         maxPasses: Int = 8
     ) -> AudioSignal {
         logger?.log("ノイズ戻り: 専用測定を開始")
-        let probePlan = noiseReturnProbePlan(for: reference)
-        let referenceProbe = noiseReturnProbe(
+        let probePlan = MasteringNoiseReturnSupport.noiseReturnProbePlan(for: reference)
+        let referenceProbe = MasteringNoiseReturnSupport.noiseReturnProbe(
             signal: reference,
             plan: probePlan
         )
@@ -712,7 +712,7 @@ struct MasteringProcessor {
             probePlan: probePlan,
             referenceProbe: referenceProbe,
             fullRangeReferenceProbe: maxPasses > 1
-                ? noiseReturnProbe(signal: reference, plan: fullRangeNoiseReturnProbePlan(for: reference))
+                ? MasteringNoiseReturnSupport.noiseReturnProbe(signal: reference, plan: MasteringNoiseReturnSupport.fullRangeNoiseReturnProbePlan(for: reference))
                 : nil,
             rules: InternalAudioJudgementPolicy.masteringNoiseReturnLimits,
             logger: logger,
@@ -741,7 +741,7 @@ struct MasteringProcessor {
             logger?.log("ノイズ戻り/軽量測定: \(probePlan.selectedWindowCount)/\(probePlan.totalWindowCount)区間")
         }
         for _ in 0..<adaptivePasses {
-            let currentMeasurements = noiseReturnProbe(signal: currentSignal, plan: probePlan)
+            let currentMeasurements = MasteringNoiseReturnSupport.noiseReturnProbe(signal: currentSignal, plan: probePlan)
             measurementCount += 1
             logger?.detail("\(measurementCount)/\(adaptivePasses) 回目を確認中", for: .noiseReturnGuard)
             logger?.log("ノイズ戻り/軽量判定: \(measurementCount)/\(adaptivePasses)")
@@ -768,11 +768,11 @@ struct MasteringProcessor {
                 completionLog = "ノイズ戻り: 完了"
                 break
             }
-            logger?.log("ノイズ戻り/判定: \(noiseReturnDisplayName(for: strongestExcess.rule.id)) +\(String(format: "%.1f", strongestExcess.excessDB)) dB")
-            let gain = noiseReturnGain(for: strongestExcess.rule, excessDB: strongestExcess.excessDB)
-            guard let candidate = constrainedNoiseReturnCandidate(
+            logger?.log("ノイズ戻り/判定: \(MasteringNoiseReturnSupport.noiseReturnDisplayName(for: strongestExcess.rule.id)) +\(String(format: "%.1f", strongestExcess.excessDB)) dB")
+            let gain = MasteringNoiseReturnSupport.noiseReturnGain(for: strongestExcess.rule, excessDB: strongestExcess.excessDB)
+            guard let candidate = MasteringNoiseReturnSupport.constrainedNoiseReturnCandidate(
                 signal: currentSignal,
-                guardReferenceLevels: resolvedNoiseReturnHighBandReferenceLevels(
+                guardReferenceLevels: MasteringNoiseReturnSupport.resolvedNoiseReturnHighBandReferenceLevels(
                     &referenceHighBandLevels,
                     signal: signal
                 ),
@@ -798,9 +798,9 @@ struct MasteringProcessor {
             logger?.detail("最終確認 1/1", for: .noiseReturnGuard)
             logger?.log("ノイズ戻り/最終確認: 全体測定 1/1")
             logger?.log("ノイズ戻り: 最終確認で追加補正")
-            if let candidate = constrainedNoiseReturnCandidate(
+            if let candidate = MasteringNoiseReturnSupport.constrainedNoiseReturnCandidate(
                 signal: currentSignal,
-                guardReferenceLevels: resolvedNoiseReturnHighBandReferenceLevels(
+                guardReferenceLevels: MasteringNoiseReturnSupport.resolvedNoiseReturnHighBandReferenceLevels(
                     &referenceHighBandLevels,
                     signal: signal
                 ),
@@ -827,7 +827,7 @@ struct MasteringProcessor {
         referenceProbe: NoiseReturnProbe,
         rules: [NoiseReturnLimit]
     ) -> (rule: NoiseReturnLimit, gain: Float)? {
-        let currentMeasurements = noiseReturnProbe(signal: signal, plan: fullRangeNoiseReturnProbePlan(for: signal))
+        let currentMeasurements = MasteringNoiseReturnSupport.noiseReturnProbe(signal: signal, plan: MasteringNoiseReturnSupport.fullRangeNoiseReturnProbePlan(for: signal))
         guard let strongestExcess = rules
             .compactMap({ rule -> (rule: NoiseReturnLimit, excessDB: Double)? in
                 guard let reference = referenceProbe.comparableLevel(for: rule.id),
@@ -841,511 +841,8 @@ struct MasteringProcessor {
         else {
             return nil
         }
-        let gain = noiseReturnGain(for: strongestExcess.rule, excessDB: strongestExcess.excessDB)
+        let gain = MasteringNoiseReturnSupport.noiseReturnGain(for: strongestExcess.rule, excessDB: strongestExcess.excessDB)
         return (strongestExcess.rule, gain)
-    }
-
-    private func noiseReturnGain(for rule: NoiseReturnLimit, excessDB: Double) -> Float {
-        powf(10, -Float(min(excessDB * rule.reductionMultiplier, rule.maxReductionDB)) / 20)
-    }
-
-    private func constrainedNoiseReturnCandidate(
-        signal: AudioSignal,
-        guardReferenceLevels: [NoiseReturnHighBandReferenceLevel],
-        rule: NoiseReturnLimit,
-        gain: Float,
-        logger: AudioProcessingLogger?
-    ) -> AudioSignal? {
-        for mix in [Float(1.0), 0.75, 0.50, 0.25, 0.10] {
-            let candidateGain = 1 - (1 - gain) * mix
-            let sampleRate = signal.sampleRate
-            let channels = mapChannelsConcurrently(signal.channels) {
-                MasteringSignalMath.scaleBand(
-                    channel: $0,
-                    sampleRate: sampleRate,
-                    lower: rule.lowerFrequency,
-                    upper: rule.upperFrequency,
-                    gain: candidateGain
-                )
-            }
-            let candidate = AudioSignal(channels: channels, sampleRate: sampleRate)
-            guard noiseReturnHighBandDropIsAllowed(candidate: candidate, referenceLevels: guardReferenceLevels) else {
-                continue
-            }
-            if mix < 1 {
-                logger?.log("ノイズ戻り: 高域保護 mix \(String(format: "%.2f", mix))")
-            }
-            return candidate
-        }
-        logger?.log("ノイズ戻り: 高域保護で削減見送り")
-        return nil
-    }
-
-    private struct NoiseReturnHighBandReferenceLevel {
-        let lower: Double
-        let upper: Double
-        let maxDropDB: Double
-        let referenceDB: Double
-    }
-
-    private func noiseReturnHighBandReferenceLevels(signal: AudioSignal) -> [NoiseReturnHighBandReferenceLevel] {
-        [
-            (lower: 8_000.0, upper: 12_000.0, maxDropDB: 0.50),
-            (lower: 12_000.0, upper: 16_000.0, maxDropDB: 0.50),
-            (lower: 16_000.0, upper: 20_000.0, maxDropDB: 0.60)
-        ].map { band in
-            NoiseReturnHighBandReferenceLevel(
-                lower: band.lower,
-                upper: band.upper,
-                maxDropDB: band.maxDropDB,
-                referenceDB: MasteringSignalMath.bandRMSDB(signal: signal, lower: band.lower, upper: band.upper)
-            )
-        }
-    }
-
-    private func resolvedNoiseReturnHighBandReferenceLevels(
-        _ levels: inout [NoiseReturnHighBandReferenceLevel]?,
-        signal: AudioSignal
-    ) -> [NoiseReturnHighBandReferenceLevel] {
-        if let levels {
-            return levels
-        }
-        let measuredLevels = noiseReturnHighBandReferenceLevels(signal: signal)
-        levels = measuredLevels
-        return measuredLevels
-    }
-
-    private func noiseReturnHighBandDropIsAllowed(
-        candidate: AudioSignal,
-        referenceLevels: [NoiseReturnHighBandReferenceLevel]
-    ) -> Bool {
-        referenceLevels.allSatisfy { band in
-            let candidateDB = MasteringSignalMath.bandRMSDB(signal: candidate, lower: band.lower, upper: band.upper)
-            return candidateDB >= band.referenceDB - band.maxDropDB
-        }
-    }
-
-    private func noiseReturnDisplayName(for id: String) -> String {
-        switch id {
-        case NoiseMeasurementID.hiss: "hiss"
-        case NoiseMeasurementID.sibilance: "sibilance"
-        case NoiseMeasurementID.shimmer: "shimmer"
-        default: id
-        }
-    }
-
-    private struct NoiseReturnProbePlan {
-        let ranges: [Range<Int>]
-        let totalWindowCount: Int
-
-        var selectedWindowCount: Int { ranges.count }
-        var usesRepresentativeWindows: Bool {
-            totalWindowCount > ranges.count
-        }
-    }
-
-    private struct NoiseReturnProbe {
-        let hiss: Double
-        let sibilance: Double
-        let shimmer: Double
-
-        func comparableLevel(for id: String) -> Double? {
-            switch id {
-            case "hiss": hiss
-            case "sibilance": sibilance
-            case "shimmer": shimmer
-            default: nil
-            }
-        }
-    }
-
-    private func noiseReturnProbePlan(for signal: AudioSignal) -> NoiseReturnProbePlan {
-        let mono = signal.monoMixdown()
-        guard !mono.isEmpty else {
-            return NoiseReturnProbePlan(ranges: [], totalWindowCount: 0)
-        }
-        let windowSize = max(Int(signal.sampleRate), 1)
-        let totalWindowCount = max(1, Int(ceil(Double(mono.count) / Double(windowSize))))
-        guard totalWindowCount > 45 else {
-            return NoiseReturnProbePlan(ranges: [mono.indices], totalWindowCount: 1)
-        }
-
-        let probeCount = min(24, totalWindowCount)
-        let selectedCount = min(8, probeCount)
-        let windowStride = max(1, totalWindowCount / probeCount)
-        let candidates = stride(from: 0, to: totalWindowCount, by: windowStride).prefix(probeCount).map { windowIndex in
-            let start = min(windowIndex * windowSize, mono.count)
-            let end = min(start + windowSize, mono.count)
-            return (range: start..<end, score: MasteringSignalMath.rmsEnergy(mono[start..<end]))
-        }
-        let quietCount = max(1, selectedCount / 2)
-        let loudCount = max(1, selectedCount - quietCount)
-        let selected = Array(
-            Set(
-                candidates.sorted { $0.score < $1.score }.prefix(quietCount).map(\.range)
-                    + candidates.sorted { $0.score > $1.score }.prefix(loudCount).map(\.range)
-            )
-        )
-            .sorted { $0.lowerBound < $1.lowerBound }
-        return NoiseReturnProbePlan(ranges: selected, totalWindowCount: totalWindowCount)
-    }
-
-    private func fullRangeNoiseReturnProbePlan(for signal: AudioSignal) -> NoiseReturnProbePlan {
-        let mono = signal.monoMixdown()
-        guard !mono.isEmpty else {
-            return NoiseReturnProbePlan(ranges: [], totalWindowCount: 0)
-        }
-        let windowSize = max(Int(signal.sampleRate), 1)
-        let totalWindowCount = max(1, Int(ceil(Double(mono.count) / Double(windowSize))))
-        return NoiseReturnProbePlan(ranges: [mono.indices], totalWindowCount: totalWindowCount)
-    }
-
-    private func noiseReturnProbe(signal: AudioSignal, plan: NoiseReturnProbePlan) -> NoiseReturnProbe {
-        let mono = signal.monoMixdown()
-        let analysisMono = representativeSamples(from: mono, ranges: plan.ranges)
-        guard !analysisMono.isEmpty else {
-            return NoiseReturnProbe(hiss: -120, sibilance: 0, shimmer: -120)
-        }
-
-        let hissBand = MasteringSignalMath.steepBandPass(analysisMono, lower: 8_000, upper: min(20_000, signal.sampleRate * 0.5 - 100), sampleRate: signal.sampleRate)
-        let sibilanceBand = MasteringSignalMath.steepBandPass(analysisMono, lower: 5_000, upper: min(9_000, signal.sampleRate * 0.5 - 100), sampleRate: signal.sampleRate)
-        return NoiseReturnProbe(
-            hiss: quietBandNoiseFloorDB(band: hissBand, reference: analysisMono, sampleRate: signal.sampleRate),
-            sibilance: transientExcessDB(sibilanceBand, sampleRate: signal.sampleRate),
-            shimmer: shimmerInstabilityDB(analysisMono, sampleRate: signal.sampleRate)
-        )
-    }
-
-    private func representativeSamples(from mono: [Float], ranges: [Range<Int>]) -> [Float] {
-        guard !mono.isEmpty else { return [] }
-        guard !(ranges.count == 1 && ranges[0] == mono.indices) else { return mono }
-
-        var samples: [Float] = []
-        samples.reserveCapacity(ranges.reduce(0) { $0 + $1.count })
-        for range in ranges {
-            let lower = min(max(range.lowerBound, mono.startIndex), mono.endIndex)
-            let upper = min(max(range.upperBound, lower), mono.endIndex)
-            guard lower < upper else { continue }
-            samples.append(contentsOf: mono[lower..<upper])
-        }
-        return samples
-    }
-
-    private func quietBandNoiseFloorDB(band: [Float], reference: [Float], sampleRate: Double) -> Double {
-        let frameSize = max(512, Int(sampleRate * 0.100))
-        let hopSize = max(256, Int(sampleRate * 0.050))
-        let referenceFrames = frameRMS(reference, frameSize: frameSize, hopSize: hopSize)
-        let bandFrames = frameRMS(band, frameSize: frameSize, hopSize: hopSize)
-        guard !referenceFrames.isEmpty, referenceFrames.count == bandFrames.count else {
-            return MasteringSignalMath.rmsDB(band)
-        }
-
-        let threshold = MasteringSignalMath.percentile(referenceFrames, 0.20)
-        let quietValues = zip(referenceFrames, bandFrames).compactMap { reference, band -> Double? in
-            reference <= threshold ? band : nil
-        }
-        return MasteringSignalMath.percentile(quietValues.isEmpty ? bandFrames : quietValues, 0.20)
-    }
-
-    private func shimmerInstabilityDB(_ samples: [Float], sampleRate: Double) -> Double {
-        let upperBound = min(16_000, sampleRate * 0.5 - 100)
-        guard 8_000 < upperBound else { return 0 }
-        let shimmerBand = MasteringSignalMath.steepBandPass(samples, lower: 8_000, upper: upperBound, sampleRate: sampleRate)
-        let bodyBand = MasteringSignalMath.bandPass(samples, lower: 200, upper: min(5_000, sampleRate * 0.5 - 100), sampleRate: sampleRate)
-        let frameSize = max(128, Int(sampleRate * 0.020))
-        let hopSize = max(64, Int(sampleRate * 0.010))
-        let shimmerFrames = frameRMS(shimmerBand, frameSize: frameSize, hopSize: hopSize)
-        let bodyFrames = frameRMS(bodyBand, frameSize: frameSize, hopSize: hopSize)
-        let count = min(shimmerFrames.count, bodyFrames.count)
-        guard count >= 9 else { return 0 }
-
-        let relativeHigh = (0..<count).map { shimmerFrames[$0] - bodyFrames[$0] }
-        let residuals = relativeHigh.indices.map { index -> Double in
-            let start = max(0, index - 8)
-            let end = min(relativeHigh.count - 1, index + 8)
-            let localMedian = MasteringSignalMath.percentile(Array(relativeHigh[start...end]), 0.50)
-            return max(0, relativeHigh[index] - localMedian)
-        }
-        return MasteringSignalMath.percentile(residuals, 0.95)
-    }
-
-    private func transientExcessDB(_ samples: [Float], sampleRate: Double) -> Double {
-        let frameSize = max(128, Int(sampleRate * 0.020))
-        let hopSize = max(64, Int(sampleRate * 0.010))
-        let frames = frameRMS(samples, frameSize: frameSize, hopSize: hopSize).sorted()
-        guard frames.count >= 4 else { return 0 }
-        return MasteringSignalMath.percentile(frames, 0.95) - MasteringSignalMath.percentile(frames, 0.50)
-    }
-
-    private func transientPeakDB(_ samples: [Float], sampleRate: Double) -> Double {
-        let frameSize = max(128, Int(sampleRate * 0.020))
-        let hopSize = max(64, Int(sampleRate * 0.010))
-        let frames = frameRMS(samples, frameSize: frameSize, hopSize: hopSize)
-        guard frames.count >= 4 else { return MasteringSignalMath.rmsDB(samples) }
-        return MasteringSignalMath.percentile(frames, 0.95)
-    }
-
-    private func frameRMS(_ samples: [Float], frameSize: Int, hopSize: Int) -> [Double] {
-        guard !samples.isEmpty else { return [] }
-        if samples.count <= frameSize {
-            return [MasteringSignalMath.rmsDB(samples)]
-        }
-
-        var values: [Double] = []
-        var start = 0
-        while start + frameSize <= samples.count {
-            values.append(10 * log10(max(MasteringSignalMath.rmsEnergy(samples[start..<(start + frameSize)]), 1e-12)))
-            start += hopSize
-        }
-        return values
-    }
-
-    private func finalNoiseReturnLimit(for id: String) -> Double {
-        InternalAudioJudgementPolicy.severityLimit(for: id)?.masteringWorseningCautionDB ?? 2.0
-    }
-
-    private func finalHighNoiseReturnTarget(
-        for id: String,
-        returnDB: Double,
-        originalReturnDB: Double,
-        appliesCorrectedReferenceLimit: Bool
-    ) -> Double? {
-        let limit = finalNoiseReturnLimit(for: id)
-        let ruleLimit = InternalAudioJudgementPolicy.masteringNoiseReturnLimits.first(where: { $0.id == id })?.allowedReturnDB ?? limit
-        if returnDB > limit, originalReturnDB > 0.5 {
-            return min(limit - 0.15, ruleLimit)
-        }
-        guard appliesCorrectedReferenceLimit else {
-            return nil
-        }
-        let correctedReferenceLimit = InternalAudioJudgementPolicy.finalOutputMaxHighNoiseReturnDB
-        guard returnDB > correctedReferenceLimit else {
-            return nil
-        }
-        return correctedReferenceLimit - InternalAudioJudgementPolicy.finalOutputHighNoiseReturnSafetyMarginDB
-    }
-
-    private func finalNoiseReturnRule(for id: String, allowedReturnDB: Double) -> NoiseReturnLimit? {
-        guard let rule = InternalAudioJudgementPolicy.masteringNoiseReturnLimits.first(where: { $0.id == id }) else {
-            return nil
-        }
-        return NoiseReturnLimit(
-            id: rule.id,
-            lowerFrequency: rule.lowerFrequency,
-            upperFrequency: rule.upperFrequency,
-            allowedReturnDB: allowedReturnDB,
-            reductionMultiplier: max(rule.reductionMultiplier, 1.0),
-            maxReductionDB: max(rule.maxReductionDB, 6.0)
-        )
-    }
-
-    private func forcedNoiseReturnCandidate(
-        signal: AudioSignal,
-        rule: NoiseReturnLimit,
-        gain: Float
-    ) -> AudioSignal {
-        let sampleRate = signal.sampleRate
-        let channels = mapChannelsConcurrently(signal.channels) {
-            MasteringSignalMath.scaleBand(
-                channel: $0,
-                sampleRate: sampleRate,
-                lower: rule.lowerFrequency,
-                upper: rule.upperFrequency,
-                gain: gain
-            )
-        }
-        return AudioSignal(channels: channels, sampleRate: sampleRate)
-    }
-
-    private func applyFinalNoiseReturnCeiling(
-        signal: AudioSignal,
-        reference: AudioSignal,
-        referenceHighBandLevels: inout [NoiseReturnHighBandReferenceLevel]?,
-        referenceNoiseMeasurements: NoiseMeasurementSnapshot?,
-        originalReferenceNoiseMeasurements: NoiseMeasurementSnapshot?,
-        loudnessRestoreFallback: AudioSignal? = nil,
-        allowsOriginalReferenceHighRecovery: Bool = false,
-        peakCeilingDB: Float,
-        logger: AudioProcessingLogger?
-    ) -> AudioSignal {
-        var current = signal
-        let requiredIDs = [NoiseMeasurementID.hiss, NoiseMeasurementID.sibilance, NoiseMeasurementID.shimmer]
-        let referenceNoise = requiredIDs.allSatisfy { referenceNoiseMeasurements?.comparableLevel(for: $0) != nil }
-            ? referenceNoiseMeasurements!
-            : NoiseMeasurementService.analyze(signal: reference, ids: requiredIDs)
-        let originalNoise = originalReferenceNoiseMeasurements
-        let referenceSibilance = referenceNoise.comparableLevel(for: NoiseMeasurementID.sibilance)
-        let targetSibilance = min(
-            originalNoise?.comparableLevel(for: NoiseMeasurementID.sibilance).map { $0 + 2.7 } ?? Double.infinity,
-            referenceSibilance.map { $0 > 18.0 ? 15.2 : Double.infinity } ?? Double.infinity
-        )
-
-        let maxPasses = 5
-        var loudnessRestoreFallbackNoise: NoiseMeasurementSnapshot?
-        for pass in 1...maxPasses {
-            let currentNoise = NoiseMeasurementService.analyze(signal: current, ids: requiredIDs)
-            if let loudnessRestoreFallback,
-               Self.finalLoudnessRestoreHissReturnExceedsLimit(
-                referenceMeasurements: referenceNoise,
-                currentMeasurements: currentNoise
-               ) {
-                let fallbackNoise = loudnessRestoreFallbackNoise ?? NoiseMeasurementService.analyze(
-                    signal: loudnessRestoreFallback,
-                    ids: [NoiseMeasurementID.hiss]
-                )
-                loudnessRestoreFallbackNoise = fallbackNoise
-                if Self.shouldUseFinalLoudnessRestoreFallback(
-                    referenceMeasurements: referenceNoise,
-                    restoredMeasurements: currentNoise,
-                    fallbackMeasurements: fallbackNoise
-                ) {
-                    logger?.log("最終音量復帰: ヒス上限超過のため復帰前へ戻します")
-                    return loudnessRestoreFallback
-                }
-                logger?.log("最終音量復帰: 復帰前もヒス上限超過のため緊急上限確認を続けます")
-            }
-            let strongestHighFloorExcess = [NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer]
-                .compactMap { id -> (rule: NoiseReturnLimit, excessDB: Double)? in
-                    let returnDB = currentNoise.noiseReturnDB(from: referenceNoise, id: id)
-                    let originalReturnDB = originalNoise.map {
-                        currentNoise.noiseReturnDB(from: $0, id: id)
-                    } ?? Double.greatestFiniteMagnitude
-                    guard let target = finalHighNoiseReturnTarget(
-                        for: id,
-                        returnDB: returnDB,
-                        originalReturnDB: originalReturnDB,
-                        appliesCorrectedReferenceLimit: loudnessRestoreFallback != nil
-                            && !allowsOriginalReferenceHighRecovery
-                    ),
-                          let rule = finalNoiseReturnRule(for: id, allowedReturnDB: target)
-                    else { return nil }
-                    return (rule, returnDB - target)
-                }
-                .max { $0.excessDB < $1.excessDB }
-            let currentSibilance = currentNoise.comparableLevel(for: NoiseMeasurementID.sibilance)
-            let shouldLimitSibilance = targetSibilance.isFinite
-                && currentSibilance.map { $0 > targetSibilance } == true
-            guard strongestHighFloorExcess != nil || shouldLimitSibilance else {
-                if pass > 1 {
-                    logger?.log("ノイズ戻り: 緊急上限確認 \(pass - 1)/\(maxPasses)")
-                }
-                return MasteringSignalMath.enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
-            }
-
-            let sampleRate = current.sampleRate
-            if let strongestHighFloorExcess {
-                let gain = noiseReturnGain(
-                    for: strongestHighFloorExcess.rule,
-                    excessDB: strongestHighFloorExcess.excessDB
-                )
-                if let candidate = constrainedNoiseReturnCandidate(
-                    signal: current,
-                    guardReferenceLevels: resolvedNoiseReturnHighBandReferenceLevels(
-                        &referenceHighBandLevels,
-                        signal: reference
-                    ),
-                    rule: strongestHighFloorExcess.rule,
-                    gain: gain,
-                    logger: logger
-                ) {
-                    current = candidate
-                    logger?.log("ノイズ戻り: 緊急\(noiseReturnDisplayName(for: strongestHighFloorExcess.rule.id))上限 \(pass)/\(maxPasses)")
-                } else {
-                    current = forcedNoiseReturnCandidate(
-                        signal: current,
-                        rule: strongestHighFloorExcess.rule,
-                        gain: gain
-                    )
-                    logger?.log("ノイズ戻り: 緊急\(noiseReturnDisplayName(for: strongestHighFloorExcess.rule.id))上限を優先 \(pass)/\(maxPasses)")
-                }
-            }
-
-            if shouldLimitSibilance {
-                let excessDB = max(0, (currentSibilance ?? targetSibilance) - targetSibilance)
-                let channels = mapChannelsConcurrently(current.channels) {
-                    limitSibilanceTransients(
-                        channel: $0,
-                        sampleRate: sampleRate,
-                        targetExcessDB: targetSibilance,
-                        strengthDB: min(max(3.0, excessDB * 5.0), 10.0)
-                    )
-                }
-                current = AudioSignal(channels: channels, sampleRate: sampleRate)
-                logger?.log("ノイズ戻り: 緊急サ行上限 \(pass)/\(maxPasses)")
-            }
-        }
-
-        return MasteringSignalMath.enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
-    }
-
-    static func finalLoudnessRestoreHissReturnExceedsLimit(
-        referenceMeasurements: NoiseMeasurementSnapshot,
-        currentMeasurements: NoiseMeasurementSnapshot
-    ) -> Bool {
-        guard let referenceHiss = referenceMeasurements.comparableLevel(for: NoiseMeasurementID.hiss),
-              let currentHiss = currentMeasurements.comparableLevel(for: NoiseMeasurementID.hiss)
-        else {
-            return false
-        }
-        return currentHiss > referenceHiss + InternalAudioJudgementPolicy.finalLoudnessRestoreMaxHissReturnDB
-    }
-
-    static func shouldUseFinalLoudnessRestoreFallback(
-        referenceMeasurements: NoiseMeasurementSnapshot,
-        restoredMeasurements: NoiseMeasurementSnapshot,
-        fallbackMeasurements: NoiseMeasurementSnapshot
-    ) -> Bool {
-        finalLoudnessRestoreHissReturnExceedsLimit(
-            referenceMeasurements: referenceMeasurements,
-            currentMeasurements: restoredMeasurements
-        ) && !finalLoudnessRestoreHissReturnExceedsLimit(
-            referenceMeasurements: referenceMeasurements,
-            currentMeasurements: fallbackMeasurements
-        )
-    }
-
-    private func limitSibilanceTransients(
-        channel: [Float],
-        sampleRate: Double,
-        targetExcessDB: Double,
-        strengthDB: Double
-    ) -> [Float] {
-        guard !channel.isEmpty, targetExcessDB.isFinite, strengthDB > 0.1 else { return channel }
-        let sibilanceBand = MasteringSignalMath.bandPass(
-            channel,
-            lower: 5_000,
-            upper: min(9_000, sampleRate * 0.5 - 100),
-            sampleRate: sampleRate
-        )
-        let frameSize = max(128, Int(sampleRate * 0.020))
-        let hopSize = max(64, Int(sampleRate * 0.010))
-        guard sibilanceBand.count > frameSize else { return channel }
-
-        var frames: [(range: Range<Int>, levelDB: Double)] = []
-        var start = 0
-        while start + frameSize <= sibilanceBand.count {
-            let range = start..<(start + frameSize)
-            frames.append((range, MasteringSignalMath.rmsDB(Array(sibilanceBand[range]))))
-            start += hopSize
-        }
-        guard frames.count >= 4 else { return channel }
-
-        let medianDB = MasteringSignalMath.percentile(frames.map(\.levelDB), 0.50)
-        let peakLimitDB = medianDB + max(0, targetExcessDB - 1.0)
-        var envelope = Array(repeating: Float.zero, count: channel.count)
-
-        for frame in frames where frame.levelDB > peakLimitDB {
-            let excessDB = frame.levelDB - peakLimitDB
-            let reductionDB = min(strengthDB, max(0, excessDB) * 2.20)
-            let reduction = 1 - powf(10, -Float(reductionDB) / 20)
-            for index in frame.range {
-                envelope[index] = max(envelope[index], reduction)
-            }
-        }
-
-        return channel.indices.map { index in
-            channel[index] - sibilanceBand[index] * envelope[index]
-        }
     }
 
     private func restoreFinalLoudnessAfterGuards(
@@ -1393,9 +890,9 @@ struct MasteringProcessor {
             signal: MasteringSignalMath.applyGain(signal: signal, gainDB: requestedGainDB),
             peakCeilingDB: peakCeilingDB
         )
-        let probePlan = noiseReturnProbePlan(for: signal)
-        let baseProbe = noiseReturnProbe(signal: signal, plan: probePlan)
-        let candidateProbe = noiseReturnProbe(signal: candidate, plan: probePlan)
+        let probePlan = MasteringNoiseReturnSupport.noiseReturnProbePlan(for: signal)
+        let baseProbe = MasteringNoiseReturnSupport.noiseReturnProbe(signal: signal, plan: probePlan)
+        let candidateProbe = MasteringNoiseReturnSupport.noiseReturnProbe(signal: candidate, plan: probePlan)
         guard isFinalLoudnessRestoreNoiseSafe(
             baseProbe: baseProbe,
             candidateProbe: candidateProbe,
@@ -1484,9 +981,9 @@ struct MasteringProcessor {
                 signal: MasteringSignalMath.applyGain(signal: signal, gainDB: restoreDB),
                 peakCeilingDB: peakCeilingDB
             )
-            let probePlan = noiseReturnProbePlan(for: signal)
-            let baseProbe = noiseReturnProbe(signal: signal, plan: probePlan)
-            let candidateProbe = noiseReturnProbe(signal: candidate, plan: probePlan)
+            let probePlan = MasteringNoiseReturnSupport.noiseReturnProbePlan(for: signal)
+            let baseProbe = MasteringNoiseReturnSupport.noiseReturnProbe(signal: signal, plan: probePlan)
+            let candidateProbe = MasteringNoiseReturnSupport.noiseReturnProbe(signal: candidate, plan: probePlan)
             guard isFinalLoudnessRestoreNoiseSafe(
                 baseProbe: baseProbe,
                 candidateProbe: candidateProbe,
@@ -1529,7 +1026,7 @@ struct MasteringProcessor {
                 return false
             }
             if let referenceLevel = referenceMeasurements?.comparableLevel(for: rule.id) {
-                let referenceLimit = referenceLevel + min(rule.allowedReturnDB + 0.35, finalNoiseReturnLimit(for: rule.id))
+                let referenceLimit = referenceLevel + min(rule.allowedReturnDB + 0.35, Self.finalNoiseReturnLimit(for: rule.id))
                 if baseLevel <= referenceLimit, candidateLevel > referenceLimit {
                     return false
                 }

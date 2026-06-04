@@ -119,6 +119,7 @@
 - シマー制限は、長い音源で全体測定を何度も繰り返さないよう、代表区間で軽く測り、強い補正時だけ最後に全体確認を1回行います。16kHz以上の空気感は戻して守ります。
 - マスタリングのノイズ戻りガードも、長い音源で全体測定を何度も繰り返さないよう、代表区間で軽く測り、必要な時だけ最後に全体確認を1回行います。
 - マスタリングのノイズ戻り候補を確認する時は、変化しない基準音の8kHz〜20kHzを候補ごとに測り直さず、先に測った3帯域の値を使い回します。候補音側は、その時点の音を今まで通り測ります。
+- マスタリングのノイズ戻り判定は、共通の軽量測定と高域保護を `MasteringNoiseReturnSupport.swift` に分けています。最後の緊急ノイズ上限確認は `MasteringFinalNoiseReturnCeiling.swift` に分けています。音の計算順、しきい値、ログ、診断WAV名は変えていません。
 - マスタリングでは、ヒスを抑えすぎて5kHz以上の明るさが大きく落ちないよう、最後に高域の残り方も確認します。
 - 補正とマスタリングの内部判定は `InternalAudioJudgementPolicy` に主要なしきい値をまとめ、意味が違う判定値は別の定義として扱います。
 - ノイズ測定値が欠けた時は「問題なし」と見なさず、再測定できる工程では再測定し、ルート判定では処理をスキップしない方向で扱います。
@@ -194,6 +195,8 @@ Macアプリ(SwiftUI)
   - `AudioAnalysisMode.swift`、`AudioAnalyzer.swift`、`HumRemover.swift`、`DenoiseMaskCoefficients.swift`、`DenoiseShimmerStabilizer.swift` は、補正パイプライン内で使う解析、ハム除去、ノイズ除去係数、シマー安定化を分けて置いています。
   - `MasteringSignalMath.swift` は、マスタリング内で使う音量変更、帯域測定、帯域増減、ピーク上限、RMS、パーセンタイルなどの共通計算を担当します。
   - `MasteringHighFloorPreserver.swift` は、マスタリング内で音楽成分として残す高域を守る処理と、その高域保持後のノイズ戻り確認を担当します。
+  - `MasteringNoiseReturnSupport.swift` は、マスタリング内のノイズ戻り判定で使う軽量測定、基準高域測定、高域を削りすぎない候補確認を担当します。
+  - `MasteringFinalNoiseReturnCeiling.swift` は、マスタリング終盤の最終ノイズ上限確認を担当します。
 - `Sources/VelouraLucent/Support/`
   - FFT まわりなどの共通処理です。
 - `Tests/VelouraLucentTests/`
