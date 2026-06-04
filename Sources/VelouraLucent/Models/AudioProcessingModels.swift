@@ -235,20 +235,6 @@ struct AudioMetricSnapshot: Sendable {
     let averageSpectrum: [SpectrumMetric]
 }
 
-struct DenoiseEffectReport: Sendable, Equatable {
-    let shimmerFlickerChangeDB: Double
-    let hf12ChangeDB: Double
-    let hf16ChangeDB: Double
-    let hf18ChangeDB: Double
-
-    static let empty = DenoiseEffectReport(
-        shimmerFlickerChangeDB: 0,
-        hf12ChangeDB: 0,
-        hf16ChangeDB: 0,
-        hf18ChangeDB: 0
-    )
-}
-
 struct NoiseMeasurementSnapshot: Sendable, Equatable {
     let values: [NoiseMeasurementValue]
 

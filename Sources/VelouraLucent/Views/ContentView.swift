@@ -669,67 +669,6 @@ struct ContentView: View {
         }
     }
 
-    private func denoiseEffectCard(_ report: DenoiseEffectReport) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("ノイズ除去後の高域変化")
-                    .font(.headline)
-                Text("左に伸びるほど、その帯域の音量やチラつきが下がっています。補正後全体ではなく、ノイズ除去工程だけを見ます。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                denoiseEffectRow(title: "10-16kHzチラつき", value: report.shimmerFlickerChangeDB, limit: 12)
-                denoiseEffectRow(title: "12kHz以上", value: report.hf12ChangeDB, limit: 12)
-                denoiseEffectRow(title: "16kHz以上", value: report.hf16ChangeDB, limit: 12)
-                denoiseEffectRow(title: "18kHz以上", value: report.hf18ChangeDB, limit: 12)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-    }
-
-    private func denoiseEffectRow(title: String, value: Double, limit: Double) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                Spacer()
-                Text(String(format: "%+.1f dB", value))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(value <= 0 ? .green : .orange)
-            }
-
-            GeometryReader { proxy in
-                let width = proxy.size.width
-                let center = width / 2
-                let ratio = min(abs(value) / limit, 1)
-                let barWidth = center * ratio
-
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.secondary.opacity(0.14))
-                        .frame(height: 6)
-
-                    Rectangle()
-                        .fill(Color.secondary.opacity(0.35))
-                        .frame(width: 1, height: 10)
-                        .offset(x: center)
-
-                    if ratio > 0.001 {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(value <= 0 ? Color.green.opacity(0.78) : Color.orange.opacity(0.78))
-                            .frame(width: max(2, barWidth), height: 6)
-                            .offset(x: value <= 0 ? center - max(2, barWidth) : center)
-                    }
-                }
-            }
-            .frame(height: 10)
-        }
-    }
-
     private func qualityReportSeverityText(_ severity: AudioQualityReportSeverity) -> String {
         switch severity {
         case .info:

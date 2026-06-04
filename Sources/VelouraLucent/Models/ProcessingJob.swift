@@ -146,7 +146,6 @@ final class ProcessingJob {
     var inputNoiseMeasurements: NoiseMeasurementSnapshot?
     var outputNoiseMeasurements: NoiseMeasurementSnapshot?
     var masteredNoiseMeasurements: NoiseMeasurementSnapshot?
-    var denoiseEffectReport: DenoiseEffectReport?
     var inputSpectrogram: SpectrogramSnapshot?
     var outputSpectrogram: SpectrogramSnapshot?
     var masteredSpectrogram: SpectrogramSnapshot?
@@ -310,7 +309,6 @@ final class ProcessingJob {
         inputNoiseMeasurements = nil
         outputNoiseMeasurements = nil
         masteredNoiseMeasurements = nil
-        denoiseEffectReport = nil
         inputSpectrogram = nil
         outputSpectrogram = nil
         masteredSpectrogram = nil
@@ -352,7 +350,6 @@ final class ProcessingJob {
         outputMasteringAnalysis = nil
         outputNoiseMeasurements = nil
         masteredNoiseMeasurements = nil
-        denoiseEffectReport = nil
         outputSpectrogram = nil
         masteredSpectrogram = nil
         resetDisplayAnalysisStates(for: .corrected)
@@ -507,8 +504,6 @@ final class ProcessingJob {
             applyProgressEvent(event)
             return
         }
-        updateDenoiseEffectReport(for: trimmed)
-
         logLines.append(trimmed)
     }
 
@@ -593,51 +588,6 @@ final class ProcessingJob {
         case let .mastering(step, state, detail):
             masteringProgress.apply(step: step, state: state, detail: detail)
         }
-    }
-
-    private func updateDenoiseEffectReport(for message: String) {
-        guard message.hasPrefix("ノイズ除去/") else { return }
-        let current = denoiseEffectReport ?? .empty
-
-        if let value = decibelValue(in: message, prefix: "ノイズ除去/10-16kHzチラつき: ") {
-            denoiseEffectReport = DenoiseEffectReport(
-                shimmerFlickerChangeDB: value,
-                hf12ChangeDB: current.hf12ChangeDB,
-                hf16ChangeDB: current.hf16ChangeDB,
-                hf18ChangeDB: current.hf18ChangeDB
-            )
-        } else if let value = decibelValue(in: message, prefix: "ノイズ除去/12kHz以上: ") {
-            denoiseEffectReport = DenoiseEffectReport(
-                shimmerFlickerChangeDB: current.shimmerFlickerChangeDB,
-                hf12ChangeDB: value,
-                hf16ChangeDB: current.hf16ChangeDB,
-                hf18ChangeDB: current.hf18ChangeDB
-            )
-        } else if let value = decibelValue(in: message, prefix: "ノイズ除去/16kHz以上: ") {
-            denoiseEffectReport = DenoiseEffectReport(
-                shimmerFlickerChangeDB: current.shimmerFlickerChangeDB,
-                hf12ChangeDB: current.hf12ChangeDB,
-                hf16ChangeDB: value,
-                hf18ChangeDB: current.hf18ChangeDB
-            )
-        } else if let value = decibelValue(in: message, prefix: "ノイズ除去/18kHz以上: ") {
-            denoiseEffectReport = DenoiseEffectReport(
-                shimmerFlickerChangeDB: current.shimmerFlickerChangeDB,
-                hf12ChangeDB: current.hf12ChangeDB,
-                hf16ChangeDB: current.hf16ChangeDB,
-                hf18ChangeDB: value
-            )
-        }
-    }
-
-    private func decibelValue(in message: String, prefix: String) -> Double? {
-        guard message.hasPrefix(prefix) else { return nil }
-        let rawValue = message
-            .dropFirst(prefix.count)
-            .replacingOccurrences(of: "dB", with: "")
-            .replacingOccurrences(of: "±", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return Double(rawValue)
     }
 
 }
