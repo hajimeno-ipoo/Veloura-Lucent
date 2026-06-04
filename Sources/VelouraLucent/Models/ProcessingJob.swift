@@ -177,16 +177,8 @@ final class ProcessingJob {
     var masteringLastError: String?
     var hasExistingOutput = false
     var hasExistingMasteredOutput = false
-    var activeStep: ProcessingStep?
-    var completedSteps: Set<ProcessingStep> = []
-    var skippedSteps: Set<ProcessingStep> = []
-    var failedSteps: Set<ProcessingStep> = []
-    var activeStepDetail: String?
-    var masteringActiveStep: MasteringStep?
-    var completedMasteringSteps: Set<MasteringStep> = []
-    var skippedMasteringSteps: Set<MasteringStep> = []
-    var failedMasteringSteps: Set<MasteringStep> = []
-    var masteringActiveStepDetail: String?
+    private var correctionProgress = ProcessingProgressStateStore<ProcessingStep>()
+    private var masteringProgress = ProcessingProgressStateStore<MasteringStep>()
     private var displayAnalysisStates = DisplayAnalysisStateStore()
     var selectedMasteringProfile: MasteringProfile = .streaming
     var editableMasteringSettings: MasteringSettings = MasteringProfile.streaming.settings
@@ -233,6 +225,46 @@ final class ProcessingJob {
             return "\(activeStep.title) を実行中"
         }
         return statusMessage
+    }
+
+    var activeStep: ProcessingStep? {
+        correctionProgress.activeStep
+    }
+
+    var completedSteps: Set<ProcessingStep> {
+        correctionProgress.completedSteps
+    }
+
+    var skippedSteps: Set<ProcessingStep> {
+        correctionProgress.skippedSteps
+    }
+
+    var failedSteps: Set<ProcessingStep> {
+        correctionProgress.failedSteps
+    }
+
+    var activeStepDetail: String? {
+        correctionProgress.activeStepDetail
+    }
+
+    var masteringActiveStep: MasteringStep? {
+        masteringProgress.activeStep
+    }
+
+    var completedMasteringSteps: Set<MasteringStep> {
+        masteringProgress.completedSteps
+    }
+
+    var skippedMasteringSteps: Set<MasteringStep> {
+        masteringProgress.skippedSteps
+    }
+
+    var failedMasteringSteps: Set<MasteringStep> {
+        masteringProgress.failedSteps
+    }
+
+    var masteringActiveStepDetail: String? {
+        masteringProgress.activeStepDetail
     }
 
     var isAnalyzingMetrics: Bool {
@@ -295,16 +327,8 @@ final class ProcessingJob {
         // Selecting a source file should not surface old outputs from prior runs.
         hasExistingOutput = false
         hasExistingMasteredOutput = false
-        activeStep = nil
-        completedSteps = []
-        skippedSteps = []
-        failedSteps = []
-        activeStepDetail = nil
-        masteringActiveStep = nil
-        completedMasteringSteps = []
-        skippedMasteringSteps = []
-        failedMasteringSteps = []
-        masteringActiveStepDetail = nil
+        correctionProgress.reset()
+        masteringProgress.reset()
         resetAllDisplayAnalysisStates()
         appliedCorrectionSettings = nil
         appliedMasteringSettings = nil
@@ -321,11 +345,7 @@ final class ProcessingJob {
         statusMessage = "処理中"
         processingStartedAt = Date()
         processingFinishedAt = nil
-        activeStep = nil
-        completedSteps = []
-        skippedSteps = []
-        failedSteps = []
-        activeStepDetail = nil
+        correctionProgress.reset()
         masteredOutputFile = outputFile.map { MasteringService.defaultOutputURL(for: $0) }
         outputMetrics = nil
         masteredMetrics = nil
@@ -343,11 +363,7 @@ final class ProcessingJob {
         masteringFinishedAt = nil
         masteringLastError = nil
         hasExistingMasteredOutput = false
-        masteringActiveStep = nil
-        completedMasteringSteps = []
-        skippedMasteringSteps = []
-        failedMasteringSteps = []
-        masteringActiveStepDetail = nil
+        masteringProgress.reset()
         appliedCorrectionSettings = nil
         appliedMasteringSettings = nil
     }
@@ -361,11 +377,7 @@ final class ProcessingJob {
         masteringStatusMessage = "マスタリング中"
         masteringStartedAt = Date()
         masteringFinishedAt = nil
-        masteringActiveStep = nil
-        completedMasteringSteps = []
-        skippedMasteringSteps = []
-        failedMasteringSteps = []
-        masteringActiveStepDetail = nil
+        masteringProgress.reset()
         masteredOutputFile = nil
         masteredMetrics = nil
         masteredNoiseMeasurements = nil
@@ -518,9 +530,7 @@ final class ProcessingJob {
         statusMessage = "完了"
         processingFinishedAt = Date()
         hasExistingOutput = FileManager.default.fileExists(atPath: outputURL.path(percentEncoded: false))
-        completedSteps = Set(ProcessingStep.allCases).subtracting(skippedSteps)
-        activeStep = nil
-        activeStepDetail = nil
+        correctionProgress.completeAll(ProcessingStep.allCases)
         masteringStatusMessage = hasExistingOutput ? "補正後の解析中" : "補正後に実行できます"
         appliedCorrectionSettings = appliedSettings ?? appliedCorrectionSettings ?? editableCorrectionSettings
         if !didSendCorrectionCompletion {
@@ -535,9 +545,7 @@ final class ProcessingJob {
         masteringStatusMessage = "完了"
         masteringFinishedAt = Date()
         hasExistingMasteredOutput = FileManager.default.fileExists(atPath: outputURL.path(percentEncoded: false))
-        completedMasteringSteps = Set(MasteringStep.allCases).subtracting(skippedMasteringSteps)
-        masteringActiveStep = nil
-        masteringActiveStepDetail = nil
+        masteringProgress.completeAll(MasteringStep.allCases)
         appliedMasteringSettings = appliedSettings ?? appliedMasteringSettings ?? editableMasteringSettings
         if !didSendMasteringCompletion {
             didSendMasteringCompletion = true
@@ -559,11 +567,7 @@ final class ProcessingJob {
         statusMessage = "失敗"
         processingFinishedAt = Date()
         hasExistingOutput = outputFile.map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
-        if let activeStep {
-            failedSteps.insert(activeStep)
-        }
-        activeStep = nil
-        activeStepDetail = nil
+        correctionProgress.failActiveStep()
         appendLog(message)
     }
 
@@ -573,11 +577,7 @@ final class ProcessingJob {
         masteringStatusMessage = "失敗"
         masteringFinishedAt = Date()
         hasExistingMasteredOutput = false
-        if let masteringActiveStep {
-            failedMasteringSteps.insert(masteringActiveStep)
-        }
-        masteringActiveStep = nil
-        masteringActiveStepDetail = nil
+        masteringProgress.failActiveStep()
         appendMasteringLog(message)
     }
 
@@ -589,49 +589,9 @@ final class ProcessingJob {
     private func applyProgressEvent(_ event: ProcessingProgressEvent) {
         switch event {
         case let .correction(step, state, detail):
-            applyCorrectionProgress(step: step, state: state, detail: detail)
+            correctionProgress.apply(step: step, state: state, detail: detail)
         case let .mastering(step, state, detail):
-            applyMasteringProgress(step: step, state: state, detail: detail)
-        }
-    }
-
-    private func applyCorrectionProgress(step: ProcessingStep, state: ProcessingProgressEvent.State, detail: String?) {
-        switch state {
-        case .started:
-            if let activeStep, activeStep != step {
-                completedSteps.insert(activeStep)
-            }
-            skippedSteps.remove(step)
-            failedSteps.remove(step)
-            activeStep = step
-            activeStepDetail = detail
-        case .completed:
-            completedSteps.insert(step)
-            skippedSteps.remove(step)
-            failedSteps.remove(step)
-            if activeStep == step {
-                activeStep = nil
-                activeStepDetail = nil
-            }
-        case .skipped:
-            skippedSteps.insert(step)
-            completedSteps.remove(step)
-            failedSteps.remove(step)
-            if activeStep == step {
-                activeStep = nil
-                activeStepDetail = nil
-            }
-        case .failed:
-            failedSteps.insert(step)
-            completedSteps.remove(step)
-            skippedSteps.remove(step)
-            if activeStep == step {
-                activeStep = nil
-                activeStepDetail = nil
-            }
-        case .detail:
-            activeStep = step
-            activeStepDetail = detail
+            masteringProgress.apply(step: step, state: state, detail: detail)
         }
     }
 
@@ -680,43 +640,4 @@ final class ProcessingJob {
         return Double(rawValue)
     }
 
-    private func applyMasteringProgress(step: MasteringStep, state: ProcessingProgressEvent.State, detail: String?) {
-        switch state {
-        case .started:
-            if let masteringActiveStep, masteringActiveStep != step {
-                completedMasteringSteps.insert(masteringActiveStep)
-            }
-            skippedMasteringSteps.remove(step)
-            failedMasteringSteps.remove(step)
-            masteringActiveStep = step
-            masteringActiveStepDetail = detail
-        case .completed:
-            completedMasteringSteps.insert(step)
-            skippedMasteringSteps.remove(step)
-            failedMasteringSteps.remove(step)
-            if masteringActiveStep == step {
-                masteringActiveStep = nil
-                masteringActiveStepDetail = nil
-            }
-        case .skipped:
-            skippedMasteringSteps.insert(step)
-            completedMasteringSteps.remove(step)
-            failedMasteringSteps.remove(step)
-            if masteringActiveStep == step {
-                masteringActiveStep = nil
-                masteringActiveStepDetail = nil
-            }
-        case .failed:
-            failedMasteringSteps.insert(step)
-            completedMasteringSteps.remove(step)
-            skippedMasteringSteps.remove(step)
-            if masteringActiveStep == step {
-                masteringActiveStep = nil
-                masteringActiveStepDetail = nil
-            }
-        case .detail:
-            masteringActiveStep = step
-            masteringActiveStepDetail = detail
-        }
-    }
 }

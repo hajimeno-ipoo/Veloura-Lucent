@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 @testable import VelouraLucent
 
@@ -70,6 +71,29 @@ struct ProcessingJobTests {
         #expect(job.activeStep == .analyze)
         #expect(job.completedSteps.contains(.loadAudio))
         #expect(job.progressValue > 0)
+    }
+
+    @Test
+    func progressChangesNotifyObservationReaders() async {
+        let job = ProcessingJob()
+
+        await confirmation("補正進捗の変更通知") { confirmation in
+            withObservationTracking {
+                _ = job.activeStep
+            } onChange: {
+                confirmation()
+            }
+            job.appendLog(ProcessingProgressEvent.correction(step: .loadAudio, state: .started, detail: nil).encodedMessage)
+        }
+
+        await confirmation("マスタリング進捗の変更通知") { confirmation in
+            withObservationTracking {
+                _ = job.masteringActiveStep
+            } onChange: {
+                confirmation()
+            }
+            job.appendMasteringLog(ProcessingProgressEvent.mastering(step: .analyze, state: .started, detail: nil).encodedMessage)
+        }
     }
 
     @Test
