@@ -11,8 +11,8 @@ struct MasteringProcessor {
         diagnosticOutputDirectory: URL? = nil,
         logger: AudioProcessingLogger? = nil
     ) -> AudioSignal {
-        let dynamicsRetention = clamped(settings.dynamicsRetention, min: 0, max: 1)
-        let finishingIntensity = clamped(settings.finishingIntensity, min: 0, max: 1)
+        let dynamicsRetention = MasteringSignalMath.clamped(settings.dynamicsRetention, min: 0, max: 1)
+        let finishingIntensity = MasteringSignalMath.clamped(settings.finishingIntensity, min: 0, max: 1)
         let loudnessPolicy = settings.loudnessAdjustmentPolicy
         let routePlan = MasteringRoutePlan.make(
             analysis: analysis,
@@ -131,7 +131,7 @@ struct MasteringProcessor {
                     peakCeilingDB: settings.peakCeilingDB
                 )
             }
-            return enforcePeakCeiling(
+            return MasteringSignalMath.enforcePeakCeiling(
                 signal: MasteringLowBodyProtector.process(
                     signal: loud,
                     reference: loudnessReference,
@@ -272,7 +272,7 @@ struct MasteringProcessor {
                 logger?.log("最終低中域保護: 対象なし")
                 return finalNoiseConfirmed
             }
-            let candidate = enforcePeakCeiling(
+            let candidate = MasteringSignalMath.enforcePeakCeiling(
                 signal: protected,
                 peakCeilingDB: settings.peakCeilingDB
             )
@@ -345,18 +345,18 @@ struct MasteringProcessor {
     }
 
     private func applyTone(signal: AudioSignal, analysis: MasteringAnalysis, settings: MasteringSettings, finishingIntensity: Float) -> AudioSignal {
-        let lowAdjustmentDB = settings.lowShelfGain + clamped(Float((analysis.midBandLevelDB - analysis.lowBandLevelDB) / 18), min: -0.25, max: 1.2)
-        let lowMidAdjustmentDB = settings.lowMidGain - clamped(Float((analysis.lowBandLevelDB - analysis.midBandLevelDB) / 16), min: -0.2, max: 0.7)
+        let lowAdjustmentDB = settings.lowShelfGain + MasteringSignalMath.clamped(Float((analysis.midBandLevelDB - analysis.lowBandLevelDB) / 18), min: -0.25, max: 1.2)
+        let lowMidAdjustmentDB = settings.lowMidGain - MasteringSignalMath.clamped(Float((analysis.lowBandLevelDB - analysis.midBandLevelDB) / 16), min: -0.2, max: 0.7)
         let roomAdjustmentDB = min(0, settings.lowMidGain * 0.45) - max(0, settings.lowShelfGain - 0.70) * 0.10
-        let presenceAdjustmentDB = settings.presenceGain + clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 16), min: -0.2, max: 0.8) - analysis.harshnessScore * 0.32
-        let highAdjustmentDB = settings.highShelfGain + clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 18), min: -0.25, max: 0.9) - analysis.harshnessScore * 0.55
+        let presenceAdjustmentDB = settings.presenceGain + MasteringSignalMath.clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 16), min: -0.2, max: 0.8) - analysis.harshnessScore * 0.32
+        let highAdjustmentDB = settings.highShelfGain + MasteringSignalMath.clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 18), min: -0.25, max: 0.9) - analysis.harshnessScore * 0.55
         let toneScale = 0.72 + finishingIntensity * 0.46
 
-        let lowDelta = gainDelta(forDB: lowAdjustmentDB) * toneScale
-        let lowMidDelta = gainDelta(forDB: lowMidAdjustmentDB) * toneScale
-        let roomDelta = gainDelta(forDB: roomAdjustmentDB) * toneScale
-        let presenceDelta = gainDelta(forDB: presenceAdjustmentDB) * toneScale
-        let highDelta = gainDelta(forDB: highAdjustmentDB) * toneScale
+        let lowDelta = MasteringSignalMath.gainDelta(forDB: lowAdjustmentDB) * toneScale
+        let lowMidDelta = MasteringSignalMath.gainDelta(forDB: lowMidAdjustmentDB) * toneScale
+        let roomDelta = MasteringSignalMath.gainDelta(forDB: roomAdjustmentDB) * toneScale
+        let presenceDelta = MasteringSignalMath.gainDelta(forDB: presenceAdjustmentDB) * toneScale
+        let highDelta = MasteringSignalMath.gainDelta(forDB: highAdjustmentDB) * toneScale
 
         let channels = signal.channels.map { channel in
             let low = SpectralDSP.lowPass(channel, cutoff: 120, sampleRate: signal.sampleRate)
@@ -400,9 +400,9 @@ struct MasteringProcessor {
         settings: MasteringSettings,
         finishingIntensity: Float
     ) -> AudioSignal {
-        let highDeficit = clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 24), min: 0, max: 0.45)
+        let highDeficit = MasteringSignalMath.clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 24), min: 0, max: 0.45)
         let baseLiftDB = settings.highShelfGain * 1.05 + highDeficit - analysis.harshnessScore * 0.22
-        let liftDB = clamped(baseLiftDB * (0.70 + finishingIntensity * 0.22), min: 0, max: 1.00)
+        let liftDB = MasteringSignalMath.clamped(baseLiftDB * (0.70 + finishingIntensity * 0.22), min: 0, max: 1.00)
         guard liftDB > 0.08 else { return signal }
 
         let gain = powf(10, liftDB / 20)
@@ -548,11 +548,11 @@ struct MasteringProcessor {
         dynamicsRetention: Float,
         finishingIntensity: Float
     ) -> MultibandCompressionSettings {
-        let compressionScale = clamped(0.56 + finishingIntensity * 0.58 - dynamicsRetention * 0.24, min: 0.35, max: 1.10)
-        let makeupScale = clamped(0.62 + finishingIntensity * 0.46 - dynamicsRetention * 0.22, min: 0.35, max: 1.00)
+        let compressionScale = MasteringSignalMath.clamped(0.56 + finishingIntensity * 0.58 - dynamicsRetention * 0.24, min: 0.35, max: 1.10)
+        let makeupScale = MasteringSignalMath.clamped(0.62 + finishingIntensity * 0.46 - dynamicsRetention * 0.22, min: 0.35, max: 1.00)
         let thresholdOffset = dynamicsRetention * 1.4 - finishingIntensity * 0.45
-        let lowMakeup = (base.low.makeupGainDB + clamped(Float((analysis.midBandLevelDB - analysis.lowBandLevelDB) / 20), min: -0.15, max: 0.25)) * makeupScale
-        let midMakeup = (base.mid.makeupGainDB + clamped(Float((analysis.highBandLevelDB - analysis.midBandLevelDB) / 24), min: -0.10, max: 0.12)) * makeupScale
+        let lowMakeup = (base.low.makeupGainDB + MasteringSignalMath.clamped(Float((analysis.midBandLevelDB - analysis.lowBandLevelDB) / 20), min: -0.15, max: 0.25)) * makeupScale
+        let midMakeup = (base.mid.makeupGainDB + MasteringSignalMath.clamped(Float((analysis.highBandLevelDB - analysis.midBandLevelDB) / 24), min: -0.10, max: 0.12)) * makeupScale
         let highThreshold = base.high.thresholdDB - analysis.harshnessScore * 1.2
         let highRatio = scaledRatio(base.high.ratio + analysis.harshnessScore * 0.18, scale: compressionScale)
         let highMakeup = max(-0.2, (base.high.makeupGainDB - analysis.harshnessScore * 0.14) * makeupScale)
@@ -692,7 +692,7 @@ struct MasteringProcessor {
         let harshnessPressure = max(0, analysis.harshnessScore - 0.62) * 0.24
         let airBoostPressure = max(0, settings.highShelfGain - 0.56) * 0.08
         let finishPressure = max(0, finishingIntensity - 0.72) * 0.05
-        return clamped(harshnessPressure + airBoostPressure + finishPressure, min: 0, max: 0.07)
+        return MasteringSignalMath.clamped(harshnessPressure + airBoostPressure + finishPressure, min: 0, max: 0.07)
     }
 
     private func applyNoiseReturnGuard(
@@ -860,7 +860,7 @@ struct MasteringProcessor {
             let candidateGain = 1 - (1 - gain) * mix
             let sampleRate = signal.sampleRate
             let channels = mapChannelsConcurrently(signal.channels) {
-                scaleBand(
+                MasteringSignalMath.scaleBand(
                     channel: $0,
                     sampleRate: sampleRate,
                     lower: rule.lowerFrequency,
@@ -898,7 +898,7 @@ struct MasteringProcessor {
                 lower: band.lower,
                 upper: band.upper,
                 maxDropDB: band.maxDropDB,
-                referenceDB: bandRMSDB(signal: signal, lower: band.lower, upper: band.upper)
+                referenceDB: MasteringSignalMath.bandRMSDB(signal: signal, lower: band.lower, upper: band.upper)
             )
         }
     }
@@ -920,7 +920,7 @@ struct MasteringProcessor {
         referenceLevels: [NoiseReturnHighBandReferenceLevel]
     ) -> Bool {
         referenceLevels.allSatisfy { band in
-            let candidateDB = bandRMSDB(signal: candidate, lower: band.lower, upper: band.upper)
+            let candidateDB = MasteringSignalMath.bandRMSDB(signal: candidate, lower: band.lower, upper: band.upper)
             return candidateDB >= band.referenceDB - band.maxDropDB
         }
     }
@@ -976,7 +976,7 @@ struct MasteringProcessor {
         let candidates = stride(from: 0, to: totalWindowCount, by: windowStride).prefix(probeCount).map { windowIndex in
             let start = min(windowIndex * windowSize, mono.count)
             let end = min(start + windowSize, mono.count)
-            return (range: start..<end, score: rmsEnergy(mono[start..<end]))
+            return (range: start..<end, score: MasteringSignalMath.rmsEnergy(mono[start..<end]))
         }
         let quietCount = max(1, selectedCount / 2)
         let loudCount = max(1, selectedCount - quietCount)
@@ -1007,8 +1007,8 @@ struct MasteringProcessor {
             return NoiseReturnProbe(hiss: -120, sibilance: 0, shimmer: -120)
         }
 
-        let hissBand = steepBandPass(analysisMono, lower: 8_000, upper: min(20_000, signal.sampleRate * 0.5 - 100), sampleRate: signal.sampleRate)
-        let sibilanceBand = steepBandPass(analysisMono, lower: 5_000, upper: min(9_000, signal.sampleRate * 0.5 - 100), sampleRate: signal.sampleRate)
+        let hissBand = MasteringSignalMath.steepBandPass(analysisMono, lower: 8_000, upper: min(20_000, signal.sampleRate * 0.5 - 100), sampleRate: signal.sampleRate)
+        let sibilanceBand = MasteringSignalMath.steepBandPass(analysisMono, lower: 5_000, upper: min(9_000, signal.sampleRate * 0.5 - 100), sampleRate: signal.sampleRate)
         return NoiseReturnProbe(
             hiss: quietBandNoiseFloorDB(band: hissBand, reference: analysisMono, sampleRate: signal.sampleRate),
             sibilance: transientExcessDB(sibilanceBand, sampleRate: signal.sampleRate),
@@ -1031,49 +1031,27 @@ struct MasteringProcessor {
         return samples
     }
 
-    private func bandPass(_ samples: [Float], lower: Double, upper: Double, sampleRate: Double) -> [Float] {
-        guard lower < upper, upper < sampleRate * 0.5 else {
-            return Array(repeating: 0, count: samples.count)
-        }
-        return SpectralDSP.lowPass(
-            SpectralDSP.highPass(samples, cutoff: lower, sampleRate: sampleRate),
-            cutoff: upper,
-            sampleRate: sampleRate
-        )
-    }
-
-    private func steepBandPass(_ samples: [Float], lower: Double, upper: Double, sampleRate: Double) -> [Float] {
-        guard lower < upper, upper < sampleRate * 0.5 else {
-            return Array(repeating: 0, count: samples.count)
-        }
-        var filtered = samples
-        for _ in 0..<4 {
-            filtered = bandPass(filtered, lower: lower, upper: upper, sampleRate: sampleRate)
-        }
-        return filtered
-    }
-
     private func quietBandNoiseFloorDB(band: [Float], reference: [Float], sampleRate: Double) -> Double {
         let frameSize = max(512, Int(sampleRate * 0.100))
         let hopSize = max(256, Int(sampleRate * 0.050))
         let referenceFrames = frameRMS(reference, frameSize: frameSize, hopSize: hopSize)
         let bandFrames = frameRMS(band, frameSize: frameSize, hopSize: hopSize)
         guard !referenceFrames.isEmpty, referenceFrames.count == bandFrames.count else {
-            return rmsDB(band)
+            return MasteringSignalMath.rmsDB(band)
         }
 
-        let threshold = percentile(referenceFrames, 0.20)
+        let threshold = MasteringSignalMath.percentile(referenceFrames, 0.20)
         let quietValues = zip(referenceFrames, bandFrames).compactMap { reference, band -> Double? in
             reference <= threshold ? band : nil
         }
-        return percentile(quietValues.isEmpty ? bandFrames : quietValues, 0.20)
+        return MasteringSignalMath.percentile(quietValues.isEmpty ? bandFrames : quietValues, 0.20)
     }
 
     private func shimmerInstabilityDB(_ samples: [Float], sampleRate: Double) -> Double {
         let upperBound = min(16_000, sampleRate * 0.5 - 100)
         guard 8_000 < upperBound else { return 0 }
-        let shimmerBand = steepBandPass(samples, lower: 8_000, upper: upperBound, sampleRate: sampleRate)
-        let bodyBand = bandPass(samples, lower: 200, upper: min(5_000, sampleRate * 0.5 - 100), sampleRate: sampleRate)
+        let shimmerBand = MasteringSignalMath.steepBandPass(samples, lower: 8_000, upper: upperBound, sampleRate: sampleRate)
+        let bodyBand = MasteringSignalMath.bandPass(samples, lower: 200, upper: min(5_000, sampleRate * 0.5 - 100), sampleRate: sampleRate)
         let frameSize = max(128, Int(sampleRate * 0.020))
         let hopSize = max(64, Int(sampleRate * 0.010))
         let shimmerFrames = frameRMS(shimmerBand, frameSize: frameSize, hopSize: hopSize)
@@ -1085,10 +1063,10 @@ struct MasteringProcessor {
         let residuals = relativeHigh.indices.map { index -> Double in
             let start = max(0, index - 8)
             let end = min(relativeHigh.count - 1, index + 8)
-            let localMedian = percentile(Array(relativeHigh[start...end]), 0.50)
+            let localMedian = MasteringSignalMath.percentile(Array(relativeHigh[start...end]), 0.50)
             return max(0, relativeHigh[index] - localMedian)
         }
-        return percentile(residuals, 0.95)
+        return MasteringSignalMath.percentile(residuals, 0.95)
     }
 
     private func transientExcessDB(_ samples: [Float], sampleRate: Double) -> Double {
@@ -1096,49 +1074,30 @@ struct MasteringProcessor {
         let hopSize = max(64, Int(sampleRate * 0.010))
         let frames = frameRMS(samples, frameSize: frameSize, hopSize: hopSize).sorted()
         guard frames.count >= 4 else { return 0 }
-        return percentile(frames, 0.95) - percentile(frames, 0.50)
+        return MasteringSignalMath.percentile(frames, 0.95) - MasteringSignalMath.percentile(frames, 0.50)
     }
 
     private func transientPeakDB(_ samples: [Float], sampleRate: Double) -> Double {
         let frameSize = max(128, Int(sampleRate * 0.020))
         let hopSize = max(64, Int(sampleRate * 0.010))
         let frames = frameRMS(samples, frameSize: frameSize, hopSize: hopSize)
-        guard frames.count >= 4 else { return rmsDB(samples) }
-        return percentile(frames, 0.95)
+        guard frames.count >= 4 else { return MasteringSignalMath.rmsDB(samples) }
+        return MasteringSignalMath.percentile(frames, 0.95)
     }
 
     private func frameRMS(_ samples: [Float], frameSize: Int, hopSize: Int) -> [Double] {
         guard !samples.isEmpty else { return [] }
         if samples.count <= frameSize {
-            return [rmsDB(samples)]
+            return [MasteringSignalMath.rmsDB(samples)]
         }
 
         var values: [Double] = []
         var start = 0
         while start + frameSize <= samples.count {
-            values.append(10 * log10(max(rmsEnergy(samples[start..<(start + frameSize)]), 1e-12)))
+            values.append(10 * log10(max(MasteringSignalMath.rmsEnergy(samples[start..<(start + frameSize)]), 1e-12)))
             start += hopSize
         }
         return values
-    }
-
-    private func rmsDB(_ samples: [Float]) -> Double {
-        guard !samples.isEmpty else { return -120 }
-        return 10 * log10(max(rmsEnergy(samples[...]), 1e-12))
-    }
-
-    private func rmsEnergy(_ samples: ArraySlice<Float>) -> Double {
-        guard !samples.isEmpty else { return 0 }
-        return samples.reduce(0.0) { partial, sample in
-            partial + Double(sample * sample)
-        } / Double(samples.count)
-    }
-
-    private func percentile(_ values: [Double], _ percentile: Double) -> Double {
-        guard !values.isEmpty else { return -120 }
-        let sorted = values.sorted()
-        let index = max(0, min(sorted.count - 1, Int(round(Double(sorted.count - 1) * percentile))))
-        return sorted[index]
     }
 
     private struct HighFloorRule {
@@ -1179,16 +1138,16 @@ struct MasteringProcessor {
     ) -> HighFloorReferenceLevels {
         HighFloorReferenceLevels(
             referenceDB: highFloorRules.map {
-                bandRMSDB(signal: reference, lower: $0.lower, upper: $0.upper)
+                MasteringSignalMath.bandRMSDB(signal: reference, lower: $0.lower, upper: $0.upper)
             },
             referenceBalanceDB: originalReference.map { _ in
                 originalHighFloorRules.map {
-                    bandBalanceDB(signal: reference, lower: $0.lower, upper: $0.upper)
+                    MasteringSignalMath.bandBalanceDB(signal: reference, lower: $0.lower, upper: $0.upper)
                 }
             },
             originalReferenceDB: originalReference.map { signal in
                 originalHighFloorRules.map {
-                    bandBalanceDB(signal: signal, lower: $0.lower, upper: $0.upper)
+                    MasteringSignalMath.bandBalanceDB(signal: signal, lower: $0.lower, upper: $0.upper)
                 }
             }
         )
@@ -1222,7 +1181,7 @@ struct MasteringProcessor {
         var didApply = false
 
         for (index, rule) in highFloorRules.enumerated() {
-            let currentDB = bandRMSDB(signal: current, lower: rule.lower, upper: rule.upper)
+            let currentDB = MasteringSignalMath.bandRMSDB(signal: current, lower: rule.lower, upper: rule.upper)
             let referenceDB = referenceLevels.referenceDB[index]
             guard currentDB.isFinite, referenceDB.isFinite else { continue }
 
@@ -1234,7 +1193,7 @@ struct MasteringProcessor {
             let gain = powf(10, Float(boostDB) / 20)
             let sampleRate = current.sampleRate
             let channels = mapChannelsConcurrently(current.channels) {
-                scaleBand(
+                MasteringSignalMath.scaleBand(
                     channel: $0,
                     sampleRate: sampleRate,
                     lower: rule.lower,
@@ -1249,7 +1208,7 @@ struct MasteringProcessor {
 
         if let originalReferenceDB = referenceLevels.originalReferenceDB {
             for (index, rule) in originalHighFloorRules.enumerated() {
-                let currentDB = bandBalanceDB(signal: current, lower: rule.lower, upper: rule.upper)
+                let currentDB = MasteringSignalMath.bandBalanceDB(signal: current, lower: rule.lower, upper: rule.upper)
                 let originalDB = originalReferenceDB[index]
                 guard currentDB.isFinite, originalDB.isFinite else { continue }
 
@@ -1261,7 +1220,7 @@ struct MasteringProcessor {
                 let gain = powf(10, Float(boostDB) / 20)
                 let sampleRate = current.sampleRate
                 let channels = mapChannelsConcurrently(current.channels) {
-                    scaleBand(
+                    MasteringSignalMath.scaleBand(
                         channel: $0,
                         sampleRate: sampleRate,
                         lower: rule.lower,
@@ -1276,7 +1235,7 @@ struct MasteringProcessor {
         }
 
         guard didApply else { return signal }
-        let peakLimited = enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
+        let peakLimited = MasteringSignalMath.enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
         return constrainHighFloorNoiseReturn(
             signal: peakLimited,
             fallback: signal,
@@ -1334,12 +1293,12 @@ struct MasteringProcessor {
             if candidate.mix < 1 {
                 logger?.log("高域保持: ノイズ戻り抑制 mix \(String(format: "%.2f", candidate.mix))")
             }
-            return enforcePeakCeiling(signal: candidate.signal, peakCeilingDB: peakCeilingDB)
+            return MasteringSignalMath.enforcePeakCeiling(signal: candidate.signal, peakCeilingDB: peakCeilingDB)
         }
 
         let minimumPreserved = blendHighFloor(base: fallback, boosted: signal, mix: 0.05)
         logger?.log("高域保持: 最低保持 mix 0.05")
-        return enforcePeakCeiling(signal: minimumPreserved, peakCeilingDB: peakCeilingDB)
+        return MasteringSignalMath.enforcePeakCeiling(signal: minimumPreserved, peakCeilingDB: peakCeilingDB)
     }
 
     private func blendHighFloor(base: AudioSignal, boosted: AudioSignal, mix: Float) -> AudioSignal {
@@ -1411,7 +1370,7 @@ struct MasteringProcessor {
     ) -> AudioSignal {
         let sampleRate = signal.sampleRate
         let channels = mapChannelsConcurrently(signal.channels) {
-            scaleBand(
+            MasteringSignalMath.scaleBand(
                 channel: $0,
                 sampleRate: sampleRate,
                 lower: rule.lowerFrequency,
@@ -1494,7 +1453,7 @@ struct MasteringProcessor {
                 if pass > 1 {
                     logger?.log("ノイズ戻り: 緊急上限確認 \(pass - 1)/\(maxPasses)")
                 }
-                return enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
+                return MasteringSignalMath.enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
             }
 
             let sampleRate = current.sampleRate
@@ -1540,7 +1499,7 @@ struct MasteringProcessor {
             }
         }
 
-        return enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
+        return MasteringSignalMath.enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
     }
 
     static func finalLoudnessRestoreHissReturnExceedsLimit(
@@ -1576,7 +1535,7 @@ struct MasteringProcessor {
         strengthDB: Double
     ) -> [Float] {
         guard !channel.isEmpty, targetExcessDB.isFinite, strengthDB > 0.1 else { return channel }
-        let sibilanceBand = bandPass(
+        let sibilanceBand = MasteringSignalMath.bandPass(
             channel,
             lower: 5_000,
             upper: min(9_000, sampleRate * 0.5 - 100),
@@ -1590,12 +1549,12 @@ struct MasteringProcessor {
         var start = 0
         while start + frameSize <= sibilanceBand.count {
             let range = start..<(start + frameSize)
-            frames.append((range, rmsDB(Array(sibilanceBand[range]))))
+            frames.append((range, MasteringSignalMath.rmsDB(Array(sibilanceBand[range]))))
             start += hopSize
         }
         guard frames.count >= 4 else { return channel }
 
-        let medianDB = percentile(frames.map(\.levelDB), 0.50)
+        let medianDB = MasteringSignalMath.percentile(frames.map(\.levelDB), 0.50)
         let peakLimitDB = medianDB + max(0, targetExcessDB - 1.0)
         var envelope = Array(repeating: Float.zero, count: channel.count)
 
@@ -1626,7 +1585,7 @@ struct MasteringProcessor {
     ) -> AudioSignal {
         let currentLoudness = MasteringAnalysisService.integratedLoudness(signal: signal)
         guard currentLoudness.isFinite, currentLoudness > -69 else {
-            return enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
+            return MasteringSignalMath.enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
         }
 
         let loudnessDeficitDB = Double(targetLKFS - currentLoudness)
@@ -1651,11 +1610,11 @@ struct MasteringProcessor {
         }
         guard requestedGainDB > 0.25 else {
             logger?.log("最終音量復帰: ピーク余裕不足")
-            return enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
+            return MasteringSignalMath.enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
         }
 
-        let candidate = enforcePeakCeiling(
-            signal: applyGain(signal: signal, gainDB: requestedGainDB),
+        let candidate = MasteringSignalMath.enforcePeakCeiling(
+            signal: MasteringSignalMath.applyGain(signal: signal, gainDB: requestedGainDB),
             peakCeilingDB: peakCeilingDB
         )
         let probePlan = noiseReturnProbePlan(for: signal)
@@ -1668,7 +1627,7 @@ struct MasteringProcessor {
             originalReferenceMeasurements: originalReferenceNoiseMeasurements
         ), isFinalLoudnessRestoreMudBalanceSafe(base: signal, candidate: candidate) else {
             logger?.log("最終音量復帰: ノイズ保護で見送り")
-            return enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
+            return MasteringSignalMath.enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
         }
         logger?.log("最終音量復帰: +\(String(format: "%.1f", requestedGainDB)) dB")
         return candidate
@@ -1717,7 +1676,7 @@ struct MasteringProcessor {
               currentLoudness > -69
         else {
             logger?.log("最終音量上限: 無音に近いためピーク確認のみ")
-            return enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
+            return MasteringSignalMath.enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
         }
 
         let toleranceDB = 0.05
@@ -1728,8 +1687,8 @@ struct MasteringProcessor {
         if current > allowedMaximum + toleranceDB {
             let gainDB = allowedMaximum - current
             logger?.log("最終音量上限: \(formatSignedDB(gainDB)) / \(policy.label) の上限内へ調整")
-            return enforcePeakCeiling(
-                signal: applyGain(signal: signal, gainDB: gainDB),
+            return MasteringSignalMath.enforcePeakCeiling(
+                signal: MasteringSignalMath.applyGain(signal: signal, gainDB: gainDB),
                 peakCeilingDB: peakCeilingDB
             )
         }
@@ -1742,11 +1701,11 @@ struct MasteringProcessor {
             let restoreDB = min(loudnessDeficitDB, peakHeadroomDB, policy.finalRestoreLimitDB)
             guard restoreDB > 0.25 else {
                 logger?.log("最終音量下限: ピーク余裕不足")
-                return enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
+                return MasteringSignalMath.enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
             }
 
-            let candidate = enforcePeakCeiling(
-                signal: applyGain(signal: signal, gainDB: restoreDB),
+            let candidate = MasteringSignalMath.enforcePeakCeiling(
+                signal: MasteringSignalMath.applyGain(signal: signal, gainDB: restoreDB),
                 peakCeilingDB: peakCeilingDB
             )
             let probePlan = noiseReturnProbePlan(for: signal)
@@ -1759,7 +1718,7 @@ struct MasteringProcessor {
                 originalReferenceMeasurements: originalReferenceNoiseMeasurements
             ), isFinalLoudnessRestoreMudBalanceSafe(base: signal, candidate: candidate) else {
                 logger?.log("最終音量下限: ノイズ保護で見送り")
-                return enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
+                return MasteringSignalMath.enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
             }
 
             let candidateLoudness = MasteringAnalysisService.integratedLoudness(signal: candidate)
@@ -1771,7 +1730,7 @@ struct MasteringProcessor {
         }
 
         logger?.log("最終音量上限: \(policy.label) の範囲内")
-        return enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
+        return MasteringSignalMath.enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
     }
 
     private func formatSignedDB(_ value: Double) -> String {
@@ -1819,7 +1778,7 @@ struct MasteringProcessor {
         else {
             return reference
         }
-        return applyGain(signal: reference, gainDB: Double(targetLoudness - referenceLoudness))
+        return MasteringSignalMath.applyGain(signal: reference, gainDB: Double(targetLoudness - referenceLoudness))
     }
 
     func isFinalLowMidBodyNoiseSafe(
@@ -1858,64 +1817,21 @@ struct MasteringProcessor {
     }
 
     private func isFinalLoudnessRestoreMudBalanceSafe(base: AudioSignal, candidate: AudioSignal) -> Bool {
-        let baseMud = bandBalanceDB(signal: base, lower: 300, upper: 1_000)
-        let candidateMud = bandBalanceDB(signal: candidate, lower: 300, upper: 1_000)
+        let baseMud = MasteringSignalMath.bandBalanceDB(signal: base, lower: 300, upper: 1_000)
+        let candidateMud = MasteringSignalMath.bandBalanceDB(signal: candidate, lower: 300, upper: 1_000)
         guard baseMud.isFinite, candidateMud.isFinite else { return true }
         return candidateMud <= baseMud + 0.25
-    }
-
-    private func applyGain(signal: AudioSignal, gainDB: Double) -> AudioSignal {
-        let gain = powf(10, Float(gainDB) / 20)
-        let channels = signal.channels.map { channel in
-            channel.map { $0 * gain }
-        }
-        return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
-    }
-
-    private func bandRMSDB(signal: AudioSignal, lower: Double, upper: Double) -> Double {
-        let upperBound = min(upper, signal.sampleRate * 0.5 - 100)
-        guard lower < upperBound else { return -120 }
-        let mono = signal.monoMixdown()
-        let band = bandPass(mono, lower: lower, upper: upperBound, sampleRate: signal.sampleRate)
-        return rmsDB(band)
-    }
-
-    private func bandBalanceDB(signal: AudioSignal, lower: Double, upper: Double) -> Double {
-        bandRMSDB(signal: signal, lower: lower, upper: upper) - rmsDB(signal.monoMixdown())
-    }
-
-    private func enforcePeakCeiling(signal: AudioSignal, peakCeilingDB: Float) -> AudioSignal {
-        let peakCeiling = powf(10, peakCeilingDB / 20)
-        var channels = applyLookaheadLimiter(signal.channels, peakCeiling: peakCeiling, sampleRate: signal.sampleRate)
-        let peak = MasteringAnalysisService.approximateTruePeak(channels)
-        if peak > peakCeiling {
-            let trim = peakCeiling / peak
-            channels = channels.map { $0.map { $0 * trim } }
-        }
-        return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
-    }
-
-    private func scaleBand(channel: [Float], sampleRate: Double, lower: Double, upper: Double, gain: Float) -> [Float] {
-        let band = SpectralDSP.lowPass(
-            SpectralDSP.highPass(channel, cutoff: lower, sampleRate: sampleRate),
-            cutoff: min(upper, sampleRate * 0.5 - 100),
-            sampleRate: sampleRate
-        )
-        let reduction = 1 - gain
-        return channel.indices.map { index in
-            channel[index] - band[index] * reduction
-        }
     }
 
     private func applyLoudness(signal: AudioSignal, targetLKFS: Float, peakCeilingDB: Float) -> AudioSignal {
         let currentLoudness = MasteringAnalysisService.integratedLoudness(signal: signal)
         guard currentLoudness.isFinite, targetLKFS.isFinite, currentLoudness > -69 else {
-            return enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
+            return MasteringSignalMath.enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
         }
         let gain = powf(10, (targetLKFS - currentLoudness) / 20)
         let peakCeiling = powf(10, peakCeilingDB / 20)
         let gainedChannels = signal.channels.map { channel in channel.map { $0 * gain } }
-        var channels = applyLookaheadLimiter(gainedChannels, peakCeiling: peakCeiling, sampleRate: signal.sampleRate)
+        var channels = MasteringSignalMath.applyLookaheadLimiter(gainedChannels, peakCeiling: peakCeiling, sampleRate: signal.sampleRate)
 
         let peak = MasteringAnalysisService.approximateTruePeak(channels)
         if peak > peakCeiling {
@@ -1926,38 +1842,8 @@ struct MasteringProcessor {
         return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
     }
 
-    private func applyLookaheadLimiter(_ channels: [[Float]], peakCeiling: Float, sampleRate: Double) -> [[Float]] {
-        guard let first = channels.first else { return channels }
-        guard first.count > 0 else { return channels }
-
-        let lookaheadSamples = max(16, Int(sampleRate * 0.003))
-        let framePeaks = framePeakEnvelope(channels, frameCount: first.count)
-        let futurePeaks = slidingMaximum(framePeaks, windowSize: lookaheadSamples + 1)
-        var gain: Float = 1
-        var limited = channels
-
-        for index in 0..<first.count {
-            let framePeak = futurePeaks[index]
-            let desiredGain = framePeak > peakCeiling ? peakCeiling / max(framePeak, 1e-6) : 1
-            if desiredGain < gain {
-                gain = desiredGain
-            } else {
-                let reductionAmount = 1 - gain
-                let releaseMs = 65 + reductionAmount * 240
-                let releaseCoeff = expf(-1 / max(Float(sampleRate) * releaseMs * 0.001, 1))
-                gain = min(1, gain * releaseCoeff + (1 - releaseCoeff))
-            }
-
-            for channelIndex in limited.indices where index < limited[channelIndex].count {
-                limited[channelIndex][index] = limited[channelIndex][index] * gain
-            }
-        }
-
-        return limited
-    }
-
     private func effectiveSaturation(_ amount: Float, dynamicsRetention: Float, finishingIntensity: Float) -> Float {
-        amount * clamped(0.64 + finishingIntensity * 0.52 - dynamicsRetention * 0.24, min: 0.35, max: 1.10)
+        amount * MasteringSignalMath.clamped(0.64 + finishingIntensity * 0.52 - dynamicsRetention * 0.24, min: 0.35, max: 1.10)
     }
 
     private func effectiveTargetLoudness(_ target: Float, dynamicsRetention: Float, finishingIntensity: Float) -> Float {
@@ -1987,50 +1873,12 @@ struct MasteringProcessor {
         return gainReductionDB
     }
 
-    private func framePeakEnvelope(_ channels: [[Float]], frameCount: Int) -> [Float] {
-        (0..<frameCount).map { index in
-            channels.reduce(Float.zero) { partial, channel in
-                guard index < channel.count else { return partial }
-                return max(partial, abs(channel[index]))
-            }
-        }
-    }
-
-    private func slidingMaximum(_ values: [Float], windowSize: Int) -> [Float] {
-        guard !values.isEmpty else { return [] }
-        let clampedWindow = max(1, windowSize)
-        var deque: [Int] = []
-        var maxima = Array(repeating: Float.zero, count: values.count)
-
-        for index in stride(from: values.count - 1, through: 0, by: -1) {
-            let upperBound = index + clampedWindow - 1
-            while let first = deque.first, first > upperBound {
-                deque.removeFirst()
-            }
-            while let last = deque.last, values[last] <= values[index] {
-                deque.removeLast()
-            }
-            deque.append(index)
-            maxima[index] = values[deque.first ?? index]
-        }
-
-        return maxima
-    }
-
-    private func gainDelta(forDB value: Float) -> Float {
-        powf(10, value / 20) - 1
-    }
-
     private func logMasteringRoutePlan(_ routePlan: MasteringRoutePlan, logger: AudioProcessingLogger?) {
         guard let logger else { return }
         for step in MasteringRouteStep.allCases {
             let decision = routePlan.decision(for: step)
             logger.log("ルート/マスタリング: \(step.logName) = \(decision.action.logTitle) - \(decision.reason)")
         }
-    }
-
-    private func clamped(_ value: Float, min minValue: Float, max maxValue: Float) -> Float {
-        Swift.max(minValue, Swift.min(value, maxValue))
     }
 }
 
@@ -2041,10 +1889,10 @@ private struct MasteringAirEnhancer {
         settings: MasteringSettings,
         finishingIntensity: Float
     ) -> AudioSignal {
-        let harshnessGuard = clamped(1 - analysis.harshnessScore * 0.62, min: 0.28, max: 1)
+        let harshnessGuard = MasteringSignalMath.clamped(1 - analysis.harshnessScore * 0.62, min: 0.28, max: 1)
         let requestedAir = max(0, settings.highShelfGain) * 0.035 + settings.saturationAmount * 0.030
-        let adaptiveAir = clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 42), min: 0, max: 0.055)
-        let amount = clamped((requestedAir + adaptiveAir) * (0.55 + finishingIntensity * 0.65) * harshnessGuard, min: 0, max: 0.11)
+        let adaptiveAir = MasteringSignalMath.clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 42), min: 0, max: 0.055)
+        let amount = MasteringSignalMath.clamped((requestedAir + adaptiveAir) * (0.55 + finishingIntensity * 0.65) * harshnessGuard, min: 0, max: 0.11)
         guard amount > 0.001 else { return signal }
 
         let channels = mapChannelsConcurrently(signal.channels) { channel in
@@ -2061,9 +1909,5 @@ private struct MasteringAirEnhancer {
         }
 
         return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
-    }
-
-    private func clamped(_ value: Float, min minValue: Float, max maxValue: Float) -> Float {
-        Swift.max(minValue, Swift.min(value, maxValue))
     }
 }
