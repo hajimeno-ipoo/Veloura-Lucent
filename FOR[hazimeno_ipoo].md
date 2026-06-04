@@ -168,6 +168,7 @@ Macアプリ(SwiftUI)
       -> ProcessingRoutePlanでマスタリングルートを決定
       -> MasteringProcessor
       -> MasteringSignalMathでマスタリング内の共通計算を担当
+      -> MasteringHighFloorPreserverでマスタリング内の高域保持を担当
       -> de-esser
       -> 4バンドEQ
       -> 空気感
@@ -192,6 +193,7 @@ Macアプリ(SwiftUI)
   - `NativeAudioProcessor.swift` は、補正パイプラインの順番、工程ログ、診断WAVの保存を担当します。
   - `AudioAnalysisMode.swift`、`AudioAnalyzer.swift`、`HumRemover.swift`、`DenoiseMaskCoefficients.swift`、`DenoiseShimmerStabilizer.swift` は、補正パイプライン内で使う解析、ハム除去、ノイズ除去係数、シマー安定化を分けて置いています。
   - `MasteringSignalMath.swift` は、マスタリング内で使う音量変更、帯域測定、帯域増減、ピーク上限、RMS、パーセンタイルなどの共通計算を担当します。
+  - `MasteringHighFloorPreserver.swift` は、マスタリング内で音楽成分として残す高域を守る処理と、その高域保持後のノイズ戻り確認を担当します。
 - `Sources/VelouraLucent/Support/`
   - FFT まわりなどの共通処理です。
 - `Tests/VelouraLucentTests/`

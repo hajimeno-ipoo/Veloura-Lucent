@@ -259,6 +259,15 @@ struct NoiseMeasurementSnapshot: Sendable, Equatable {
     func comparableLevel(for id: String) -> Double? {
         value(for: id)?.comparableLevelDB
     }
+
+    func noiseReturnDB(from reference: NoiseMeasurementSnapshot, id: String) -> Double {
+        guard let referenceValue = reference.comparableLevel(for: id),
+              let currentValue = comparableLevel(for: id)
+        else {
+            return 0
+        }
+        return currentValue - referenceValue
+    }
 }
 
 struct NoiseMeasurementValue: Sendable, Equatable, Identifiable {
