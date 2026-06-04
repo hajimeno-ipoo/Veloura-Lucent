@@ -22,15 +22,16 @@ enum LoudnessMeasurementService {
         }
 
         let sampleCount = channels.map(\.count).min() ?? 0
-        let integratedEnergyPrefixes = channels.map {
-            officialKWeightedEnergyPrefix(for: $0, sampleCount: sampleCount, trailingSilenceCount: 0)
-        }
         let gatedBlocks = officialGatedBlockLoudness(
-            forEnergyPrefixes: integratedEnergyPrefixes,
+            for: channels,
+            sampleCount: sampleCount,
             sampleRate: signal.sampleRate
         )
-        let energyPrefixes = channels.map { energyPrefix(for: kWeighted($0, sampleRate: signal.sampleRate)) }
-        let shortTerm = shortTermLoudnessTimeline(forEnergyPrefixes: energyPrefixes, sampleRate: signal.sampleRate)
+        let shortTerm = shortTermLoudnessTimeline(
+            for: channels,
+            sampleCount: sampleCount,
+            sampleRate: signal.sampleRate
+        )
         let truePeak = truePeakLinear(signal.channels)
 
         return Measurement(
@@ -100,27 +101,31 @@ enum LoudnessMeasurementService {
         }
 
         let trailingSilenceCount = Int(signal.sampleRate * 1.5)
-        let prefixes = signal.channels.map {
-            officialKWeightedEnergyPrefix(
-                for: $0,
-                sampleCount: sampleCount,
-                trailingSilenceCount: trailingSilenceCount
-            )
-        }
         let totalSampleCount = sampleCount + trailingSilenceCount
         let windowSize = Int(signal.sampleRate * 3.0)
         let hopSize = Int(signal.sampleRate * 0.1)
         guard totalSampleCount >= windowSize else { return nil }
 
-        var loudnessValues: [Double] = []
-        var start = 0
-        while start + windowSize <= totalSampleCount {
-            let end = start + windowSize
+        let windows = fixedWindows(
+            sampleCount: totalSampleCount,
+            windowSize: windowSize,
+            hopSize: hopSize,
+            includePartialFinalWindow: false
+        )
+        let requiredIndices = requiredPrefixIndices(for: windows)
+        let prefixes = signal.channels.map {
+            sparseOfficialKWeightedEnergyPrefix(
+                for: $0,
+                sampleCount: sampleCount,
+                trailingSilenceCount: trailingSilenceCount,
+                requiredIndices: requiredIndices
+            )
+        }
+        let loudnessValues = windows.map { window in
             let meanEnergy = prefixes.reduce(0.0) {
-                $0 + meanSquare(in: $1, start: start, end: end)
+                $0 + meanSquare(in: $1, start: window.start, end: window.end)
             }
-            loudnessValues.append(-0.691 + 10 * log10(max(meanEnergy, 1e-12)))
-            start += hopSize
+            return -0.691 + 10 * log10(max(meanEnergy, 1e-12))
         }
 
         let absoluteGated = loudnessValues.filter { $0 >= -70 }
@@ -149,8 +154,81 @@ enum LoudnessMeasurementService {
         return prefix
     }
 
-    private static func shortTermLoudnessTimeline(forEnergyPrefixes prefixes: [[Double]], sampleRate: Double) -> [TimedLevelMetric] {
-        let sampleCount = prefixes.map { max($0.count - 1, 0) }.min() ?? 0
+    private static func officialGatedBlockLoudness(
+        for channels: [[Float]],
+        sampleCount: Int,
+        sampleRate: Double
+    ) -> [Double] {
+        guard sampleCount > 0 else { return [] }
+
+        let windowSize = max(Int(sampleRate * 0.4), 1)
+        let hopSize = max(Int(sampleRate * 0.1), 1)
+        let windows = fixedWindows(
+            sampleCount: sampleCount,
+            windowSize: windowSize,
+            hopSize: hopSize,
+            includePartialFinalWindow: false
+        )
+        let requiredIndices = requiredPrefixIndices(for: windows)
+        let prefixes = channels.map {
+            sparseOfficialKWeightedEnergyPrefix(
+                for: $0,
+                sampleCount: sampleCount,
+                trailingSilenceCount: 0,
+                requiredIndices: requiredIndices
+            )
+        }
+        let blockLoudness = windows.map { window in
+            let meanEnergy = prefixes.reduce(0.0) {
+                $0 + meanSquare(in: $1, start: window.start, end: window.end)
+            }
+            return -0.691 + 10 * log10(max(meanEnergy, 1e-12))
+        }
+
+        let absoluteGated = blockLoudness.filter { $0 >= -70 }
+        guard !absoluteGated.isEmpty else { return [] }
+        let preliminary = energyAverage(absoluteGated)
+        let relativeGate = preliminary - 10
+        let relativeGated = absoluteGated.filter { $0 >= relativeGate }
+        return relativeGated.isEmpty ? absoluteGated : relativeGated
+    }
+
+    private static func sparseOfficialKWeightedEnergyPrefix(
+        for channel: [Float],
+        sampleCount: Int,
+        trailingSilenceCount: Int,
+        requiredIndices: [Int]
+    ) -> [Int: Double] {
+        var preFilter = BiquadFilter(coefficients: officialPreFilterCoefficients)
+        var rlbFilter = BiquadFilter(coefficients: officialRLBFilterCoefficients)
+        let totalSampleCount = sampleCount + trailingSilenceCount
+        var prefix: [Int: Double] = [:]
+        prefix.reserveCapacity(requiredIndices.count)
+        var requiredIndex = 0
+        var cumulativeEnergy = 0.0
+
+        while requiredIndex < requiredIndices.count, requiredIndices[requiredIndex] == 0 {
+            prefix[0] = 0
+            requiredIndex += 1
+        }
+        for index in 0..<totalSampleCount {
+            let sample = index < sampleCount ? Double(channel[index]) : 0
+            let weighted = rlbFilter.process(preFilter.process(sample))
+            cumulativeEnergy += weighted * weighted
+            let prefixIndex = index + 1
+            while requiredIndex < requiredIndices.count, requiredIndices[requiredIndex] == prefixIndex {
+                prefix[prefixIndex] = cumulativeEnergy
+                requiredIndex += 1
+            }
+        }
+        return prefix
+    }
+
+    private static func shortTermLoudnessTimeline(
+        for channels: [[Float]],
+        sampleCount: Int,
+        sampleRate: Double
+    ) -> [TimedLevelMetric] {
         guard sampleCount > 0 else { return [] }
 
         let duration = Double(sampleCount) / sampleRate
@@ -158,21 +236,66 @@ enum LoudnessMeasurementService {
         let hopDuration = max(0.25, duration / 96.0)
         let windowSize = max(1, Int(sampleRate * windowDuration))
         let hopSize = max(1, Int(sampleRate * hopDuration))
-
-        var values: [TimedLevelMetric] = []
-        var start = 0
-        var index = 0
-        while start < sampleCount {
-            let end = min(sampleCount, start + windowSize)
-            guard start < end else { break }
-            let meanEnergy = prefixes.reduce(0.0) { $0 + meanSquare(in: $1, start: start, end: end) }
-            let rms = sqrt(max(meanEnergy, 1e-12))
-            let time = (Double(start + end) * 0.5) / sampleRate
-            values.append(TimedLevelMetric(id: "loudness-\(index)", time: time, levelDB: 20 * log10(max(rms, 1e-12))))
-            start += hopSize
-            index += 1
+        let windows = fixedWindows(
+            sampleCount: sampleCount,
+            windowSize: windowSize,
+            hopSize: hopSize,
+            includePartialFinalWindow: true
+        )
+        let requiredIndices = requiredPrefixIndices(for: windows)
+        let prefixes = channels.map {
+            sparseEnergyPrefix(for: kWeighted($0, sampleRate: sampleRate), requiredIndices: requiredIndices)
         }
-        return values
+
+        return windows.enumerated().map { index, window in
+            let meanEnergy = prefixes.reduce(0.0) {
+                $0 + meanSquare(in: $1, start: window.start, end: window.end)
+            }
+            let rms = sqrt(max(meanEnergy, 1e-12))
+            let time = (Double(window.start + window.end) * 0.5) / sampleRate
+            return TimedLevelMetric(id: "loudness-\(index)", time: time, levelDB: 20 * log10(max(rms, 1e-12)))
+        }
+    }
+
+    private static func sparseEnergyPrefix(for values: [Float], requiredIndices: [Int]) -> [Int: Double] {
+        var prefix: [Int: Double] = [:]
+        prefix.reserveCapacity(requiredIndices.count)
+        var requiredIndex = 0
+        var cumulativeEnergy = 0.0
+
+        while requiredIndex < requiredIndices.count, requiredIndices[requiredIndex] == 0 {
+            prefix[0] = 0
+            requiredIndex += 1
+        }
+        for index in values.indices {
+            let value = Double(values[index])
+            cumulativeEnergy += value * value
+            let prefixIndex = index + 1
+            while requiredIndex < requiredIndices.count, requiredIndices[requiredIndex] == prefixIndex {
+                prefix[prefixIndex] = cumulativeEnergy
+                requiredIndex += 1
+            }
+        }
+        return prefix
+    }
+
+    private static func fixedWindows(
+        sampleCount: Int,
+        windowSize: Int,
+        hopSize: Int,
+        includePartialFinalWindow: Bool
+    ) -> [(start: Int, end: Int)] {
+        var windows: [(start: Int, end: Int)] = []
+        var start = 0
+        while includePartialFinalWindow ? start < sampleCount : start + windowSize <= sampleCount {
+            windows.append((start: start, end: min(sampleCount, start + windowSize)))
+            start += hopSize
+        }
+        return windows
+    }
+
+    private static func requiredPrefixIndices(for windows: [(start: Int, end: Int)]) -> [Int] {
+        Array(Set(windows.flatMap { [$0.start, $0.end] })).sorted()
     }
 
     private static func kWeighted(_ signal: [Float], sampleRate: Double) -> [Float] {
@@ -181,18 +304,14 @@ enum LoudnessMeasurementService {
         return zip(highPassed, shelfBase).map { $0 + $1 * 0.25 }
     }
 
-    private static func energyPrefix(for values: [Float]) -> [Double] {
-        var prefix = Array(repeating: 0.0, count: values.count + 1)
-        for index in values.indices {
-            let value = Double(values[index])
-            prefix[index + 1] = prefix[index] + value * value
-        }
-        return prefix
-    }
-
     private static func meanSquare(in prefix: [Double], start: Int, end: Int) -> Double {
         guard start < end, start >= 0, end < prefix.count else { return 0 }
         return (prefix[end] - prefix[start]) / Double(max(end - start, 1))
+    }
+
+    private static func meanSquare(in prefix: [Int: Double], start: Int, end: Int) -> Double {
+        guard start < end, start >= 0, let startValue = prefix[start], let endValue = prefix[end] else { return 0 }
+        return (endValue - startValue) / Double(max(end - start, 1))
     }
 
     private static func energyAverage(_ loudnessValues: [Double]) -> Double {
