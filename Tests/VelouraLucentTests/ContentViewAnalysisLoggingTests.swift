@@ -7,7 +7,7 @@ struct ContentViewAnalysisLoggingTests {
     func displayAnalysisMeasurementLogsDuration() async throws {
         let logs = ThreadSafeLogCollector()
 
-        let value = try await ContentView.measureDisplayAnalysis("ノイズ測定", logHandler: { message in
+        let value = try await DisplayAnalysisSupport.measure("ノイズ測定", logHandler: { message in
             logs.append(message)
         }) {
             42
@@ -23,7 +23,7 @@ struct ContentViewAnalysisLoggingTests {
     func disabledOptionalDisplayAnalysisDoesNotLog() async throws {
         let logs = ThreadSafeLogCollector()
 
-        let value: Int? = try await ContentView.measureOptionalDisplayAnalysis("プレビュー生成", isEnabled: false, logHandler: { message in
+        let value: Int? = try await DisplayAnalysisSupport.measureOptional("プレビュー生成", isEnabled: false, logHandler: { message in
             logs.append(message)
         }) {
             Issue.record("Disabled display analysis work should not run")

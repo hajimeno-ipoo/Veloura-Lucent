@@ -2371,8 +2371,8 @@ struct ContentView: View {
 
         let signal: AudioSignal
         do {
-            signal = try await Self.measureDisplayAnalysis("ファイル読み込み", logHandler: logHandler) {
-                try await Self.runDisplayAnalysisWorker {
+            signal = try await DisplayAnalysisSupport.measure("ファイル読み込み", logHandler: logHandler) {
+                try await DisplayAnalysisSupport.runWorker {
                     try AudioFileService.loadAudio(from: url)
                 }
             }
@@ -2384,8 +2384,8 @@ struct ContentView: View {
         guard await shouldContinueDisplayAnalysis(target: target, selectionID: selectionID, fileURL: url) else { return }
         if includePreview && (missingKinds.contains(.preview) || missingKinds.contains(.spectrogram)) {
             do {
-                let snapshots = try await Self.measureDisplayAnalysis("プレビュー/スペクトログラム生成", logHandler: logHandler) {
-                    try await Self.runDisplayAnalysisWorker {
+                let snapshots = try await DisplayAnalysisSupport.measure("プレビュー/スペクトログラム生成", logHandler: logHandler) {
+                    try await DisplayAnalysisSupport.runWorker {
                         AudioFileService.makeDisplaySnapshots(from: signal)
                     }
                 }
@@ -2400,8 +2400,8 @@ struct ContentView: View {
             }
         } else if missingKinds.contains(.spectrogram) {
             do {
-                let spectrogram = try await Self.measureDisplayAnalysis("スペクトログラム生成", logHandler: logHandler) {
-                    try await Self.runDisplayAnalysisWorker {
+                let spectrogram = try await DisplayAnalysisSupport.measure("スペクトログラム生成", logHandler: logHandler) {
+                    try await DisplayAnalysisSupport.runWorker {
                         AudioFileService.makeSpectrogramSnapshot(from: signal)
                     }
                 }
@@ -2417,7 +2417,7 @@ struct ContentView: View {
         guard await shouldContinueDisplayAnalysis(target: target, selectionID: selectionID, fileURL: url) else { return }
         if missingKinds.contains(.metrics) {
             do {
-                let metrics = try await Self.measureDisplayAnalysis("比較指標", logHandler: logHandler) {
+                let metrics = try await DisplayAnalysisSupport.measure("比較指標", logHandler: logHandler) {
                     try await AudioComparisonService.analyzeConcurrently(signal: signal)
                 }
                 await MainActor.run {
@@ -2433,8 +2433,8 @@ struct ContentView: View {
         guard await shouldContinueDisplayAnalysis(target: target, selectionID: selectionID, fileURL: url) else { return }
         if includeMasteringAnalysis, missingKinds.contains(.masteringAnalysis) {
             do {
-                let masteringAnalysis = try await Self.measureDisplayAnalysis("マスタリング解析", logHandler: logHandler) {
-                    try await Self.runDisplayAnalysisWorker {
+                let masteringAnalysis = try await DisplayAnalysisSupport.measure("マスタリング解析", logHandler: logHandler) {
+                    try await DisplayAnalysisSupport.runWorker {
                         MasteringAnalysisService.analyze(signal: signal)
                     }
                 }
@@ -2450,8 +2450,8 @@ struct ContentView: View {
         guard await shouldContinueDisplayAnalysis(target: target, selectionID: selectionID, fileURL: url) else { return }
         if let correctionAnalysisMode, missingKinds.contains(.correctionAnalysis) {
             do {
-                let correctionAnalysis = try await Self.measureDisplayAnalysis("補正解析", logHandler: logHandler) {
-                    try await Self.runDisplayAnalysisWorker {
+                let correctionAnalysis = try await DisplayAnalysisSupport.measure("補正解析", logHandler: logHandler) {
+                    try await DisplayAnalysisSupport.runWorker {
                         AudioAnalyzer(mode: correctionAnalysisMode).analyze(signal: signal)
                     }
                 }
@@ -2467,8 +2467,8 @@ struct ContentView: View {
         guard await shouldContinueDisplayAnalysis(target: target, selectionID: selectionID, fileURL: url) else { return }
         if missingKinds.contains(.noise) {
             do {
-                let noiseMeasurements = try await Self.measureDisplayAnalysis("ノイズ測定", logHandler: logHandler) {
-                    try await Self.runDisplayAnalysisWorker {
+                let noiseMeasurements = try await DisplayAnalysisSupport.measure("ノイズ測定", logHandler: logHandler) {
+                    try await DisplayAnalysisSupport.runWorker {
                         try NoiseMeasurementService.analyzeCancellable(signal: signal)
                     }
                 }
@@ -2479,22 +2479,6 @@ struct ContentView: View {
             } catch {
                 await failDisplayAnalysisKinds([.noise], for: target, selectionID: selectionID, fileURL: url)
             }
-        }
-    }
-
-    private static func runDisplayAnalysisWorker<T: Sendable>(
-        _ work: @escaping @Sendable () async throws -> T
-    ) async throws -> T {
-        let worker = Task.detached(priority: .utility) {
-            try Task.checkCancellation()
-            let result = try await work()
-            try Task.checkCancellation()
-            return result
-        }
-        return try await withTaskCancellationHandler {
-            try await worker.value
-        } onCancel: {
-            worker.cancel()
         }
     }
 
@@ -2524,37 +2508,6 @@ struct ContentView: View {
                 }
             }
         }
-    }
-
-    static func measureDisplayAnalysis<T: Sendable>(
-        _ label: String,
-        logHandler: (@Sendable (String) -> Void)?,
-        work: @Sendable () async throws -> T
-    ) async throws -> T {
-        let start = DispatchTime.now().uptimeNanoseconds
-        do {
-            let result = try await work()
-            logHandler?("表示解析/計測: \(label): \(formatProcessingDuration(displayAnalysisDurationSeconds(since: start)))")
-            return result
-        } catch {
-            logHandler?("表示解析/計測: \(label): \(formatProcessingDuration(displayAnalysisDurationSeconds(since: start)))")
-            throw error
-        }
-    }
-
-    static func measureOptionalDisplayAnalysis<T: Sendable>(
-        _ label: String,
-        isEnabled: Bool,
-        logHandler: (@Sendable (String) -> Void)?,
-        work: @Sendable () async throws -> T
-    ) async throws -> T? {
-        guard isEnabled else { return nil }
-        return try await measureDisplayAnalysis(label, logHandler: logHandler, work: work)
-    }
-
-    private static func displayAnalysisDurationSeconds(since start: UInt64) -> Double {
-        let end = DispatchTime.now().uptimeNanoseconds
-        return Double(end - start) / 1_000_000_000
     }
 
     private func preparePreviewCards(loadInputPreview: Bool = true) {
