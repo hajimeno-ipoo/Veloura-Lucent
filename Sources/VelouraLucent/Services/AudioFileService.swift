@@ -231,8 +231,14 @@ enum AudioFileService {
             return emptyPreviewSnapshot(bucketCount: bucketCount)
         }
 
-        let spectrogram = SpectralDSP.stft(mono, fftSize: previewFFTSize, hopSize: previewHopSize)
-        return makePreviewSnapshot(from: signal, mono: mono, spectrogram: spectrogram, bucketCount: bucketCount)
+        let spectralAnalysis = makePreviewSpectralAnalysis(
+            mono: mono,
+            sampleRate: signal.sampleRate,
+            bucketCount: bucketCount,
+            includesBandLevels: true,
+            includesSpectrogram: false
+        )
+        return makePreviewSnapshot(from: signal, mono: mono, spectralAnalysis: spectralAnalysis, bucketCount: bucketCount)
     }
 
     static func makeDisplaySnapshots(from signal: AudioSignal, bucketCount: Int = previewBucketCount) -> AudioDisplaySnapshots {
@@ -244,14 +250,20 @@ enum AudioFileService {
             )
         }
 
-        let spectrogram = SpectralDSP.stft(mono, fftSize: previewFFTSize, hopSize: previewHopSize)
+        let spectralAnalysis = makePreviewSpectralAnalysis(
+            mono: mono,
+            sampleRate: signal.sampleRate,
+            bucketCount: bucketCount,
+            includesBandLevels: true,
+            includesSpectrogram: true
+        )
         return AudioDisplaySnapshots(
-            previewSnapshot: makePreviewSnapshot(from: signal, mono: mono, spectrogram: spectrogram, bucketCount: bucketCount),
-            spectrogram: makeSpectrogramSnapshot(from: signal, mono: mono, spectrogram: spectrogram)
+            previewSnapshot: makePreviewSnapshot(from: signal, mono: mono, spectralAnalysis: spectralAnalysis, bucketCount: bucketCount),
+            spectrogram: makeSpectrogramSnapshot(from: signal, mono: mono, spectralAnalysis: spectralAnalysis)
         )
     }
 
-    private static func makePreviewSnapshot(from signal: AudioSignal, mono: [Float], spectrogram: Spectrogram, bucketCount: Int) -> AudioPreviewSnapshot {
+    private static func makePreviewSnapshot(from signal: AudioSignal, mono: [Float], spectralAnalysis: PreviewSpectralAnalysis, bucketCount: Int) -> AudioPreviewSnapshot {
         let chunkSize = max(1, mono.count / bucketCount)
         let waveform = stride(from: 0, to: mono.count, by: chunkSize).prefix(bucketCount).map { index in
             let end = min(index + chunkSize, mono.count)
@@ -260,7 +272,7 @@ enum AudioFileService {
             return min(1, peak)
         }
 
-        let (bandLevels, bandLevelDBs) = makeBandLevels(from: spectrogram, sampleRate: signal.sampleRate, bucketCount: bucketCount)
+        let (bandLevels, bandLevelDBs) = makeBandLevels(from: spectralAnalysis, bucketCount: bucketCount)
 
         return AudioPreviewSnapshot(
             waveform: Array(waveform),
@@ -281,57 +293,36 @@ enum AudioFileService {
             return .empty
         }
 
-        let spectrogram = SpectralDSP.stft(mono, fftSize: previewFFTSize, hopSize: previewHopSize)
-        return makeSpectrogramSnapshot(from: signal, mono: mono, spectrogram: spectrogram)
+        let spectralAnalysis = makePreviewSpectralAnalysis(
+            mono: mono,
+            sampleRate: signal.sampleRate,
+            bucketCount: previewBucketCount,
+            includesBandLevels: false,
+            includesSpectrogram: true
+        )
+        return makeSpectrogramSnapshot(from: signal, mono: mono, spectralAnalysis: spectralAnalysis)
     }
 
-    private static func makeSpectrogramSnapshot(from signal: AudioSignal, mono: [Float], spectrogram: Spectrogram) -> SpectrogramSnapshot {
-        guard spectrogram.frameCount > 0 else {
+    private static func makeSpectrogramSnapshot(from signal: AudioSignal, mono: [Float], spectralAnalysis: PreviewSpectralAnalysis) -> SpectrogramSnapshot {
+        guard spectralAnalysis.frameCount > 0 else {
             return .empty
         }
 
-        let timeBuckets = min(120, max(1, spectrogram.frameCount))
+        let timeBuckets = spectralAnalysis.spectrogramTimeBuckets
         let frequencyBuckets = 56
         let maxFrequency = signal.sampleRate * 0.5
         let minFrequency = 80.0
-        let frameGroupSize = max(1, Int(ceil(Double(spectrogram.frameCount) / Double(timeBuckets))))
-        let frequencyStep = signal.sampleRate / Double(spectrogram.fftSize)
 
         var cells: [SpectrogramCell] = []
         cells.reserveCapacity(timeBuckets * frequencyBuckets)
-
-        let binEdges: [ClosedRange<Int>] = (0..<frequencyBuckets).map { bucket in
-            let lowerRatio = Double(bucket) / Double(frequencyBuckets)
-            let upperRatio = Double(bucket + 1) / Double(frequencyBuckets)
-            let lowerFrequency = minFrequency * pow(maxFrequency / minFrequency, lowerRatio)
-            let upperFrequency = minFrequency * pow(maxFrequency / minFrequency, upperRatio)
-            let lowerBin = max(0, min(Int(lowerFrequency / frequencyStep), spectrogram.binCount - 1))
-            let upperBin = max(lowerBin, min(Int(upperFrequency / frequencyStep), spectrogram.binCount - 1))
-            return lowerBin...upperBin
-        }
 
         var maxIntensity = -120.0
         var rawLevels = Array(repeating: Array(repeating: -120.0, count: frequencyBuckets), count: timeBuckets)
 
         for timeBucket in 0..<timeBuckets {
-            let startFrame = timeBucket * frameGroupSize
-            let endFrame = min(spectrogram.frameCount, startFrame + frameGroupSize)
-            guard startFrame < endFrame else { continue }
-
             for frequencyBucket in 0..<frequencyBuckets {
-                let range = binEdges[frequencyBucket]
-                var energy: Float = 0
-                var count: Int = 0
-
-                for frameIndex in startFrame..<endFrame {
-                    for binIndex in range {
-                        let value = spectrogram.magnitude(frameIndex: frameIndex, binIndex: binIndex)
-                        energy += value * value
-                        count += 1
-                    }
-                }
-
-                let rms = sqrt(max(Double(energy) / Double(max(count, 1)), 1e-12))
+                let index = timeBucket * frequencyBuckets + frequencyBucket
+                let rms = sqrt(max(Double(spectralAnalysis.spectrogramEnergy[index]) / Double(max(spectralAnalysis.spectrogramCounts[index], 1)), 1e-12))
                 let levelDB = 20 * log10(max(rms, 1e-12))
                 rawLevels[timeBucket][frequencyBucket] = levelDB
                 maxIntensity = max(maxIntensity, levelDB)
@@ -375,53 +366,34 @@ enum AudioFileService {
     }
 
     private static func makeBandLevels(from mono: [Float], sampleRate: Double, bucketCount: Int) -> ([String: [Float]], [String: [Float]]) {
-        let spectrogram = SpectralDSP.stft(mono, fftSize: previewFFTSize, hopSize: previewHopSize)
-        return makeBandLevels(from: spectrogram, sampleRate: sampleRate, bucketCount: bucketCount)
+        let spectralAnalysis = makePreviewSpectralAnalysis(
+            mono: mono,
+            sampleRate: sampleRate,
+            bucketCount: bucketCount,
+            includesBandLevels: true,
+            includesSpectrogram: false
+        )
+        return makeBandLevels(from: spectralAnalysis, bucketCount: bucketCount)
     }
 
-    private static func makeBandLevels(from spectrogram: Spectrogram, sampleRate: Double, bucketCount: Int) -> ([String: [Float]], [String: [Float]]) {
-        guard spectrogram.frameCount > 0 else {
+    private static func makeBandLevels(from spectralAnalysis: PreviewSpectralAnalysis, bucketCount: Int) -> ([String: [Float]], [String: [Float]]) {
+        guard spectralAnalysis.frameCount > 0 else {
             return (
                 emptyBandLevels(bucketCount: bucketCount),
                 emptyBandLevels(bucketCount: bucketCount, fill: -120)
             )
         }
 
-        let frequencyStep = sampleRate / Double(spectrogram.fftSize)
-        let bandBinRanges = AudioBandCatalog.previewBands.map { band -> (String, ClosedRange<Int>) in
-            let lower = max(0, min(Int(floor(band.lowerBound / frequencyStep)), spectrogram.binCount - 1))
-            let upper = max(lower, min(Int(floor(band.upperBound / frequencyStep)), spectrogram.binCount - 1))
-            return (band.id, lower...upper)
-        }
-
-        var frameBandLevels: [String: [Float]] = Dictionary(uniqueKeysWithValues: bandBinRanges.map {
-            ($0.0, Array(repeating: 0, count: spectrogram.frameCount))
+        var bucketLevels: [String: [Float]] = Dictionary(uniqueKeysWithValues: AudioBandCatalog.previewBands.map {
+            ($0.id, Array(repeating: 0, count: bucketCount))
         })
-
-        var frameMagnitudes = Array(repeating: Float.zero, count: spectrogram.binCount)
-        for frameIndex in 0..<spectrogram.frameCount {
-            spectrogram.fillMagnitudes(frameIndex: frameIndex, into: &frameMagnitudes)
-            for (bandID, range) in bandBinRanges {
-                var energy: Float = 0
-                for binIndex in range {
-                    let value = frameMagnitudes[binIndex]
-                    energy += value * value
-                }
-                let meanSquare = energy / Float(max(range.count, 1))
-                let rms = sqrtf(max(meanSquare, 1e-12))
-                frameBandLevels[bandID]?[frameIndex] = 20 * log10f(rms)
-            }
-        }
-
-        var bucketLevels: [String: [Float]] = Dictionary(uniqueKeysWithValues: bandBinRanges.map {
-            ($0.0, Array(repeating: 0, count: bucketCount))
+        var bucketLevelDBs: [String: [Float]] = Dictionary(uniqueKeysWithValues: AudioBandCatalog.previewBands.map {
+            ($0.id, Array(repeating: Float(-120), count: bucketCount))
         })
-        var bucketLevelDBs: [String: [Float]] = Dictionary(uniqueKeysWithValues: bandBinRanges.map {
-            ($0.0, Array(repeating: Float(-120), count: bucketCount))
-        })
-        let framesPerBucket = max(Double(spectrogram.frameCount) / Double(bucketCount), 1)
+        let framesPerBucket = max(Double(spectralAnalysis.frameCount) / Double(bucketCount), 1)
 
-        for (bandID, levels) in frameBandLevels {
+        for band in AudioBandCatalog.previewBands {
+            guard let levels = spectralAnalysis.frameBandLevels[band.id] else { continue }
             let sortedLevels = levels.sorted()
             let lowerReference = percentile(sortedLevels, fraction: 0.15)
             let upperReference = percentile(sortedLevels, fraction: 0.95)
@@ -437,12 +409,103 @@ enum AudioFileService {
                 let bucketPeak = bucketSlice.max() ?? bucketMean
                 let blendedLevel = bucketMean + (bucketPeak - bucketMean) * 0.45
                 let normalized = max(0, min(1, (blendedLevel - floorLevel) / max(ceilingLevel - floorLevel, 1)))
-                bucketLevels[bandID]?[bucketIndex] = powf(normalized, 0.58)
-                bucketLevelDBs[bandID]?[bucketIndex] = blendedLevel
+                bucketLevels[band.id]?[bucketIndex] = powf(normalized, 0.58)
+                bucketLevelDBs[band.id]?[bucketIndex] = blendedLevel
             }
         }
 
         return (bucketLevels, bucketLevelDBs)
+    }
+
+    private struct PreviewSpectralAnalysis {
+        let frameCount: Int
+        let spectrogramTimeBuckets: Int
+        let frameBandLevels: [String: [Float]]
+        let spectrogramEnergy: [Float]
+        let spectrogramCounts: [Int]
+    }
+
+    private static func makePreviewSpectralAnalysis(
+        mono: [Float],
+        sampleRate: Double,
+        bucketCount _: Int,
+        includesBandLevels: Bool,
+        includesSpectrogram: Bool
+    ) -> PreviewSpectralAnalysis {
+        let frequencyStep = sampleRate / Double(previewFFTSize)
+        let binCount = previewFFTSize / 2 + 1
+        let previewBandRanges: [(id: String, range: ClosedRange<Int>)] = includesBandLevels
+            ? AudioBandCatalog.previewBands.map { band -> (id: String, range: ClosedRange<Int>) in
+                let lower = max(0, min(Int(floor(band.lowerBound / frequencyStep)), binCount - 1))
+                let upper = max(lower, min(Int(floor(band.upperBound / frequencyStep)), binCount - 1))
+                return (band.id, lower...upper)
+            }
+            : []
+
+        let frameCount = previewSTFTFrameCount(forSampleCount: mono.count)
+        let timeBuckets = min(120, max(1, frameCount))
+        let frequencyBuckets = 56
+        let maxFrequency = sampleRate * 0.5
+        let minFrequency = 80.0
+        let frameGroupSize = max(1, Int(ceil(Double(frameCount) / Double(timeBuckets))))
+        let binEdges: [ClosedRange<Int>] = includesSpectrogram
+            ? (0..<frequencyBuckets).map { bucket in
+                let lowerRatio = Double(bucket) / Double(frequencyBuckets)
+                let upperRatio = Double(bucket + 1) / Double(frequencyBuckets)
+                let lowerFrequency = minFrequency * pow(maxFrequency / minFrequency, lowerRatio)
+                let upperFrequency = minFrequency * pow(maxFrequency / minFrequency, upperRatio)
+                let lowerBin = max(0, min(Int(lowerFrequency / frequencyStep), binCount - 1))
+                let upperBin = max(lowerBin, min(Int(upperFrequency / frequencyStep), binCount - 1))
+                return lowerBin...upperBin
+            }
+            : []
+
+        var frames: [String: [Float]] = includesBandLevels
+            ? Dictionary(uniqueKeysWithValues: previewBandRanges.map { ($0.id, Array(repeating: Float.zero, count: frameCount)) })
+            : [:]
+        var spectrogramEnergy = includesSpectrogram ? Array(repeating: Float.zero, count: timeBuckets * frequencyBuckets) : []
+        var spectrogramCounts = includesSpectrogram ? Array(repeating: 0, count: timeBuckets * frequencyBuckets) : []
+
+        SpectralDSP.forEachSTFTFrame(mono, fftSize: previewFFTSize, hopSize: previewHopSize) { frameIndex, _, real, imag in
+            if includesBandLevels {
+                for (bandID, range) in previewBandRanges {
+                    var energy: Float = 0
+                    for binIndex in range {
+                        let value = hypotf(real[binIndex], imag[binIndex])
+                        energy += value * value
+                    }
+                    let meanSquare = energy / Float(max(range.count, 1))
+                    let rms = sqrtf(max(meanSquare, 1e-12))
+                    frames[bandID]?[frameIndex] = 20 * log10f(rms)
+                }
+            }
+
+            if includesSpectrogram {
+                let timeBucket = min(timeBuckets - 1, frameIndex / frameGroupSize)
+                for frequencyBucket in 0..<frequencyBuckets {
+                    let outputIndex = timeBucket * frequencyBuckets + frequencyBucket
+                    for binIndex in binEdges[frequencyBucket] {
+                        let value = hypotf(real[binIndex], imag[binIndex])
+                        spectrogramEnergy[outputIndex] += value * value
+                        spectrogramCounts[outputIndex] += 1
+                    }
+                }
+            }
+        }
+
+        return PreviewSpectralAnalysis(
+            frameCount: frameCount,
+            spectrogramTimeBuckets: timeBuckets,
+            frameBandLevels: frames,
+            spectrogramEnergy: spectrogramEnergy,
+            spectrogramCounts: spectrogramCounts
+        )
+    }
+
+    private static func previewSTFTFrameCount(forSampleCount sampleCount: Int) -> Int {
+        let sourceCount = sampleCount == 0 ? 1 : sampleCount
+        let paddedCount = sourceCount > 1 ? sourceCount + previewFFTSize : sourceCount
+        return max(1, Int(ceil(Double(max(paddedCount - previewFFTSize, 0)) / Double(previewHopSize))) + 1)
     }
 
     private static func emptyPreviewSnapshot(bucketCount: Int) -> AudioPreviewSnapshot {
