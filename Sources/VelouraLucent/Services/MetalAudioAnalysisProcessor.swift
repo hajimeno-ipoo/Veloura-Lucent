@@ -112,7 +112,7 @@ struct MetalAudioAnalysisProcessor: Sendable {
 }
 
 extension MetalAudioAnalysisProcessor {
-    private func separatedMeanSpectra(magnitudes: [Float], frameCount: Int, binCount: Int) -> AudioSeparatedMeanSpectra? {
+    func separatedMeanSpectra(magnitudes: [Float], frameCount: Int, binCount: Int) -> AudioSeparatedMeanSpectra? {
         guard frameCount > 0, binCount > 0 else {
             return AudioSeparatedMeanSpectra(harmonic: [], percussive: [])
         }

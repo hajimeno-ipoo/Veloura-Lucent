@@ -53,6 +53,39 @@ struct AudioAnalysisModeTests {
     }
 
     @Test
+    func metalMagnitudeInputMatchesSpectrogramInputWhenAvailable() {
+        let processor = MetalAudioAnalysisProcessor()
+        guard processor.isAvailable else { return }
+
+        let sampleRate = 48_000.0
+        let samples = (0..<16_384).map { index in
+            let time = Double(index) / sampleRate
+            return Float(sin(2 * Double.pi * 440 * time) * 0.1 + sin(2 * Double.pi * 2_200 * time) * 0.04)
+        }
+        let spectrogram = SpectralDSP.stft(samples)
+        let fromSpectrogram = processor.separatedMeanSpectra(spectrogram: spectrogram)
+        var magnitudes: [Float] = []
+        magnitudes.reserveCapacity(spectrogram.frameCount * spectrogram.binCount)
+        var frameMagnitudes = Array(repeating: Float.zero, count: spectrogram.binCount)
+        for frameIndex in 0..<spectrogram.frameCount {
+            spectrogram.fillMagnitudes(frameIndex: frameIndex, into: &frameMagnitudes)
+            magnitudes.append(contentsOf: frameMagnitudes)
+        }
+
+        let fromMagnitudes = processor.separatedMeanSpectra(
+            magnitudes: magnitudes,
+            frameCount: spectrogram.frameCount,
+            binCount: spectrogram.binCount
+        )
+
+        #expect(fromSpectrogram != nil)
+        #expect(fromMagnitudes != nil)
+        guard let fromSpectrogram, let fromMagnitudes else { return }
+        #expect(maxDifference(fromSpectrogram.harmonic, fromMagnitudes.harmonic) <= 0.00001)
+        #expect(maxDifference(fromSpectrogram.percussive, fromMagnitudes.percussive) <= 0.00001)
+    }
+
+    @Test
     func metalTemporalMedian17MatchesReferenceImplementation() {
         let processor = MetalAudioAnalysisProcessor()
         guard processor.isAvailable else { return }
@@ -242,6 +275,11 @@ struct AudioAnalysisModeTests {
         }
 
         return temporalMedian
+    }
+
+    private func maxDifference(_ lhs: [Float], _ rhs: [Float]) -> Float {
+        guard lhs.count == rhs.count else { return .infinity }
+        return zip(lhs, rhs).map { abs($0 - $1) }.max() ?? 0
     }
 
     private struct AnalysisBenchmarkComparison {

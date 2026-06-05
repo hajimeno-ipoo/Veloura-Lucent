@@ -5,6 +5,41 @@ struct AudioSeparatedMeanSpectra: Equatable, Sendable {
     let percussive: [Float]
 }
 
+private struct AudioAnalysisSpectrogram: Sendable {
+    let magnitudes: [Float]
+    let fftSize: Int
+    let hopSize: Int
+    let frameCount: Int
+    let binCount: Int
+
+    func storageIndex(frameIndex: Int, binIndex: Int) -> Int {
+        frameIndex * binCount + binIndex
+    }
+
+    func magnitude(frameIndex: Int, binIndex: Int) -> Float {
+        magnitudes[storageIndex(frameIndex: frameIndex, binIndex: binIndex)]
+    }
+
+    func fillMagnitudes(frameIndex: Int, into frameMagnitudes: inout [Float]) {
+        if frameMagnitudes.count != binCount {
+            frameMagnitudes = Array(repeating: Float.zero, count: binCount)
+        }
+
+        let start = frameIndex * binCount
+        frameMagnitudes[0..<binCount] = magnitudes[start..<(start + binCount)]
+    }
+
+    func fillMagnitudeHistory(binIndex: Int, into history: inout [Float]) {
+        if history.count != frameCount {
+            history = Array(repeating: Float.zero, count: frameCount)
+        }
+
+        for frameIndex in 0..<frameCount {
+            history[frameIndex] = magnitude(frameIndex: frameIndex, binIndex: binIndex)
+        }
+    }
+}
+
 struct AudioAnalyzer {
     let mode: AudioAnalysisMode
 
@@ -14,7 +49,7 @@ struct AudioAnalyzer {
 
     func analyze(signal: AudioSignal) -> AnalysisData {
         let mono = signal.monoMixdown()
-        let spectrogram = SpectralDSP.stft(mono)
+        let spectrogram = makeAnalysisSpectrogram(mono)
         guard spectrogram.frameCount > 0 else {
             return AnalysisData(
                 cutoffFrequency: 16_000,
@@ -109,7 +144,41 @@ struct AudioAnalyzer {
         )
     }
 
-    private func denoiseEffectMetrics(from spectrogram: Spectrogram, sampleRate: Double) -> DenoiseEffectMetrics {
+    private func makeAnalysisSpectrogram(_ mono: [Float]) -> AudioAnalysisSpectrogram {
+        let fftSize = SpectralDSP.fftSize
+        let hopSize = SpectralDSP.hopSize
+        let binCount = fftSize / 2 + 1
+        let expectedFrameCount = analysisSTFTFrameCount(forSampleCount: mono.count, fftSize: fftSize, hopSize: hopSize)
+        var magnitudes: [Float] = []
+        magnitudes.reserveCapacity(expectedFrameCount * binCount)
+        var frameCount = 0
+
+        SpectralDSP.forEachSTFTFrame(mono, fftSize: fftSize, hopSize: hopSize) { frameIndex, _, real, imag in
+            frameCount = frameIndex + 1
+            for binIndex in 0..<binCount {
+                magnitudes.append(hypotf(real[binIndex], imag[binIndex]))
+            }
+        }
+
+        return AudioAnalysisSpectrogram(
+            magnitudes: magnitudes,
+            fftSize: fftSize,
+            hopSize: hopSize,
+            frameCount: frameCount,
+            binCount: binCount
+        )
+    }
+
+    private func analysisSTFTFrameCount(forSampleCount sampleCount: Int, fftSize: Int, hopSize: Int) -> Int {
+        let sourceCount = sampleCount == 0 ? 1 : sampleCount
+        let paddedCount = sourceCount > 1 ? sourceCount + fftSize : sourceCount
+        let remainder = max(0, (paddedCount - fftSize) % hopSize)
+        let trailingPadding = remainder == 0 ? 0 : hopSize - remainder
+        let workingCount = paddedCount + trailingPadding
+        return max(1, Int(ceil(Double(max(workingCount - fftSize, 0)) / Double(hopSize))) + 1)
+    }
+
+    private func denoiseEffectMetrics(from spectrogram: AudioAnalysisSpectrogram, sampleRate: Double) -> DenoiseEffectMetrics {
         guard spectrogram.frameCount > 0, spectrogram.binCount > 0 else {
             return DenoiseEffectMetrics(shimmerFlicker: 0, hf12Magnitude: 0, hf16Magnitude: 0, hf18Magnitude: 0)
         }
@@ -179,15 +248,19 @@ struct AudioAnalyzer {
         return spectrum[start...end].reduce(0, +) / Float(end - start + 1)
     }
 
-    private func separatedMeanSpectra(spectrogram: Spectrogram) -> AudioSeparatedMeanSpectra {
+    private func separatedMeanSpectra(spectrogram: AudioAnalysisSpectrogram) -> AudioSeparatedMeanSpectra {
         if mode == .experimentalMetal,
-           let separatedSpectrum = MetalAudioAnalysisProcessor().separatedMeanSpectra(spectrogram: spectrogram) {
+           let separatedSpectrum = MetalAudioAnalysisProcessor().separatedMeanSpectra(
+            magnitudes: spectrogram.magnitudes,
+            frameCount: spectrogram.frameCount,
+            binCount: spectrogram.binCount
+           ) {
             return separatedSpectrum
         }
         return cpuSeparatedMeanSpectra(spectrogram: spectrogram)
     }
 
-    private func cpuSeparatedMeanSpectra(spectrogram: Spectrogram) -> AudioSeparatedMeanSpectra {
+    private func cpuSeparatedMeanSpectra(spectrogram: AudioAnalysisSpectrogram) -> AudioSeparatedMeanSpectra {
         guard spectrogram.frameCount > 0, spectrogram.binCount > 0 else {
             return AudioSeparatedMeanSpectra(harmonic: [], percussive: [])
         }

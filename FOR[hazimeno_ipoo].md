@@ -134,7 +134,7 @@
 - 解析のMetal/GPU化は、先に `Docs/AudioAnalysisMetalGPUDesign.md` で実験モード前提の設計を固定しています。
 - `temporal median` のMetal化は、先に `Docs/TemporalMedianMetalDesign.md` で一致条件と採用条件を固定しています。
 - 解析には `自動`、`安定CPU`、`実験Metal` の入口があり、UIから選べます。初期値は自動です。
-- 実験Metalでは、magnitude計算と `temporal median 17` をMetalで試作しています。マスタリング解析の帯域集計は、Metal対応Macでは本処理でMetalを使います。
+- 補正用解析では、STFTのreal/imag全体を持たず、周波数ごとの大きさだけを保持して解析します。実験Metalでは `temporal median 17` をMetalで試作しています。マスタリング解析の帯域集計は、Metal対応Macでは本処理でMetalを使います。
 - 用語は正式名称へ寄せて、`?` ボタンから読み方と意味を確認できます。
 - ブラウザではなく、Mac の普通のアプリとして動きます。
 
