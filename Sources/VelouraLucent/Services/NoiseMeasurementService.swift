@@ -259,8 +259,6 @@ enum NoiseMeasurementService {
     private static func humProminenceDB(mono: [Float], sampleRate: Double, cancellationCheck: @escaping () throws -> Void) throws -> Double {
         let baseFrequencies = [50.0, 60.0]
         var harmonicFrequencies: [Double] = []
-        let spectrogram = SpectralDSP.stft(mono, fftSize: 8192, hopSize: 4096)
-        let frequencyStep = sampleRate / Double(spectrogram.fftSize)
 
         for base in baseFrequencies {
             try cancellationCheck()
@@ -272,6 +270,13 @@ enum NoiseMeasurementService {
             }
         }
 
+        let uniqueHarmonicFrequencies = Array(Set(harmonicFrequencies)).sorted()
+        let spectralProminences = try harmonicProminencesDB(
+            mono: mono,
+            frequencies: uniqueHarmonicFrequencies,
+            sampleRate: sampleRate,
+            cancellationCheck: cancellationCheck
+        )
         let sineProminences = try windowedSineProminencesDB(
             mono: mono,
             frequencies: harmonicFrequencies,
@@ -281,12 +286,7 @@ enum NoiseMeasurementService {
         var strongest = 0.0
         for harmonic in harmonicFrequencies {
             try cancellationCheck()
-            let spectral = try harmonicProminenceDB(
-                spectrogram: spectrogram,
-                frequency: harmonic,
-                frequencyStep: frequencyStep,
-                cancellationCheck: cancellationCheck
-            )
+            let spectral = spectralProminences[harmonic] ?? 0
             let sine = sineProminences[harmonic] ?? 0
             strongest = max(strongest, spectral, sine)
         }
@@ -355,49 +355,55 @@ enum NoiseMeasurementService {
         return 20 * log10(max(magnitude, 1e-12))
     }
 
-    private static func harmonicProminenceDB(
-        spectrogram: Spectrogram,
-        frequency: Double,
-        frequencyStep: Double,
+    private static func harmonicProminencesDB(
+        mono: [Float],
+        frequencies: [Double],
+        sampleRate: Double,
         cancellationCheck: @escaping () throws -> Void
-    ) throws -> Double {
-        let centerBin = max(1, min(spectrogram.binCount - 2, Int(round(frequency / frequencyStep))))
-        let centerRadius = max(1, Int(round(1.5 / frequencyStep)))
-        let excludeRadius = max(centerRadius + 1, Int(round(3.0 / frequencyStep)))
-        let searchRadius = max(excludeRadius + 1, Int(round(18.0 / frequencyStep)))
-        var frameProminences: [Double] = []
+    ) throws -> [Double: Double] {
+        let fftSize = 8192
+        let hopSize = 4096
+        let frequencyStep = sampleRate / Double(fftSize)
+        var frameProminences = Dictionary(uniqueKeysWithValues: frequencies.map { ($0, [Double]()) })
 
-        for frameIndex in 0..<spectrogram.frameCount {
+        try SpectralDSP.forEachSTFTFrameThrowing(mono, fftSize: fftSize, hopSize: hopSize) { frameIndex, binCount, real, imag in
             if frameIndex.isMultiple(of: 32) {
                 try cancellationCheck()
             }
-            let frameOffset = frameIndex * spectrogram.binCount
-            var centerMagnitudes: [Double] = []
-            var surroundingMagnitudes: [Double] = []
-            let lower = max(1, centerBin - searchRadius)
-            let upper = min(spectrogram.binCount - 1, centerBin + searchRadius)
 
-            for bin in lower...upper {
-                let index = frameOffset + bin
-                let real = Double(spectrogram.real[index])
-                let imag = Double(spectrogram.imag[index])
-                let magnitude = sqrt(real * real + imag * imag)
-                let distance = abs(bin - centerBin)
-                if distance <= centerRadius {
-                    centerMagnitudes.append(magnitude)
-                } else if distance > excludeRadius {
-                    surroundingMagnitudes.append(magnitude)
+            for frequency in frequencies {
+                let centerBin = max(1, min(binCount - 2, Int(round(frequency / frequencyStep))))
+                let centerRadius = max(1, Int(round(1.5 / frequencyStep)))
+                let excludeRadius = max(centerRadius + 1, Int(round(3.0 / frequencyStep)))
+                let searchRadius = max(excludeRadius + 1, Int(round(18.0 / frequencyStep)))
+                var centerMagnitudes: [Double] = []
+                var surroundingMagnitudes: [Double] = []
+                let lower = max(1, centerBin - searchRadius)
+                let upper = min(binCount - 1, centerBin + searchRadius)
+
+                for bin in lower...upper {
+                    let realValue = Double(real[bin])
+                    let imagValue = Double(imag[bin])
+                    let magnitude = sqrt(realValue * realValue + imagValue * imagValue)
+                    let distance = abs(bin - centerBin)
+                    if distance <= centerRadius {
+                        centerMagnitudes.append(magnitude)
+                    } else if distance > excludeRadius {
+                        surroundingMagnitudes.append(magnitude)
+                    }
                 }
-            }
 
-            guard !centerMagnitudes.isEmpty, surroundingMagnitudes.count >= 3 else { continue }
-            let center = centerMagnitudes.reduce(0, +) / Double(centerMagnitudes.count)
-            let surrounding = median(surroundingMagnitudes)
-            frameProminences.append(20 * log10(max(center, 1e-12) / max(surrounding, 1e-12)))
+                guard !centerMagnitudes.isEmpty, surroundingMagnitudes.count >= 3 else { continue }
+                let center = centerMagnitudes.reduce(0, +) / Double(centerMagnitudes.count)
+                let surrounding = median(surroundingMagnitudes)
+                frameProminences[frequency, default: []].append(20 * log10(max(center, 1e-12) / max(surrounding, 1e-12)))
+            }
         }
 
-        guard !frameProminences.isEmpty else { return 0 }
-        return max(0, percentile(frameProminences, 0.75))
+        try cancellationCheck()
+        return Dictionary(uniqueKeysWithValues: frameProminences.map { frequency, values in
+            (frequency, values.isEmpty ? 0 : max(0, percentile(values, 0.75)))
+        })
     }
 
     private static func frameRMS(

@@ -154,6 +154,17 @@ enum SpectralDSP {
         hopSize: Int = hopSize,
         body: (_ frameIndex: Int, _ binCount: Int, _ real: [Float], _ imag: [Float]) -> Void
     ) {
+        try! forEachSTFTFrameThrowing(signal, fftSize: fftSize, hopSize: hopSize) { frameIndex, binCount, real, imag in
+            body(frameIndex, binCount, real, imag)
+        }
+    }
+
+    static func forEachSTFTFrameThrowing(
+        _ signal: [Float],
+        fftSize: Int = fftSize,
+        hopSize: Int = hopSize,
+        body: (_ frameIndex: Int, _ binCount: Int, _ real: [Float], _ imag: [Float]) throws -> Void
+    ) throws {
         let source = signal.isEmpty ? [Float.zero] : signal
         let padding = fftSize / 2
         let paddedSource = reflectPad(signal: source, count: padding)
@@ -177,7 +188,7 @@ enum SpectralDSP {
             vDSP.multiply(frame, window, result: &frame)
 
             dft.transform(inputReal: frame, inputImaginary: inputImag, outputReal: &outputReal, outputImaginary: &outputImag)
-            body(frameIndex, binCount, outputReal, outputImag)
+            try body(frameIndex, binCount, outputReal, outputImag)
         }
     }
 
