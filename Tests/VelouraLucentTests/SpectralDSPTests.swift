@@ -61,6 +61,50 @@ struct SpectralDSPTests {
         }
     }
 
+    @Test
+    func sparseHalfSpectrumFromSTFTFramesMatchesStoredSpectrogramPath() {
+        let signal = (0..<16_384).map { index in
+            let time = Double(index) / 48_000
+            let base = sin(2 * Double.pi * 880 * time) * 0.18
+            let upper = sin(2 * Double.pi * 4_600 * time) * 0.08
+            let movement = cos(Double(index) * 0.011) * 0.03
+            return Float(base + upper + movement)
+        }
+        let sourceBins = [180, 246, 318]
+        let activeBins = [360, 492, 636]
+
+        let spectrogram = SpectralDSP.stft(signal)
+        let stored = SpectralDSP.istftSparseHalfSpectrum(
+            frameCount: spectrogram.frameCount,
+            fftSize: spectrogram.fftSize,
+            hopSize: spectrogram.hopSize,
+            originalLength: spectrogram.originalLength,
+            leadingPadding: spectrogram.leadingPadding,
+            trailingPadding: spectrogram.trailingPadding,
+            activeBins: activeBins
+        ) { frameIndex, realFrame, imagFrame in
+            for (sourceBin, targetBin) in zip(sourceBins, activeBins) {
+                let lift = Float(0.04 + Double(targetBin) * 0.00001)
+                let sourceIndex = spectrogram.storageIndex(frameIndex: frameIndex, binIndex: sourceBin)
+                realFrame[targetBin] += spectrogram.real[sourceIndex] * lift
+                imagFrame[targetBin] += spectrogram.imag[sourceIndex] * lift
+            }
+        }
+
+        let streamed = SpectralDSP.istftSparseHalfSpectrumFromSTFTFrames(
+            signal,
+            activeBins: activeBins
+        ) { _, _, sourceReal, sourceImag, realFrame, imagFrame in
+            for (sourceBin, targetBin) in zip(sourceBins, activeBins) {
+                let lift = Float(0.04 + Double(targetBin) * 0.00001)
+                realFrame[targetBin] += sourceReal[sourceBin] * lift
+                imagFrame[targetBin] += sourceImag[sourceBin] * lift
+            }
+        }
+
+        #expect(streamed == stored)
+    }
+
     private func referencePercentile(_ values: [Float], _ percentile: Float) -> Float {
         guard !values.isEmpty else { return 0 }
         let sorted = values.sorted()

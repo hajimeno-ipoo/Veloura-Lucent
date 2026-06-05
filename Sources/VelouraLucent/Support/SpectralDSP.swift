@@ -286,6 +286,68 @@ enum SpectralDSP {
         }
     }
 
+    static func istftSparseHalfSpectrumFromSTFTFrames(
+        _ signal: [Float],
+        fftSize: Int = fftSize,
+        hopSize: Int = hopSize,
+        activeBins: [Int],
+        fillActiveBins: (
+            _ frameIndex: Int,
+            _ binCount: Int,
+            _ sourceReal: [Float],
+            _ sourceImag: [Float],
+            _ real: inout [Float],
+            _ imag: inout [Float]
+        ) -> Void
+    ) -> [Float] {
+        let source = signal.isEmpty ? [Float.zero] : signal
+        let padding = fftSize / 2
+        let paddedSource = reflectPad(signal: source, count: padding)
+        let remainder = max(0, (paddedSource.count - fftSize) % hopSize)
+        let trailingPadding = remainder == 0 ? 0 : (hopSize - remainder)
+        let workingSource = trailingPadding > 0 ? paddedSource + Array(repeating: Float.zero, count: trailingPadding) : paddedSource
+        let frameCount = max(1, Int(ceil(Double(max(workingSource.count - fftSize, 0)) / Double(hopSize))) + 1)
+        let resources = resourceCache.resources(for: fftSize)
+        let window = resources.window
+        let dft = resources.forward
+
+        let binCount = fftSize / 2 + 1
+        let inputImag = Array(repeating: Float.zero, count: fftSize)
+        var frame = Array(repeating: Float.zero, count: fftSize)
+        var outputReal = Array(repeating: Float.zero, count: fftSize)
+        var outputImag = Array(repeating: Float.zero, count: fftSize)
+
+        return inverseTransform(
+            frameCount: frameCount,
+            fftSize: fftSize,
+            hopSize: hopSize,
+            originalLength: source.count,
+            leadingPadding: padding,
+            trailingPadding: trailingPadding
+        ) { frameIndex, fullReal, fullImag in
+            let start = frameIndex * hopSize
+            frame[0..<fftSize] = workingSource[start..<(start + fftSize)]
+            vDSP.multiply(frame, window, result: &frame)
+            dft.transform(inputReal: frame, inputImaginary: inputImag, outputReal: &outputReal, outputImaginary: &outputImag)
+
+            fillActiveBins(frameIndex, binCount, outputReal, outputImag, &fullReal, &fullImag)
+            for binIndex in activeBins where binIndex > 0 && binIndex < binCount - 1 {
+                fullReal[fftSize - binIndex] = fullReal[binIndex]
+                fullImag[fftSize - binIndex] = -fullImag[binIndex]
+            }
+        } cleanupFrame: { fullReal, fullImag in
+            for binIndex in activeBins {
+                fullReal[binIndex] = .zero
+                fullImag[binIndex] = .zero
+                if binIndex > 0 && binIndex < binCount - 1 {
+                    let mirrorIndex = fftSize - binIndex
+                    fullReal[mirrorIndex] = .zero
+                    fullImag[mirrorIndex] = .zero
+                }
+            }
+        }
+    }
+
     private static func inverseTransform(
         frameCount: Int,
         fftSize: Int,

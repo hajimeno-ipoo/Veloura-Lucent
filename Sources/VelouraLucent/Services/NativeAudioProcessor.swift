@@ -2667,42 +2667,35 @@ private struct CorrectionHarmonicRepair: Sendable {
     }
 
     private func foldover(channel: [Float], sampleRate: Double, cutoff: Double, mix: Float) -> [Float] {
-        let spectrogram = SpectralDSP.stft(channel)
-        guard spectrogram.frameCount > 0 else { return Array(repeating: 0, count: channel.count) }
-
-        let frequencyStep = sampleRate / Double(spectrogram.fftSize)
-        let sourceStart = max(1, min(Int(max(cutoff * 0.5, 5_500) / frequencyStep), spectrogram.binCount - 1))
-        let sourceEnd = max(sourceStart, min(Int(min(cutoff * 0.95, 12_000) / frequencyStep), spectrogram.binCount - 1))
-        let targetStart = max(sourceStart + 1, min(Int(16_000 / frequencyStep), spectrogram.binCount - 1))
-        guard sourceEnd > sourceStart, targetStart < spectrogram.binCount else {
+        let fftSize = SpectralDSP.fftSize
+        let binCount = fftSize / 2 + 1
+        let frequencyStep = sampleRate / Double(fftSize)
+        let sourceStart = max(1, min(Int(max(cutoff * 0.5, 5_500) / frequencyStep), binCount - 1))
+        let sourceEnd = max(sourceStart, min(Int(min(cutoff * 0.95, 12_000) / frequencyStep), binCount - 1))
+        let targetStart = max(sourceStart + 1, min(Int(16_000 / frequencyStep), binCount - 1))
+        guard sourceEnd > sourceStart, targetStart < binCount else {
             return Array(repeating: 0, count: channel.count)
         }
 
         var activeBins: [Int] = []
         var seenBins = Set<Int>()
         for sourceBin in sourceStart...sourceEnd {
-            let targetBin = min(spectrogram.binCount - 1, sourceBin * 2)
+            let targetBin = min(binCount - 1, sourceBin * 2)
             guard targetBin >= targetStart, seenBins.insert(targetBin).inserted else { continue }
             activeBins.append(targetBin)
         }
 
-        return SpectralDSP.istftSparseHalfSpectrum(
-            frameCount: spectrogram.frameCount,
-            fftSize: spectrogram.fftSize,
-            hopSize: spectrogram.hopSize,
-            originalLength: spectrogram.originalLength,
-            leadingPadding: spectrogram.leadingPadding,
-            trailingPadding: spectrogram.trailingPadding,
+        return SpectralDSP.istftSparseHalfSpectrumFromSTFTFrames(
+            channel,
             activeBins: activeBins
-        ) { frameIndex, realFrame, imagFrame in
+        ) { _, sourceBinCount, sourceReal, sourceImag, realFrame, imagFrame in
             for sourceBin in sourceStart...sourceEnd {
-                let targetBin = min(spectrogram.binCount - 1, sourceBin * 2)
+                let targetBin = min(sourceBinCount - 1, sourceBin * 2)
                 guard targetBin >= targetStart else { continue }
-                let normalizedPosition = Float(targetBin - targetStart) / Float(max(spectrogram.binCount - targetStart - 1, 1))
+                let normalizedPosition = Float(targetBin - targetStart) / Float(max(sourceBinCount - targetStart - 1, 1))
                 let lift = mix * (1 - normalizedPosition * 0.45)
-                let sourceIndex = spectrogram.storageIndex(frameIndex: frameIndex, binIndex: sourceBin)
-                realFrame[targetBin] += spectrogram.real[sourceIndex] * lift
-                imagFrame[targetBin] += spectrogram.imag[sourceIndex] * lift
+                realFrame[targetBin] += sourceReal[sourceBin] * lift
+                imagFrame[targetBin] += sourceImag[sourceBin] * lift
             }
         }
     }
