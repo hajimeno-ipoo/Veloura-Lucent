@@ -201,7 +201,9 @@ Macアプリ(SwiftUI)
   - 補正処理、倍音解析、Neural foldover 推定、ノイズ除去、マスタリング処理、工程別診断WAVの書き出し、音量系の共通測定、比較用メトリクス計算、時間ごとの音量、平均スペクトル、左右相関の計算、音声ファイルの読み書き、ファイル選択、完了通知などです。
   - `NativeAudioProcessor.swift` は、補正パイプラインの順番、工程ログ、診断WAVの保存を担当します。
   - `AudioAnalysisMode.swift`、`AudioAnalyzer.swift`、`HumRemover.swift`、`SpectralGateDenoiser.swift`、`DenoiseMaskCoefficients.swift`、`DenoiseShimmerStabilizer.swift` は、補正パイプライン内で使う解析、ハム除去、ノイズ除去本体、ノイズ除去係数、シマー安定化を分けて置いています。
+  - `ShimmerPeakLimiter.swift`、`CorrectionHarmonicRepair.swift`、`CorrectionHighFloorPreserver.swift`、`CorrectionMudGuard.swift` は、補正パイプライン内のシマー制限、高域補完、補正後高域保持、補正後こもり確認を分けて置いています。
   - `MasteringSignalMath.swift` は、マスタリング内で使う音量変更、帯域測定、帯域増減、ピーク上限、RMS、パーセンタイルなどの共通計算を担当します。
+  - `MasteringToneStage.swift`、`MasteringDeEsserStage.swift`、`MasteringDynamicsStage.swift`、`MasteringSaturationStage.swift`、`MasteringStereoStage.swift`、`MasteringFinalLoudnessStage.swift` は、マスタリング内の音色、ディエッサー、圧縮、倍音、ステレオ幅、最終音量復帰と音量上限を分けて置いています。
   - `MasteringHighFloorPreserver.swift` は、マスタリング内で音楽成分として残す高域を守る処理と、その高域保持後のノイズ戻り確認を担当します。
   - `MasteringNoiseReturnSupport.swift` は、マスタリング内のノイズ戻り判定で使う軽量測定、基準高域測定、高域を削りすぎない候補確認を担当します。
   - `MasteringFinalNoiseReturnCeiling.swift` は、マスタリング終盤の最終ノイズ上限確認を担当します。
