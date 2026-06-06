@@ -6,8 +6,8 @@
 - ノイズ除去は `弱い / 標準 / 強い` から選べます。
 - そのあと、高い音の不足を少し補います。
 - 高い音の補い方では、倍音寄りの成分と立ち上がりを見て、16kHz 以上の伸びを作ります。
-- 高い音をどれだけ足すかは、軽い `Neural foldover` 推定器が自動で決めます。
-- `Neural foldover` 推定器は、高域不足、16kHz以上の残り具合、18kHz以上の荒れも見て、足しすぎを避けます。
+- 高い音をどれだけ足すかは、軽い `foldover補完量推定` が自動で決めます。
+- `foldover補完量推定` は、高域不足、16kHz以上の残り具合、18kHz以上の荒れも見て、足しすぎを避けます。
 - ノイズ除去では、低中域の音楽成分があり、静かな区間より高域が自然に伸びている時は、8kHz〜20kHzの煌びやかさ、空気感、超高域をできるだけ残します。
 - ノイズ除去では、静かな区間に出るヒスや、音楽成分と一緒に動いていない高域ノイズは下げます。高域保護は基本のノイズゲートにだけ使い、チリつき確認や最終mask全体を無条件に持ち上げません。
 - ノイズ除去では、完全な静音部は今まで通り下げます。ただし、静音部より少し強く、演奏の余韻として残っているフレームでは、60Hz〜150Hzと150Hz〜250Hzを少し守り、低域と低中域が吸い込まれすぎないようにします。
@@ -155,7 +155,7 @@ Macアプリ(SwiftUI)
       -> AudioFileService
       -> SpectralDSP
       -> 倍音/シマー解析
-      -> Neural foldover推定
+      -> foldover補完量推定
       -> ハム/低域ゴロゴロ整理
       -> ProcessingRoutePlanで補正ルートを決定
       -> ノイズ除去
@@ -198,7 +198,7 @@ Macアプリ(SwiftUI)
   - `ProcessingProgressStateStore.swift` は、補正とマスタリングの進捗状態を担当します。
   - `ProcessingSettingsState.swift` は、補正設定、マスタリング設定、解析モード、処理時に固定した設定を担当します。
 - `Sources/VelouraLucent/Services/`
-  - 補正処理、倍音解析、Neural foldover 推定、ノイズ除去、マスタリング処理、工程別診断WAVの書き出し、音量系の共通測定、比較用メトリクス計算、時間ごとの音量、平均スペクトル、左右相関の計算、音声ファイルの読み書き、ファイル選択、完了通知などです。
+  - 補正処理、倍音解析、foldover補完量推定、ノイズ除去、マスタリング処理、工程別診断WAVの書き出し、音量系の共通測定、比較用メトリクス計算、時間ごとの音量、平均スペクトル、左右相関の計算、音声ファイルの読み書き、ファイル選択、完了通知などです。
   - `NativeAudioProcessor.swift` は、補正パイプラインの順番、工程ログ、診断WAVの保存を担当します。
   - `AudioAnalysisMode.swift`、`AudioAnalyzer.swift`、`HumRemover.swift`、`SpectralGateDenoiser.swift`、`DenoiseMaskCoefficients.swift`、`DenoiseShimmerStabilizer.swift` は、補正パイプライン内で使う解析、ハム除去、ノイズ除去本体、ノイズ除去係数、シマー安定化を分けて置いています。
   - `ShimmerPeakLimiter.swift`、`CorrectionHarmonicRepair.swift`、`CorrectionHighFloorPreserver.swift`、`CorrectionMudGuard.swift` は、補正パイプライン内のシマー制限、高域補完、補正後高域保持、補正後こもり確認を分けて置いています。

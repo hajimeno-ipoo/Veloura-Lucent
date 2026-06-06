@@ -96,7 +96,7 @@ struct AnalysisData: Sendable {
     let denoiseEffectMetrics: DenoiseEffectMetrics?
 }
 
-struct NeuralFoldoverFeatures: Sendable {
+struct FoldoverRepairFeatures: Sendable {
     let harmonicConfidence: Float
     let shimmerRatio: Float
     let brightnessRatio: Float
@@ -108,7 +108,7 @@ struct NeuralFoldoverFeatures: Sendable {
     let artifactBandRatio: Float
 }
 
-struct NeuralFoldoverPrediction: Sendable, Equatable {
+struct FoldoverRepairPrediction: Sendable, Equatable {
     let foldoverMix: Float
     let airGainBias: Float
     let transientBoostBias: Float

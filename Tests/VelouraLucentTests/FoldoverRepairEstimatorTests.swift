@@ -2,12 +2,12 @@ import Foundation
 import Testing
 @testable import VelouraLucent
 
-struct NeuralFoldoverEstimatorTests {
+struct FoldoverRepairEstimatorTests {
     @Test
     func estimatorRaisesFoldoverForHarmonicDeficit() {
-        let estimator = NeuralFoldoverEstimator()
+        let estimator = FoldoverRepairEstimator()
         let richPrediction = estimator.predict(
-            features: NeuralFoldoverFeatures(
+            features: FoldoverRepairFeatures(
                 harmonicConfidence: 1.0,
                 shimmerRatio: 0.10,
                 brightnessRatio: 0.34,
@@ -20,7 +20,7 @@ struct NeuralFoldoverEstimatorTests {
             )
         )
         let weakPrediction = estimator.predict(
-            features: NeuralFoldoverFeatures(
+            features: FoldoverRepairFeatures(
                 harmonicConfidence: 0.18,
                 shimmerRatio: 0.34,
                 brightnessRatio: 0.58,
@@ -39,9 +39,9 @@ struct NeuralFoldoverEstimatorTests {
 
     @Test
     func estimatorClampsOutputsToSafeRange() {
-        let estimator = NeuralFoldoverEstimator()
+        let estimator = FoldoverRepairEstimator()
         let prediction = estimator.predict(
-            features: NeuralFoldoverFeatures(
+            features: FoldoverRepairFeatures(
                 harmonicConfidence: 3.0,
                 shimmerRatio: 1.0,
                 brightnessRatio: 1.0,
@@ -62,9 +62,9 @@ struct NeuralFoldoverEstimatorTests {
 
     @Test
     func estimatorReducesFoldoverWhenAirAndArtifactsAlreadyExist() {
-        let estimator = NeuralFoldoverEstimator()
+        let estimator = FoldoverRepairEstimator()
         let cleanDeficit = estimator.predict(
-            features: NeuralFoldoverFeatures(
+            features: FoldoverRepairFeatures(
                 harmonicConfidence: 0.82,
                 shimmerRatio: 0.10,
                 brightnessRatio: 0.38,
@@ -77,7 +77,7 @@ struct NeuralFoldoverEstimatorTests {
             )
         )
         let riskyHighBand = estimator.predict(
-            features: NeuralFoldoverFeatures(
+            features: FoldoverRepairFeatures(
                 harmonicConfidence: 0.82,
                 shimmerRatio: 0.10,
                 brightnessRatio: 0.38,

@@ -29,7 +29,7 @@ struct NativeAudioProcessorBenchmarkTests {
             "denoise",
             "sibilanceShimmerGuard",
             "analyzeDenoised",
-            "neuralPrediction",
+            "foldoverRepairPrediction",
             "harmonicRepair",
             "repairShimmerGuard",
             "lowMidResidueGuard",

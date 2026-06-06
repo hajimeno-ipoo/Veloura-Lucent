@@ -1,7 +1,7 @@
 import Foundation
 
-struct NeuralFoldoverEstimator {
-    func predict(features: NeuralFoldoverFeatures) -> NeuralFoldoverPrediction {
+struct FoldoverRepairEstimator {
+    func predict(features: FoldoverRepairFeatures) -> FoldoverRepairPrediction {
         let cutoffDeficit = normalizedCutoffDeficit(features.cutoffFrequency)
         let harmonic = clipped(features.harmonicConfidence, min: 0, max: 1.2) / 1.2
         let shimmer = clipped(features.shimmerRatio, min: 0, max: 0.55) / 0.55
@@ -23,7 +23,7 @@ struct NeuralFoldoverEstimator {
         let rawTransientBias = 0.01 + hidden2 * 0.18 + transient * 0.05 - noise * 0.08
         let rawHarshnessGuard = 0.16 + hidden3 * 0.34 + shimmer * 0.22 + noise * 0.24 + artifact * 0.28 - rolloff * 0.08 - harmonic * 0.08
 
-        return NeuralFoldoverPrediction(
+        return FoldoverRepairPrediction(
             foldoverMix: clipped(rawFoldover, min: 0.04, max: 0.32),
             airGainBias: clipped(rawAirBias, min: -0.06, max: 0.16),
             transientBoostBias: clipped(rawTransientBias, min: -0.04, max: 0.12),

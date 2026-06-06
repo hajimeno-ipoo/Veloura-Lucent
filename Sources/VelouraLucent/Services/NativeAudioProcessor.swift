@@ -218,9 +218,9 @@ struct NativeAudioProcessor {
         }
         logger?.start(.analysisAssist)
         logger?.log(ProcessingStep.analysisAssist.rawValue)
-        let repairPrediction = measure("neuralPrediction", label: "解析補助", recorder: benchmarkRecorder, logger: logger, progressStep: .analysisAssist) {
-            NeuralFoldoverEstimator().predict(
-                features: NeuralFoldoverFeatures(
+        let repairPrediction = measure("foldoverRepairPrediction", label: "解析補助", recorder: benchmarkRecorder, logger: logger, progressStep: .analysisAssist) {
+            FoldoverRepairEstimator().predict(
+                features: FoldoverRepairFeatures(
                     harmonicConfidence: postDenoiseAnalysis.harmonicConfidence,
                     shimmerRatio: postDenoiseAnalysis.shimmerRatio,
                     brightnessRatio: postDenoiseAnalysis.brightnessRatio,

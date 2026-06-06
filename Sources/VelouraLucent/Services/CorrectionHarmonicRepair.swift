@@ -3,7 +3,7 @@ import Foundation
 struct CorrectionHarmonicRepair: Sendable {
     let settings: CorrectionSettings
 
-    func process(signal: AudioSignal, analysis: AnalysisData, prediction: NeuralFoldoverPrediction) -> AudioSignal {
+    func process(signal: AudioSignal, analysis: AnalysisData, prediction: FoldoverRepairPrediction) -> AudioSignal {
         let defaults = settings.profile.settings
         let cutoff = max(analysis.cutoffFrequency - 1_000, 12_000)
         let harmonicWeight = min(1.25, 0.55 + Float(analysis.dominantHarmonics.count) * 0.08 + analysis.harmonicConfidence * 0.26)
