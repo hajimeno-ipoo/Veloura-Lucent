@@ -98,6 +98,55 @@ struct HumRemover: Sendable {
     }
 }
 
+struct HumRemovalFrameAttenuation: Sendable {
+    static func scale(
+        spectrogram: Spectrogram,
+        frameIndex: Int,
+        centerBin: Int,
+        frameEnergy: Float,
+        quietThreshold: Float,
+        activeThreshold: Float
+    ) -> Float {
+        let activeScale: Float = localProminenceDB(
+            spectrogram: spectrogram,
+            frameIndex: frameIndex,
+            centerBin: centerBin
+        ) >= 6 ? 0.85 : 0.35
+        return scale(
+            frameEnergy: frameEnergy,
+            quietThreshold: quietThreshold,
+            activeThreshold: activeThreshold,
+            activeScale: activeScale
+        )
+    }
+
+    static func scale(
+        frameEnergy: Float,
+        quietThreshold: Float,
+        activeThreshold: Float,
+        activeScale: Float
+    ) -> Float {
+        if frameEnergy <= quietThreshold { return 1 }
+        if frameEnergy >= activeThreshold { return activeScale }
+        let position = (frameEnergy - quietThreshold) / max(activeThreshold - quietThreshold, 1e-9)
+        return 1 - (1 - activeScale) * position
+    }
+
+    static func localProminenceDB(spectrogram: Spectrogram, frameIndex: Int, centerBin: Int) -> Float {
+        let center = spectrogram.magnitude(frameIndex: frameIndex, binIndex: centerBin)
+        let lowerBin = max(0, centerBin - 2)
+        let upperBin = min(spectrogram.binCount - 1, centerBin + 2)
+        var surrounding: Float = 0
+        var count: Float = 0
+        for binIndex in lowerBin...upperBin where binIndex != centerBin {
+            surrounding += spectrogram.magnitude(frameIndex: frameIndex, binIndex: binIndex)
+            count += 1
+        }
+        let surroundingMean = surrounding / max(count, 1)
+        return 20 * log10f(max(center, 1e-9) / max(surroundingMean, 1e-9))
+    }
+}
+
 private func clamped(_ value: Float, min minValue: Float, max maxValue: Float) -> Float {
     Swift.max(minValue, Swift.min(value, maxValue))
 }
