@@ -7,6 +7,7 @@ struct UIWordingPolicyTests {
         let source = try combinedSource(
             [
                 "Sources/VelouraLucent/Views/ContentView.swift",
+                "Sources/VelouraLucent/Views/AudioComparisonDashboardView.swift",
                 "Sources/VelouraLucent/Views/CorrectionSettingsPanel.swift",
                 "Sources/VelouraLucent/Views/MasteringSettingsPanel.swift",
                 "Sources/VelouraLucent/Services/AudioQualityReportService.swift",

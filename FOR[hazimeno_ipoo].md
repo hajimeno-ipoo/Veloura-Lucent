@@ -192,9 +192,17 @@ Macアプリ(SwiftUI)
   - アプリの起動です。Dock アイコンの上書きもここで行います。
 - `Sources/VelouraLucent/Views/`
   - 画面です。差分サマリー、スペクトログラム、比較表示もここです。
+  - `ContentView.swift` は、入力選択、補正開始、マスタリング開始、表示解析、書き出しの流れを担当します。
+  - `ProcessingControlsView.swift` は、入力ファイル、設定、出力先を担当します。
+  - `ProcessingActionsView.swift` は、補正とマスタリングの操作ボタンを担当します。
+  - `ProcessingProgressView.swift` は、補正とマスタリングの進行状況を担当します。
+  - `AudioComparisonDashboardView.swift` は、音源変化の比較、品質チェック、ノイズチェック、数値比較を担当します。
+  - `SpectrogramComparisonView.swift` は、入力、補正後、最終版のスペクトログラム表示を担当します。
+  - `ProcessingLogView.swift` は、補正ログとマスタリングログの表示を担当します。
 - `Sources/VelouraLucent/Models/`
   - 画面の状態、ノイズ除去の強さ、マスタリング設定、処理ルート判定です。
   - `DisplayAnalysisStateStore.swift` は、入力、補正後、最終版ごとの表示解析状態を担当します。
+  - `ProcessingProgressModels.swift` は、補正工程と進行イベントの名前、画面表示名、ログから進行状況を復元するための情報を担当します。
   - `ProcessingProgressStateStore.swift` は、補正とマスタリングの進捗状態を担当します。
   - `ProcessingSettingsState.swift` は、補正設定、マスタリング設定、解析モード、処理時に固定した設定を担当します。
 - `Sources/VelouraLucent/Services/`
