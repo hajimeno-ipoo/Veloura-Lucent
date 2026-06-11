@@ -211,7 +211,7 @@ Macアプリ(SwiftUI)
   - `NativeAudioProcessor.swift` は、補正パイプライン全体の順番を担当します。`NativeAudioProcessorStages.swift` は、読み込み、解析、ノイズ除去、高域補完、各ガード、保存などの補正工程を分けて置いています。
   - `ConcurrentChannelProcessing.swift` は、左右チャンネルを同時に処理する共通処理を担当します。`NoiseMeasurementRunCache.swift` は、同じ音声のノイズ測定結果を再利用します。
   - `AudioAnalysisMode.swift`、`AudioAnalyzer.swift`、`HumRemover.swift`、`RumbleReducer.swift`、`SpectralGateDenoiser.swift`、`DenoiseMaskCoefficients.swift`、`DenoiseShimmerStabilizer.swift` は、補正パイプライン内で使う解析、ハム除去、低域ノイズ除去、ノイズ除去本体、ノイズ除去係数、シマー安定化を分けて置いています。
-- `SibilanceShimmerGuard.swift`、`CorrectionSibilanceBalanceGuard.swift`、`ShimmerPeakLimiter.swift`、`LowMidResidueGuard.swift`、`CorrectionHarmonicRepair.swift`、`CorrectionHighFloorPreserver.swift`、`CorrectionMudGuard.swift`、`PeakSafetyLimiter.swift` は、補正パイプライン内のサ行保護、サ行の相対悪化防止、シマー制限、低中域整理、高域補完、補正後高域保持、補正後こもり確認、最終ピーク保護を分けて置いています。
+  - `SibilanceShimmerGuard.swift`、`CorrectionSibilanceBalanceGuard.swift`、`ShimmerPeakLimiter.swift`、`LowMidResidueGuard.swift`、`CorrectionHarmonicRepair.swift`、`CorrectionHighFloorPreserver.swift`、`CorrectionMudGuard.swift`、`PeakSafetyLimiter.swift` は、補正パイプライン内のサ行保護、サ行の相対悪化防止、シマー制限、低中域整理、高域補完、補正後高域保持、補正後こもり確認、最終ピーク保護を分けて置いています。
   - `MasteringSignalMath.swift` は、マスタリング内で使う音量変更、帯域測定、帯域増減、ピーク上限、RMS、パーセンタイルなどの共通計算を担当します。
   - `MasteringToneStage.swift`、`MasteringDeEsserStage.swift`、`MasteringDynamicsStage.swift`、`MasteringSaturationStage.swift`、`MasteringAirEnhancer.swift`、`MasteringStereoStage.swift` は、マスタリング内の音色、ディエッサー、圧縮、倍音、空気感、ステレオ幅を分けて置いています。
   - `MasteringHighReturnGuard.swift`、`MasteringNoiseReturnGuard.swift`、`MasteringLoudnessStage.swift`、`MasteringFinalLowMidSafety.swift`、`MasteringFinalLoudnessStage.swift` は、高域戻り防止、ノイズ戻り防止、基本音量調整、最終低中域の安全確認、最終音量復帰と音量上限を分けて置いています。
