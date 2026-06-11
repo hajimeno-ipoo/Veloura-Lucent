@@ -11,6 +11,13 @@ func audioQualityMaxMasteringNoiseReturnDB(for id: String) -> Double {
     InternalAudioJudgementPolicy.severityLimit(for: id)?.masteringWorseningCautionDB ?? 2.0
 }
 
+func audioQualityMaxFinalHighNoiseReturnDB(for id: String) -> Double {
+    max(
+        audioQualityMaxMasteringNoiseReturnDB(for: id),
+        InternalAudioJudgementPolicy.finalOutputMaxHighNoiseReturnDB
+    )
+}
+
 func audioQualityFixtureURL(_ fileName: String) throws -> URL {
     let fileManager = FileManager.default
     var directory = URL(fileURLWithPath: fileManager.currentDirectoryPath)

@@ -446,7 +446,7 @@ struct SpectralGateDenoiser: Sendable {
         case .balanced:
             return 0.60
         case .strong:
-            return 0
+            return 0.48
         }
     }
 
@@ -457,7 +457,7 @@ struct SpectralGateDenoiser: Sendable {
         case .balanced:
             return (lowBody: 0.60, lowMid: 0.65)
         case .strong:
-            return (lowBody: 0, lowMid: 0)
+            return (lowBody: 0.46, lowMid: 0.54)
         }
     }
 
@@ -590,6 +590,17 @@ struct HighBandMusicalProtection {
         }
 
         let builtBands = [
+            Self.makeBand(
+                spectrogram: spectrogram,
+                frequencyStep: frequencyStep,
+                lower: 5_000,
+                upper: 8_000,
+                baseLift: 0.72,
+                secondPassLift: 0.04,
+                frameEnergy: frameEnergy,
+                quietFrameThreshold: quietFrameThreshold,
+                bodyWeights: bodyWeights
+            ),
             Self.makeBand(
                 spectrogram: spectrogram,
                 frequencyStep: frequencyStep,

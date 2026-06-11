@@ -13,6 +13,7 @@
 - ノイズ除去では、完全な静音部は今まで通り下げます。ただし、静音部より少し強く、演奏の余韻として残っているフレームでは、60Hz〜150Hzと150Hz〜250Hzを少し守り、低域と低中域が吸い込まれすぎないようにします。
 - ノイズ除去では、10kHz〜16kHzの一瞬だけ出るチラつきも見て、AI生成音源のシュワシュワ感を抑えます。
 - サ行とシマーの保護では、8kHz以上を常に下げず、短時間だけ大きく出るサ行、刺さり、チリつきだけを下げます。
+- サ行保護後に5kHz〜9kHzの通常の明るさが下がりすぎ、サ行だけが相対的に目立つ時は、短時間ピーク以外の通常高域を戻し、まだ強い短時間ピークだけを軽く抑えます。
 - そのあと、別機能のマスタリングで仕上がりを整えます。
 - 補正後と最終版は、用途に合わせて `高品質保存`、`配信・納品用`、`CD用`、`試聴共有用` から選んで書き出せます。
 - 内部のプレビュー用ファイルは、音の情報を保つため `32-bit float WAV / 48kHz` のままです。
@@ -30,7 +31,7 @@
 - マスタリングでは、ノイズを減らし続けるよりも、原音の透明感と空気感を残すことを優先します。
 - マスタリングでは、最後のヒス・サ行・高域チラつき確認も緊急用に寄せ、少しの戻りで高域全体を削りすぎないようにしています。
 - マスタリングでは、`targetLoudness` を必ず合わせる数値ではなく、仕上がりの音量目安として使います。安全に届く時は目標音量へ近づけ、音量変更は `自然`、`聴きやすく整える`、`押し出し強め`、`安全AI配信`、`YouTube / Spotify向け`、`リリース音圧重視` ごとの上限内に収めます。
-- マスタリングでは、ノイズ戻りガードや高域保持のあとに最終音量を再確認します。目標音量との差だけで判断せず、True Peakの余裕、プリセットごとの音量変更上限、プリセットごとの目安超過幅、ノイズ戻りを守れる時は、最大2.0dBまで最終音量を戻します。目安超過幅は、自然と安全AI配信が0.75dB、聴きやすく整えるが1.0dB、YouTube / Spotify向けが1.25dB、押し出し強めが1.5dB、リリース音圧重視が2.0dBです。音量復帰後の全体確認で、補正後よりヒスや高域チラつきが2.5dBを超えて戻った場合は、緊急上限ガードで抑え直します。ヒスは復帰前も確認し、復帰前が上限内なら音量復帰前へ戻します。補正後で高域が大きく失われ、原音参照で高域を戻す素材では、原音より同じ種類のノイズが増えない範囲で、音楽的な高域として原音参照を優先します。復帰前も上限を超える場合は緊急上限ガードを続けます。
+- マスタリングでは、ノイズ戻りガードや高域保持のあとに最終音量を再確認します。目標音量との差だけで判断せず、True Peakの余裕、プリセットごとの音量変更上限、プリセットごとの目安超過幅、ノイズ戻りを守れる時は、最大2.0dBまで最終音量を戻します。目安超過幅は、自然と安全AI配信が0.75dB、聴きやすく整えるが1.0dB、YouTube / Spotify向けが1.25dB、押し出し強めが1.5dB、リリース音圧重視が2.0dBです。音量復帰後の全体確認で、補正後よりヒスや高域チラつきが種類ごとの上限を超えて戻った場合は、緊急上限ガードで抑え直します。ヒスは復帰前も確認し、復帰前が上限内なら音量復帰前へ戻します。補正後で高域が大きく失われ、原音参照で高域を戻す素材でも、補正後からのヒスや高域チラつきの戻り上限は守ります。復帰前も上限を超える場合は緊急上限ガードを続けます。
 - マスタリングでは、8kHz〜12kHz の煌びやかさと 12kHz〜16kHz の空気感を、軽い帯域測定で確認し、最終版だけ暗くなりすぎないようにしています。
 - マスタリングでは、補正後にサ行が強く残った素材だけ、最後に 5kHz〜9kHz の短時間ピークを軽く抑え、原音からの増えすぎを防ぎます。
 - マスタリングログでは、ラウドネス、高域戻りガード、ノイズ戻りガードを分けて表示し、どこに時間がかかったか見やすくしています。
@@ -207,10 +208,10 @@ Macアプリ(SwiftUI)
   - `ProcessingSettingsState.swift` は、補正設定、マスタリング設定、解析モード、処理時に固定した設定を担当します。
 - `Sources/VelouraLucent/Services/`
   - 補正処理、倍音解析、foldover補完量推定、ノイズ除去、マスタリング処理、工程別診断WAVの書き出し、音量系の共通測定、比較用メトリクス計算、時間ごとの音量、平均スペクトル、左右相関の計算、音声ファイルの読み書き、ファイル選択、完了通知などです。
-  - `NativeAudioProcessor.swift` は、補正パイプラインの順番、工程ログ、診断WAVの保存を担当します。
+  - `NativeAudioProcessor.swift` は、補正パイプライン全体の順番を担当します。`NativeAudioProcessorStages.swift` は、読み込み、解析、ノイズ除去、高域補完、各ガード、保存などの補正工程を分けて置いています。
   - `ConcurrentChannelProcessing.swift` は、左右チャンネルを同時に処理する共通処理を担当します。`NoiseMeasurementRunCache.swift` は、同じ音声のノイズ測定結果を再利用します。
   - `AudioAnalysisMode.swift`、`AudioAnalyzer.swift`、`HumRemover.swift`、`RumbleReducer.swift`、`SpectralGateDenoiser.swift`、`DenoiseMaskCoefficients.swift`、`DenoiseShimmerStabilizer.swift` は、補正パイプライン内で使う解析、ハム除去、低域ノイズ除去、ノイズ除去本体、ノイズ除去係数、シマー安定化を分けて置いています。
-  - `SibilanceShimmerGuard.swift`、`ShimmerPeakLimiter.swift`、`LowMidResidueGuard.swift`、`CorrectionHarmonicRepair.swift`、`CorrectionHighFloorPreserver.swift`、`CorrectionMudGuard.swift`、`PeakSafetyLimiter.swift` は、補正パイプライン内のサ行保護、シマー制限、低中域整理、高域補完、補正後高域保持、補正後こもり確認、最終ピーク保護を分けて置いています。
+- `SibilanceShimmerGuard.swift`、`CorrectionSibilanceBalanceGuard.swift`、`ShimmerPeakLimiter.swift`、`LowMidResidueGuard.swift`、`CorrectionHarmonicRepair.swift`、`CorrectionHighFloorPreserver.swift`、`CorrectionMudGuard.swift`、`PeakSafetyLimiter.swift` は、補正パイプライン内のサ行保護、サ行の相対悪化防止、シマー制限、低中域整理、高域補完、補正後高域保持、補正後こもり確認、最終ピーク保護を分けて置いています。
   - `MasteringSignalMath.swift` は、マスタリング内で使う音量変更、帯域測定、帯域増減、ピーク上限、RMS、パーセンタイルなどの共通計算を担当します。
   - `MasteringToneStage.swift`、`MasteringDeEsserStage.swift`、`MasteringDynamicsStage.swift`、`MasteringSaturationStage.swift`、`MasteringAirEnhancer.swift`、`MasteringStereoStage.swift` は、マスタリング内の音色、ディエッサー、圧縮、倍音、空気感、ステレオ幅を分けて置いています。
   - `MasteringHighReturnGuard.swift`、`MasteringNoiseReturnGuard.swift`、`MasteringLoudnessStage.swift`、`MasteringFinalLowMidSafety.swift`、`MasteringFinalLoudnessStage.swift` は、高域戻り防止、ノイズ戻り防止、基本音量調整、最終低中域の安全確認、最終音量復帰と音量上限を分けて置いています。

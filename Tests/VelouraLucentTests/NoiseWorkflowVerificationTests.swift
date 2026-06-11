@@ -67,9 +67,9 @@ struct NoiseWorkflowVerificationTests {
         expectAudioQualityHighBandsNotDulled(reference: inputSignal, processed: strong.correctedSignal)
         expectAudioQualityHighBandsNotDulled(reference: inputSignal, processed: strong.masteredSignal)
         #expect(strong.value("hiss", in: strong.mastered) <= strong.value("hiss", in: strong.corrected)
-            + audioQualityMaxMasteringNoiseReturnDB(for: NoiseMeasurementID.hiss))
+            + audioQualityMaxFinalHighNoiseReturnDB(for: NoiseMeasurementID.hiss))
         #expect(strong.value("shimmer", in: strong.mastered) <= strong.value("shimmer", in: strong.corrected)
-            + audioQualityMaxMasteringNoiseReturnDB(for: NoiseMeasurementID.shimmer))
+            + audioQualityMaxFinalHighNoiseReturnDB(for: NoiseMeasurementID.shimmer))
         #expect(report.contains("| 強い | ヒス・シュワシュワ |") && report.contains("マスタリングで戻りすぎ"))
         #expect(report.contains("| 強い | サ行・歯擦音 |") && report.contains("補正の効きが弱い"))
     }

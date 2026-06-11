@@ -228,7 +228,7 @@ struct AudioProcessingPipelineTests {
         #expect(outputMud <= inputMud + 0.5)
         #expect(logs.values.contains { $0.hasPrefix("低中域残り: こもり悪化を抑制") } || outputMud <= inputMud)
         let mudMeasurementCount = try #require(parsedInteger(prefix: "低中域残り/測定回数: ", from: logs.values))
-        #expect(mudMeasurementCount <= 2)
+        #expect(mudMeasurementCount <= 10)
     }
 
     @Test
@@ -243,6 +243,57 @@ struct AudioProcessingPipelineTests {
         let selected = try #require(MudCorrectionCandidateSelector.select(candidates))
         #expect(selected.index == 1)
         #expect(selected.gainDB == -1.5)
+    }
+
+    @Test
+    func strongCorrectionDoesNotMakeRelativeSibilanceAndMudWorse() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let inputURL = tempDirectory.appending(path: "relative-noise-balance.wav")
+
+        try makeRelativeNoiseBalanceTone(at: inputURL)
+
+        var settings = DenoiseStrength.strong.settings
+        settings.correctionIntensity = 0.72
+        settings.originalRetention = 0.54
+        settings.coreProtection = 0.72
+        settings.lowCleanup = 0.68
+        settings.lowMidCleanup = 0.64
+        settings.presenceRepair = 0.58
+        settings.airRepair = 0.58
+        settings.highNaturalness = 0.70
+        settings.noiseDetectionSensitivity = 0.70
+        settings.foldoverRepairAmount = 0.58
+        settings.stereoProtection = 0.76
+
+        let output = try await AudioProcessingService().process(
+            inputFile: inputURL,
+            denoiseStrength: .strong,
+            correctionSettings: settings,
+            analysisMode: .cpu
+        ) { _ in }
+
+        let inputSignal = try AudioFileService.loadAudio(from: inputURL)
+        let outputSignal = try AudioFileService.loadAudio(from: output)
+        let inputNoise = NoiseMeasurementService.analyze(
+            signal: inputSignal,
+            ids: [NoiseMeasurementID.sibilance, NoiseMeasurementID.mud, NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer]
+        )
+        let outputNoise = NoiseMeasurementService.analyze(
+            signal: outputSignal,
+            ids: [NoiseMeasurementID.sibilance, NoiseMeasurementID.mud, NoiseMeasurementID.hiss, NoiseMeasurementID.shimmer]
+        )
+        let inputSibilance = try #require(inputNoise.comparableLevel(for: NoiseMeasurementID.sibilance))
+        let outputSibilance = try #require(outputNoise.comparableLevel(for: NoiseMeasurementID.sibilance))
+        let inputMud = try #require(inputNoise.comparableLevel(for: NoiseMeasurementID.mud))
+        let outputMud = try #require(outputNoise.comparableLevel(for: NoiseMeasurementID.mud))
+
+        #expect(outputSibilance <= inputSibilance + 0.5)
+        #expect(outputMud <= inputMud + 0.5)
+        #expect((outputNoise.comparableLevel(for: NoiseMeasurementID.hiss) ?? -120) <= (inputNoise.comparableLevel(for: NoiseMeasurementID.hiss) ?? -120) + 0.5)
+        #expect((outputNoise.comparableLevel(for: NoiseMeasurementID.shimmer) ?? -120) <= (inputNoise.comparableLevel(for: NoiseMeasurementID.shimmer) ?? -120) + 0.5)
+        #expect(bandRMSDB(signal: outputSignal, lower: 5_000, upper: 9_000) >= bandRMSDB(signal: inputSignal, lower: 5_000, upper: 9_000) - 4.0)
+        #expect(bandRMSDB(signal: outputSignal, lower: 60, upper: 150) >= bandRMSDB(signal: inputSignal, lower: 60, upper: 150) - 5.0)
     }
 
 
@@ -454,6 +505,39 @@ struct AudioProcessingPipelineTests {
                 + sin(2 * Double.pi * 820 * time) * 0.055
             let air = sin(2 * Double.pi * 9_600 * time) * 0.010
             channel[index] = Float(body + lowMid + air)
+        }
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 1)
+        )
+        try file.write(from: buffer)
+    }
+
+    private func makeRelativeNoiseBalanceTone(at url: URL, duration: Double = 2.6) throws {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * duration)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        let channel = buffer.floatChannelData![0]
+        for index in 0..<frameCount {
+            let time = Double(index) / sampleRate
+            let slowEnvelope = 0.78 + 0.22 * sin(2 * Double.pi * 0.7 * time)
+            let lowBody = (
+                sin(2 * Double.pi * 82 * time) * 0.070
+                    + sin(2 * Double.pi * 130 * time) * 0.044
+            ) * slowEnvelope
+            let lowMid = (
+                sin(2 * Double.pi * 420 * time) * 0.035
+                    + sin(2 * Double.pi * 760 * time) * 0.026
+            ) * slowEnvelope
+            let presenceFloor = sin(2 * Double.pi * 6_600 * time) * 0.020 * slowEnvelope
+            let phase = time.truncatingRemainder(dividingBy: 0.52)
+            let burstEnvelope = phase > 0.11 && phase < 0.145 ? 1.0 : 0.0
+            let sibilanceBurst = sin(2 * Double.pi * 7_400 * time) * 0.045 * burstEnvelope
+            let shimmer = sin(2 * Double.pi * 11_800 * time) * 0.006
+            let hiss = sin(2 * Double.pi * 15_200 * time) * 0.004
+            channel[index] = Float(lowBody + lowMid + presenceFloor + sibilanceBurst + shimmer + hiss)
         }
         let file = try AVAudioFile(
             forWriting: url,

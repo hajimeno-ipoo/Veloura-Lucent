@@ -21,15 +21,26 @@ extension NativeAudioProcessor {
             return signal
         }
 
-        let allowedIncreaseDB = 0.5
+        let allowedIncreaseDB = 0.45
         let excessDB = currentMud - referenceMud - allowedIncreaseDB
         guard excessDB > 0.25 else {
             logger?.log("低中域残り/測定回数: \(measurementCount)")
             return signal
         }
 
-        let targetGainDB = -min(excessDB * 0.85, 3.0)
-        let candidates = [targetGainDB, targetGainDB * 0.75, targetGainDB * 0.50, targetGainDB * 0.25]
+        let limitMud = referenceMud + allowedIncreaseDB
+        let targetGainDB = -min(max(excessDB * 1.10, 1.0), 8.0)
+        let candidates = [
+            targetGainDB * 0.25,
+            targetGainDB * 0.50,
+            targetGainDB * 0.75,
+            targetGainDB,
+            targetGainDB * 1.50,
+            targetGainDB * 2.00,
+            targetGainDB * 2.50,
+            targetGainDB * 3.50,
+            targetGainDB * 5.00
+        ]
             .enumerated()
             .map { index, gainDB in
                 let candidate = scaleCorrectionSignalBand(signal: signal, lower: 300, upper: 1_000, gainDB: gainDB)
@@ -42,26 +53,34 @@ extension NativeAudioProcessor {
                     signal: candidate
                 )
             }
-        guard let selectedScore = MudCorrectionCandidateSelector.select(candidates.map(\.score)),
-              let selectedCandidate = candidates.first(where: { $0.score.index == selectedScore.index })
-        else {
-            logger?.log("低中域残り/測定回数: \(measurementCount)")
+        var measuredCandidates: [(score: MudCorrectionCandidateScore, signal: AudioSignal, mud: Double)] = []
+        measuredCandidates.reserveCapacity(candidates.count)
+        for candidate in candidates {
+            let candidateMeasurements = measurementCache.snapshot(
+                signalID: "correctionMudGuard.candidate.\(candidate.score.index)",
+                signal: candidate.signal,
+                ids: [NoiseMeasurementID.mud]
+            )
+            measurementCount += 1
+            let candidateMud = candidateMeasurements.comparableLevel(for: NoiseMeasurementID.mud) ?? currentMud
+            measuredCandidates.append((score: candidate.score, signal: candidate.signal, mud: candidateMud))
+        }
+        logger?.log("低中域残り/測定回数: \(measurementCount)")
+
+        let selectedCandidate = measuredCandidates.first { $0.mud <= limitMud }
+            ?? measuredCandidates.min { lhs, rhs in
+                if lhs.mud != rhs.mud { return lhs.mud < rhs.mud }
+                return abs(lhs.score.gainDB) < abs(rhs.score.gainDB)
+            }
+        guard let selectedCandidate, selectedCandidate.mud < currentMud - 0.1 else {
+            logger?.log("低中域残り: 有効なこもり改善候補がないため維持")
             return signal
         }
         logger?.log(
-            "低中域残り/候補選定: \(selectedCandidate.score.index) gain \(String(format: "%.1f", selectedCandidate.score.gainDB)) dB"
+            "低中域残り/候補選定: \(selectedCandidate.score.index) gain \(String(format: "%.1f", selectedCandidate.score.gainDB)) dB mud \(String(format: "%.1f", selectedCandidate.mud)) dB"
         )
-        let candidateMeasurements = measurementCache.snapshot(
-            signalID: "correctionMudGuard.candidate.\(selectedCandidate.score.index)",
-            signal: selectedCandidate.signal,
-            ids: [NoiseMeasurementID.mud]
-        )
-        measurementCount += 1
-        let candidateMud = candidateMeasurements.comparableLevel(for: NoiseMeasurementID.mud) ?? currentMud
-        logger?.log("低中域残り/測定回数: \(measurementCount)")
-        if candidateMud > referenceMud + allowedIncreaseDB {
-            logger?.log("低中域残り: 最終候補でもこもり基準を超過したため見送り")
-            return signal
+        if selectedCandidate.mud > limitMud {
+            logger?.log("低中域残り: 基準内候補なし、最もこもりが少ない候補を採用")
         }
         logger?.log("低中域残り: こもり悪化を抑制 \(String(format: "%.1f", selectedCandidate.score.gainDB)) dB")
         return selectedCandidate.signal
