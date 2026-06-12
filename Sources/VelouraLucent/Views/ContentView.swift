@@ -6,48 +6,93 @@ struct ContentView: View {
     @State private var preview = AudioPreviewController()
     @State private var inputSelectionID = UUID()
     @State private var displayAnalysisTasks: [DisplayAnalysisTarget: Task<Void, Never>] = [:]
+    @State private var selectedWorkspaceSection: VelouraWorkspaceSection = .comparison
+    @State private var isInspectorPresented = true
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                ProcessingControlsView(
-                    job: job,
-                    onChooseInput: chooseInputAudio
-                )
-                PreviewPanelView(
-                    preview: preview,
-                    inputFileURL: job.inputFile,
-                    correctedFileURL: job.hasExistingOutput ? job.outputFile : nil,
-                    masteredFileURL: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil,
-                    completionReport: completionReport
-                )
-                ProcessingActionsView(
-                    job: job,
-                    canStartMastering: canStartMastering,
-                    onStartCorrection: startCorrectionProcessing,
-                    onStartMastering: startMasteringProcessing,
-                    onExportCorrected: exportCorrectedAudio,
-                    onExportMastered: exportMasteredAudio,
-                    onOpenCorrectedPreview: openCorrectedPreview,
-                    onOpenMasteredPreview: openMasteredPreview
-                )
-                ProcessingProgressView(job: job)
-                AudioComparisonDashboardView(job: job, section: .masteringDifference)
-                SpectrogramComparisonView(
-                    input: job.inputSpectrogram,
-                    corrected: job.outputSpectrogram,
-                    mastered: job.masteredSpectrogram
-                )
-                AudioComparisonDashboardView(job: job, section: .metrics)
-                ProcessingLogView(
-                    correctionLines: job.visibleLogLines,
-                    masteringLines: job.visibleMasteringLogLines
-                )
+        NavigationSplitView {
+            VelouraSidebarView(job: job)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 300)
+        } detail: {
+            VelouraMainWorkspaceView(
+                job: job,
+                preview: preview,
+                completionReport: completionReport,
+                selectedSection: $selectedWorkspaceSection
+            )
+            .inspector(isPresented: $isInspectorPresented) {
+                VelouraInspectorView(job: job)
             }
-            .padding(24)
         }
-        .frame(minWidth: 1_060, minHeight: 860)
+        .toolbar {
+            ToolbarItemGroup(placement: .principal) {
+                Button(action: chooseInputAudio) {
+                    toolbarLabel("音声を選ぶ", systemImage: "waveform.badge.plus")
+                }
+                .accessibilityLabel("音声を選ぶ")
+                .help("入力音声を選びます")
+                .disabled(job.isProcessing || job.isMastering)
+
+                Button(action: startCorrectionProcessing) {
+                    toolbarLabel(job.isProcessing ? "補正中..." : "補正を実行", systemImage: "wand.and.sparkles")
+                }
+                .accessibilityLabel(job.isProcessing ? "補正中" : "補正を実行")
+                .help("入力音声に補正処理をかけます")
+                .disabled(job.inputFile == nil || job.isProcessing || job.isMastering)
+
+                Button(action: startMasteringProcessing) {
+                    toolbarLabel(job.isMastering ? "マスタリング中..." : "マスタリングを実行", systemImage: "slider.horizontal.3")
+                }
+                .accessibilityLabel(job.isMastering ? "マスタリング中" : "マスタリングを実行")
+                .help("補正後音声を最終版へ仕上げます")
+                .disabled(!canStartMastering)
+
+                Menu {
+                    Section("補正後") {
+                        ForEach(AudioExportFormat.allCases) { format in
+                            Button(format.menuTitle) {
+                                exportCorrectedAudio(as: format)
+                            }
+                            .disabled(!job.hasExistingOutput || job.isProcessing)
+                        }
+                        Divider()
+                        Button("補正後プレビューを開く") {
+                            openCorrectedPreview()
+                        }
+                        .disabled(!job.hasExistingOutput || job.isProcessing)
+                    }
+
+                    Section("最終版") {
+                        ForEach(AudioExportFormat.allCases) { format in
+                            Button(format.menuTitle) {
+                                exportMasteredAudio(as: format)
+                            }
+                            .disabled(!job.hasExistingMasteredOutput || job.isMastering)
+                        }
+                        Divider()
+                        Button("最終版プレビューを開く") {
+                            openMasteredPreview()
+                        }
+                        .disabled(!job.hasExistingMasteredOutput || job.isMastering)
+                    }
+                } label: {
+                    toolbarLabel("書き出し", systemImage: "square.and.arrow.down")
+                }
+                .accessibilityLabel("書き出し")
+                .help("補正後または最終版を書き出します")
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    isInspectorPresented.toggle()
+                } label: {
+                    toolbarLabel(isInspectorPresented ? "設定を隠す" : "設定を表示", systemImage: "sidebar.right")
+                }
+                .accessibilityLabel(isInspectorPresented ? "設定を隠す" : "設定を表示")
+                .help("右側の設定パネルを表示または非表示にします")
+            }
+        }
+        .frame(minWidth: 1_180, minHeight: 820)
         .onChange(of: job.selectedMasteringProfile) { _, newValue in
             job.applyMasteringProfile(newValue)
         }
@@ -57,13 +102,13 @@ struct ContentView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Veloura Lucent")
-                .font(.largeTitle.bold())
-            Text("補正で荒れを整えたあと、別機能のマスタリングで仕上げまで行います。")
-                .foregroundStyle(.secondary)
+    private func toolbarLabel(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+            Text(title)
         }
+        .fixedSize()
+        .accessibilityLabel(title)
     }
 
     private var completionReport: CompletionReport? {

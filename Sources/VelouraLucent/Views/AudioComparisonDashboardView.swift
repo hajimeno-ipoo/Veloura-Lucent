@@ -10,10 +10,7 @@ struct AudioComparisonDashboardView: View {
     @Bindable var job: ProcessingJob
     let section: Section
 
-    private let comparisonCardColumns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
-    ]
+    private let comparisonCardColumns = [GridItem(.adaptive(minimum: 360), spacing: 14)]
 
     var body: some View {
         Group {
@@ -48,7 +45,7 @@ struct AudioComparisonDashboardView: View {
             }
 
             if let inputMetrics = job.inputMetrics {
-                LazyVGrid(columns: comparisonCardColumns, alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 14) {
                     comparisonMetricsTable(input: inputMetrics, corrected: job.outputMetrics, mastered: job.masteredMetrics)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -186,7 +183,7 @@ struct AudioComparisonDashboardView: View {
             }
         }
         .padding(18)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func noiseCheckBarLine(
@@ -338,7 +335,7 @@ struct AudioComparisonDashboardView: View {
                     corrected: corrected,
                     mastered: mastered
                 )
-                HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 14) {
                     comparisonDirectionSummaryCard(input: job.inputMetrics, corrected: corrected, mastered: mastered)
                     comparisonBalanceCurveCard(stages: stages)
                 }
@@ -506,7 +503,11 @@ struct AudioComparisonDashboardView: View {
             spectrumDeltaChart(points: diffPoints, yDomain: diffMin ... diffMax)
                 .frame(height: 150)
 
-            HStack(spacing: 14) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 120), spacing: 10)],
+                alignment: .leading,
+                spacing: 8
+            ) {
                 if input != nil {
                     legendChip(color: .blue, label: "入力", dashed: true)
                 }
@@ -682,7 +683,11 @@ struct AudioComparisonDashboardView: View {
     }
 
     private func chartLegend(stages: [ComparisonStageMetrics]) -> some View {
-        HStack(spacing: 14) {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 88), spacing: 10)],
+            alignment: .leading,
+            spacing: 8
+        ) {
             ForEach(stages) { stage in
                 legendChip(color: stage.color, label: stage.label, dashed: stage.id == "input")
             }

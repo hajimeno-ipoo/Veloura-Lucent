@@ -5,7 +5,7 @@ MODE="${1:-run}"
 BUILD_PRODUCT_NAME="VelouraLucent"
 DISPLAY_NAME="Veloura Lucent"
 BUNDLE_ID="com.codex.VelouraLucent"
-MIN_SYSTEM_VERSION="14.0"
+MIN_SYSTEM_VERSION="26.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"

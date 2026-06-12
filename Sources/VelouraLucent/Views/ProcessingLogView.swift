@@ -8,7 +8,11 @@ struct ProcessingLogView: View {
         logSection
     }
     private var logSection: some View {
-        HStack(alignment: .top, spacing: 14) {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 360), spacing: 14)],
+            alignment: .leading,
+            spacing: 14
+        ) {
             logCard(title: "補正ログ", lines: correctionLines, placeholder: "ここに補正ログが表示されます。")
             logCard(title: "マスタリングログ", lines: masteringLines, placeholder: "ここにマスタリングログが表示されます。")
         }

@@ -16,7 +16,11 @@ struct SpectrogramComparisonView: View {
 
             if let input {
                 let bounds = combinedSpectrogramBounds(input: input, corrected: corrected, mastered: mastered)
-                HStack(alignment: .top, spacing: 14) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 260), spacing: 14)],
+                    alignment: .leading,
+                    spacing: 14
+                ) {
                     spectrogramCard(title: "入力", snapshot: input, tint: .blue, bounds: bounds)
                     spectrogramCard(title: "補正後", snapshot: corrected ?? .empty, tint: .green, bounds: bounds)
                     spectrogramCard(title: "最終版", snapshot: mastered ?? .empty, tint: .orange, bounds: bounds)
@@ -34,7 +38,7 @@ struct SpectrogramComparisonView: View {
                 .font(.headline)
             if snapshot.cells.isEmpty {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.secondary.opacity(0.08))
+                    .fill(.thinMaterial)
                     .frame(height: 180)
                     .overlay {
                         Text("まだ表示できません")

@@ -8,8 +8,7 @@ struct UIWordingPolicyTests {
             [
                 "Sources/VelouraLucent/Views/ContentView.swift",
                 "Sources/VelouraLucent/Views/AudioComparisonDashboardView.swift",
-                "Sources/VelouraLucent/Views/CorrectionSettingsPanel.swift",
-                "Sources/VelouraLucent/Views/MasteringSettingsPanel.swift",
+                "Sources/VelouraLucent/Views/InspectorSettingsPanel.swift",
                 "Sources/VelouraLucent/Services/AudioQualityReportService.swift",
                 "Sources/VelouraLucent/Services/NoiseCheckReportService.swift"
             ]

@@ -31,7 +31,11 @@ struct PreviewPanelView: View {
 
             comparisonControlSection
 
-            HStack(spacing: 14) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 220), spacing: 14)],
+                alignment: .leading,
+                spacing: 14
+            ) {
                 PreviewCardView(
                     title: "入力音声",
                     state: preview.cardState(for: .input),
@@ -71,59 +75,32 @@ struct PreviewPanelView: View {
 
     private var comparisonControlSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Picker("比較対象", selection: binding(
-                    get: { preview.comparisonPair },
-                    set: { preview.setComparisonPair($0) }
-                )) {
-                    ForEach(AudioComparisonPair.allCases) { pair in
-                        Text(pair.title).tag(pair)
-                    }
+            Picker("比較対象", selection: binding(
+                get: { preview.comparisonPair },
+                set: { preview.setComparisonPair($0) }
+            )) {
+                ForEach(AudioComparisonPair.allCases) { pair in
+                    Text(pair.title).tag(pair)
                 }
-                .pickerStyle(.segmented)
-
-                Spacer()
             }
+            .pickerStyle(.segmented)
 
-            HStack(spacing: 10) {
-                Text(preview.comparisonPair.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Text(preview.comparisonPair.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-                Spacer()
-
-                HStack(spacing: 8) {
-                    Text("vol.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Slider(
-                        value: binding(
-                            get: { Double(preview.playbackVolume) },
-                            set: { preview.setPlaybackVolume(Float($0)) }
-                        ),
-                        in: 0 ... 1,
-                        step: 0.01
-                    )
-                    .frame(width: 120)
-                    Text("\(Int((preview.playbackVolume * 100).rounded()))%")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 42, alignment: .trailing)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 16) {
+                    volumeControl
+                    loudnessComparisonToggle
+                    activeComparisonLabel
                 }
 
-                Toggle(
-                    "ラウドネス合わせ比較",
-                    isOn: binding(
-                        get: { preview.isLoudnessMatchedComparisonEnabled },
-                        set: { preview.setLoudnessMatchedComparisonEnabled($0) }
-                    )
-                )
-                .toggleStyle(.switch)
-                .controlSize(.small)
-
-                Text("現在: \(preview.comparisonPair.title(for: preview.activeComparisonSide))")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 10) {
+                    volumeControl
+                    loudnessComparisonToggle
+                    activeComparisonLabel
+                }
             }
 
             HStack(spacing: 10) {
@@ -143,6 +120,48 @@ struct PreviewPanelView: View {
                 .disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)
             }
         }
+    }
+
+    private var volumeControl: some View {
+        HStack(spacing: 8) {
+            Text("音量")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Slider(
+                value: binding(
+                    get: { Double(preview.playbackVolume) },
+                    set: { preview.setPlaybackVolume(Float($0)) }
+                ),
+                in: 0 ... 1,
+                step: 0.01
+            )
+            .frame(minWidth: 100, idealWidth: 140, maxWidth: 180)
+            Text("\(Int((preview.playbackVolume * 100).rounded()))%")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 42, alignment: .trailing)
+        }
+    }
+
+    private var loudnessComparisonToggle: some View {
+        Toggle(
+            "ラウドネス合わせ比較",
+            isOn: binding(
+                get: { preview.isLoudnessMatchedComparisonEnabled },
+                set: { preview.setLoudnessMatchedComparisonEnabled($0) }
+            )
+        )
+        .toggleStyle(.switch)
+        .controlSize(.small)
+        .fixedSize()
+    }
+
+    private var activeComparisonLabel: some View {
+        Text("現在: \(preview.comparisonPair.title(for: preview.activeComparisonSide))")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .fixedSize()
     }
 
     private func comparisonBadge(for target: AudioPreviewTarget) -> String? {
@@ -224,7 +243,7 @@ private struct CompletionReportPopoverView: View {
                     }
                 }
                 .padding(10)
-                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
             }
         }
     }
@@ -297,7 +316,7 @@ private struct PreviewCardView: View {
                 ForEach(liveBands) { band in
                     HStack(spacing: 8) {
                         Text(band.label)
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                             .frame(width: 34, alignment: .leading)
                     GeometryReader { proxy in
@@ -315,21 +334,9 @@ private struct PreviewCardView: View {
                 }
             }
 
-            HStack(spacing: 8) {
-                Button(primaryPlaybackButtonTitle(for: playbackState), action: onPlay)
-                .disabled(fileURL == nil || playbackState == .playing)
-
-                Button("一時停止", action: onPause)
-                .disabled(playbackState != .playing)
-
-                Button("停止", action: onStop)
-                .disabled(fileURL == nil || playbackState == .stopped)
-
-                if let fileURL {
-                    Button("Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-                    }
-                }
+            ViewThatFits(in: .horizontal) {
+                playbackButtons(playbackState: playbackState, compact: false)
+                playbackButtons(playbackState: playbackState, compact: true)
             }
         }
         .padding(14)
@@ -342,6 +349,52 @@ private struct PreviewCardView: View {
                         .stroke(tint.opacity(0.25), lineWidth: 1)
                 )
         )
+    }
+
+    @ViewBuilder
+    private func playbackButtons(playbackState: AudioPlaybackState, compact: Bool) -> some View {
+        HStack(spacing: 8) {
+            if compact {
+                Button("再生", systemImage: "play.fill", action: onPlay)
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel(primaryPlaybackButtonTitle(for: playbackState))
+                    .help(primaryPlaybackButtonTitle(for: playbackState))
+                    .disabled(fileURL == nil || playbackState == .playing)
+
+                Button("一時停止", systemImage: "pause.fill", action: onPause)
+                    .labelStyle(.iconOnly)
+                    .help("一時停止")
+                    .disabled(playbackState != .playing)
+
+                Button("停止", systemImage: "stop.fill", action: onStop)
+                    .labelStyle(.iconOnly)
+                    .help("停止")
+                    .disabled(fileURL == nil || playbackState == .stopped)
+
+                if let fileURL {
+                    Button("Finderに表示", systemImage: "folder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                    }
+                    .labelStyle(.iconOnly)
+                    .help("Finderに表示")
+                }
+            } else {
+                Button(primaryPlaybackButtonTitle(for: playbackState), systemImage: "play.fill", action: onPlay)
+                    .disabled(fileURL == nil || playbackState == .playing)
+
+                Button("一時停止", systemImage: "pause.fill", action: onPause)
+                    .disabled(playbackState != .playing)
+
+                Button("停止", systemImage: "stop.fill", action: onStop)
+                    .disabled(fileURL == nil || playbackState == .stopped)
+
+                if let fileURL {
+                    Button("Finder", systemImage: "folder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                    }
+                }
+            }
+        }
     }
 
     private var emptySnapshot: AudioPreviewSnapshot {
