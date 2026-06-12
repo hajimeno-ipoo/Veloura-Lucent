@@ -1487,38 +1487,6 @@ struct AudioComparisonDashboardView: View {
         let format: MetricFormat
     }
 
-    private struct TermHelpButton: View {
-        let title: String
-        let reading: String
-        let description: String
-        @State private var isPresented = false
-
-        var body: some View {
-            Button {
-                isPresented.toggle()
-            } label: {
-                Image(systemName: "questionmark.circle")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(title)
-                        .font(.headline)
-                    Text(reading)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Text(description)
-                        .font(.body)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(14)
-                .frame(width: 360, alignment: .leading)
-            }
-        }
-    }
-
     private struct TermDefinition: Identifiable {
         let id: String
         let label: String

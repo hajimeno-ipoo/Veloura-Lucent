@@ -212,6 +212,7 @@ Macアプリ(SwiftUI)
   - `VelouraMainWorkspaceView.swift` は、試聴比較と、比較、数値、ログの表示切り替えを担当します。比較には音源変化とスペクトログラムをまとめて表示します。
   - `VelouraInspectorView.swift` は、右側の詳細設定を表示します。
   - `InspectorSettingsPanel.swift` は、右側インスペクタ専用の縦型設定画面を担当します。補正、マスタリング、アプリ設定を切り替え、解析モードはアプリ設定内に表示します。
+  - `TermHelpButton.swift` は、設定項目や比較項目の `?` 説明ポップアップを担当します。
   - `VelouraWorkspaceSection.swift` は、中央画面の表示切り替え項目を担当します。
   - `ProcessingProgressView.swift` は、左側で補正とマスタリングの進行状況を担当します。待機中は要約だけを見せ、必要な時だけ工程詳細を開けます。
   - `AudioComparisonDashboardView.swift` は、音源変化の比較、品質チェック、ノイズチェック、数値比較を担当します。
