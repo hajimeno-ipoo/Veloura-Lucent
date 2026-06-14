@@ -156,7 +156,8 @@ enum AudioComparisonService {
         )
         let bandRanges = frequencyBandRanges(for: bandTemplate, frequencyStep: frequencyStep, maxBin: frameSize / 2)
         let masteringBandRanges = frequencyBandRanges(for: masteringBandTemplate, frequencyStep: frequencyStep, maxBin: frameSize / 2)
-        let spectrumBands = spectrumBandTemplate(sampleRate: sampleRate, frameSize: frameSize)
+        let spectrumBins = spectrumBinTemplate(sampleRate: sampleRate, frameSize: frameSize)
+        let spectrumAmplitudeScale = 2.0 / max(Double(window.reduce(0, +)), 1e-12)
         let hf12Start = lowerBin(for: 12_000, frequencyStep: frequencyStep, maxBin: frameSize / 2)
         let hf16Start = lowerBin(for: 16_000, frequencyStep: frequencyStep, maxBin: frameSize / 2)
         let hf18Start = lowerBin(for: 18_000, frequencyStep: frequencyStep, maxBin: frameSize / 2)
@@ -178,7 +179,7 @@ enum AudioComparisonService {
         var harshnessAirSum = 0.0
         var bandEnergySum = Array(repeating: 0.0, count: bandTemplate.count)
         var masteringBandEnergySum = Array(repeating: 0.0, count: masteringBandTemplate.count)
-        var spectrumEnergySum = Array(repeating: 0.0, count: spectrumBands.count)
+        var spectrumAmplitudeSum = Array(repeating: 0.0, count: spectrumBins.count)
 
         if mono.count < frameSize {
             try cancellationCheck()
@@ -204,8 +205,9 @@ enum AudioComparisonService {
                 bandEnergySum: &bandEnergySum,
                 masteringBandRanges: masteringBandRanges,
                 masteringBandEnergySum: &masteringBandEnergySum,
-                spectrumBands: spectrumBands,
-                spectrumEnergySum: &spectrumEnergySum
+                spectrumBins: spectrumBins,
+                spectrumAmplitudeSum: &spectrumAmplitudeSum,
+                spectrumAmplitudeScale: spectrumAmplitudeScale
             )
         } else {
             var start = 0
@@ -236,8 +238,9 @@ enum AudioComparisonService {
                     bandEnergySum: &bandEnergySum,
                     masteringBandRanges: masteringBandRanges,
                     masteringBandEnergySum: &masteringBandEnergySum,
-                    spectrumBands: spectrumBands,
-                    spectrumEnergySum: &spectrumEnergySum
+                    spectrumBins: spectrumBins,
+                    spectrumAmplitudeSum: &spectrumAmplitudeSum,
+                    spectrumAmplitudeScale: spectrumAmplitudeScale
                 )
                 start += hopSize
                 frameIndex += 1
@@ -262,10 +265,10 @@ enum AudioComparisonService {
                 levelDB: 20 * log10(max(value / safeFrameCount, 1e-12))
             )
         }
-        let spectrumMetrics = zip(spectrumBands, spectrumEnergySum).map { band, value in
+        let spectrumMetrics = zip(spectrumBins, spectrumAmplitudeSum).map { bin, value in
             SpectrumMetric(
-                id: band.id,
-                frequencyHz: band.center,
+                id: bin.id,
+                frequencyHz: bin.frequencyHz,
                 levelDB: 20 * log10(max(value / safeFrameCount, 1e-12))
             )
         }
@@ -338,25 +341,19 @@ enum AudioComparisonService {
         max(0, min(Int(ceil(frequency / frequencyStep)), maxBin + 1))
     }
 
-    private static func spectrumBandTemplate(sampleRate: Double, frameSize: Int) -> [(id: String, center: Double, lower: Int, upper: Int)] {
-        let bandCount = 32
+    private static func spectrumBinTemplate(sampleRate: Double, frameSize: Int) -> [(id: String, frequencyHz: Double, bin: Int)] {
         let minFrequency = 80.0
         let maxFrequency = min(20_000.0, sampleRate * 0.5)
         let frequencyStep = sampleRate / Double(frameSize)
+        let lowerBin = max(1, Int(ceil(minFrequency / frequencyStep)))
+        let upperBin = min(frameSize / 2, Int(floor(maxFrequency / frequencyStep)))
+        guard lowerBin <= upperBin else { return [] }
 
-        return (0..<bandCount).map { index in
-            let lowerRatio = Double(index) / Double(bandCount)
-            let upperRatio = Double(index + 1) / Double(bandCount)
-            let lowerFrequency = minFrequency * pow(maxFrequency / minFrequency, lowerRatio)
-            let upperFrequency = minFrequency * pow(maxFrequency / minFrequency, upperRatio)
-            let centerFrequency = sqrt(lowerFrequency * upperFrequency)
-            let lowerBin = max(0, min(Int(floor(lowerFrequency / frequencyStep)), frameSize / 2))
-            let upperBin = max(lowerBin, min(Int(ceil(upperFrequency / frequencyStep)), frameSize / 2))
+        return (lowerBin...upperBin).map { bin in
             return (
-                id: "spectrum-\(index)",
-                center: centerFrequency,
-                lower: lowerBin,
-                upper: upperBin
+                id: "spectrum-bin-\(bin)",
+                frequencyHz: Double(bin) * frequencyStep,
+                bin: bin
             )
         }
     }
@@ -463,8 +460,9 @@ enum AudioComparisonService {
         bandEnergySum: inout [Double],
         masteringBandRanges: [FrequencyBandRange],
         masteringBandEnergySum: inout [Double],
-        spectrumBands: [(id: String, center: Double, lower: Int, upper: Int)],
-        spectrumEnergySum: inout [Double]
+        spectrumBins: [(id: String, frequencyHz: Double, bin: Int)],
+        spectrumAmplitudeSum: inout [Double],
+        spectrumAmplitudeScale: Double
     ) {
         var windowed = Array(repeating: Float.zero, count: frame.count)
         vDSP.multiply(frame, window, result: &windowed)
@@ -504,9 +502,8 @@ enum AudioComparisonService {
             masteringBandEnergySum[index] += sqrt(mean)
         }
 
-        for (index, band) in spectrumBands.enumerated() {
-            let mean = meanPower(power, lower: band.lower, upperInclusive: band.upper)
-            spectrumEnergySum[index] += sqrt(mean)
+        for (index, bin) in spectrumBins.enumerated() where bin.bin < power.count {
+            spectrumAmplitudeSum[index] += sqrt(power[bin.bin]) * spectrumAmplitudeScale
         }
 
         frameCount += 1

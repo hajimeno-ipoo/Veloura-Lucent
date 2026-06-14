@@ -3,36 +3,35 @@ import SwiftUI
 struct VelouraMainWorkspaceView: View {
     @Bindable var job: ProcessingJob
     let preview: AudioPreviewController
-    let completionReport: CompletionReport?
-    @Binding var selectedSection: VelouraWorkspaceSection
+    @State private var displayMode: WorkspaceDisplayMode = .basic
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
 
-                PreviewPanelView(
-                    preview: preview,
-                    inputFileURL: job.inputFile,
-                    correctedFileURL: job.hasExistingOutput ? job.outputFile : nil,
-                    masteredFileURL: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil,
-                    completionReport: completionReport
-                )
-                .padding(18)
-                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
+                    Picker("中央表示", selection: $displayMode) {
+                        ForEach(WorkspaceDisplayMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 360, alignment: .leading)
+                    .accessibilityLabel("中央表示")
 
-                Picker("表示", selection: $selectedSection) {
-                    ForEach(VelouraWorkspaceSection.allCases) { section in
-                        Label(section.title, systemImage: section.systemImage)
-                            .tag(section)
+                    switch displayMode {
+                    case .basic:
+                        basicWorkspace
+                    case .detail:
+                        DetailedAnalysisWorkspaceView(job: job)
                     }
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.large)
-
-                selectedContent
+                .padding(24)
             }
-            .padding(24)
+
+            Divider()
+            WorkspaceFooterView(job: job)
         }
         .navigationTitle("試聴と解析")
     }
@@ -47,24 +46,35 @@ struct VelouraMainWorkspaceView: View {
     }
 
     @ViewBuilder
-    private var selectedContent: some View {
-        switch selectedSection {
-        case .comparison:
-            VStack(alignment: .leading, spacing: 18) {
-                AudioComparisonDashboardView(job: job, section: .masteringDifference)
-                SpectrogramComparisonView(
-                    input: job.inputSpectrogram,
-                    corrected: job.outputSpectrogram,
-                    mastered: job.masteredSpectrogram
-                )
-            }
-        case .metrics:
-            AudioComparisonDashboardView(job: job, section: .metrics)
-        case .logs:
-            ProcessingLogView(
-                correctionLines: job.visibleLogLines,
-                masteringLines: job.visibleMasteringLogLines
-            )
+    private var basicWorkspace: some View {
+        AudioWaveformWorkspaceView(
+            preview: preview,
+            inputFileURL: job.inputFile,
+            correctedFileURL: job.hasExistingOutput ? job.outputFile : nil,
+            masteredFileURL: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil
+        )
+
+        AverageSpectrumComparisonView(preview: preview)
+
+        SpectrogramComparisonView(
+            input: job.inputSpectrogram,
+            corrected: job.outputSpectrogram,
+            mastered: job.masteredSpectrogram
+        )
+    }
+
+}
+
+private enum WorkspaceDisplayMode: String, CaseIterable, Identifiable {
+    case basic
+    case detail
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .basic: "基本表示"
+        case .detail: "詳細解析"
         }
     }
 }

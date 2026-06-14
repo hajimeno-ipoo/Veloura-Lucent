@@ -7,63 +7,63 @@ struct VelouraSidebarView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("Veloura Lucent", systemImage: "waveform")
-                        .font(.title3.bold())
+                    HStack(spacing: 6) {
+                        Image(systemName: "waveform")
+                            .accessibilityHidden(true)
+                        Text("Veloura Lucent")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    .font(.callout.bold())
                     Text("流れと状態を確認します。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
                 .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowInsets(.init(top: 5, leading: 10, bottom: 5, trailing: 8))
             }
 
-            Section("入力") {
-                fileSummaryRow(
-                    title: "入力ファイル",
+            Section("音源") {
+                SidebarFileRow(
+                    title: "入力音声",
+                    systemImage: "waveform",
                     fileURL: job.inputFile,
-                    placeholder: "まだ選択されていません"
+                    fileInfo: job.inputFileInfo,
+                    placeholder: "まだ選択されていません",
+                    tint: .blue
                 )
-                fileSummaryRow(
-                    title: "補正後プレビュー",
+                .listRowInsets(.init(top: 4, leading: 10, bottom: 4, trailing: 8))
+                SidebarFileRow(
+                    title: "補正後",
+                    systemImage: "waveform.badge.checkmark",
                     fileURL: job.hasExistingOutput ? job.outputFile : nil,
-                    placeholder: "補正後に表示されます"
+                    fileInfo: job.hasExistingOutput ? job.outputFileInfo : nil,
+                    placeholder: "補正後に表示されます",
+                    tint: .green
                 )
-                fileSummaryRow(
-                    title: "最終版プレビュー",
+                .listRowInsets(.init(top: 4, leading: 10, bottom: 4, trailing: 8))
+                SidebarFileRow(
+                    title: "最終版",
+                    systemImage: "waveform.path.ecg.rectangle",
                     fileURL: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil,
-                    placeholder: "マスタリング後に表示されます"
+                    fileInfo: job.hasExistingMasteredOutput ? job.masteredFileInfo : nil,
+                    placeholder: "マスタリング後に表示されます",
+                    tint: .orange
                 )
+                .listRowInsets(.init(top: 4, leading: 10, bottom: 4, trailing: 8))
             }
 
-            Section("進捗") {
-                ProcessingProgressView(job: job)
+            Section("工程") {
+                SidebarProcessingStatusView(job: job)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .listRowInsets(.init(top: 5, leading: 10, bottom: 5, trailing: 8))
             }
+
         }
         .listStyle(.sidebar)
         .navigationTitle("工程")
     }
 
-    private func fileSummaryRow(title: String, fileURL: URL?, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.callout.weight(.semibold))
-            Text(fileURL?.lastPathComponent ?? placeholder)
-                .font(.callout)
-                .foregroundStyle(fileURL == nil ? .secondary : .primary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if let fileURL {
-                let path = fileURL.path(percentEncoded: false)
-                Text(path)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
-                    .help(path)
-            }
-        }
-        .padding(.vertical, 3)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .help(fileURL?.path(percentEncoded: false) ?? placeholder)
-    }
 }

@@ -1,9 +1,18 @@
 import Foundation
+import AVFoundation
 import Testing
 @testable import VelouraLucent
 
 @MainActor
 struct AudioPreviewControllerTests {
+    @Test
+    func comparisonDefaultsToInputAndCorrectedAudio() {
+        let controller = AudioPreviewController()
+
+        #expect(controller.comparisonPair == .inputVsCorrected)
+        #expect(controller.comparisonTarget(for: .a) == .input)
+    }
+
     @Test
     func comparisonPairSwitchesTargets() {
         let controller = AudioPreviewController()
@@ -44,6 +53,78 @@ struct AudioPreviewControllerTests {
 
         controller.setPlaybackVolume(1.5)
         #expect(controller.playbackVolume == 1.0)
+    }
+
+    @Test
+    func waveformSeekSynchronizesAllAvailableTargetsByPlaybackTime() {
+        let controller = AudioPreviewController()
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 10),
+            for: .input,
+            sourceURL: URL(filePath: "/tmp/input.wav")
+        )
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 8),
+            for: .corrected,
+            sourceURL: URL(filePath: "/tmp/corrected.wav")
+        )
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 12),
+            for: .mastered,
+            sourceURL: URL(filePath: "/tmp/mastered.wav")
+        )
+
+        controller.seek(to: 0.6, target: .input)
+
+        #expect(controller.cardState(for: .input).playbackPosition == 6)
+        #expect(controller.cardState(for: .input).playbackProgress == 0.6)
+        #expect(controller.cardState(for: .corrected).playbackPosition == 6)
+        #expect(controller.cardState(for: .corrected).playbackProgress == 0.75)
+        #expect(controller.cardState(for: .mastered).playbackPosition == 6)
+        #expect(controller.cardState(for: .mastered).playbackProgress == 0.5)
+    }
+
+    @Test
+    func waveformSeekClampsShorterABTargetToItsDuration() {
+        let controller = AudioPreviewController()
+        controller.setComparisonPair(.inputVsCorrected)
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 10),
+            for: .input,
+            sourceURL: URL(filePath: "/tmp/input.wav")
+        )
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 8),
+            for: .corrected,
+            sourceURL: URL(filePath: "/tmp/corrected.wav")
+        )
+
+        controller.seek(to: 0.9, target: .input)
+
+        #expect(controller.cardState(for: controller.comparisonTarget(for: .a)).playbackPosition == 9)
+        #expect(controller.cardState(for: controller.comparisonTarget(for: .b)).playbackPosition == 8)
+        #expect(controller.cardState(for: controller.comparisonTarget(for: .b)).playbackProgress == 1)
+    }
+
+    @Test
+    func globalStopResetsAllSynchronizedPlaybackPositions() {
+        let controller = AudioPreviewController()
+        for target in AudioPreviewTarget.allCases {
+            controller.setPreviewSnapshot(
+                previewSnapshot(duration: 10),
+                for: target,
+                sourceURL: URL(filePath: "/tmp/\(target.rawValue).wav")
+            )
+        }
+
+        controller.seek(to: 0.6, target: .input)
+        controller.stopPlayback()
+
+        for target in AudioPreviewTarget.allCases {
+            #expect(controller.cardState(for: target).playbackPosition == 0)
+            #expect(controller.cardState(for: target).playbackProgress == 0)
+            #expect(controller.playbackState(for: target) == .stopped)
+        }
     }
 
     @Test
@@ -148,6 +229,33 @@ struct AudioPreviewControllerTests {
     }
 
     @Test
+    func finishingActivePlaybackDoesNotResetOtherCardState() {
+        let controller = AudioPreviewController()
+        let snapshot = AudioPreviewSnapshot(
+            waveform: [0, 0.5, 0],
+            duration: 10,
+            bandLevels: [:],
+            bandLevelDBs: [:]
+        )
+
+        controller.setPreviewSnapshot(snapshot, for: .input, sourceURL: URL(filePath: "/tmp/input.wav"))
+        controller.setPreviewSnapshot(snapshot, for: .corrected, sourceURL: URL(filePath: "/tmp/corrected.wav"))
+        controller.setPreviewSnapshot(snapshot, for: .mastered, sourceURL: URL(filePath: "/tmp/mastered.wav"))
+        controller.seek(to: 0.6, target: .input)
+        controller.activeTarget = .input
+        controller.cardState(for: .input).playbackState = .playing
+
+        controller.finishActivePlayback()
+
+        #expect(controller.cardState(for: .input).playbackProgress == 0)
+        #expect(controller.cardState(for: .input).playbackPosition == 0)
+        #expect(controller.cardState(for: .corrected).playbackProgress == 0.6)
+        #expect(controller.cardState(for: .corrected).playbackPosition == 6)
+        #expect(controller.cardState(for: .mastered).playbackProgress == 0.6)
+        #expect(controller.cardState(for: .mastered).playbackPosition == 6)
+    }
+
+    @Test
     func preparePreviewCanSkipLoudnessMeasurementWhenAnalysisWillProvideIt() async throws {
         let fixture = try makePreviewFixture()
         defer {
@@ -192,9 +300,58 @@ struct AudioPreviewControllerTests {
         #expect(controller.integratedLoudnessLUFS(for: .input) != nil)
     }
 
+    @Test
+    func realtimeSpectrumAnalyzerCreatesDisplayPointsFromPCMBuffer() throws {
+        let sampleRate = 48_000.0
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4_800)!
+        buffer.frameLength = 4_800
+        let samples = buffer.floatChannelData![0]
+        for index in 0..<Int(buffer.frameLength) {
+            samples[index] = Float(sin(2 * Double.pi * 1_000 * Double(index) / sampleRate) * 0.5)
+        }
+
+        let points = RealtimeSpectrumAnalyzer.points(from: buffer)
+
+        #expect(points.isEmpty == false)
+        #expect(points.contains { $0.frequencyHz == 1_000 })
+        #expect(points.allSatisfy { $0.levelDB >= -100 && $0.levelDB <= 0 })
+        #expect((points.map(\.levelDB).max() ?? -100) > -60)
+    }
+
+    @Test
+    func realtimeSpectrumTapBufferSizeKeepsLowSampleRateAnalyzable() throws {
+        let sampleRate = 16_000.0
+        let bufferSize = RealtimeSpectrumAnalyzer.tapBufferSize(for: sampleRate)
+
+        #expect(bufferSize == AVAudioFrameCount(RealtimeSpectrumAnalyzer.analysisSampleCount))
+
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: bufferSize)!
+        buffer.frameLength = bufferSize
+        let samples = buffer.floatChannelData![0]
+        for index in 0..<Int(buffer.frameLength) {
+            samples[index] = Float(sin(2 * Double.pi * 1_000 * Double(index) / sampleRate) * 0.5)
+        }
+
+        let points = RealtimeSpectrumAnalyzer.points(from: buffer)
+
+        #expect(points.isEmpty == false)
+        #expect(points.contains { $0.frequencyHz == 1_000 })
+    }
+
     private struct PreviewFixture {
         let directory: URL
         let url: URL
+    }
+
+    private func previewSnapshot(duration: TimeInterval) -> AudioPreviewSnapshot {
+        AudioPreviewSnapshot(
+            waveform: [0, 0.5, 0],
+            duration: duration,
+            bandLevels: [:],
+            bandLevelDBs: [:]
+        )
     }
 
     private func makePreviewFixture() throws -> PreviewFixture {

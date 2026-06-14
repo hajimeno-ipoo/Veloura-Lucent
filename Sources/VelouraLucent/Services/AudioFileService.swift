@@ -73,6 +73,60 @@ enum AudioFileService {
     private static let previewHopSize = 1024
     private static let spectrogramTimeBuckets = 72
     private static let spectrogramFrequencyBuckets = 28
+    static let spectrogramDisplayMinimumDB = -100.0
+    static let spectrogramDisplayMaximumDB = 0.0
+    private static let spectrogramFullScaleWindowMagnitude: Double = {
+        let window = vDSP.window(
+            ofType: Float.self,
+            usingSequence: .hanningDenormalized,
+            count: previewFFTSize,
+            isHalfWindow: false
+        )
+        return Double(window.reduce(0) { $0 + sqrtf(max($1, 0)) }) * 0.5
+    }()
+
+    static func fileInfo(for url: URL) throws -> AudioFileInfo {
+        let file = try AVAudioFile(forReading: url)
+        let format = file.fileFormat
+        let settings = format.settings
+        let formatID = (settings[AVFormatIDKey] as? NSNumber)?.uint32Value
+        let isLinearPCM = formatID == kAudioFormatLinearPCM
+        let bitDepth = isLinearPCM ? (settings[AVLinearPCMBitDepthKey] as? NSNumber)?.intValue : nil
+        let isFloatingPoint = isLinearPCM && ((settings[AVLinearPCMIsFloatKey] as? NSNumber)?.boolValue ?? false)
+        let duration = format.sampleRate > 0 ? Double(file.length) / format.sampleRate : 0
+
+        return AudioFileInfo(
+            formatName: formatName(formatID: formatID, fileExtension: url.pathExtension),
+            sampleRate: format.sampleRate,
+            channelCount: Int(format.channelCount),
+            duration: duration,
+            bitDepth: bitDepth,
+            isFloatingPoint: isFloatingPoint
+        )
+    }
+
+    static func formatName(formatID: UInt32?, fileExtension: String) -> String {
+        switch formatID {
+        case kAudioFormatMPEGLayer3:
+            return "MP3"
+        case kAudioFormatMPEG4AAC, kAudioFormatMPEG4AAC_HE, kAudioFormatMPEG4AAC_HE_V2:
+            return "AAC"
+        case kAudioFormatAppleLossless:
+            return "ALAC"
+        case kAudioFormatLinearPCM:
+            switch fileExtension.lowercased() {
+            case "wav", "wave":
+                return "WAV"
+            case "aif", "aiff":
+                return "AIFF"
+            default:
+                return "PCM"
+            }
+        default:
+            let normalizedExtension = fileExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalizedExtension.isEmpty ? "音声" : normalizedExtension.uppercased()
+        }
+    }
 
     static func loadAudio(from url: URL) throws -> AudioSignal {
         let file = try AVAudioFile(forReading: url)
@@ -312,11 +366,14 @@ enum AudioFileService {
         let frequencyBuckets = 56
         let maxFrequency = signal.sampleRate * 0.5
         let minFrequency = 80.0
+        let binRanges = spectrogramBinRanges(
+            sampleRate: signal.sampleRate,
+            frequencyBucketCount: frequencyBuckets
+        )
 
         var cells: [SpectrogramCell] = []
         cells.reserveCapacity(timeBuckets * frequencyBuckets)
 
-        var maxIntensity = -120.0
         var rawLevels = Array(repeating: Array(repeating: -120.0, count: frequencyBuckets), count: timeBuckets)
 
         for timeBucket in 0..<timeBuckets {
@@ -325,16 +382,17 @@ enum AudioFileService {
                 let rms = sqrt(max(Double(spectralAnalysis.spectrogramEnergy[index]) / Double(max(spectralAnalysis.spectrogramCounts[index], 1)), 1e-12))
                 let levelDB = 20 * log10(max(rms, 1e-12))
                 rawLevels[timeBucket][frequencyBucket] = levelDB
-                maxIntensity = max(maxIntensity, levelDB)
             }
         }
 
-        let floor = max(-96.0, maxIntensity - 58.0)
         let duration = Double(mono.count) / signal.sampleRate
 
         for timeBucket in 0..<timeBuckets {
             for frequencyBucket in 0..<frequencyBuckets {
-                let levelDB = rawLevels[timeBucket][frequencyBucket]
+                let levelDB = spectrogramDisplayLevelDB(
+                    rawLevelDB: rawLevels[timeBucket][frequencyBucket],
+                    binCount: binRanges[frequencyBucket].count
+                )
                 let timeStart = duration * Double(timeBucket) / Double(timeBuckets)
                 let timeEnd = duration * Double(timeBucket + 1) / Double(timeBuckets)
                 let lowerFrequency = minFrequency * pow(maxFrequency / minFrequency, Double(frequencyBucket) / Double(frequencyBuckets))
@@ -360,9 +418,38 @@ enum AudioFileService {
             timeBucketCount: timeBuckets,
             frequencyBucketCount: frequencyBuckets,
             duration: duration,
-            minLevelDB: floor,
-            maxLevelDB: maxIntensity
+            minLevelDB: spectrogramDisplayMinimumDB,
+            maxLevelDB: spectrogramDisplayMaximumDB
         )
+    }
+
+    static func spectrogramDisplayLevelDB(rawLevelDB: Double, binCount: Int) -> Double {
+        let referenceMagnitude = spectrogramFullScaleWindowMagnitude / sqrt(Double(max(binCount, 1)))
+        let referenceDB = 20 * log10(max(referenceMagnitude, 1e-12))
+        return min(
+            spectrogramDisplayMaximumDB,
+            max(spectrogramDisplayMinimumDB, rawLevelDB - referenceDB)
+        )
+    }
+
+    private static func spectrogramBinRanges(
+        sampleRate: Double,
+        frequencyBucketCount: Int
+    ) -> [ClosedRange<Int>] {
+        let frequencyStep = sampleRate / Double(previewFFTSize)
+        let binCount = previewFFTSize / 2 + 1
+        let minFrequency = 80.0
+        let maxFrequency = sampleRate * 0.5
+
+        return (0..<frequencyBucketCount).map { bucket in
+            let lowerRatio = Double(bucket) / Double(frequencyBucketCount)
+            let upperRatio = Double(bucket + 1) / Double(frequencyBucketCount)
+            let lowerFrequency = minFrequency * pow(maxFrequency / minFrequency, lowerRatio)
+            let upperFrequency = minFrequency * pow(maxFrequency / minFrequency, upperRatio)
+            let lowerBin = max(0, min(Int(lowerFrequency / frequencyStep), binCount - 1))
+            let upperBin = max(lowerBin, min(Int(upperFrequency / frequencyStep), binCount - 1))
+            return lowerBin...upperBin
+        }
     }
 
     private static func makeBandLevels(from mono: [Float], sampleRate: Double, bucketCount: Int) -> ([String: [Float]], [String: [Float]]) {
@@ -445,19 +532,9 @@ enum AudioFileService {
         let frameCount = previewSTFTFrameCount(forSampleCount: mono.count)
         let timeBuckets = min(120, max(1, frameCount))
         let frequencyBuckets = 56
-        let maxFrequency = sampleRate * 0.5
-        let minFrequency = 80.0
         let frameGroupSize = max(1, Int(ceil(Double(frameCount) / Double(timeBuckets))))
         let binEdges: [ClosedRange<Int>] = includesSpectrogram
-            ? (0..<frequencyBuckets).map { bucket in
-                let lowerRatio = Double(bucket) / Double(frequencyBuckets)
-                let upperRatio = Double(bucket + 1) / Double(frequencyBuckets)
-                let lowerFrequency = minFrequency * pow(maxFrequency / minFrequency, lowerRatio)
-                let upperFrequency = minFrequency * pow(maxFrequency / minFrequency, upperRatio)
-                let lowerBin = max(0, min(Int(lowerFrequency / frequencyStep), binCount - 1))
-                let upperBin = max(lowerBin, min(Int(upperFrequency / frequencyStep), binCount - 1))
-                return lowerBin...upperBin
-            }
+            ? spectrogramBinRanges(sampleRate: sampleRate, frequencyBucketCount: frequencyBuckets)
             : []
 
         var frames: [String: [Float]] = includesBandLevels

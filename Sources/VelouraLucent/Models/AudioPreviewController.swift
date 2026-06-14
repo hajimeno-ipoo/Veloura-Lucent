@@ -1,4 +1,5 @@
 import AVFoundation
+import Accelerate
 import Foundation
 
 enum AudioPreviewTarget: String, CaseIterable {
@@ -20,6 +21,7 @@ final class AudioPreviewCardState {
     var sourceURL: URL?
     var snapshot: AudioPreviewSnapshot?
     var liveBandLevels: [LiveBandSample] = []
+    var realtimeSpectrum: [RealtimeSpectrumPoint] = []
     var playbackProgress: Double = 0
     var playbackPosition: TimeInterval = 0
     var playbackState: AudioPlaybackState = .stopped
@@ -31,11 +33,11 @@ final class AudioPreviewCardState {
 
 @MainActor
 @Observable
-final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
+final class AudioPreviewController {
     var activeTarget: AudioPreviewTarget?
     var playbackLabel = "未再生"
     var playbackVolume: Float = 1.0
-    var comparisonPair: AudioComparisonPair = .correctedVsMastered
+    var comparisonPair: AudioComparisonPair = .inputVsCorrected
     var activeComparisonSide: AudioComparisonSide = .a
     var isLoudnessMatchedComparisonEnabled = false
     let inputCardState = AudioPreviewCardState(target: .input)
@@ -55,17 +57,28 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         })
     }
 
-    private var player: AVAudioPlayer?
+    private var engine: AVAudioEngine?
+    private var playerNode: AVAudioPlayerNode?
+    private var analysisMixer: AVAudioMixerNode?
+    private var activeAudioFile: AVAudioFile?
+    private var activePlaybackStartTime: TimeInterval = 0
+    private var activePlaybackDuration: TimeInterval = 0
+    private var activePlaybackID = UUID()
+    private var hasInstalledAnalysisTap = false
     private var meterTimer: Timer?
     private var previewTasks: [AudioPreviewTarget: Task<Void, Never>] = [:]
     private var integratedLoudnessByTarget: [AudioPreviewTarget: Float] = [:]
+    private let realtimeSpectrumAnalysisQueue = DispatchQueue(
+        label: "com.codex.VelouraLucent.realtimeSpectrumAnalysis",
+        qos: .userInitiated
+    )
     private let meterInterval: TimeInterval = 0.05
     private let smoothingFactor = 0.25
 
     func startPlayback(for url: URL?, target: AudioPreviewTarget) {
         guard let url else { return }
 
-        if activeTarget == target, let player, player.isPlaying {
+        if activeTarget == target, let playerNode, playerNode.isPlaying {
             return
         }
 
@@ -73,18 +86,11 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
             preparePreview(for: url, target: target)
             syncComparisonPositionIfNeeded(for: target)
             transitionAwayFromCurrentTarget(keepingPosition: true)
-            player = try AVAudioPlayer(contentsOf: url)
-            player?.delegate = self
-            player?.isMeteringEnabled = true
-            player?.prepareToPlay()
-            player?.volume = effectivePlaybackVolume(for: target)
+            let audioFile = try AVAudioFile(forReading: url)
+            let duration = Double(audioFile.length) / audioFile.processingFormat.sampleRate
             let targetState = cardState(for: target)
-            let resumeTime = targetState.playbackPosition
-            if let player {
-                player.currentTime = min(resumeTime, max(player.duration - 0.05, 0))
-            }
-            player?.play()
-            activeTarget = target
+            let resumeTime = min(targetState.playbackPosition, max(duration - 0.05, 0))
+            try prepareEnginePlayback(audioFile: audioFile, target: target, startTime: resumeTime, duration: duration)
             targetState.playbackState = .playing
             if let comparisonSide = comparisonSide(for: target) {
                 activeComparisonSide = comparisonSide
@@ -92,9 +98,10 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
             } else {
                 playbackLabel = "\(target.rawValue)を再生中"
             }
-            let progress = player?.duration == 0 ? 0 : max(0, min(1, (player?.currentTime ?? 0) / (player?.duration ?? 1)))
-            targetState.playbackProgress = progress
+            targetState.playbackPosition = resumeTime
+            targetState.playbackProgress = duration > 0 ? max(0, min(1, resumeTime / duration)) : 0
             startMetering(target: target)
+            playerNode?.play()
         } catch {
             stopPlayback(target: target)
             playbackLabel = "再生できませんでした"
@@ -131,6 +138,27 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         refreshPlaybackVolumeIfNeeded()
     }
 
+    func seek(to progress: Double, target: AudioPreviewTarget) {
+        guard let sourceSnapshot = cardState(for: target).snapshot, sourceSnapshot.duration > 0 else {
+            return
+        }
+
+        let requestedTime = sourceSnapshot.duration * min(max(progress, 0), 1)
+
+        synchronizePlaybackPositions(to: requestedTime, updatesLiveBandLevels: true)
+
+        guard let activeTarget, playerNode != nil else { return }
+        let activeState = cardState(for: activeTarget)
+        guard let url = activeState.sourceURL else { return }
+        let wasPlaying = activeState.playbackState == .playing
+        stopActivePlaybackEngine()
+        activeState.playbackPosition = min(requestedTime, snapshot(for: activeTarget).duration)
+        activeState.playbackProgress = snapshot(for: activeTarget).duration > 0 ? activeState.playbackPosition / snapshot(for: activeTarget).duration : 0
+        if wasPlaying {
+            startPlayback(for: url, target: activeTarget)
+        }
+    }
+
     func comparisonTarget(for side: AudioComparisonSide) -> AudioPreviewTarget {
         switch side {
         case .a:
@@ -155,38 +183,41 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
     }
 
     func pausePlayback(target: AudioPreviewTarget) {
-        guard activeTarget == target, let player else { return }
+        guard activeTarget == target, let playerNode else { return }
         let targetState = cardState(for: target)
-        targetState.playbackPosition = player.currentTime
-        targetState.playbackProgress = player.duration > 0 ? max(0, min(1, player.currentTime / player.duration)) : 0
+        let currentTime = currentPlaybackPosition()
+        targetState.playbackPosition = currentTime
+        targetState.playbackProgress = activePlaybackDuration > 0 ? max(0, min(1, currentTime / activePlaybackDuration)) : 0
         meterTimer?.invalidate()
         meterTimer = nil
-        player.pause()
+        playerNode.pause()
         targetState.playbackState = .paused
         playbackLabel = "\(target.rawValue)を一時停止中"
     }
 
     func stopPlayback(target: AudioPreviewTarget? = nil) {
-        let resolvedTarget = target ?? activeTarget
-        guard let resolvedTarget else {
+        let targetsToReset = target.map { [$0] } ?? AudioPreviewTarget.allCases
+        guard !targetsToReset.isEmpty else {
             playbackLabel = "停止中"
             return
         }
 
-        if activeTarget == resolvedTarget {
+        if target == nil || activeTarget == target {
             meterTimer?.invalidate()
             meterTimer = nil
-            player?.stop()
-            player = nil
+            stopActivePlaybackEngine()
             activeTarget = nil
         }
 
-        let resolvedState = cardState(for: resolvedTarget)
-        resolvedState.playbackPosition = 0
-        resolvedState.playbackProgress = 0
-        resolvedState.playbackState = .stopped
-        if let snapshot = resolvedState.snapshot {
-            resolvedState.liveBandLevels = makeInitialLiveBandLevels(from: snapshot, target: resolvedTarget)
+        for targetToReset in targetsToReset {
+            let state = cardState(for: targetToReset)
+            state.playbackPosition = 0
+            state.playbackProgress = 0
+            state.playbackState = .stopped
+            state.realtimeSpectrum = []
+            if let snapshot = state.snapshot {
+                state.liveBandLevels = makeInitialLiveBandLevels(from: snapshot, target: targetToReset)
+            }
         }
         playbackLabel = "停止中"
     }
@@ -210,6 +241,7 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         targetState.sourceURL = url
         targetState.snapshot = nil
         targetState.liveBandLevels = []
+        targetState.realtimeSpectrum = []
         integratedLoudnessByTarget[target] = nil
 
         previewTasks[target] = Task {
@@ -243,11 +275,13 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         targetState.sourceURL = url
         targetState.snapshot = nil
         targetState.liveBandLevels = []
+        targetState.realtimeSpectrum = []
         integratedLoudnessByTarget[target] = nil
         targetState.playbackPosition = 0
         targetState.playbackProgress = 0
         targetState.playbackState = .stopped
         if activeTarget == target {
+            stopActivePlaybackEngine()
             activeTarget = nil
         }
         previewTasks[target] = nil
@@ -276,11 +310,13 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         targetState.sourceURL = nil
         targetState.snapshot = nil
         targetState.liveBandLevels = []
+        targetState.realtimeSpectrum = []
         integratedLoudnessByTarget[target] = nil
         targetState.playbackPosition = 0
         targetState.playbackProgress = 0
         targetState.playbackState = .stopped
         if activeTarget == target {
+            stopActivePlaybackEngine()
             activeTarget = nil
         }
     }
@@ -291,6 +327,9 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         targetState.snapshot = snapshot
         targetState.playbackProgress = normalizedProgress(for: target, duration: snapshot.duration)
         targetState.liveBandLevels = makeInitialLiveBandLevels(from: snapshot, target: target)
+        if targetState.playbackState == .stopped {
+            targetState.realtimeSpectrum = []
+        }
         if let integratedLoudnessLUFS {
             setIntegratedLoudnessLUFS(integratedLoudnessLUFS, for: target)
         }
@@ -320,7 +359,7 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
 
         let elapsed: TimeInterval
         if activeTarget == target {
-            elapsed = player?.currentTime ?? targetState.playbackPosition
+            elapsed = currentPlaybackPosition()
         } else {
             elapsed = targetState.playbackPosition
         }
@@ -337,10 +376,9 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         )
     }
 
-    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor in
-            self.stopPlayback()
-        }
+    func finishActivePlayback() {
+        guard let activeTarget else { return }
+        stopPlayback(target: activeTarget)
     }
 
     private func startMetering(target: AudioPreviewTarget) {
@@ -354,14 +392,10 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
     }
 
     private func updateMeters(target: AudioPreviewTarget) {
-        guard let player else { return }
-        player.updateMeters()
+        guard playerNode != nil else { return }
 
-        if player.duration > 0 {
-            let progress = max(0, min(1, player.currentTime / player.duration))
-            let targetState = cardState(for: target)
-            targetState.playbackProgress = progress
-            targetState.playbackPosition = player.currentTime
+        if activePlaybackDuration > 0 {
+            synchronizePlaybackPositions(to: currentPlaybackPosition(), updatesLiveBandLevels: false)
         }
 
         let snapshot = snapshot(for: target)
@@ -449,10 +483,11 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
     }
 
     private func storeCurrentPlaybackPosition() {
-        guard let activeTarget, let player else { return }
+        guard let activeTarget, playerNode != nil else { return }
         let targetState = cardState(for: activeTarget)
-        targetState.playbackPosition = player.currentTime
-        targetState.playbackProgress = player.duration > 0 ? max(0, min(1, player.currentTime / player.duration)) : 0
+        let currentTime = currentPlaybackPosition()
+        targetState.playbackPosition = currentTime
+        targetState.playbackProgress = activePlaybackDuration > 0 ? max(0, min(1, currentTime / activePlaybackDuration)) : 0
     }
 
     private func makeInitialLiveBandLevels(from snapshot: AudioPreviewSnapshot, target: AudioPreviewTarget) -> [LiveBandSample] {
@@ -473,9 +508,24 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         }
     }
 
+    private func synchronizePlaybackPositions(to requestedTime: TimeInterval, updatesLiveBandLevels: Bool) {
+        for target in AudioPreviewTarget.allCases {
+            guard let snapshot = cardState(for: target).snapshot, snapshot.duration > 0 else {
+                continue
+            }
+
+            let state = cardState(for: target)
+            state.playbackPosition = min(max(requestedTime, 0), snapshot.duration)
+            state.playbackProgress = state.playbackPosition / snapshot.duration
+            if updatesLiveBandLevels {
+                state.liveBandLevels = makeInitialLiveBandLevels(from: snapshot, target: target)
+            }
+        }
+    }
+
     func playbackProgress(for target: AudioPreviewTarget) -> Double {
-        if activeTarget == target, let player, player.duration > 0 {
-            return max(0, min(1, player.currentTime / player.duration))
+        if activeTarget == target, activePlaybackDuration > 0 {
+            return max(0, min(1, currentPlaybackPosition() / activePlaybackDuration))
         }
         return cardState(for: target).playbackProgress
     }
@@ -497,14 +547,13 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         }
         meterTimer?.invalidate()
         meterTimer = nil
-        player?.stop()
-        player = nil
+        stopActivePlaybackEngine()
         self.activeTarget = nil
     }
 
     private func refreshPlaybackVolumeIfNeeded() {
         guard let activeTarget else { return }
-        player?.volume = effectivePlaybackVolume(for: activeTarget)
+        playerNode?.volume = effectivePlaybackVolume(for: activeTarget)
     }
 
     private func effectivePlaybackVolume(for target: AudioPreviewTarget) -> Float {
@@ -534,10 +583,10 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         guard isInComparisonPair(target) else { return }
 
         if let activeTarget, isInComparisonPair(activeTarget), activeTarget != target {
-            let currentTime = player?.currentTime ?? cardState(for: activeTarget).playbackPosition
+            let currentTime = playerNode == nil ? cardState(for: activeTarget).playbackPosition : currentPlaybackPosition()
             let activeState = cardState(for: activeTarget)
             activeState.playbackPosition = currentTime
-            activeState.playbackProgress = player?.duration ?? 0 > 0 ? currentTime / max(player?.duration ?? 1, 1) : 0
+            activeState.playbackProgress = activePlaybackDuration > 0 ? currentTime / activePlaybackDuration : 0
             cardState(for: target).playbackPosition = currentTime
             return
         }
@@ -547,6 +596,111 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         if pairedPosition > 0 {
             cardState(for: target).playbackPosition = pairedPosition
         }
+    }
+
+    private func prepareEnginePlayback(
+        audioFile: AVAudioFile,
+        target: AudioPreviewTarget,
+        startTime: TimeInterval,
+        duration: TimeInterval
+    ) throws {
+        let engine = AVAudioEngine()
+        let playerNode = AVAudioPlayerNode()
+        let analysisMixer = AVAudioMixerNode()
+        let format = audioFile.processingFormat
+        let sampleRate = format.sampleRate
+        let safeStartTime = min(max(startTime, 0), max(duration - 0.05, 0))
+        let startFrame = AVAudioFramePosition(safeStartTime * sampleRate)
+        let remainingFrames = max(AVAudioFramePosition(0), audioFile.length - startFrame)
+        let frameCount = AVAudioFrameCount(min(remainingFrames, AVAudioFramePosition(UInt32.max)))
+        let playbackID = UUID()
+
+        engine.attach(playerNode)
+        engine.attach(analysisMixer)
+        engine.connect(playerNode, to: analysisMixer, format: format)
+        engine.connect(analysisMixer, to: engine.mainMixerNode, format: format)
+
+        let tapBufferSize = RealtimeSpectrumAnalyzer.tapBufferSize(for: sampleRate)
+        RealtimeSpectrumTapInstaller.installTap(
+            on: analysisMixer,
+            bufferSize: tapBufferSize,
+            format: format,
+            analysisQueue: realtimeSpectrumAnalysisQueue,
+            controller: self,
+            target: target,
+            playbackID: playbackID
+        )
+        hasInstalledAnalysisTap = true
+
+        try engine.start()
+        playerNode.volume = effectivePlaybackVolume(for: target)
+
+        self.engine = engine
+        self.playerNode = playerNode
+        self.analysisMixer = analysisMixer
+        self.activeAudioFile = audioFile
+        activeTarget = target
+        activePlaybackStartTime = safeStartTime
+        activePlaybackDuration = duration
+        activePlaybackID = playbackID
+        let targetState = cardState(for: target)
+        targetState.playbackState = .playing
+        targetState.playbackPosition = safeStartTime
+        targetState.playbackProgress = duration > 0 ? max(0, min(1, safeStartTime / duration)) : 0
+
+        playerNode.scheduleSegment(
+            audioFile,
+            startingFrame: startFrame,
+            frameCount: frameCount,
+            at: nil,
+            completionCallbackType: .dataPlayedBack
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.finishPlaybackIfCurrent(target: target, playbackID: playbackID)
+            }
+        }
+    }
+
+    fileprivate func storeRealtimeSpectrum(
+        _ points: [RealtimeSpectrumPoint],
+        for target: AudioPreviewTarget,
+        playbackID: UUID
+    ) {
+        guard activeTarget == target, activePlaybackID == playbackID else { return }
+        cardState(for: target).realtimeSpectrum = points
+    }
+
+    private func finishPlaybackIfCurrent(target: AudioPreviewTarget, playbackID: UUID) {
+        guard activeTarget == target, activePlaybackID == playbackID else { return }
+        finishActivePlayback()
+    }
+
+    private func currentPlaybackPosition() -> TimeInterval {
+        guard
+            let playerNode,
+            let nodeTime = playerNode.lastRenderTime,
+            let playerTime = playerNode.playerTime(forNodeTime: nodeTime)
+        else {
+            return activeTarget.map { cardState(for: $0).playbackPosition } ?? 0
+        }
+        let elapsed = Double(playerTime.sampleTime) / playerTime.sampleRate
+        return min(max(activePlaybackStartTime + elapsed, 0), activePlaybackDuration)
+    }
+
+    private func stopActivePlaybackEngine() {
+        activePlaybackID = UUID()
+        if hasInstalledAnalysisTap {
+            analysisMixer?.removeTap(onBus: 0)
+            hasInstalledAnalysisTap = false
+        }
+        playerNode?.stop()
+        engine?.stop()
+        playerNode = nil
+        analysisMixer = nil
+        engine = nil
+        activeAudioFile = nil
+        activePlaybackStartTime = 0
+        activePlaybackDuration = 0
     }
 
     private func normalizedProgress(for target: AudioPreviewTarget, duration: TimeInterval) -> Double {
@@ -570,5 +724,145 @@ final class AudioPreviewController: NSObject, AVAudioPlayerDelegate {
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+}
+
+private enum RealtimeSpectrumTapInstaller {
+    nonisolated static func installTap(
+        on mixer: AVAudioMixerNode,
+        bufferSize: AVAudioFrameCount,
+        format: AVAudioFormat,
+        analysisQueue: DispatchQueue,
+        controller: AudioPreviewController,
+        target: AudioPreviewTarget,
+        playbackID: UUID
+    ) {
+        mixer.installTap(onBus: 0, bufferSize: bufferSize, format: format) { [weak controller] buffer, _ in
+            guard let sampleBuffer = RealtimeSpectrumAnalyzer.sampleBuffer(from: buffer) else { return }
+            analysisQueue.async { [weak controller] in
+                let points = RealtimeSpectrumAnalyzer.points(from: sampleBuffer)
+                guard !points.isEmpty else { return }
+                Task { @MainActor [weak controller] in
+                    controller?.storeRealtimeSpectrum(points, for: target, playbackID: playbackID)
+                }
+            }
+        }
+    }
+}
+
+fileprivate struct RealtimeSpectrumSampleBuffer: Sendable {
+    let channelSamples: [[Float]]
+    let sampleRate: Double
+}
+
+enum RealtimeSpectrumAnalyzer {
+    static let analysisSampleCount = 2_048
+    private static let minimumAudibleSample: Float = 0.00001
+    private static let displayedFrequencies = [
+        80.0, 100.0, 125.0, 160.0, 200.0, 250.0, 315.0, 400.0,
+        500.0, 630.0, 800.0, 1_000.0, 1_250.0, 1_600.0, 2_000.0,
+        2_500.0, 3_150.0, 4_000.0, 5_000.0, 6_300.0, 8_000.0,
+        10_000.0, 12_500.0, 16_000.0, 20_000.0
+    ]
+
+    static func tapBufferSize(for sampleRate: Double) -> AVAudioFrameCount {
+        AVAudioFrameCount(max(analysisSampleCount, Int(sampleRate * 0.1)))
+    }
+
+    static func points(from buffer: AVAudioPCMBuffer) -> [RealtimeSpectrumPoint] {
+        guard let sampleBuffer = sampleBuffer(from: buffer) else { return [] }
+        return points(from: sampleBuffer)
+    }
+
+    fileprivate static func sampleBuffer(from buffer: AVAudioPCMBuffer) -> RealtimeSpectrumSampleBuffer? {
+        guard
+            let channelData = buffer.floatChannelData,
+            buffer.frameLength >= AVAudioFrameCount(analysisSampleCount)
+        else {
+            return nil
+        }
+
+        let frameLength = Int(buffer.frameLength)
+        let channelCount = Int(buffer.format.channelCount)
+        var channelSamples: [[Float]] = []
+        channelSamples.reserveCapacity(channelCount)
+        for channelIndex in 0..<channelCount {
+            let samples = UnsafeBufferPointer(start: channelData[channelIndex], count: frameLength)
+            channelSamples.append(Array(samples))
+        }
+
+        return RealtimeSpectrumSampleBuffer(
+            channelSamples: channelSamples,
+            sampleRate: buffer.format.sampleRate
+        )
+    }
+
+    fileprivate static func points(from sampleBuffer: RealtimeSpectrumSampleBuffer) -> [RealtimeSpectrumPoint] {
+        let mono = loudestWindow(from: sampleBuffer.channelSamples)
+        guard !mono.isEmpty else { return [] }
+
+        let dft: vDSP.DiscreteFourierTransform<Float>
+        do {
+            dft = try vDSP.DiscreteFourierTransform<Float>(
+                count: analysisSampleCount,
+                direction: .forward,
+                transformType: .complexReal,
+                ofType: Float.self
+            )
+        } catch {
+            return []
+        }
+
+        let inputImaginary = [Float](repeating: .zero, count: analysisSampleCount)
+        var outputReal = Array(repeating: Float.zero, count: analysisSampleCount)
+        var outputImaginary = Array(repeating: Float.zero, count: analysisSampleCount)
+        dft.transform(
+            inputReal: mono,
+            inputImaginary: inputImaginary,
+            outputReal: &outputReal,
+            outputImaginary: &outputImaginary
+        )
+
+        let sampleRate = sampleBuffer.sampleRate
+        let frequencyStep = sampleRate / Double(analysisSampleCount)
+        let halfCount = analysisSampleCount / 2
+        return displayedFrequencies.compactMap { frequency in
+            guard frequency < sampleRate / 2 else { return nil }
+            let bin = min(max(Int((frequency / frequencyStep).rounded()), 1), halfCount - 1)
+            let power = Double(outputReal[bin] * outputReal[bin] + outputImaginary[bin] * outputImaginary[bin])
+            let amplitude = sqrt(power) * 2 / Double(analysisSampleCount)
+            let levelDB = 20 * log10(max(amplitude, 1e-9))
+            return RealtimeSpectrumPoint(
+                id: String(format: "%.0f", frequency),
+                frequencyHz: frequency,
+                levelDB: max(-100, min(0, levelDB))
+            )
+        }
+    }
+
+    private static func loudestWindow(from channelSamples: [[Float]]) -> [Float] {
+        guard let frameLength = channelSamples.first?.count, frameLength >= analysisSampleCount else { return [] }
+
+        var loudestIndex = 0
+        var loudestSample = Float.zero
+        for samples in channelSamples {
+            for (index, sample) in samples.enumerated() {
+                let value = abs(sample)
+                if value > loudestSample {
+                    loudestSample = value
+                    loudestIndex = index
+                }
+            }
+        }
+        guard loudestSample > minimumAudibleSample else { return [] }
+
+        let startIndex = min(max(loudestIndex - analysisSampleCount / 2, 0), frameLength - analysisSampleCount)
+        var mono = Array(repeating: Float.zero, count: analysisSampleCount)
+        for samples in channelSamples {
+            for index in 0..<analysisSampleCount {
+                mono[index] += samples[startIndex + index] / Float(channelSamples.count)
+            }
+        }
+        return mono
     }
 }

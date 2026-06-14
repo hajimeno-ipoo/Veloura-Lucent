@@ -368,13 +368,23 @@ struct InspectorSettingsPanel: View {
         step: Float = 0.01
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                titleWithHelp(title, font: .callout.bold(), help: help)
-                Spacer()
-                stepperButtons(title: title, value: value, range: range, step: step)
-                Text(valueText)
-                    .font(.callout.monospacedDigit().bold())
-                    .foregroundStyle(.primary)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    titleWithHelp(title, font: .callout.bold(), help: help)
+                    Spacer()
+                    stepperButtons(title: title, value: value, range: range, step: step)
+                    sliderValueText(valueText)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        titleWithHelp(title, font: .callout.bold(), help: help)
+                        Spacer()
+                        sliderValueText(valueText)
+                    }
+                    stepperButtons(title: title, value: value, range: range, step: step)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             }
 
             Slider(value: value, in: range, step: step)
@@ -388,6 +398,13 @@ struct InspectorSettingsPanel: View {
                 }
             }
         }
+    }
+
+    private func sliderValueText(_ value: String) -> some View {
+        Text(value)
+            .font(.callout.monospacedDigit().bold())
+            .foregroundStyle(.primary)
+            .lineLimit(1)
     }
 
     private func titleWithHelp(_ title: String, font: Font, help: SettingHelp?) -> some View {
@@ -416,14 +433,29 @@ struct InspectorSettingsPanel: View {
     }
 
     private func resetRow(isCustom: Bool, resetTitle: String, action: @escaping () -> Void) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            Text(isCustom ? "手動調整中です" : "既定値を使用しています")
-                .font(.callout)
-                .foregroundStyle(isCustom ? .orange : .secondary)
-            Spacer()
-            Button(resetTitle, action: action)
-                .disabled(!isCustom)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 10) {
+                resetStatusText(isCustom: isCustom)
+                Spacer()
+                resetButton(title: resetTitle, isCustom: isCustom, action: action)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                resetStatusText(isCustom: isCustom)
+                resetButton(title: resetTitle, isCustom: isCustom, action: action)
+            }
         }
+    }
+
+    private func resetStatusText(isCustom: Bool) -> some View {
+        Text(isCustom ? "手動調整中です" : "既定値を使用しています")
+            .font(.callout)
+            .foregroundStyle(isCustom ? .orange : .secondary)
+    }
+
+    private func resetButton(title: String, isCustom: Bool, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .disabled(!isCustom)
     }
 
     private var correctionProfileBinding: Binding<DenoiseStrength> {

@@ -6,24 +6,22 @@ struct ContentView: View {
     @State private var preview = AudioPreviewController()
     @State private var inputSelectionID = UUID()
     @State private var displayAnalysisTasks: [DisplayAnalysisTarget: Task<Void, Never>] = [:]
-    @State private var selectedWorkspaceSection: VelouraWorkspaceSection = .comparison
     @State private var isInspectorPresented = true
 
     var body: some View {
         NavigationSplitView {
             VelouraSidebarView(job: job)
-            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 300)
+            .navigationSplitViewColumnWidth(min: 160, ideal: 220, max: 260)
         } detail: {
             VelouraMainWorkspaceView(
                 job: job,
-                preview: preview,
-                completionReport: completionReport,
-                selectedSection: $selectedWorkspaceSection
+                preview: preview
             )
             .inspector(isPresented: $isInspectorPresented) {
-                VelouraInspectorView(job: job)
+                VelouraInspectorView(job: job, completionReport: completionReport)
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .toolbar {
             ToolbarItemGroup(placement: .principal) {
                 Button(action: chooseInputAudio) {
@@ -132,9 +130,11 @@ struct ContentView: View {
     }
 
     private func chooseInputAudio() {
-        guard let url = FilePanelService.chooseAudioFile() else { return }
-        let selectionID = beginInputSelection(for: url)
-        analyzeMetrics(for: url, target: .input, selectionID: selectionID)
+        FilePanelService.chooseAudioFile { url in
+            guard let url else { return }
+            let selectionID = beginInputSelection(for: url)
+            analyzeMetrics(for: url, target: .input, selectionID: selectionID)
+        }
     }
 
     private func openCorrectedPreview() {
@@ -623,6 +623,7 @@ struct ContentView: View {
         PreviewFileStore.removeAllPreviewFiles()
         job.prepareForSelection(url)
         preview.stopPlayback()
+        preview.setComparisonPair(.inputVsCorrected)
         preparePreviewCards(loadInputPreview: false)
         return selectionID
     }
@@ -630,14 +631,17 @@ struct ContentView: View {
     private func exportCorrectedAudio(as format: AudioExportFormat) {
         guard let sourceURL = job.outputFile, let inputFile = job.inputFile else { return }
         let suggestedName = exportFileName(baseURL: AudioProcessingService.defaultOutputURL(for: inputFile), format: format)
-        guard let destinationURL = FilePanelService.chooseSaveLocation(suggestedFileName: suggestedName, allowedContentTypes: [format.contentType]) else {
-            return
-        }
-        do {
-            try AudioFileService.exportAudio(from: sourceURL, to: destinationURL, format: format)
-            job.finishCorrectedExport(destinationURL)
-        } catch {
-            job.finishFailure(error.localizedDescription)
+        FilePanelService.chooseSaveLocation(
+            suggestedFileName: suggestedName,
+            allowedContentTypes: [format.contentType]
+        ) { destinationURL in
+            guard let destinationURL else { return }
+            do {
+                try AudioFileService.exportAudio(from: sourceURL, to: destinationURL, format: format)
+                job.finishCorrectedExport(destinationURL)
+            } catch {
+                job.finishFailure(error.localizedDescription)
+            }
         }
     }
 
@@ -645,14 +649,17 @@ struct ContentView: View {
         guard let sourceURL = job.masteredOutputFile else { return }
         let baseURL = job.inputFile.map { MasteringService.defaultOutputURL(for: $0) } ?? sourceURL
         let suggestedName = exportFileName(baseURL: baseURL, format: format)
-        guard let destinationURL = FilePanelService.chooseSaveLocation(suggestedFileName: suggestedName, allowedContentTypes: [format.contentType]) else {
-            return
-        }
-        do {
-            try AudioFileService.exportAudio(from: sourceURL, to: destinationURL, format: format)
-            job.finishMasteredExport(destinationURL)
-        } catch {
-            job.finishMasteringFailure(error.localizedDescription)
+        FilePanelService.chooseSaveLocation(
+            suggestedFileName: suggestedName,
+            allowedContentTypes: [format.contentType]
+        ) { destinationURL in
+            guard let destinationURL else { return }
+            do {
+                try AudioFileService.exportAudio(from: sourceURL, to: destinationURL, format: format)
+                job.finishMasteredExport(destinationURL)
+            } catch {
+                job.finishMasteringFailure(error.localizedDescription)
+            }
         }
     }
 

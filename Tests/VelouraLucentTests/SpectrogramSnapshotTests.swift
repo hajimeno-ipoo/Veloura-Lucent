@@ -53,6 +53,58 @@ struct SpectrogramSnapshotTests {
         #expect(maxSpectrogramDifference(referenceSnapshots.spectrogram, displaySnapshots.spectrogram) == 0)
     }
 
+    @Test
+    func spectrogramUsesFixedDisplayDBRange() {
+        let snapshot = AudioFileService.makeSpectrogramSnapshot(from: makeSignal())
+
+        #expect(snapshot.minLevelDB == AudioFileService.spectrogramDisplayMinimumDB)
+        #expect(snapshot.maxLevelDB == AudioFileService.spectrogramDisplayMaximumDB)
+        #expect(snapshot.cells.allSatisfy {
+            $0.levelDB >= AudioFileService.spectrogramDisplayMinimumDB
+                && $0.levelDB <= AudioFileService.spectrogramDisplayMaximumDB
+        })
+    }
+
+    @Test
+    func spectrogramPreservesTwentyDBAmplitudeDifferenceAcrossFrequencyBuckets() throws {
+        for frequency in [100.0, 250.0, 1_000.0, 4_000.0, 10_000.0, 18_000.0] {
+            let louder = AudioFileService.makeSpectrogramSnapshot(
+                from: makeToneSignal(frequency: frequency, amplitude: 0.5)
+            )
+            let quieter = AudioFileService.makeSpectrogramSnapshot(
+                from: makeToneSignal(frequency: frequency, amplitude: 0.05)
+            )
+            let louderLevel = try #require(maximumLevel(near: frequency, in: louder))
+            let quieterLevel = try #require(maximumLevel(near: frequency, in: quieter))
+
+            #expect(abs((quieterLevel - louderLevel) + 20) < 0.1)
+        }
+    }
+
+    @Test
+    func equalAmplitudeTonesRemainComparableAcrossFrequencyBuckets() throws {
+        let levels = try [100.0, 250.0, 1_000.0, 4_000.0, 10_000.0, 18_000.0].map { frequency in
+            let snapshot = AudioFileService.makeSpectrogramSnapshot(
+                from: makeToneSignal(frequency: frequency, amplitude: 0.5)
+            )
+            return try #require(maximumLevel(near: frequency, in: snapshot))
+        }
+
+        let maximum = try #require(levels.max())
+        let minimum = try #require(levels.min())
+
+        #expect(maximum - minimum < 3.2)
+    }
+
+    @Test
+    func displayColorScaleUsesFixedEndpoints() {
+        #expect(SpectrogramDisplayColorScale.normalizedPosition(for: -120) == 0)
+        #expect(SpectrogramDisplayColorScale.normalizedPosition(for: -100) == 0)
+        #expect(SpectrogramDisplayColorScale.normalizedPosition(for: -50) == 0.5)
+        #expect(SpectrogramDisplayColorScale.normalizedPosition(for: 0) == 1)
+        #expect(SpectrogramDisplayColorScale.normalizedPosition(for: 12) == 1)
+    }
+
     private func makeTestTone(at url: URL) throws {
         let sampleRate = 48_000.0
         let frameCount = Int(sampleRate * 2)
@@ -79,6 +131,23 @@ struct SpectrogramSnapshotTests {
             return Float(sin(2 * Double.pi * 440 * t) * 0.1 + sin(2 * Double.pi * 4000 * t) * 0.03)
         }
         return AudioSignal(channels: [samples], sampleRate: sampleRate)
+    }
+
+    private func makeToneSignal(frequency: Double, amplitude: Double) -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate)
+        let samples = (0..<frameCount).map { index in
+            let time = Double(index) / sampleRate
+            return Float(sin(2 * Double.pi * frequency * time) * amplitude)
+        }
+        return AudioSignal(channels: [samples], sampleRate: sampleRate)
+    }
+
+    private func maximumLevel(near frequency: Double, in snapshot: SpectrogramSnapshot) -> Double? {
+        snapshot.cells
+            .filter { $0.frequencyStart <= frequency && frequency <= $0.frequencyEnd }
+            .map(\.levelDB)
+            .max()
     }
 
     private func maxPreviewDifference(_ lhs: AudioPreviewSnapshot, _ rhs: AudioPreviewSnapshot) -> Double {
@@ -184,7 +253,6 @@ struct SpectrogramSnapshotTests {
             return lowerBin...upperBin
         }
 
-        var maxIntensity = -120.0
         var rawLevels = Array(repeating: Array(repeating: -120.0, count: frequencyBuckets), count: timeBuckets)
         for timeBucket in 0..<timeBuckets {
             let startFrame = timeBucket * frameGroupSize
@@ -203,11 +271,9 @@ struct SpectrogramSnapshotTests {
                 let rms = sqrt(max(Double(energy) / Double(max(count, 1)), 1e-12))
                 let levelDB = 20 * log10(max(rms, 1e-12))
                 rawLevels[timeBucket][frequencyBucket] = levelDB
-                maxIntensity = max(maxIntensity, levelDB)
             }
         }
 
-        let floor = max(-96.0, maxIntensity - 58.0)
         let duration = Double(mono.count) / signal.sampleRate
         var cells: [SpectrogramCell] = []
         cells.reserveCapacity(timeBuckets * frequencyBuckets)
@@ -222,12 +288,22 @@ struct SpectrogramSnapshotTests {
                         timeEnd: duration * Double(timeBucket + 1) / Double(timeBuckets),
                         frequencyStart: minFrequency * pow(maxFrequency / minFrequency, Double(frequencyBucket) / Double(frequencyBuckets)),
                         frequencyEnd: minFrequency * pow(maxFrequency / minFrequency, Double(frequencyBucket + 1) / Double(frequencyBuckets)),
-                        levelDB: rawLevels[timeBucket][frequencyBucket]
+                        levelDB: AudioFileService.spectrogramDisplayLevelDB(
+                            rawLevelDB: rawLevels[timeBucket][frequencyBucket],
+                            binCount: binEdges[frequencyBucket].count
+                        )
                     )
                 )
             }
         }
-        return SpectrogramSnapshot(cells: cells, timeBucketCount: timeBuckets, frequencyBucketCount: frequencyBuckets, duration: duration, minLevelDB: floor, maxLevelDB: maxIntensity)
+        return SpectrogramSnapshot(
+            cells: cells,
+            timeBucketCount: timeBuckets,
+            frequencyBucketCount: frequencyBuckets,
+            duration: duration,
+            minLevelDB: AudioFileService.spectrogramDisplayMinimumDB,
+            maxLevelDB: AudioFileService.spectrogramDisplayMaximumDB
+        )
     }
 
     private func referenceBandLevels(from spectrogram: Spectrogram, sampleRate: Double, bucketCount: Int) -> ([String: [Float]], [String: [Float]]) {

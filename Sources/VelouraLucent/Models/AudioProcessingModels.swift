@@ -1,5 +1,50 @@
 import Foundation
 
+struct AudioFileInfo: Sendable, Equatable {
+    let formatName: String
+    let sampleRate: Double
+    let channelCount: Int
+    let duration: TimeInterval
+    let bitDepth: Int?
+    let isFloatingPoint: Bool
+
+    var sampleRateText: String {
+        let kilohertz = sampleRate / 1_000
+        if abs(kilohertz.rounded() - kilohertz) < 0.001 {
+            return String(format: "%.0f kHz", kilohertz)
+        }
+        return String(format: "%.1f kHz", kilohertz)
+    }
+
+    var channelText: String {
+        switch channelCount {
+        case 1: "Mono"
+        case 2: "Stereo"
+        default: "\(channelCount) ch"
+        }
+    }
+
+    var encodingText: String {
+        guard let bitDepth else { return formatName }
+        return isFloatingPoint ? "\(bitDepth)-bit float" : "\(bitDepth) bit"
+    }
+
+    var technicalSummary: String {
+        "\(sampleRateText) / \(encodingText) / \(channelText)"
+    }
+
+    var durationText: String {
+        let totalSeconds = max(0, Int(duration.rounded()))
+        let hours = totalSeconds / 3_600
+        let minutes = (totalSeconds % 3_600) / 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+}
+
 struct AudioBandDescriptor: Sendable, Identifiable {
     let id: String
     let label: String
@@ -407,6 +452,12 @@ struct LiveBandSample: Sendable, Identifiable {
     let id: String
     let label: String
     let level: Double
+}
+
+struct RealtimeSpectrumPoint: Sendable, Identifiable, Equatable {
+    let id: String
+    let frequencyHz: Double
+    let levelDB: Double
 }
 
 struct SpectrogramCell: Sendable, Identifiable {

@@ -5,6 +5,50 @@ import Testing
 
 struct AudioFileServiceTests {
     @Test
+    func fileInfoReadsStoredPCMMetadataWithoutUsingProcessingFormat() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let source = testSignal(sampleRate: 44_100)
+        let sourceURL = directory.appending(path: "source-44k1.wav")
+        try AudioFileService.saveAudio(source, to: sourceURL)
+
+        let info = try AudioFileService.fileInfo(for: sourceURL)
+
+        #expect(info.formatName == "WAV")
+        #expect(info.sampleRate == 44_100)
+        #expect(info.channelCount == 2)
+        #expect(abs(info.duration - 0.1) < 0.001)
+        #expect(info.bitDepth == 32)
+        #expect(info.isFloatingPoint)
+    }
+
+    @Test
+    func fileInfoReadsAACMetadataWithoutInventingBitDepth() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sourceURL = directory.appending(path: "source.wav")
+        let aacURL = directory.appending(path: "sharing.m4a")
+        try AudioFileService.saveAudio(testSignal(sampleRate: 48_000), to: sourceURL)
+        try AudioFileService.exportAudio(from: sourceURL, to: aacURL, format: .sharingAAC)
+
+        let info = try AudioFileService.fileInfo(for: aacURL)
+
+        #expect(info.formatName == "AAC")
+        #expect(info.sampleRate == 48_000)
+        #expect(info.channelCount == 2)
+        #expect(info.duration > 0)
+        #expect(info.bitDepth == nil)
+        #expect(!info.isFloatingPoint)
+    }
+
+    @Test
+    func formatNameRecognizesMP3WithoutTreatingItAsPCM() {
+        #expect(AudioFileService.formatName(formatID: kAudioFormatMPEGLayer3, fileExtension: "mp3") == "MP3")
+    }
+
+    @Test
     func loadAudioKeepsFortyEightKilohertzInputUnchanged() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

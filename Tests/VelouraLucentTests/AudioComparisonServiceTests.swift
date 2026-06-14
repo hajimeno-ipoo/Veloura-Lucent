@@ -35,7 +35,9 @@ struct AudioComparisonServiceTests {
         #expect(metrics.shortTermLoudness.allSatisfy { $0.levelDB.isFinite })
         #expect(metrics.dynamics.isEmpty == false)
         #expect(metrics.dynamics.allSatisfy { $0.crestFactorDB.isFinite })
-        #expect(metrics.averageSpectrum.count == 32)
+        #expect(metrics.averageSpectrum.count > 6_000)
+        #expect(try #require(metrics.averageSpectrum.first).frequencyHz >= 80)
+        #expect(try #require(metrics.averageSpectrum.last).frequencyHz <= 20_000)
         #expect(metrics.averageSpectrum.allSatisfy { $0.levelDB.isFinite })
     }
 
@@ -62,11 +64,32 @@ struct AudioComparisonServiceTests {
         #expect(metrics.hf12Ratio < 1e-10)
         #expect(metrics.hf16Ratio < 1e-10)
         #expect(metrics.hf18Ratio < 1e-10)
-        #expect(metrics.averageSpectrum.count == 32)
+        #expect(metrics.averageSpectrum.count > 6_000)
         #expect(metrics.shortTermLoudness.count == 8)
         #expect(metrics.dynamics.count == 4)
         #expect(metrics.bandEnergies.count == 8)
         #expect(metrics.masteringBandEnergies.count == 4)
+    }
+
+    @Test
+    func averageSpectrumKeepsTonePeakFrequency() throws {
+        let signal = makeSignal(frequency: 1_000, amplitude: 0.10)
+
+        let metrics = try AudioComparisonService.analyze(signal: signal)
+        let peak = try #require(metrics.averageSpectrum.max { $0.levelDB < $1.levelDB })
+
+        #expect(abs(peak.frequencyHz - 1_000) < 10)
+        #expect(peak.levelDB > -30)
+    }
+
+    @Test
+    func averageSpectrumKeepsAmplitudeDifferenceInDB() throws {
+        let loud = try AudioComparisonService.analyze(signal: makeSignal(frequency: 1_000, amplitude: 0.10))
+        let quiet = try AudioComparisonService.analyze(signal: makeSignal(frequency: 1_000, amplitude: 0.01))
+        let loudPeak = try #require(loud.averageSpectrum.max { $0.levelDB < $1.levelDB })
+        let quietPeak = try #require(quiet.averageSpectrum.max { $0.levelDB < $1.levelDB })
+
+        expectClose(loudPeak.levelDB - quietPeak.levelDB, 20.0, tolerance: 0.6)
     }
 
     @Test
@@ -161,6 +184,15 @@ struct AudioComparisonServiceTests {
             settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 2)
         )
         try file.write(from: buffer)
+    }
+
+    private func makeSignal(frequency: Double, amplitude: Double) -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 2)
+        let channel = (0..<frameCount).map { index in
+            Float(sin(2 * Double.pi * frequency * Double(index) / sampleRate) * amplitude)
+        }
+        return AudioSignal(channels: [channel], sampleRate: sampleRate)
     }
 
     private func expectClose(_ actual: Double, _ expected: Double, tolerance: Double) {

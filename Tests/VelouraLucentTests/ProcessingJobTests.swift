@@ -48,6 +48,148 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func selectingRealInputStoresFileInfoAndRecentActivity() throws {
+        let directory = try makeTemporaryAudioDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let input = directory.appending(path: "selected.wav")
+        try AudioFileService.saveAudio(makeAudioSignal(), to: input)
+        let job = ProcessingJob()
+
+        job.prepareForSelection(input)
+
+        #expect(job.inputFileInfo?.formatName == "WAV")
+        #expect(job.inputFileInfo?.sampleRate == 48_000)
+        #expect(job.inputFileInfo?.channelCount == 2)
+        #expect(job.outputFileInfo == nil)
+        #expect(job.masteredFileInfo == nil)
+        #expect(job.recentActivityEvents.count == 1)
+        #expect(job.recentActivityEvents.first?.title == "ファイルを読み込みました")
+        #expect(job.recentActivityEvents.first?.fileName == "selected.wav")
+        #expect(job.recentActivityEvents.first?.audioSummary == "48 kHz / 32-bit float / Stereo")
+    }
+
+    @Test
+    func inputAnalysisAddsMeasuredValuesToRecentActivity() {
+        let job = ProcessingJob()
+        job.prepareForSelection(URL(fileURLWithPath: "/tmp/input.wav"))
+
+        job.finishInputMetricAnalysis(makeSnapshot())
+
+        let activity = job.recentActivityEvents.last
+        #expect(activity?.title == "解析が完了しました")
+        #expect(activity?.detail == "ラウドネス: -18.0 LUFS / ピーク: -1.0 dBTP")
+    }
+
+    @Test
+    func progressEventsUpdateOneRunningActivityInsteadOfAddingLogRows() {
+        let job = ProcessingJob()
+        job.prepareForSelection(URL(fileURLWithPath: "/tmp/input.wav"))
+        job.beginProcessing()
+        let activityCountAfterStart = job.activityEvents.count
+
+        job.appendLog(ProcessingProgressEvent.correction(step: .loadAudio, state: .started, detail: nil).encodedMessage)
+        job.appendLog(ProcessingProgressEvent.correction(step: .loadAudio, state: .completed, detail: nil).encodedMessage)
+        job.appendLog(ProcessingProgressEvent.correction(step: .analyze, state: .started, detail: "周波数を確認中").encodedMessage)
+
+        #expect(job.activityEvents.count == activityCountAfterStart)
+        #expect(job.recentActivityEvents.last?.title == "補正処理を実行中")
+        #expect(job.recentActivityEvents.last?.detail == "解析: 周波数を確認中")
+        #expect(job.recentActivityEvents.last?.progress == job.progressValue)
+        #expect(job.recentActivityEvents.last?.isRunning == true)
+    }
+
+    @Test
+    func successfulProcessingStoresGeneratedFileInfoAndCompletesActivity() throws {
+        let directory = try makeTemporaryAudioDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let output = directory.appending(path: "corrected.wav")
+        try AudioFileService.saveAudio(makeAudioSignal(), to: output)
+        let job = ProcessingJob()
+        job.prepareForSelection(URL(fileURLWithPath: "/tmp/input.wav"))
+        job.beginProcessing()
+
+        job.finishSuccess(output)
+
+        #expect(job.outputFileInfo?.formatName == "WAV")
+        let outputDuration = try #require(job.outputFileInfo?.duration)
+        #expect(outputDuration > 0)
+        #expect(job.recentActivityEvents.last?.title == "補正処理が完了しました")
+        #expect(job.recentActivityEvents.last?.fileName == "corrected.wav")
+        #expect(job.recentActivityEvents.last?.audioSummary == "48 kHz / 32-bit float / Stereo")
+        #expect(job.recentActivityEvents.last?.progress == 1)
+        #expect(job.recentActivityEvents.last?.isRunning == false)
+    }
+
+    @Test
+    func masteringAndExportActivitiesUseGeneratedFiles() throws {
+        let directory = try makeTemporaryAudioDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let corrected = directory.appending(path: "corrected.wav")
+        let mastered = directory.appending(path: "mastered.wav")
+        try AudioFileService.saveAudio(makeAudioSignal(), to: corrected)
+        try AudioFileService.saveAudio(makeAudioSignal(), to: mastered)
+        let job = ProcessingJob()
+        job.finishSuccess(corrected)
+        job.beginMastering()
+
+        job.appendMasteringLog(ProcessingProgressEvent.mastering(step: .analyze, state: .started, detail: nil).encodedMessage)
+        job.finishMasteringSuccess(mastered)
+        job.finishMasteredExport(mastered)
+
+        #expect(job.masteredFileInfo?.formatName == "WAV")
+        #expect(job.activityEvents.contains { $0.title == "マスタリングが完了しました" })
+        #expect(job.recentActivityEvents.last?.title == "最終版を書き出しました")
+        #expect(job.recentActivityEvents.last?.fileName == "mastered.wav")
+        #expect(job.recentActivityEvents.last?.audioSummary == "48 kHz / 32-bit float / Stereo")
+    }
+
+    @Test
+    func failedActivityUsesFailureStateAndCompletionTime() {
+        let job = ProcessingJob()
+        job.prepareForSelection(URL(fileURLWithPath: "/tmp/input.wav"))
+        job.beginProcessing()
+        job.appendLog(
+            ProcessingProgressEvent.correction(step: .denoise, state: .started, detail: nil).encodedMessage
+        )
+        let startedAt = job.recentActivityEvents.last?.timestamp
+        let failureProgress = job.progressValue
+
+        job.finishFailure("読み込みに失敗しました")
+
+        let activity = job.recentActivityEvents.last
+        #expect(activity?.title == "補正処理に失敗しました")
+        #expect(activity?.hasFailed == true)
+        #expect(activity?.isRunning == false)
+        #expect(activity?.progress == failureProgress)
+        #expect(failureProgress > 0)
+        #expect((activity?.timestamp ?? .distantPast) >= (startedAt ?? .distantFuture))
+    }
+
+    @Test
+    func startingNewProcessingClearsPreviousExportState() {
+        let job = ProcessingJob()
+        job.finishCorrectedExport(URL(fileURLWithPath: "/tmp/old-corrected.wav"))
+        job.finishMasteredExport(URL(fileURLWithPath: "/tmp/old-mastered.wav"))
+
+        job.beginProcessing()
+
+        #expect(job.exportedCorrectedFile == nil)
+        #expect(job.exportedMasteredFile == nil)
+    }
+
+    @Test
+    func displayAnalysisStateCanBeReadForOneTarget() {
+        let job = ProcessingJob()
+        job.beginDisplayAnalysis(.metrics, for: .corrected)
+        job.failDisplayAnalysis(.noise, for: .mastered)
+
+        #expect(job.isAnalyzingDisplayAnalysis(for: .input) == false)
+        #expect(job.isAnalyzingDisplayAnalysis(for: .corrected))
+        #expect(job.hasFailedDisplayAnalysis(for: .input) == false)
+        #expect(job.hasFailedDisplayAnalysis(for: .mastered))
+    }
+
+    @Test
     func analysisModeDefaultsToAuto() {
         let job = ProcessingJob()
 
@@ -869,6 +1011,22 @@ struct ProcessingJobTests {
             dynamics: [],
             averageSpectrum: []
         )
+    }
+
+    private func makeTemporaryAudioDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "veloura-processing-job-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func makeAudioSignal() -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = 4_800
+        let channel = (0..<frameCount).map { index in
+            Float(sin(2 * Double.pi * 440 * Double(index) / sampleRate) * 0.2)
+        }
+        return AudioSignal(channels: [channel, channel], sampleRate: sampleRate)
     }
 
     private func makeAnalysis() -> AnalysisData {

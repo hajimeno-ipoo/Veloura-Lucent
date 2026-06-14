@@ -13,6 +13,9 @@ final class ProcessingJob {
     var masteredOutputFile: URL?
     var exportedCorrectedFile: URL?
     var exportedMasteredFile: URL?
+    var inputFileInfo: AudioFileInfo?
+    var outputFileInfo: AudioFileInfo?
+    var masteredFileInfo: AudioFileInfo?
     var inputMetrics: AudioMetricSnapshot?
     var outputMetrics: AudioMetricSnapshot?
     var masteredMetrics: AudioMetricSnapshot?
@@ -45,6 +48,10 @@ final class ProcessingJob {
     }
     var visibleMasteringLogLines: [String] {
         masteringLog.visibleLines
+    }
+    private(set) var activityEvents: [RecentActivityEvent] = []
+    var recentActivityEvents: [RecentActivityEvent] {
+        Array(activityEvents.suffix(3))
     }
     var statusMessage = "待機中"
     var masteringStatusMessage = "待機中"
@@ -202,6 +209,9 @@ final class ProcessingJob {
 
     func prepareForSelection(_ inputURL: URL) {
         inputFile = inputURL
+        inputFileInfo = try? AudioFileService.fileInfo(for: inputURL)
+        outputFileInfo = nil
+        masteredFileInfo = nil
         outputFile = AudioProcessingService.defaultOutputURL(for: inputURL)
         masteredOutputFile = outputFile.map { MasteringService.defaultOutputURL(for: $0) }
         exportedCorrectedFile = nil
@@ -209,6 +219,13 @@ final class ProcessingJob {
         resetAllAnalysisResults()
         correctionLog.reset()
         masteringLog.reset()
+        activityEvents.removeAll()
+        appendActivity(
+            domain: .input,
+            title: "ファイルを読み込みました",
+            fileURL: inputURL,
+            fileInfo: inputFileInfo
+        )
         statusMessage = "処理待ち"
         masteringStatusMessage = "補正後に実行できます"
         processingStartedAt = nil
@@ -237,6 +254,10 @@ final class ProcessingJob {
         statusMessage = "処理中"
         processingStartedAt = Date()
         processingFinishedAt = nil
+        exportedCorrectedFile = nil
+        exportedMasteredFile = nil
+        outputFileInfo = nil
+        masteredFileInfo = nil
         correctionProgress.reset()
         masteredOutputFile = outputFile.map { MasteringService.defaultOutputURL(for: $0) }
         resetCorrectedAnalysisResults()
@@ -251,6 +272,13 @@ final class ProcessingJob {
         hasExistingMasteredOutput = false
         masteringProgress.reset()
         settingsState.resetAppliedSettings()
+        appendActivity(
+            domain: .correction,
+            title: "補正処理を開始しました",
+            detail: "準備中",
+            progress: 0,
+            isRunning: true
+        )
     }
 
     func beginMastering(appliedSettings: MasteringSettings? = nil) {
@@ -262,12 +290,21 @@ final class ProcessingJob {
         masteringStatusMessage = "マスタリング中"
         masteringStartedAt = Date()
         masteringFinishedAt = nil
+        exportedMasteredFile = nil
+        masteredFileInfo = nil
         masteringProgress.reset()
         masteredOutputFile = nil
         resetMasteredAnalysisResults()
         resetDisplayAnalysisStates(for: .mastered)
         hasExistingMasteredOutput = false
         settingsState.resetAppliedMasteringSettings()
+        appendActivity(
+            domain: .mastering,
+            title: "マスタリングを開始しました",
+            detail: "準備中",
+            progress: 0,
+            isRunning: true
+        )
     }
 
     func applyMasteringProfile(_ profile: MasteringProfile) {
@@ -297,6 +334,7 @@ final class ProcessingJob {
     func finishInputMetricAnalysis(_ metrics: AudioMetricSnapshot) {
         inputMetrics = metrics
         finishDisplayAnalysis(.metrics, for: .input)
+        appendMetricActivity(title: "解析が完了しました", metrics: metrics, domain: .input)
     }
 
     func finishInputCorrectionAnalysis(_ analysis: AnalysisData, mode: AudioAnalysisMode) {
@@ -313,6 +351,7 @@ final class ProcessingJob {
     func finishOutputMetricAnalysis(_ metrics: AudioMetricSnapshot) {
         outputMetrics = metrics
         finishDisplayAnalysis(.metrics, for: .corrected)
+        appendMetricActivity(title: "補正後の解析が完了しました", metrics: metrics, domain: .correction)
     }
 
     func finishOutputMasteringAnalysis(_ analysis: MasteringAnalysis) {
@@ -330,6 +369,7 @@ final class ProcessingJob {
     func finishMasteredMetricAnalysis(_ metrics: AudioMetricSnapshot) {
         masteredMetrics = metrics
         finishDisplayAnalysis(.metrics, for: .mastered)
+        appendMetricActivity(title: "最終版の解析が完了しました", metrics: metrics, domain: .mastering)
     }
 
     func finishMasteredNoiseMeasurement(_ measurements: NoiseMeasurementSnapshot) {
@@ -366,6 +406,14 @@ final class ProcessingJob {
 
     func displayAnalysisState(_ kind: DisplayAnalysisKind, for target: DisplayAnalysisTarget) -> DisplayAnalysisState {
         displayAnalysisStates.state(kind, for: target)
+    }
+
+    func isAnalyzingDisplayAnalysis(for target: DisplayAnalysisTarget) -> Bool {
+        displayAnalysisStates.isRunningAny(for: target)
+    }
+
+    func hasFailedDisplayAnalysis(for target: DisplayAnalysisTarget) -> Bool {
+        displayAnalysisStates.isFailedAny(for: target)
     }
 
     func resetDisplayAnalysisStates(for target: DisplayAnalysisTarget) {
@@ -427,11 +475,21 @@ final class ProcessingJob {
     func finishSuccess(_ outputURL: URL, appliedSettings: CorrectionSettings? = nil) {
         isProcessing = false
         outputFile = outputURL
+        outputFileInfo = try? AudioFileService.fileInfo(for: outputURL)
         masteredOutputFile = nil
+        masteredFileInfo = nil
         statusMessage = "完了"
         processingFinishedAt = Date()
         hasExistingOutput = FileManager.default.fileExists(atPath: outputURL.path(percentEncoded: false))
         correctionProgress.completeAll(ProcessingStep.allCases)
+        completeRunningActivity(
+            domain: .correction,
+            title: "補正処理が完了しました",
+            detail: outputURL.lastPathComponent,
+            progress: 1,
+            fileURL: outputURL,
+            fileInfo: outputFileInfo
+        )
         masteringStatusMessage = hasExistingOutput ? "補正後の解析中" : "補正後に実行できます"
         settingsState.storeAppliedCorrectionSettings(appliedSettings)
         if !didSendCorrectionCompletion {
@@ -443,10 +501,19 @@ final class ProcessingJob {
     func finishMasteringSuccess(_ outputURL: URL, appliedSettings: MasteringSettings? = nil) {
         isMastering = false
         masteredOutputFile = outputURL
+        masteredFileInfo = try? AudioFileService.fileInfo(for: outputURL)
         masteringStatusMessage = "完了"
         masteringFinishedAt = Date()
         hasExistingMasteredOutput = FileManager.default.fileExists(atPath: outputURL.path(percentEncoded: false))
         masteringProgress.completeAll(MasteringStep.allCases)
+        completeRunningActivity(
+            domain: .mastering,
+            title: "マスタリングが完了しました",
+            detail: outputURL.lastPathComponent,
+            progress: 1,
+            fileURL: outputURL,
+            fileInfo: masteredFileInfo
+        )
         settingsState.storeAppliedMasteringSettings(appliedSettings)
         if !didSendMasteringCompletion {
             didSendMasteringCompletion = true
@@ -456,29 +523,57 @@ final class ProcessingJob {
 
     func finishCorrectedExport(_ url: URL) {
         exportedCorrectedFile = url
+        appendActivity(
+            domain: .export,
+            title: "補正後を書き出しました",
+            fileURL: url,
+            fileInfo: try? AudioFileService.fileInfo(for: url)
+        )
     }
 
     func finishMasteredExport(_ url: URL) {
         exportedMasteredFile = url
+        appendActivity(
+            domain: .export,
+            title: "最終版を書き出しました",
+            fileURL: url,
+            fileInfo: try? AudioFileService.fileInfo(for: url)
+        )
     }
 
     func finishFailure(_ message: String) {
+        let failureProgress = progressValue
         isProcessing = false
         lastError = message
         statusMessage = "失敗"
         processingFinishedAt = Date()
         hasExistingOutput = outputFile.map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
         correctionProgress.failActiveStep()
+        completeRunningActivity(
+            domain: .correction,
+            title: "補正処理に失敗しました",
+            detail: message,
+            progress: failureProgress,
+            hasFailed: true
+        )
         appendLog(message)
     }
 
     func finishMasteringFailure(_ message: String) {
+        let failureProgress = masteringProgressValue
         isMastering = false
         masteringLastError = message
         masteringStatusMessage = "失敗"
         masteringFinishedAt = Date()
         hasExistingMasteredOutput = false
         masteringProgress.failActiveStep()
+        completeRunningActivity(
+            domain: .mastering,
+            title: "マスタリングに失敗しました",
+            detail: message,
+            progress: failureProgress,
+            hasFailed: true
+        )
         appendMasteringLog(message)
     }
 
@@ -491,8 +586,145 @@ final class ProcessingJob {
         switch event {
         case let .correction(step, state, detail):
             correctionProgress.apply(step: step, state: state, detail: detail)
+            updateRunningActivity(
+                domain: .correction,
+                title: "補正処理を実行中",
+                detail: progressDetail(stepTitle: step.title, state: state, detail: detail),
+                progress: progressValue
+            )
         case let .mastering(step, state, detail):
             masteringProgress.apply(step: step, state: state, detail: detail)
+            updateRunningActivity(
+                domain: .mastering,
+                title: "マスタリングを実行中",
+                detail: progressDetail(stepTitle: step.title, state: state, detail: detail),
+                progress: masteringProgressValue
+            )
+        }
+    }
+
+    var masteringProgressValue: Double {
+        if !isMastering && masteringStatusMessage == "完了" {
+            return 1
+        }
+        let total = Double(MasteringStep.allCases.count)
+        let completed = Double(completedMasteringSteps.count)
+        let skipped = Double(skippedMasteringSteps.count)
+        let activeBoost = masteringActiveStep == nil ? 0 : 0.5
+        return min(0.98, (completed + skipped + activeBoost) / total)
+    }
+
+    private func appendMetricActivity(title: String, metrics: AudioMetricSnapshot, domain: RecentActivityDomain) {
+        appendActivity(
+            domain: domain,
+            title: title,
+            detail: String(
+                format: "ラウドネス: %.1f LUFS / ピーク: %.1f dBTP",
+                metrics.integratedLoudnessLUFS,
+                metrics.truePeakDBFS
+            )
+        )
+    }
+
+    private func appendActivity(
+        domain: RecentActivityDomain,
+        title: String,
+        detail: String? = nil,
+        fileURL: URL? = nil,
+        fileInfo: AudioFileInfo? = nil,
+        progress: Double? = nil,
+        isRunning: Bool = false,
+        hasFailed: Bool = false
+    ) {
+        activityEvents.append(
+            RecentActivityEvent(
+                domain: domain,
+                title: title,
+                detail: detail,
+                fileName: fileURL?.lastPathComponent,
+                audioSummary: fileInfo?.technicalSummary,
+                progress: progress.map { min(max($0, 0), 1) },
+                isRunning: isRunning,
+                hasFailed: hasFailed
+            )
+        )
+        if activityEvents.count > 20 {
+            activityEvents.removeFirst(activityEvents.count - 20)
+        }
+    }
+
+    private func updateRunningActivity(
+        domain: RecentActivityDomain,
+        title: String,
+        detail: String?,
+        progress: Double
+    ) {
+        guard let index = activityEvents.lastIndex(where: { $0.domain == domain && $0.isRunning }) else {
+            appendActivity(domain: domain, title: title, detail: detail, progress: progress, isRunning: true)
+            return
+        }
+        activityEvents[index].title = title
+        activityEvents[index].detail = detail
+        activityEvents[index].progress = min(max(progress, 0), 1)
+    }
+
+    private func completeRunningActivity(
+        domain: RecentActivityDomain,
+        title: String,
+        detail: String?,
+        progress: Double,
+        fileURL: URL? = nil,
+        fileInfo: AudioFileInfo? = nil,
+        hasFailed: Bool = false
+    ) {
+        if let index = activityEvents.lastIndex(where: { $0.domain == domain && $0.isRunning }) {
+            activityEvents[index].timestamp = Date()
+            activityEvents[index].title = title
+            activityEvents[index].detail = detail
+            activityEvents[index].fileName = fileURL?.lastPathComponent
+            activityEvents[index].audioSummary = fileInfo?.technicalSummary
+            activityEvents[index].progress = min(max(progress, 0), 1)
+            activityEvents[index].isRunning = false
+            activityEvents[index].hasFailed = hasFailed
+            return
+        }
+        if let index = activityEvents.lastIndex(where: { $0.domain == domain && $0.title == title }) {
+            activityEvents[index].detail = detail
+            activityEvents[index].fileName = fileURL?.lastPathComponent
+            activityEvents[index].audioSummary = fileInfo?.technicalSummary
+            activityEvents[index].progress = min(max(progress, 0), 1)
+            activityEvents[index].timestamp = Date()
+            activityEvents[index].hasFailed = hasFailed
+            return
+        }
+        appendActivity(
+            domain: domain,
+            title: title,
+            detail: detail,
+            fileURL: fileURL,
+            fileInfo: fileInfo,
+            progress: progress,
+            hasFailed: hasFailed
+        )
+    }
+
+    private func progressDetail(
+        stepTitle: String,
+        state: ProcessingProgressEvent.State,
+        detail: String?
+    ) -> String {
+        if let detail, !detail.isEmpty {
+            return "\(stepTitle): \(detail)"
+        }
+        switch state {
+        case .started, .detail:
+            return "\(stepTitle)を実行中"
+        case .completed:
+            return "\(stepTitle)が完了"
+        case .skipped:
+            return "\(stepTitle)を省略"
+        case .failed:
+            return "\(stepTitle)に失敗"
         }
     }
 

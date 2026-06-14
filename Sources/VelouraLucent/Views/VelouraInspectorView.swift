@@ -2,13 +2,17 @@ import SwiftUI
 
 struct VelouraInspectorView: View {
     @Bindable var job: ProcessingJob
+    let completionReport: CompletionReport?
 
     var body: some View {
         ScrollView {
-            InspectorSettingsPanel(job: job)
-                .padding(18)
+            VStack(alignment: .leading, spacing: 20) {
+                InspectorSettingsPanel(job: job)
+                Divider()
+                InspectorAnalysisPanel(job: job, completionReport: completionReport)
+            }
+            .padding(14)
         }
-        .frame(minWidth: 320, idealWidth: 360, maxWidth: 440)
-        .inspectorColumnWidth(min: 320, ideal: 360, max: 440)
+        .inspectorColumnWidth(min: 240, ideal: 300, max: 360)
     }
 }

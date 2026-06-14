@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 enum FilePanelService {
-    static func chooseAudioFile() -> URL? {
+    static func chooseAudioFile(completion: @escaping @MainActor (URL?) -> Void) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [
             .audio,
@@ -17,16 +17,28 @@ enum FilePanelService {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.prompt = "開く"
-        return panel.runModal() == .OK ? panel.url : nil
+        panel.begin { response in
+            Task { @MainActor in
+                completion(response == .OK ? panel.url : nil)
+            }
+        }
     }
 
-    static func chooseSaveLocation(suggestedFileName: String, allowedContentTypes: [UTType]) -> URL? {
+    static func chooseSaveLocation(
+        suggestedFileName: String,
+        allowedContentTypes: [UTType],
+        completion: @escaping @MainActor (URL?) -> Void
+    ) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = allowedContentTypes
         panel.nameFieldStringValue = suggestedFileName
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         panel.prompt = "書き出し"
-        return panel.runModal() == .OK ? panel.url : nil
+        panel.begin { response in
+            Task { @MainActor in
+                completion(response == .OK ? panel.url : nil)
+            }
+        }
     }
 }

@@ -52,6 +52,18 @@ struct DisplayAnalysisStateStore {
         DisplayAnalysisKind.allCases.contains { isRunning($0) }
     }
 
+    func isRunningAny(for target: DisplayAnalysisTarget) -> Bool {
+        DisplayAnalysisKind.allCases.contains {
+            state($0, for: target) == .running
+        }
+    }
+
+    func isFailedAny(for target: DisplayAnalysisTarget) -> Bool {
+        DisplayAnalysisKind.allCases.contains {
+            state($0, for: target) == .failed
+        }
+    }
+
     var runningStatusText: String? {
         let running = DisplayAnalysisKind.allCases
             .filter { isRunning($0) }
