@@ -18,6 +18,7 @@ enum AudioComparisonService {
         let channelMetrics = channelMetrics(for: signal, loudness: loudnessMeasurement)
         let frequencyMetrics = try frequencyMetrics(for: mono, sampleRate: signal.sampleRate)
         return snapshot(
+            duration: duration(for: signal),
             waveformMetrics: waveformMetrics,
             channelMetrics: channelMetrics,
             frequencyMetrics: frequencyMetrics
@@ -71,6 +72,7 @@ enum AudioComparisonService {
                 let channelResult = try await channelTask.value
                 let frequencyResult = try await frequencyTask.value
                 return snapshot(
+                    duration: duration(for: signal),
                     waveformMetrics: waveformResult,
                     channelMetrics: channelResult,
                     frequencyMetrics: frequencyResult
@@ -86,6 +88,7 @@ enum AudioComparisonService {
 
     private static func emptySnapshot() -> AudioMetricSnapshot {
         AudioMetricSnapshot(
+            duration: 0,
             peakDBFS: -120,
             rmsDBFS: -120,
             crestFactorDB: 0,
@@ -94,6 +97,8 @@ enum AudioComparisonService {
             truePeakDBFS: -120,
             stereoWidth: 0,
             stereoCorrelation: 1,
+            stereoCorrelationTimeline: [],
+            stereoCorrelationTimelineStatus: .unavailable,
             harshnessScore: 0,
             centroidHz: 0,
             hf12Ratio: 0,
@@ -112,11 +117,13 @@ enum AudioComparisonService {
     }
 
     private static func snapshot(
+        duration: TimeInterval,
         waveformMetrics: WaveformMetrics,
         channelMetrics: ChannelMetrics,
         frequencyMetrics: FrequencyMetrics
     ) -> AudioMetricSnapshot {
         AudioMetricSnapshot(
+            duration: duration,
             peakDBFS: waveformMetrics.peakDBFS,
             rmsDBFS: waveformMetrics.rmsDBFS,
             crestFactorDB: waveformMetrics.peakDBFS - waveformMetrics.rmsDBFS,
@@ -125,6 +132,8 @@ enum AudioComparisonService {
             truePeakDBFS: channelMetrics.truePeakDBFS,
             stereoWidth: channelMetrics.stereoWidth,
             stereoCorrelation: channelMetrics.stereoCorrelation,
+            stereoCorrelationTimeline: channelMetrics.stereoCorrelationTimeline,
+            stereoCorrelationTimelineStatus: channelMetrics.stereoCorrelationTimelineStatus,
             harshnessScore: frequencyMetrics.harshnessScore,
             centroidHz: frequencyMetrics.centroidHz,
             hf12Ratio: frequencyMetrics.hf12Ratio,
@@ -136,6 +145,11 @@ enum AudioComparisonService {
             dynamics: waveformMetrics.dynamics,
             averageSpectrum: frequencyMetrics.averageSpectrum
         )
+    }
+
+    private static func duration(for signal: AudioSignal) -> TimeInterval {
+        guard signal.sampleRate > 0 else { return 0 }
+        return Double(signal.frameCount) / signal.sampleRate
     }
 
     private static func frequencyMetrics(
@@ -312,6 +326,13 @@ enum AudioComparisonService {
         let truePeakDBFS: Double
         let stereoWidth: Double
         let stereoCorrelation: Double
+        let stereoCorrelationTimeline: [TimedCorrelationMetric]
+        let stereoCorrelationTimelineStatus: StereoCorrelationTimelineStatus
+    }
+
+    private struct StereoCorrelationTimelineResult: Sendable {
+        let points: [TimedCorrelationMetric]
+        let status: StereoCorrelationTimelineStatus
     }
 
     private struct FrequencyMetrics: Sendable {
@@ -384,10 +405,13 @@ enum AudioComparisonService {
     }
 
     private static func channelMetrics(for signal: AudioSignal, loudness: LoudnessMeasurementService.Measurement) -> ChannelMetrics {
+        let timeline = stereoCorrelationTimeline(for: signal)
         return ChannelMetrics(
             truePeakDBFS: loudness.truePeakDBFS,
             stereoWidth: Double(MasteringAnalysisService.stereoWidth(for: signal)),
-            stereoCorrelation: stereoCorrelation(for: signal)
+            stereoCorrelation: stereoCorrelation(for: signal),
+            stereoCorrelationTimeline: timeline.points,
+            stereoCorrelationTimelineStatus: timeline.status
         )
     }
 
@@ -568,6 +592,59 @@ enum AudioComparisonService {
 
         let denominator = sqrt(leftEnergy * rightEnergy)
         guard denominator > 1e-12 else { return 1 }
+        return max(-1, min(1, sharedEnergy / denominator))
+    }
+
+    private static func stereoCorrelationTimeline(for signal: AudioSignal) -> StereoCorrelationTimelineResult {
+        guard signal.channels.count >= 2 else {
+            return StereoCorrelationTimelineResult(points: [], status: .mono)
+        }
+
+        let left = signal.channels[0]
+        let right = signal.channels[1]
+        let count = min(left.count, right.count)
+        guard count > 0 else {
+            return StereoCorrelationTimelineResult(points: [], status: .unavailable)
+        }
+
+        let duration = Double(count) / signal.sampleRate
+        let bucketCount = min(120, max(1, Int(ceil(duration / 0.5))))
+        let bucketSize = max(1, Int(ceil(Double(count) / Double(bucketCount))))
+        var points: [TimedCorrelationMetric] = []
+        points.reserveCapacity(bucketCount)
+
+        for bucketIndex in 0..<bucketCount {
+            let start = bucketIndex * bucketSize
+            let end = min(count, start + bucketSize)
+            guard start < end else { continue }
+            guard let value = stereoCorrelation(left: left, right: right, start: start, end: end) else { continue }
+            points.append(
+                TimedCorrelationMetric(
+                    id: "stereo-correlation-\(bucketIndex)",
+                    time: (Double(start + end) * 0.5) / signal.sampleRate,
+                    value: value
+                )
+            )
+        }
+
+        let status: StereoCorrelationTimelineStatus = points.isEmpty ? .silent : .available
+        return StereoCorrelationTimelineResult(points: points, status: status)
+    }
+
+    private static func stereoCorrelation(left: [Float], right: [Float], start: Int, end: Int) -> Double? {
+        var leftEnergy = 0.0
+        var rightEnergy = 0.0
+        var sharedEnergy = 0.0
+        for index in start..<end {
+            let leftValue = Double(left[index])
+            let rightValue = Double(right[index])
+            leftEnergy += leftValue * leftValue
+            rightEnergy += rightValue * rightValue
+            sharedEnergy += leftValue * rightValue
+        }
+
+        let denominator = sqrt(leftEnergy * rightEnergy)
+        guard denominator > 1e-12 else { return nil }
         return max(-1, min(1, sharedEnergy / denominator))
     }
 

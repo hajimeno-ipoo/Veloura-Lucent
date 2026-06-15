@@ -17,12 +17,14 @@ struct AverageSpectrumComparisonView: View {
                 spectrumLegend
             }
 
-            if spectrumSeries.isEmpty {
-                unavailableMessage("音声を再生すると、いま鳴っている音の周波数バランスを表示します")
-            } else {
+            ZStack {
                 SpectrumCanvasChart(series: spectrumSeries)
                     .frame(height: 220)
                     .accessibilityLabel("再生中音声のリアルタイムスペクトル")
+
+                if spectrumSeries.isEmpty {
+                    emptySpectrumMessage
+                }
             }
         }
     }
@@ -76,12 +78,13 @@ struct AverageSpectrumComparisonView: View {
         }
     }
 
-    private func unavailableMessage(_ message: String) -> some View {
-        Text(message)
-            .font(.callout)
+    private var emptySpectrumMessage: some View {
+        Text("音声を再生すると、いま鳴っている音の周波数バランスを表示します")
+            .font(.callout.weight(.semibold))
             .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 180)
-            .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
     }
 }
 

@@ -89,6 +89,7 @@ struct CompletionReportServiceTests {
         ]
 
         return AudioMetricSnapshot(
+            duration: 1,
             peakDBFS: truePeak - 0.2,
             rmsDBFS: loudness - 8,
             crestFactorDB: 8,
@@ -97,6 +98,8 @@ struct CompletionReportServiceTests {
             truePeakDBFS: truePeak,
             stereoWidth: 0.8,
             stereoCorrelation: 0.8,
+            stereoCorrelationTimeline: [],
+            stereoCorrelationTimelineStatus: .unavailable,
             harshnessScore: 0.2,
             centroidHz: 2_500,
             hf12Ratio: 0.08,

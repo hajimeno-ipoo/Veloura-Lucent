@@ -70,6 +70,24 @@ struct UIWordingPolicyTests {
     }
 
     @Test
+    func stereoCorrelationMeterShowsReadableScale() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"])
+
+        #expect(source.contains("0未満はモノラル再生で音が痩せる可能性があります。"))
+        #expect(source.contains("-1 逆相"))
+        #expect(source.contains("0 注意"))
+        #expect(source.contains("+1 同相"))
+        #expect(source.contains("-1は逆相、0は注意、+1は同相です。"))
+        #expect(source.contains("時間ごとの相関推移"))
+        #expect(source.contains("無音区間は相関値として計算せず、線を区切ります。"))
+        #expect(source.contains("モノラル音源のため、ステレオ相関推移はありません。"))
+        #expect(source.contains("chartYScale(domain: -1 ... 1)"))
+        #expect(source.contains("RuleMark(y: .value(\"注意ライン\", 0))"))
+        #expect(source.contains("series: .value(\"区間\", point.lineGroup)"))
+        #expect(source.contains("correlationTimelineDuration(stages: stages)"))
+    }
+
+    @Test
     func sidebarUsesApprovedInformationSections() throws {
         let source = try combinedSource(
             [
@@ -142,6 +160,28 @@ struct UIWordingPolicyTests {
 
         #expect(source.contains("panel.begin"))
         #expect(!source.contains("runModal()"))
+    }
+
+    @Test
+    func realtimeSpectrumKeepsChartFrameVisibleBeforePlayback() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/AverageSpectrumComparisonView.swift"])
+
+        #expect(source.contains("ZStack"))
+        #expect(source.contains("SpectrumCanvasChart(series: spectrumSeries)"))
+        #expect(source.contains("if spectrumSeries.isEmpty"))
+        #expect(source.contains("emptySpectrumMessage"))
+    }
+
+    @Test
+    func spectrogramShowsSharedTimeAxis() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/SpectrogramComparisonView.swift"])
+
+        #expect(source.contains("timeAxisDuration"))
+        #expect(source.contains("SpectrogramTimeAxisView"))
+        #expect(source.contains("スペクトログラムの時間目盛り"))
+        #expect(source.contains("formatTime"))
+        #expect(source.contains("sharedDuration: timeAxisDuration"))
+        #expect(source.contains("chartXScale(domain: 0 ... max(sharedDuration ?? snapshot.duration, 0.1))"))
     }
 
     private func combinedSource(_ relativePaths: [String]) throws -> String {

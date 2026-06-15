@@ -377,8 +377,8 @@ final class AudioPreviewController {
     }
 
     func finishActivePlayback() {
-        guard let activeTarget else { return }
-        stopPlayback(target: activeTarget)
+        guard activeTarget != nil else { return }
+        stopPlayback()
     }
 
     private func startMetering(target: AudioPreviewTarget) {

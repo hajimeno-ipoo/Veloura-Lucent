@@ -229,7 +229,7 @@ struct AudioPreviewControllerTests {
     }
 
     @Test
-    func finishingActivePlaybackDoesNotResetOtherCardState() {
+    func finishingActivePlaybackResetsAllSynchronizedCardState() {
         let controller = AudioPreviewController()
         let snapshot = AudioPreviewSnapshot(
             waveform: [0, 0.5, 0],
@@ -249,10 +249,10 @@ struct AudioPreviewControllerTests {
 
         #expect(controller.cardState(for: .input).playbackProgress == 0)
         #expect(controller.cardState(for: .input).playbackPosition == 0)
-        #expect(controller.cardState(for: .corrected).playbackProgress == 0.6)
-        #expect(controller.cardState(for: .corrected).playbackPosition == 6)
-        #expect(controller.cardState(for: .mastered).playbackProgress == 0.6)
-        #expect(controller.cardState(for: .mastered).playbackPosition == 6)
+        #expect(controller.cardState(for: .corrected).playbackProgress == 0)
+        #expect(controller.cardState(for: .corrected).playbackPosition == 0)
+        #expect(controller.cardState(for: .mastered).playbackProgress == 0)
+        #expect(controller.cardState(for: .mastered).playbackPosition == 0)
     }
 
     @Test

@@ -24,11 +24,14 @@ struct SpectrogramComparisonView: View {
 
             HStack(alignment: .center, spacing: 8) {
                 VStack(spacing: 0) {
-                    spectrogramRow(title: "入力", snapshot: input, tint: .blue)
+                    spectrogramRow(title: "入力", snapshot: input, tint: .blue, sharedDuration: timeAxisDuration)
                     Divider()
-                    spectrogramRow(title: "補正後", snapshot: corrected, tint: .green)
+                    spectrogramRow(title: "補正後", snapshot: corrected, tint: .green, sharedDuration: timeAxisDuration)
                     Divider()
-                    spectrogramRow(title: "最終版", snapshot: mastered, tint: .orange)
+                    spectrogramRow(title: "最終版", snapshot: mastered, tint: .orange, sharedDuration: timeAxisDuration)
+                    if let duration = timeAxisDuration {
+                        timeAxis(duration: duration)
+                    }
                 }
                 spectrogramLegend
             }
@@ -40,7 +43,7 @@ struct SpectrogramComparisonView: View {
         }
     }
 
-    private func spectrogramRow(title: String, snapshot: SpectrogramSnapshot?, tint: Color) -> some View {
+    private func spectrogramRow(title: String, snapshot: SpectrogramSnapshot?, tint: Color, sharedDuration: Double?) -> some View {
         HStack(spacing: 12) {
             HStack(spacing: 7) {
                 Circle()
@@ -74,7 +77,7 @@ struct SpectrogramComparisonView: View {
                         }
                     }
                 }
-                .chartXScale(domain: 0 ... max(snapshot.duration, 0.1))
+                .chartXScale(domain: 0 ... max(sharedDuration ?? snapshot.duration, 0.1))
                 .chartYScale(domain: 80 ... 24_000, type: .log)
                 .chartPlotStyle { plotArea in
                     plotArea
@@ -93,6 +96,28 @@ struct SpectrogramComparisonView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private var timeAxisDuration: Double? {
+        [input, corrected, mastered]
+            .compactMap { snapshot -> Double? in
+                guard let snapshot, snapshot.duration > 0 else { return nil }
+                return snapshot.duration
+            }
+            .max()
+    }
+
+    private func timeAxis(duration: Double) -> some View {
+        HStack(spacing: 12) {
+            Color.clear
+                .frame(width: 78)
+            SpectrogramTimeAxisView(duration: duration)
+                .frame(height: 28)
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("スペクトログラムの時間目盛り")
     }
 
     private var spectrogramLegend: some View {
@@ -139,6 +164,65 @@ struct SpectrogramComparisonView: View {
         default:
             return "マスタリングが完了すると表示します"
         }
+    }
+}
+
+private struct SpectrogramTimeAxisView: View {
+    let duration: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            let ticks = timeTicks(for: duration)
+            let width = max(proxy.size.width, 1)
+
+            ZStack(alignment: .topLeading) {
+                Rectangle()
+                    .fill(.separator.opacity(0.7))
+                    .frame(height: 1)
+                    .offset(y: 4)
+
+                ForEach(ticks) { tick in
+                    VStack(spacing: 3) {
+                        Rectangle()
+                            .fill(.separator.opacity(0.8))
+                            .frame(width: 1, height: 5)
+                        Text(formatTime(tick.time))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(width: 48)
+                    .position(
+                        x: labelPosition(for: tick.time, width: width),
+                        y: 14
+                    )
+                }
+            }
+        }
+    }
+
+    private func timeTicks(for duration: Double) -> [TimeTick] {
+        [0, 0.25, 0.5, 0.75, 1].map { ratio in
+            TimeTick(time: max(duration, 0) * ratio)
+        }
+    }
+
+    private func formatTime(_ time: Double) -> String {
+        let totalSeconds = Int(time.rounded())
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    private func labelPosition(for time: Double, width: CGFloat) -> CGFloat {
+        guard width >= 48 else { return width / 2 }
+        let rawX = CGFloat(time / max(duration, 0.1)) * width
+        return min(max(rawX, 24), width - 24)
+    }
+
+    private struct TimeTick: Identifiable {
+        let time: Double
+
+        var id: Double { time }
     }
 }
 

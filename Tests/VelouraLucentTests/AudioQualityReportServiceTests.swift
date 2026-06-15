@@ -302,6 +302,7 @@ struct AudioQualityReportServiceTests {
         ]
 
         return AudioMetricSnapshot(
+            duration: 1,
             peakDBFS: truePeakDBFS - 0.2,
             rmsDBFS: truePeakDBFS - crestFactorDB,
             crestFactorDB: crestFactorDB,
@@ -310,6 +311,8 @@ struct AudioQualityReportServiceTests {
             truePeakDBFS: truePeakDBFS,
             stereoWidth: stereoWidth,
             stereoCorrelation: 0.8,
+            stereoCorrelationTimeline: [],
+            stereoCorrelationTimelineStatus: .unavailable,
             harshnessScore: 0.2,
             centroidHz: 2_500,
             hf12Ratio: hf12Ratio,

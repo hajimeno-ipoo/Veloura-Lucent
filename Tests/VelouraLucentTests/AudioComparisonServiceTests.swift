@@ -93,6 +93,47 @@ struct AudioComparisonServiceTests {
     }
 
     @Test
+    func stereoCorrelationTimelineDetectsInPhaseAudio() throws {
+        let metrics = try AudioComparisonService.analyze(signal: makeStereoSignal(rightScale: 1))
+
+        expectClose(metrics.duration, 2.0, tolerance: 0.001)
+        #expect(metrics.stereoCorrelationTimelineStatus == .available)
+        #expect(metrics.stereoCorrelationTimeline.isEmpty == false)
+        #expect(metrics.stereoCorrelationTimeline.allSatisfy { $0.value > 0.99 })
+    }
+
+    @Test
+    func stereoCorrelationTimelineDetectsReversePhaseAudio() throws {
+        let metrics = try AudioComparisonService.analyze(signal: makeStereoSignal(rightScale: -1))
+
+        #expect(metrics.stereoCorrelationTimelineStatus == .available)
+        #expect(metrics.stereoCorrelationTimeline.isEmpty == false)
+        #expect(metrics.stereoCorrelationTimeline.allSatisfy { $0.value < -0.99 })
+    }
+
+    @Test
+    func stereoCorrelationTimelineSkipsSilentStereoAudio() throws {
+        let signal = AudioSignal(channels: [
+            Array(repeating: Float.zero, count: 48_000),
+            Array(repeating: Float.zero, count: 48_000)
+        ], sampleRate: 48_000)
+
+        let metrics = try AudioComparisonService.analyze(signal: signal)
+
+        expectClose(metrics.duration, 1.0, tolerance: 0.001)
+        #expect(metrics.stereoCorrelationTimelineStatus == .silent)
+        #expect(metrics.stereoCorrelationTimeline.isEmpty)
+    }
+
+    @Test
+    func stereoCorrelationTimelineIsNotShownForMonoAudio() throws {
+        let metrics = try AudioComparisonService.analyze(signal: makeSignal(frequency: 440, amplitude: 0.10))
+
+        #expect(metrics.stereoCorrelationTimelineStatus == .mono)
+        #expect(metrics.stereoCorrelationTimeline.isEmpty)
+    }
+
+    @Test
     func concurrentAnalysisMatchesSynchronousAnalysis() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
@@ -116,6 +157,8 @@ struct AudioComparisonServiceTests {
         #expect(concurrent.averageSpectrum.count == synchronous.averageSpectrum.count)
         #expect(concurrent.shortTermLoudness.count == synchronous.shortTermLoudness.count)
         #expect(concurrent.dynamics.count == synchronous.dynamics.count)
+        #expect(concurrent.stereoCorrelationTimelineStatus == synchronous.stereoCorrelationTimelineStatus)
+        #expect(concurrent.stereoCorrelationTimeline.count == synchronous.stereoCorrelationTimeline.count)
     }
 
     @Test
@@ -193,6 +236,16 @@ struct AudioComparisonServiceTests {
             Float(sin(2 * Double.pi * frequency * Double(index) / sampleRate) * amplitude)
         }
         return AudioSignal(channels: [channel], sampleRate: sampleRate)
+    }
+
+    private func makeStereoSignal(rightScale: Double) -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 2)
+        let left = (0..<frameCount).map { index in
+            Float(sin(2 * Double.pi * 440 * Double(index) / sampleRate) * 0.10)
+        }
+        let right = left.map { Float(Double($0) * rightScale) }
+        return AudioSignal(channels: [left, right], sampleRate: sampleRate)
     }
 
     private func expectClose(_ actual: Double, _ expected: Double, tolerance: Double) {

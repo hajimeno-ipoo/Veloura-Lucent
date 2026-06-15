@@ -992,6 +992,7 @@ struct ProcessingJobTests {
 
     private func makeSnapshot() -> AudioMetricSnapshot {
         AudioMetricSnapshot(
+            duration: 1,
             peakDBFS: -1,
             rmsDBFS: -18,
             crestFactorDB: 12,
@@ -1000,6 +1001,8 @@ struct ProcessingJobTests {
             truePeakDBFS: -1,
             stereoWidth: 0.5,
             stereoCorrelation: 0.8,
+            stereoCorrelationTimeline: [],
+            stereoCorrelationTimelineStatus: .unavailable,
             harshnessScore: 0.2,
             centroidHz: 2_000,
             hf12Ratio: 0.1,

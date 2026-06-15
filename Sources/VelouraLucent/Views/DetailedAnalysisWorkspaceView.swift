@@ -375,6 +375,9 @@ struct DetailedAnalysisWorkspaceView: View {
                 title: "ステレオ相関",
                 help: "左右の音がどれくらい同じ向きで鳴っているかを見る指標です。0より下はモノラル再生で音が痩せる可能性があります。"
             )
+            Text("0未満はモノラル再生で音が痩せる可能性があります。0以上は左右の音が同じ向きに近い状態です。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if stages.isEmpty {
                 Text("解析が完了するとステレオ相関を表示します。")
@@ -384,6 +387,8 @@ struct DetailedAnalysisWorkspaceView: View {
                 ForEach(stages) { stage in
                     correlationRow(stage)
                 }
+                Divider()
+                correlationTimelineSection(stages: stages)
             }
         }
         .analysisCard()
@@ -393,7 +398,7 @@ struct DetailedAnalysisWorkspaceView: View {
     private func correlationRow(_ stage: AnalysisStageMetrics) -> some View {
         let value = max(-1, min(1, stage.metrics.stereoCorrelation))
         let ratio = (value + 1) * 0.5
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(stage.label)
                     .font(.callout.weight(.semibold))
@@ -406,6 +411,13 @@ struct DetailedAnalysisWorkspaceView: View {
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 6)
                         .fill(Color.secondary.opacity(0.12))
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color.red.opacity(0.10))
+                        Rectangle()
+                            .fill(stage.color.opacity(0.12))
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                     Rectangle()
                         .fill(Color.secondary.opacity(0.35))
                         .frame(width: 1)
@@ -417,7 +429,106 @@ struct DetailedAnalysisWorkspaceView: View {
                 }
             }
             .frame(height: 22)
+            HStack {
+                Text("-1 逆相")
+                Spacer()
+                Text("0 注意")
+                Spacer()
+                Text("+1 同相")
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(stage.label)のステレオ相関")
+        .accessibilityValue(String(format: "%+.2f。-1は逆相、0は注意、+1は同相です。", value))
+    }
+
+    private func correlationTimelineSection(stages: [AnalysisStageMetrics]) -> some View {
+        let points = correlationTimelinePoints(stages: stages)
+        let maxTime = max(1, ceil(correlationTimelineDuration(stages: stages)))
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("時間ごとの相関推移")
+                .font(.callout.weight(.semibold))
+            Text("0未満の時間帯は、モノラル再生で音が痩せる可能性があります。無音区間は相関値として計算せず、線を区切ります。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if points.isEmpty {
+                Text(correlationTimelineUnavailableText(stages: stages))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+                    .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+            } else {
+                correlationTimelineChart(points: points, maxTime: maxTime)
+                    .frame(height: 220)
+                    .accessibilityLabel("時間ごとのステレオ相関推移")
+                if let note = correlationTimelinePartialNote(stages: stages) {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func correlationTimelineChart(points: [TimelinePoint], maxTime: Double) -> some View {
+        Chart {
+            RectangleMark(
+                xStart: .value("開始", 0),
+                xEnd: .value("終了", maxTime),
+                yStart: .value("逆相", -1),
+                yEnd: .value("注意", 0)
+            )
+            .foregroundStyle(Color.red.opacity(0.08))
+            RuleMark(y: .value("注意ライン", 0))
+                .foregroundStyle(Color.red.opacity(0.55))
+                .lineStyle(.init(lineWidth: 1.5))
+            ForEach(points) { point in
+                LineMark(
+                    x: .value("時間", point.time),
+                    y: .value("相関", point.value),
+                    series: .value("区間", point.lineGroup)
+                )
+                .foregroundStyle(by: .value("音源", point.series))
+                .interpolationMethod(.catmullRom)
+                .lineStyle(.init(lineWidth: 2.5))
+            }
+        }
+        .chartForegroundStyleScale(stageColorScale)
+        .chartLegend(position: .bottom)
+        .chartXScale(domain: 0 ... maxTime)
+        .chartYScale(domain: -1 ... 1)
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 5)) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    if let seconds = value.as(Double.self) {
+                        Text(String(format: "%.0fs", seconds))
+                    }
+                }
+            }
+        }
+        .chartYAxis {
+            AxisMarks(values: [-1, 0, 1]) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    if let correlation = value.as(Double.self) {
+                        Text(correlationAxisLabel(correlation))
+                    }
+                }
+            }
+        }
+    }
+
+    private func correlationTimelineDuration(stages: [AnalysisStageMetrics]) -> Double {
+        let analyzedDurations = stages.map(\.metrics.duration).filter { $0 > 0 }
+        if let duration = analyzedDurations.max() {
+            return duration
+        }
+        return correlationTimelinePoints(stages: stages).map(\.time).max() ?? 1
     }
 
     private func shortTermLoudnessChart(stages: [AnalysisStageMetrics]) -> some View {
@@ -736,10 +847,72 @@ struct DetailedAnalysisWorkspaceView: View {
                     id: "\(stage.id)-\(index)",
                     time: value.0,
                     series: stage.label,
+                    lineGroup: stage.id,
                     value: value.1
                 )
             }
         }
+    }
+
+    private func correlationTimelinePoints(stages: [AnalysisStageMetrics]) -> [TimelinePoint] {
+        stages.flatMap { stage in
+            let metrics = stage.metrics.stereoCorrelationTimeline
+            let step = correlationTimelineStep(metrics)
+            var segment = 0
+            var previousTime: Double?
+            return metrics.map { metric in
+                if let previousTime, metric.time - previousTime > step * 1.5 {
+                    segment += 1
+                }
+                previousTime = metric.time
+                return TimelinePoint(
+                    id: "\(stage.id)-\(metric.id)",
+                    time: metric.time,
+                    series: stage.label,
+                    lineGroup: "\(stage.id)-segment-\(segment)",
+                    value: metric.value
+                )
+            }
+        }
+    }
+
+    private func correlationTimelineStep(_ metrics: [TimedCorrelationMetric]) -> Double {
+        let deltas = zip(metrics, metrics.dropFirst()).map { $1.time - $0.time }.filter { $0 > 0 }
+        return deltas.min() ?? 0.5
+    }
+
+    private func correlationTimelineUnavailableText(stages: [AnalysisStageMetrics]) -> String {
+        if stages.allSatisfy({ $0.metrics.stereoCorrelationTimelineStatus == .mono }) {
+            return "モノラル音源のため、ステレオ相関推移はありません。"
+        }
+        if stages.allSatisfy({ $0.metrics.stereoCorrelationTimelineStatus == .silent }) {
+            return "音が入っているステレオ区間がないため、ステレオ相関推移はありません。"
+        }
+        return "ステレオ音源の解析が完了すると、時間ごとの相関推移を表示します。"
+    }
+
+    private func correlationTimelinePartialNote(stages: [AnalysisStageMetrics]) -> String? {
+        let missing = stages.compactMap { stage -> String? in
+            guard stage.metrics.stereoCorrelationTimeline.isEmpty else { return nil }
+            switch stage.metrics.stereoCorrelationTimelineStatus {
+            case .mono:
+                return "\(stage.label): モノラル音源のため表示しません"
+            case .silent:
+                return "\(stage.label): 音が入っているステレオ区間がないため表示しません"
+            case .unavailable:
+                return "\(stage.label): ステレオ相関推移は未解析です"
+            case .available:
+                return nil
+            }
+        }
+        guard !missing.isEmpty else { return nil }
+        return missing.joined(separator: " / ")
+    }
+
+    private func correlationAxisLabel(_ value: Double) -> String {
+        if value <= -1 { return "-1 逆相" }
+        if value >= 1 { return "+1 同相" }
+        return "0 注意"
     }
 
     private func spectrumPoints(stages: [AnalysisStageMetrics]) -> [SpectrumPoint] {
@@ -932,6 +1105,7 @@ private struct TimelinePoint: Identifiable {
     let id: String
     let time: Double
     let series: String
+    let lineGroup: String
     let value: Double
 }
 

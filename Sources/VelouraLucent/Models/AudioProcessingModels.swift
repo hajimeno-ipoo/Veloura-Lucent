@@ -260,6 +260,7 @@ struct CorrectionSettings: Sendable, Equatable {
 }
 
 struct AudioMetricSnapshot: Sendable {
+    let duration: TimeInterval
     let peakDBFS: Double
     let rmsDBFS: Double
     let crestFactorDB: Double
@@ -268,6 +269,8 @@ struct AudioMetricSnapshot: Sendable {
     let truePeakDBFS: Double
     let stereoWidth: Double
     let stereoCorrelation: Double
+    let stereoCorrelationTimeline: [TimedCorrelationMetric]
+    let stereoCorrelationTimelineStatus: StereoCorrelationTimelineStatus
     let harshnessScore: Double
     let centroidHz: Double
     let hf12Ratio: Double
@@ -278,6 +281,13 @@ struct AudioMetricSnapshot: Sendable {
     let shortTermLoudness: [TimedLevelMetric]
     let dynamics: [DynamicsMetric]
     let averageSpectrum: [SpectrumMetric]
+}
+
+enum StereoCorrelationTimelineStatus: String, Sendable {
+    case available
+    case mono
+    case silent
+    case unavailable
 }
 
 struct NoiseMeasurementSnapshot: Sendable, Equatable {
@@ -433,6 +443,12 @@ struct DynamicsMetric: Sendable, Identifiable {
     let peakDBFS: Double
     let rmsDBFS: Double
     let crestFactorDB: Double
+}
+
+struct TimedCorrelationMetric: Sendable, Identifiable {
+    let id: String
+    let time: Double
+    let value: Double
 }
 
 struct SpectrumMetric: Sendable, Identifiable {
