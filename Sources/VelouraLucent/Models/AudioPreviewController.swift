@@ -23,6 +23,7 @@ final class AudioPreviewCardState {
     var liveBandLevels: [LiveBandSample] = []
     var realtimeSpectrum: [RealtimeSpectrumPoint] = []
     var vectorScopeSnapshot = VectorScopeSnapshot.unavailable
+    var liveLoudnessMeterSnapshot = LiveLoudnessMeterSnapshot.unavailable
     var playbackProgress: Double = 0
     var playbackPosition: TimeInterval = 0
     var playbackState: AudioPlaybackState = .stopped
@@ -218,6 +219,7 @@ final class AudioPreviewController {
             state.playbackState = .stopped
             state.realtimeSpectrum = []
             state.vectorScopeSnapshot = .unavailable
+            state.liveLoudnessMeterSnapshot = .unavailable
             if let snapshot = state.snapshot {
                 state.liveBandLevels = makeInitialLiveBandLevels(from: snapshot, target: targetToReset)
             }
@@ -246,6 +248,7 @@ final class AudioPreviewController {
         targetState.liveBandLevels = []
         targetState.realtimeSpectrum = []
         targetState.vectorScopeSnapshot = .unavailable
+        targetState.liveLoudnessMeterSnapshot = .unavailable
         integratedLoudnessByTarget[target] = nil
 
         previewTasks[target] = Task {
@@ -281,6 +284,7 @@ final class AudioPreviewController {
         targetState.liveBandLevels = []
         targetState.realtimeSpectrum = []
         targetState.vectorScopeSnapshot = .unavailable
+        targetState.liveLoudnessMeterSnapshot = .unavailable
         integratedLoudnessByTarget[target] = nil
         targetState.playbackPosition = 0
         targetState.playbackProgress = 0
@@ -317,6 +321,7 @@ final class AudioPreviewController {
         targetState.liveBandLevels = []
         targetState.realtimeSpectrum = []
         targetState.vectorScopeSnapshot = .unavailable
+        targetState.liveLoudnessMeterSnapshot = .unavailable
         integratedLoudnessByTarget[target] = nil
         targetState.playbackPosition = 0
         targetState.playbackProgress = 0
@@ -336,6 +341,7 @@ final class AudioPreviewController {
         if targetState.playbackState == .stopped {
             targetState.realtimeSpectrum = []
             targetState.vectorScopeSnapshot = .unavailable
+            targetState.liveLoudnessMeterSnapshot = .unavailable
         }
         if let integratedLoudnessLUFS {
             setIntegratedLoudnessLUFS(integratedLoudnessLUFS, for: target)
@@ -544,7 +550,7 @@ final class AudioPreviewController {
     private func transitionAwayFromCurrentTarget(keepingPosition: Bool) {
         guard let activeTarget else { return }
         let activeState = cardState(for: activeTarget)
-        clearVectorScopeSnapshots()
+        clearRealtimeVisualSnapshots()
         if keepingPosition {
             storeCurrentPlaybackPosition()
             activeState.playbackState = .paused
@@ -623,11 +629,12 @@ final class AudioPreviewController {
         let frameCount = AVAudioFrameCount(min(remainingFrames, AVAudioFramePosition(UInt32.max)))
         let playbackID = UUID()
 
-        clearVectorScopeSnapshots()
+        clearRealtimeVisualSnapshots()
         cardState(for: target).vectorScopeSnapshot = VectorScopeSnapshot(
             inputState: VectorScopeAnalyzer.inputState(forChannelCount: Int(format.channelCount)),
             points: []
         )
+        cardState(for: target).liveLoudnessMeterSnapshot = .unavailable
 
         engine.attach(playerNode)
         engine.attach(analysisMixer)
@@ -693,6 +700,15 @@ final class AudioPreviewController {
         storeVectorScopeSnapshotIfPlaying(snapshot, for: target)
     }
 
+    fileprivate func storeLiveLoudnessMeterSnapshot(
+        _ snapshot: LiveLoudnessMeterSnapshot,
+        for target: AudioPreviewTarget,
+        playbackID: UUID
+    ) {
+        guard activeTarget == target, activePlaybackID == playbackID else { return }
+        storeLiveLoudnessMeterSnapshotIfPlaying(snapshot, for: target)
+    }
+
     func storeVectorScopeSnapshotIfPlaying(
         _ snapshot: VectorScopeSnapshot,
         for target: AudioPreviewTarget
@@ -700,6 +716,15 @@ final class AudioPreviewController {
         guard activeTarget == target, cardState(for: target).playbackState == .playing else { return }
         clearVectorScopeSnapshots(except: target)
         cardState(for: target).vectorScopeSnapshot = snapshot
+    }
+
+    func storeLiveLoudnessMeterSnapshotIfPlaying(
+        _ snapshot: LiveLoudnessMeterSnapshot,
+        for target: AudioPreviewTarget
+    ) {
+        guard activeTarget == target, cardState(for: target).playbackState == .playing else { return }
+        clearLiveLoudnessMeterSnapshots(except: target)
+        cardState(for: target).liveLoudnessMeterSnapshot = snapshot
     }
 
     private func finishPlaybackIfCurrent(target: AudioPreviewTarget, playbackID: UUID) {
@@ -741,6 +766,17 @@ final class AudioPreviewController {
         }
     }
 
+    private func clearLiveLoudnessMeterSnapshots(except preservedTarget: AudioPreviewTarget? = nil) {
+        for target in AudioPreviewTarget.allCases where target != preservedTarget {
+            cardState(for: target).liveLoudnessMeterSnapshot = .unavailable
+        }
+    }
+
+    private func clearRealtimeVisualSnapshots(except preservedTarget: AudioPreviewTarget? = nil) {
+        clearVectorScopeSnapshots(except: preservedTarget)
+        clearLiveLoudnessMeterSnapshots(except: preservedTarget)
+    }
+
     private func normalizedProgress(for target: AudioPreviewTarget, duration: TimeInterval) -> Double {
         guard duration > 0 else { return 0 }
         return min(max(cardState(for: target).playbackPosition / duration, 0), 1)
@@ -775,16 +811,19 @@ private enum RealtimeSpectrumTapInstaller {
         target: AudioPreviewTarget,
         playbackID: UUID
     ) {
+        let loudnessAnalyzer = LiveLoudnessAnalyzer(sampleRate: format.sampleRate)
         mixer.installTap(onBus: 0, bufferSize: bufferSize, format: format) { [weak controller] buffer, _ in
             guard let sampleBuffer = RealtimeSpectrumAnalyzer.sampleBuffer(from: buffer) else { return }
             analysisQueue.async { [weak controller] in
                 let spectrumPoints = RealtimeSpectrumAnalyzer.points(from: sampleBuffer)
                 let vectorScopeSnapshot = VectorScopeAnalyzer.snapshot(from: sampleBuffer)
+                let loudnessSnapshot = loudnessAnalyzer.snapshot(from: sampleBuffer)
                 Task { @MainActor [weak controller] in
                     if !spectrumPoints.isEmpty {
                         controller?.storeRealtimeSpectrum(spectrumPoints, for: target, playbackID: playbackID)
                     }
                     controller?.storeVectorScopeSnapshot(vectorScopeSnapshot, for: target, playbackID: playbackID)
+                    controller?.storeLiveLoudnessMeterSnapshot(loudnessSnapshot, for: target, playbackID: playbackID)
                 }
             }
         }
@@ -794,6 +833,170 @@ private enum RealtimeSpectrumTapInstaller {
 fileprivate struct RealtimeSpectrumSampleBuffer: Sendable {
     let channelSamples: [[Float]]
     let sampleRate: Double
+}
+
+fileprivate final class LiveLoudnessAnalyzer: @unchecked Sendable {
+    private let momentaryWindowSize: Int
+    private let shortTermWindowSize: Int
+    private let integratedBlockSize: Int
+    private let integratedHopSize: Int
+    private var filters: [LiveKWeightingFilter] = []
+    private var momentaryEnergyWindow: [Double] = []
+    private var shortTermEnergyWindow: [Double] = []
+    private var integratedEnergyWindow: [Double] = []
+    private var integratedBlockLoudness: [Double] = []
+    private var samplesSinceIntegratedHop = 0
+    private var heldTruePeakLinear = Float.zero
+    private var truePeakTailSamples: [[Float]] = []
+
+    init(sampleRate: Double) {
+        momentaryWindowSize = max(1, Int(sampleRate * 0.4))
+        shortTermWindowSize = max(1, Int(sampleRate * 3.0))
+        integratedBlockSize = max(1, Int(sampleRate * 0.4))
+        integratedHopSize = max(1, Int(sampleRate * 0.1))
+    }
+
+    func snapshot(from sampleBuffer: RealtimeSpectrumSampleBuffer) -> LiveLoudnessMeterSnapshot {
+        let channels = sampleBuffer.channelSamples.filter { !$0.isEmpty }
+        guard let frameLength = channels.map(\.count).min(), frameLength > 0 else {
+            return .unavailable
+        }
+
+        if filters.count != channels.count {
+            filters = Array(repeating: LiveKWeightingFilter(), count: channels.count)
+            momentaryEnergyWindow.removeAll()
+            shortTermEnergyWindow.removeAll()
+            integratedEnergyWindow.removeAll()
+            integratedBlockLoudness.removeAll()
+            samplesSinceIntegratedHop = 0
+            heldTruePeakLinear = 0
+            truePeakTailSamples = Array(repeating: [], count: channels.count)
+        }
+
+        for sampleIndex in 0..<frameLength {
+            var summedEnergy = 0.0
+            for channelIndex in channels.indices {
+                let weighted = filters[channelIndex].process(Double(channels[channelIndex][sampleIndex]))
+                summedEnergy += weighted * weighted
+            }
+            appendEnergySample(summedEnergy)
+        }
+        trimEnergyWindows()
+
+        let truePeakChannels = channels.enumerated().map { channelIndex, samples in
+            let tailSamples = channelIndex < truePeakTailSamples.count ? truePeakTailSamples[channelIndex] : []
+            return tailSamples + samples
+        }
+        heldTruePeakLinear = max(heldTruePeakLinear, LoudnessMeasurementService.truePeakLinear(truePeakChannels))
+        truePeakTailSamples = channels.map { Array($0.suffix(16)) }
+        return LiveLoudnessMeterSnapshot(
+            state: .measuring,
+            momentaryLUFS: momentaryEnergyWindow.count >= momentaryWindowSize ? loudnessLUFS(from: momentaryEnergyWindow) : nil,
+            shortTermLUFS: shortTermEnergyWindow.count >= shortTermWindowSize ? loudnessLUFS(from: shortTermEnergyWindow) : nil,
+            integratedLUFS: integratedLoudnessLUFS(),
+            truePeakDBTP: heldTruePeakLinear > 0 ? 20 * log10(max(Double(heldTruePeakLinear), 1e-12)) : nil
+        )
+    }
+
+    private func appendEnergySample(_ energy: Double) {
+        momentaryEnergyWindow.append(energy)
+        shortTermEnergyWindow.append(energy)
+        integratedEnergyWindow.append(energy)
+
+        samplesSinceIntegratedHop += 1
+        if samplesSinceIntegratedHop >= integratedHopSize {
+            samplesSinceIntegratedHop = 0
+            if integratedEnergyWindow.count >= integratedBlockSize {
+                let blockLoudness = loudnessLUFS(from: Array(integratedEnergyWindow.suffix(integratedBlockSize)))
+                integratedBlockLoudness.append(blockLoudness)
+            }
+        }
+    }
+
+    private func trimEnergyWindows() {
+        trim(&momentaryEnergyWindow, maximumCount: momentaryWindowSize)
+        trim(&shortTermEnergyWindow, maximumCount: shortTermWindowSize)
+        trim(&integratedEnergyWindow, maximumCount: integratedBlockSize)
+    }
+
+    private func trim(_ values: inout [Double], maximumCount: Int) {
+        guard values.count > maximumCount else { return }
+        values.removeFirst(values.count - maximumCount)
+    }
+
+    private func loudnessLUFS(from energies: [Double]) -> Double {
+        guard !energies.isEmpty else { return -70 }
+        let meanEnergy = energies.reduce(0, +) / Double(energies.count)
+        return -0.691 + 10 * log10(max(meanEnergy, 1e-12))
+    }
+
+    private func integratedLoudnessLUFS() -> Double? {
+        let absoluteGated = integratedBlockLoudness.filter { $0 >= -70 }
+        guard !absoluteGated.isEmpty else { return nil }
+        let preliminary = energyAverage(absoluteGated)
+        let relativeGate = preliminary - 10
+        let relativeGated = absoluteGated.filter { $0 >= relativeGate }
+        return energyAverage(relativeGated.isEmpty ? absoluteGated : relativeGated)
+    }
+
+    private func energyAverage(_ loudnessValues: [Double]) -> Double {
+        let meanEnergy = loudnessValues.map { pow(10, $0 / 10) }.reduce(0, +) / Double(max(loudnessValues.count, 1))
+        return 10 * log10(max(meanEnergy, 1e-9))
+    }
+}
+
+fileprivate struct LiveKWeightingFilter {
+    private var preFilter = LiveBiquadFilter(coefficients: .officialPreFilter)
+    private var rlbFilter = LiveBiquadFilter(coefficients: .officialRLBFilter)
+
+    mutating func process(_ input: Double) -> Double {
+        rlbFilter.process(preFilter.process(input))
+    }
+}
+
+fileprivate struct LiveBiquadFilter {
+    let coefficients: LiveBiquadCoefficients
+    var x1 = 0.0
+    var x2 = 0.0
+    var y1 = 0.0
+    var y2 = 0.0
+
+    mutating func process(_ input: Double) -> Double {
+        let output = coefficients.b0 * input
+            + coefficients.b1 * x1
+            + coefficients.b2 * x2
+            - coefficients.a1 * y1
+            - coefficients.a2 * y2
+        x2 = x1
+        x1 = input
+        y2 = y1
+        y1 = output
+        return output
+    }
+}
+
+fileprivate struct LiveBiquadCoefficients {
+    let b0: Double
+    let b1: Double
+    let b2: Double
+    let a1: Double
+    let a2: Double
+
+    static let officialPreFilter = LiveBiquadCoefficients(
+        b0: 1.53512485958697,
+        b1: -2.69169618940638,
+        b2: 1.19839281085285,
+        a1: -1.69065929318241,
+        a2: 0.73248077421585
+    )
+
+    static let officialRLBFilter = LiveBiquadCoefficients(
+        b0: 1,
+        b1: -2,
+        b2: 1,
+        a1: -1.99004745483398,
+        a2: 0.99007225036621
+    )
 }
 
 enum RealtimeSpectrumAnalyzer {

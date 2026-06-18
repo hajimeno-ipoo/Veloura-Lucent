@@ -56,7 +56,10 @@ struct VelouraMainWorkspaceView: View {
 
         AverageSpectrumComparisonView(preview: preview)
 
-        VectorScopeView(preview: preview)
+        VectorScopeView(
+            preview: preview,
+            masteringSettings: job.appliedMasteringSettings ?? job.editableMasteringSettings
+        )
 
         SpectrogramComparisonView(
             input: job.inputSpectrogram,

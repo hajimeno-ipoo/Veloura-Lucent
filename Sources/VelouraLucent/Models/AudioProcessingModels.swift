@@ -496,6 +496,27 @@ struct VectorScopeSnapshot: Sendable, Equatable {
     static let unavailable = VectorScopeSnapshot(inputState: .unavailable, points: [])
 }
 
+enum LoudnessMeterState: Sendable, Equatable {
+    case unavailable
+    case measuring
+}
+
+struct LiveLoudnessMeterSnapshot: Sendable, Equatable {
+    let state: LoudnessMeterState
+    let momentaryLUFS: Double?
+    let shortTermLUFS: Double?
+    let integratedLUFS: Double?
+    let truePeakDBTP: Double?
+
+    static let unavailable = LiveLoudnessMeterSnapshot(
+        state: .unavailable,
+        momentaryLUFS: nil,
+        shortTermLUFS: nil,
+        integratedLUFS: nil,
+        truePeakDBTP: nil
+    )
+}
+
 struct SpectrogramCell: Sendable, Identifiable {
     let id: String
     let timeIndex: Int

@@ -79,7 +79,7 @@ enum AudioQualityReportService {
         if target.truePeakDBFS > -0.3 {
             items.append(.warning(
                 "\(stageName)のピークが高すぎます",
-                "True Peak が \(format(target.truePeakDBFS)) dBFS です。音割れがないか\(stageName)を試聴してください。"
+                "True Peak が \(format(target.truePeakDBFS)) dBTP です。音割れがないか\(stageName)を試聴してください。"
             ))
         }
 

@@ -930,7 +930,7 @@ struct DiagnosticStageExportTests {
     }
 
     private func diagnosticTableHeader() -> String {
-        "| ファイル | LUFS | TP dBFS | 8-12kHz | 12-16kHz | 16-20kHz |\n|---|---:|---:|---:|---:|---:|"
+        "| ファイル | LUFS | TP dBTP | 8-12kHz | 12-16kHz | 16-20kHz |\n|---|---:|---:|---:|---:|---:|"
     }
 
     private func diagnosticStageMetrics(for files: [URL]) throws -> [DiagnosticStageMetric] {

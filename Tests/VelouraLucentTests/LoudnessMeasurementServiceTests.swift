@@ -39,6 +39,20 @@ struct LoudnessMeasurementServiceTests {
     }
 
     @Test
+    func shortTermLoudnessUsesOfficialLUFSScale() throws {
+        let signal = sineSignal(amplitude: 0.1, duration: 4.0)
+
+        let measurement = LoudnessMeasurementService.measure(signal: signal)
+        let finalShortTerm = try #require(measurement.shortTermLoudness.last?.levelDB)
+        let ungatedLoudness = LoudnessMeasurementService.ungatedLoudnessLUFS(
+            for: signal.channels,
+            sampleRate: signal.sampleRate
+        )
+
+        expectClose(finalShortTerm, ungatedLoudness, tolerance: 0.35)
+    }
+
+    @Test
     func truePeakUsesInterpolatedSamples() {
         let channels: [[Float]] = [
             [0, 0.12, -0.37, 0.52, -0.18, 0.04, -0.09],
@@ -50,6 +64,17 @@ struct LoudnessMeasurementServiceTests {
 
         #expect(truePeak >= samplePeak)
         #expect(truePeak == MasteringAnalysisService.approximateTruePeak(channels))
+    }
+
+    @Test
+    func truePeakCanExceedSamplePeakWithFourPhaseOversampling() {
+        let sampleRate = 48_000.0
+        let channel = sineSamples(amplitude: 0.8, duration: 0.25, sampleRate: sampleRate, frequency: 8_000)
+        let samplePeak = channel.map { abs($0) }.max() ?? 0
+
+        let truePeak = LoudnessMeasurementService.truePeakLinear([channel])
+
+        #expect(truePeak > samplePeak * 1.1)
     }
 
     @Test

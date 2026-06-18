@@ -79,12 +79,12 @@ struct MasteringProfileTests {
 
     @Test
     func profilesExposePresetHelpTextWithTargetAndPeakValues() {
-        #expect(MasteringProfile.natural.presetTargetText == "目安: -17.4 LUFS / True Peak上限: -1.2 dBFS")
-        #expect(MasteringProfile.streaming.presetTargetText == "目安: -16.7 LUFS / True Peak上限: -1.5 dBFS")
-        #expect(MasteringProfile.forward.presetTargetText == "目安: -14.8 LUFS / True Peak上限: -0.9 dBFS")
-        #expect(MasteringProfile.safeAIStreaming.presetTargetText == "目安: -14.5 LUFS / True Peak上限: -1.2 dBFS")
-        #expect(MasteringProfile.youtubeSpotify.presetTargetText == "目安: -14.0 LUFS / True Peak上限: -1.0 dBFS")
-        #expect(MasteringProfile.releaseLoud.presetTargetText == "目安: -12.0 LUFS / True Peak上限: -1.0 dBFS")
+        #expect(MasteringProfile.natural.presetTargetText == "目安: -17.4 LUFS / True Peak上限: -1.2 dBTP")
+        #expect(MasteringProfile.streaming.presetTargetText == "目安: -16.7 LUFS / True Peak上限: -1.5 dBTP")
+        #expect(MasteringProfile.forward.presetTargetText == "目安: -14.8 LUFS / True Peak上限: -0.9 dBTP")
+        #expect(MasteringProfile.safeAIStreaming.presetTargetText == "目安: -14.5 LUFS / True Peak上限: -1.2 dBTP")
+        #expect(MasteringProfile.youtubeSpotify.presetTargetText == "目安: -14.0 LUFS / True Peak上限: -1.0 dBTP")
+        #expect(MasteringProfile.releaseLoud.presetTargetText == "目安: -12.0 LUFS / True Peak上限: -1.0 dBTP")
         #expect(MasteringProfile.youtubeSpotify.presetHelpText == "YouTubeやSpotify向けに、扱いやすい音量を狙います。")
         #expect(MasteringProfile.releaseLoud.presetHelpText == "音圧を重視します。強弱が少なくなる場合があります。")
         #expect(MasteringProfile.allCases.allSatisfy { !$0.presetHelpText.contains("必ず") })

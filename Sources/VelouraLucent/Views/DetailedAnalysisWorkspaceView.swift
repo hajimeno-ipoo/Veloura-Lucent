@@ -770,7 +770,7 @@ struct DetailedAnalysisWorkspaceView: View {
     ) -> [MetricComparisonRow] {
         let mainRows: [MetricComparisonRow] = [
             metricRow(term: .loudness, input: input.integratedLoudnessLUFS, corrected: corrected?.integratedLoudnessLUFS, mastered: mastered?.integratedLoudnessLUFS, valueFormat: .lufs, deltaFormat: .luDelta),
-            metricRow(term: .truePeak, input: input.truePeakDBFS, corrected: corrected?.truePeakDBFS, mastered: mastered?.truePeakDBFS, valueFormat: .dBFS, deltaFormat: .dBDelta),
+            metricRow(term: .truePeak, input: input.truePeakDBFS, corrected: corrected?.truePeakDBFS, mastered: mastered?.truePeakDBFS, valueFormat: .dBTP, deltaFormat: .dBDelta),
             metricRow(term: .stereoWidth, input: input.stereoWidth, corrected: corrected?.stereoWidth, mastered: mastered?.stereoWidth, valueFormat: .ratio(2), deltaFormat: .ratioDelta(2)),
             metricRow(term: .harshness, input: input.harshnessScore, corrected: corrected?.harshnessScore, mastered: mastered?.harshnessScore, valueFormat: .score(2), deltaFormat: .scoreDelta(2)),
             metricRow(term: .crest, input: input.crestFactorDB, corrected: corrected?.crestFactorDB, mastered: mastered?.crestFactorDB, valueFormat: .dB, deltaFormat: .dBDelta),
@@ -995,8 +995,8 @@ struct DetailedAnalysisWorkspaceView: View {
 
     private func formatValue(_ value: Double, format: MetricFormat) -> String {
         switch format {
-        case .dBFS:
-            String(format: "%.2f dBFS", value)
+        case .dBTP:
+            String(format: "%.2f dBTP", value)
         case .dB:
             String(format: "%.2f dB", value)
         case .dBDelta:
@@ -1130,7 +1130,7 @@ private struct TermDefinition: Identifiable {
     let description: String
 
     static let loudness = TermDefinition(id: "loudness", label: "音量", reading: "おんりょう", description: "曲全体の平均的な大きさです。LUFSで表示します。")
-    static let truePeak = TermDefinition(id: "truePeak", label: "True Peak", reading: "とぅるーぴーく", description: "書き出しや再生で歪む可能性を見る最大ピークです。dBFSで表示します。")
+    static let truePeak = TermDefinition(id: "truePeak", label: "True Peak", reading: "とぅるーぴーく", description: "書き出しや再生で歪む可能性を見る最大ピークです。dBTPで表示します。")
     static let stereoWidth = TermDefinition(id: "stereoWidth", label: "ステレオ幅", reading: "すてれおはば", description: "左右への広がり具合です。")
     static let harshness = TermDefinition(id: "harshness", label: "ハーシュネス", reading: "はーしゅねす", description: "高域の耳障りさの指標です。")
     static let crest = TermDefinition(id: "crest", label: "Crest", reading: "くれすと", description: "瞬間的なピークと平均音量の差です。")
@@ -1146,7 +1146,7 @@ private struct TermDefinition: Identifiable {
 }
 
 private enum MetricFormat {
-    case dBFS
+    case dBTP
     case dB
     case dBDelta
     case lu

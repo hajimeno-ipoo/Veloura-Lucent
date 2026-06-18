@@ -60,8 +60,8 @@ enum CompletionReportService {
             CompletionReportRow(
                 id: "truePeak",
                 title: "True Peak",
-                value: format(mastered.truePeakDBFS, decimals: 2, unit: "dBFS"),
-                detail: "上限 \(format(Double(settings.peakCeilingDB), decimals: 1, unit: "dBFS")) / 余裕 \(formatSigned(peakHeadroom, decimals: 2, unit: "dB"))",
+                value: format(mastered.truePeakDBFS, decimals: 2, unit: "dBTP"),
+                detail: "上限 \(format(Double(settings.peakCeilingDB), decimals: 1, unit: "dBTP")) / 余裕 \(formatSigned(peakHeadroom, decimals: 2, unit: "dB"))",
                 severity: peakHeadroom < 0 ? .warning : peakHeadroom < 0.3 ? .caution : .normal
             ),
             CompletionReportRow(

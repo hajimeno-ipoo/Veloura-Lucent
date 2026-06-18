@@ -2,6 +2,7 @@ import SwiftUI
 
 struct VectorScopeView: View {
     let preview: AudioPreviewController
+    let masteringSettings: MasteringSettings
 
     private var activeTarget: AudioPreviewTarget? {
         preview.activeTarget
@@ -12,8 +13,31 @@ struct VectorScopeView: View {
         return preview.cardState(for: activeTarget).vectorScopeSnapshot
     }
 
+    private var loudnessSnapshot: LiveLoudnessMeterSnapshot {
+        guard let activeTarget else { return .unavailable }
+        return preview.cardState(for: activeTarget).liveLoudnessMeterSnapshot
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 24) {
+                    scopePanel
+                    loudnessPanel
+                }
+
+                VStack(alignment: .center, spacing: 14) {
+                    scopePanel
+                    loudnessPanel
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private var scopePanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text("ベクトルスコープ")
                     .font(.headline)
@@ -22,39 +46,73 @@ struct VectorScopeView: View {
                     reading: "べくとるすこーぷ",
                     description: "左右チャンネルの瞬間的な関係を点の軌跡で表示します。縦に近いほど同相、横に広がるほど逆相成分が多く、斜め方向は左右どちらかへ偏った状態を示します。"
                 )
+            }
+
+            Text("縦=同相 / 横=逆相 / 斜め=左右偏り。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            scopePlot
+        }
+        .frame(width: 420, alignment: .topLeading)
+    }
+
+    private var loudnessPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("ラウドネスメーター")
+                    .font(.headline)
+                TermHelpButton(
+                    title: "ラウドネスメーター",
+                    reading: "らうどねすめーたー",
+                    description: "音の大きさとピークを確認するメーターです。Momentaryは約0.4秒、Short-Termは約3秒、Integratedは再生開始からの平均、True Peakは再生中に出た最大ピークを示します。"
+                )
                 Spacer()
                 if let activeTarget {
-                    Label(activeTarget.rawValue, systemImage: "waveform")
+                    Text(activeTarget.rawValue)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(targetColor(activeTarget))
                 }
             }
 
-            Text("縦=同相 / 横=逆相 / 斜め=左右偏り。再生中の1音源だけを表示します。")
+            Text("目標線と上限線で、再生中の音を確認します。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            ZStack {
-                VectorScopePlot(
-                    points: snapshot.points,
-                    color: activeTarget.map(targetColor) ?? .secondary
-                )
-
-                if let message = statusMessage {
-                    Text(message)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(16)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        .padding(24)
-                }
-            }
-            .frame(width: 280, height: 240)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilityDescription)
+            loudnessMeter
         }
+        .frame(width: 540, alignment: .topLeading)
+    }
+
+    private var scopePlot: some View {
+        ZStack {
+            VectorScopePlot(
+                points: snapshot.points,
+                color: activeTarget.map(targetColor) ?? .secondary
+            )
+
+            if let message = statusMessage {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(24)
+                }
+        }
+        .frame(width: 420, height: 300)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    private var loudnessMeter: some View {
+        LoudnessMeterView(
+            snapshot: loudnessSnapshot,
+            targetLoudnessLUFS: Double(masteringSettings.targetLoudness),
+            truePeakCeilingDBTP: Double(masteringSettings.peakCeilingDB)
+        )
+        .frame(width: 540, height: 300)
     }
 
     private var statusMessage: String? {

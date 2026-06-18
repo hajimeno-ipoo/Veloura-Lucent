@@ -55,9 +55,9 @@ struct InspectorAnalysisPanel: View {
             )
             metricCell(
                 title: "True Peak",
-                value: String(format: "%.2f dBFS", metrics.truePeakDBFS),
+                value: String(format: "%.2f dBTP", metrics.truePeakDBFS),
                 color: truePeakColor(metrics.truePeakDBFS),
-                help: "書き出しや再生で歪む可能性を見る最大ピークです。-0.3 dBFSを超える場合は試聴確認が必要です。"
+                help: "書き出しや再生で歪む可能性を見る最大ピークです。-0.3 dBTPを超える場合は試聴確認が必要です。"
             )
             metricCell(
                 title: "ダイナミクス",

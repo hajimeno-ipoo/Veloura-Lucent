@@ -192,6 +192,7 @@ struct AudioPreviewControllerTests {
             inputState: .stereo,
             points: [VectorScopePoint(id: 0, x: 0.2, y: 0.4)]
         )
+        controller.cardState(for: .input).liveLoudnessMeterSnapshot = liveLoudnessSnapshot()
 
         controller.preparePreviewPlaceholder(for: newURL, target: .input)
 
@@ -202,6 +203,7 @@ struct AudioPreviewControllerTests {
         #expect(controller.cardState(for: .input).playbackProgress == 0)
         #expect(controller.cardState(for: .input).playbackPosition == 0)
         #expect(controller.cardState(for: .input).vectorScopeSnapshot == .unavailable)
+        #expect(controller.cardState(for: .input).liveLoudnessMeterSnapshot == .unavailable)
         guard case .stopped = controller.cardState(for: .input).playbackState else {
             Issue.record("Placeholder should stop input playback state")
             return
@@ -254,6 +256,7 @@ struct AudioPreviewControllerTests {
                 inputState: .stereo,
                 points: [VectorScopePoint(id: 0, x: 0.2, y: 0.4)]
             )
+            controller.cardState(for: target).liveLoudnessMeterSnapshot = liveLoudnessSnapshot()
         }
 
         controller.finishActivePlayback()
@@ -266,6 +269,7 @@ struct AudioPreviewControllerTests {
         #expect(controller.cardState(for: .mastered).playbackPosition == 0)
         for target in AudioPreviewTarget.allCases {
             #expect(controller.cardState(for: target).vectorScopeSnapshot == .unavailable)
+            #expect(controller.cardState(for: target).liveLoudnessMeterSnapshot == .unavailable)
         }
     }
 
@@ -415,12 +419,14 @@ struct AudioPreviewControllerTests {
                 inputState: .stereo,
                 points: [VectorScopePoint(id: 0, x: 0.2, y: 0.4)]
             )
+            controller.cardState(for: target).liveLoudnessMeterSnapshot = liveLoudnessSnapshot()
         }
 
         controller.stopPlayback()
 
         for target in AudioPreviewTarget.allCases {
             #expect(controller.cardState(for: target).vectorScopeSnapshot == .unavailable)
+            #expect(controller.cardState(for: target).liveLoudnessMeterSnapshot == .unavailable)
         }
     }
 
@@ -458,6 +464,22 @@ struct AudioPreviewControllerTests {
         #expect(controller.cardState(for: .corrected).vectorScopeSnapshot == retainedSnapshot)
     }
 
+    @Test
+    func delayedLoudnessMeterResultDoesNotReplacePausedSnapshot() {
+        let controller = AudioPreviewController()
+        controller.activeTarget = .corrected
+        let retainedSnapshot = liveLoudnessSnapshot(momentary: -22)
+        controller.cardState(for: .corrected).liveLoudnessMeterSnapshot = retainedSnapshot
+        controller.cardState(for: .corrected).playbackState = .paused
+
+        controller.storeLiveLoudnessMeterSnapshotIfPlaying(
+            liveLoudnessSnapshot(momentary: -12),
+            for: .corrected
+        )
+
+        #expect(controller.cardState(for: .corrected).liveLoudnessMeterSnapshot == retainedSnapshot)
+    }
+
     private struct PreviewFixture {
         let directory: URL
         let url: URL
@@ -469,6 +491,16 @@ struct AudioPreviewControllerTests {
             duration: duration,
             bandLevels: [:],
             bandLevelDBs: [:]
+        )
+    }
+
+    private func liveLoudnessSnapshot(momentary: Double = -18) -> LiveLoudnessMeterSnapshot {
+        LiveLoudnessMeterSnapshot(
+            state: .measuring,
+            momentaryLUFS: momentary,
+            shortTermLUFS: -19,
+            integratedLUFS: -20,
+            truePeakDBTP: -1
         )
     }
 

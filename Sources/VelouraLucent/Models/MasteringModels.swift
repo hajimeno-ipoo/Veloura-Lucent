@@ -47,7 +47,7 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
     var presetTargetText: String {
         let settings = settings
         return String(
-            format: "目安: %.1f LUFS / True Peak上限: %.1f dBFS",
+            format: "目安: %.1f LUFS / True Peak上限: %.1f dBTP",
             Double(settings.targetLoudness),
             Double(settings.peakCeilingDB)
         )
