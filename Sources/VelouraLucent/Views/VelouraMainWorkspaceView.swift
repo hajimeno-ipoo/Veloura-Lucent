@@ -56,6 +56,8 @@ struct VelouraMainWorkspaceView: View {
 
         AverageSpectrumComparisonView(preview: preview)
 
+        VectorScopeView(preview: preview)
+
         SpectrogramComparisonView(
             input: job.inputSpectrogram,
             corrected: job.outputSpectrogram,

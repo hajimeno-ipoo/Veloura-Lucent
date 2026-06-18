@@ -476,6 +476,26 @@ struct RealtimeSpectrumPoint: Sendable, Identifiable, Equatable {
     let levelDB: Double
 }
 
+enum VectorScopeInputState: Sendable, Equatable {
+    case unavailable
+    case mono
+    case stereo
+    case multichannel(Int)
+}
+
+struct VectorScopePoint: Sendable, Identifiable, Equatable {
+    let id: Int
+    let x: Double
+    let y: Double
+}
+
+struct VectorScopeSnapshot: Sendable, Equatable {
+    let inputState: VectorScopeInputState
+    let points: [VectorScopePoint]
+
+    static let unavailable = VectorScopeSnapshot(inputState: .unavailable, points: [])
+}
+
 struct SpectrogramCell: Sendable, Identifiable {
     let id: String
     let timeIndex: Int

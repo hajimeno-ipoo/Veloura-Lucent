@@ -188,6 +188,10 @@ struct AudioPreviewControllerTests {
         controller.setPreviewSnapshot(oldSnapshot, for: .input, sourceURL: oldURL, integratedLoudnessLUFS: -18)
         controller.cardState(for: .input).playbackProgress = 0.5
         controller.cardState(for: .input).playbackPosition = 0.5
+        controller.cardState(for: .input).vectorScopeSnapshot = VectorScopeSnapshot(
+            inputState: .stereo,
+            points: [VectorScopePoint(id: 0, x: 0.2, y: 0.4)]
+        )
 
         controller.preparePreviewPlaceholder(for: newURL, target: .input)
 
@@ -197,6 +201,7 @@ struct AudioPreviewControllerTests {
         #expect(controller.integratedLoudnessLUFS(for: .input) == nil)
         #expect(controller.cardState(for: .input).playbackProgress == 0)
         #expect(controller.cardState(for: .input).playbackPosition == 0)
+        #expect(controller.cardState(for: .input).vectorScopeSnapshot == .unavailable)
         guard case .stopped = controller.cardState(for: .input).playbackState else {
             Issue.record("Placeholder should stop input playback state")
             return
@@ -244,6 +249,12 @@ struct AudioPreviewControllerTests {
         controller.seek(to: 0.6, target: .input)
         controller.activeTarget = .input
         controller.cardState(for: .input).playbackState = .playing
+        for target in AudioPreviewTarget.allCases {
+            controller.cardState(for: target).vectorScopeSnapshot = VectorScopeSnapshot(
+                inputState: .stereo,
+                points: [VectorScopePoint(id: 0, x: 0.2, y: 0.4)]
+            )
+        }
 
         controller.finishActivePlayback()
 
@@ -253,6 +264,9 @@ struct AudioPreviewControllerTests {
         #expect(controller.cardState(for: .corrected).playbackPosition == 0)
         #expect(controller.cardState(for: .mastered).playbackProgress == 0)
         #expect(controller.cardState(for: .mastered).playbackPosition == 0)
+        for target in AudioPreviewTarget.allCases {
+            #expect(controller.cardState(for: target).vectorScopeSnapshot == .unavailable)
+        }
     }
 
     @Test
@@ -340,6 +354,110 @@ struct AudioPreviewControllerTests {
         #expect(points.contains { $0.frequencyHz == 1_000 })
     }
 
+    @Test
+    func vectorScopeShowsInPhaseSignalVertically() throws {
+        let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in (sample, sample) })
+
+        #expect(snapshot.inputState == .stereo)
+        #expect(snapshot.points.count == VectorScopeAnalyzer.maximumPointCount)
+        #expect(snapshot.points.allSatisfy { abs($0.x) < 0.000_001 })
+        #expect((snapshot.points.map { abs($0.y) }.max() ?? 0) > 0.4)
+    }
+
+    @Test
+    func vectorScopeShowsReversePhaseSignalHorizontally() throws {
+        let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in (sample, -sample) })
+
+        #expect(snapshot.inputState == .stereo)
+        #expect(snapshot.points.allSatisfy { abs($0.y) < 0.000_001 })
+        #expect((snapshot.points.map { abs($0.x) }.max() ?? 0) > 0.4)
+    }
+
+    @Test
+    func vectorScopeShowsLeftOnlySignalDiagonally() throws {
+        let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in (sample, 0) })
+
+        #expect(snapshot.inputState == .stereo)
+        #expect(snapshot.points.allSatisfy { abs($0.x - $0.y) < 0.000_001 })
+        #expect((snapshot.points.map { abs($0.x) }.max() ?? 0) > 0.2)
+    }
+
+    @Test
+    func vectorScopeDoesNotDrawSilence() throws {
+        let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer { _ in (0, 0) })
+
+        #expect(snapshot.inputState == .stereo)
+        #expect(snapshot.points.isEmpty)
+    }
+
+    @Test
+    func vectorScopeReportsMonoWithoutDrawing() throws {
+        let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 2_048)!
+        buffer.frameLength = 2_048
+
+        let snapshot = VectorScopeAnalyzer.snapshot(from: buffer)
+
+        #expect(snapshot.inputState == .mono)
+        #expect(snapshot.points.isEmpty)
+    }
+
+    @Test
+    func vectorScopeReportsMultichannelAsUnsupported() {
+        #expect(VectorScopeAnalyzer.inputState(forChannelCount: 3) == .multichannel(3))
+    }
+
+    @Test
+    func globalStopClearsAllVectorScopeSnapshots() {
+        let controller = AudioPreviewController()
+        for target in AudioPreviewTarget.allCases {
+            controller.cardState(for: target).vectorScopeSnapshot = VectorScopeSnapshot(
+                inputState: .stereo,
+                points: [VectorScopePoint(id: 0, x: 0.2, y: 0.4)]
+            )
+        }
+
+        controller.stopPlayback()
+
+        for target in AudioPreviewTarget.allCases {
+            #expect(controller.cardState(for: target).vectorScopeSnapshot == .unavailable)
+        }
+    }
+
+    @Test
+    func pausingActiveTargetPreservesVectorScopeSnapshot() {
+        let controller = AudioPreviewController()
+        controller.activeTarget = .corrected
+        let snapshot = VectorScopeSnapshot(
+            inputState: .stereo,
+            points: [VectorScopePoint(id: 0, x: 0.2, y: 0.4)]
+        )
+        controller.cardState(for: .corrected).vectorScopeSnapshot = snapshot
+
+        controller.pausePlayback(target: .corrected)
+
+        #expect(controller.cardState(for: .corrected).vectorScopeSnapshot == snapshot)
+    }
+
+    @Test
+    func delayedVectorScopeResultDoesNotReplacePausedSnapshot() {
+        let controller = AudioPreviewController()
+        controller.activeTarget = .corrected
+        let retainedSnapshot = VectorScopeSnapshot(
+            inputState: .stereo,
+            points: [VectorScopePoint(id: 0, x: 0.2, y: 0.4)]
+        )
+        controller.cardState(for: .corrected).vectorScopeSnapshot = retainedSnapshot
+        controller.cardState(for: .corrected).playbackState = .paused
+
+        controller.storeVectorScopeSnapshotIfPlaying(
+            VectorScopeSnapshot(inputState: .stereo, points: []),
+            for: .corrected
+        )
+
+        #expect(controller.cardState(for: .corrected).vectorScopeSnapshot == retainedSnapshot)
+    }
+
     private struct PreviewFixture {
         let directory: URL
         let url: URL
@@ -352,6 +470,23 @@ struct AudioPreviewControllerTests {
             bandLevels: [:],
             bandLevelDBs: [:]
         )
+    }
+
+    private func stereoBuffer(
+        transform: (Float) -> (Float, Float)
+    ) -> AVAudioPCMBuffer {
+        let sampleRate = 48_000.0
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 2_048)!
+        buffer.frameLength = 2_048
+        let channels = buffer.floatChannelData!
+        for index in 0..<Int(buffer.frameLength) {
+            let sample = Float(sin(2 * Double.pi * 1_000 * Double(index) / sampleRate) * 0.5)
+            let transformed = transform(sample)
+            channels[0][index] = transformed.0
+            channels[1][index] = transformed.1
+        }
+        return buffer
     }
 
     private func makePreviewFixture() throws -> PreviewFixture {

@@ -37,7 +37,8 @@ struct UIWordingPolicyTests {
         let source = try combinedSource(
             [
                 "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
-                "Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"
+                "Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift",
+                "Sources/VelouraLucent/Views/VectorScopeView.swift"
             ]
         )
 
@@ -51,6 +52,10 @@ struct UIWordingPolicyTests {
         #expect(source.contains("マスタリング差分"))
         #expect(source.contains("ノイズ7種類比較"))
         #expect(source.contains("ステレオ相関"))
+        #expect(source.contains("VectorScopeView(preview: preview)"))
+        #expect(source.contains("Text(\"ベクトルスコープ\")"))
+        #expect(source.contains(".frame(width: 280, height: 240)"))
+        #expect(!source.contains("再生中ベクトルスコープ"))
         #expect(source.contains("短時間ラウドネス"))
         #expect(source.contains("ダイナミクス推移"))
         #expect(source.contains("平均スペクトル比較"))
@@ -71,7 +76,10 @@ struct UIWordingPolicyTests {
 
     @Test
     func stereoCorrelationMeterShowsReadableScale() throws {
-        let source = try combinedSource(["Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"])
+        let source = try combinedSource([
+            "Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift",
+            "Sources/VelouraLucent/Views/VectorScopeView.swift"
+        ])
 
         #expect(source.contains("0未満はモノラル再生で音が痩せる可能性があります。"))
         #expect(source.contains("-1 逆相"))
@@ -85,6 +93,9 @@ struct UIWordingPolicyTests {
         #expect(source.contains("RuleMark(y: .value(\"注意ライン\", 0))"))
         #expect(source.contains("series: .value(\"区間\", point.lineGroup)"))
         #expect(source.contains("correlationTimelineDuration(stages: stages)"))
+        #expect(source.contains("縦=同相 / 横=逆相 / 斜め=左右偏り。再生中の1音源だけを表示します。"))
+        #expect(source.contains("モノラル音源のため、左右の関係は表示しません"))
+        #expect(source.contains("チャンネル音源はベクトルスコープ未対応です"))
     }
 
     @Test

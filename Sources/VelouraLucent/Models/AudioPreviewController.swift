@@ -22,6 +22,7 @@ final class AudioPreviewCardState {
     var snapshot: AudioPreviewSnapshot?
     var liveBandLevels: [LiveBandSample] = []
     var realtimeSpectrum: [RealtimeSpectrumPoint] = []
+    var vectorScopeSnapshot = VectorScopeSnapshot.unavailable
     var playbackProgress: Double = 0
     var playbackPosition: TimeInterval = 0
     var playbackState: AudioPlaybackState = .stopped
@@ -183,8 +184,9 @@ final class AudioPreviewController {
     }
 
     func pausePlayback(target: AudioPreviewTarget) {
-        guard activeTarget == target, let playerNode else { return }
+        guard activeTarget == target else { return }
         let targetState = cardState(for: target)
+        guard let playerNode else { return }
         let currentTime = currentPlaybackPosition()
         targetState.playbackPosition = currentTime
         targetState.playbackProgress = activePlaybackDuration > 0 ? max(0, min(1, currentTime / activePlaybackDuration)) : 0
@@ -215,6 +217,7 @@ final class AudioPreviewController {
             state.playbackProgress = 0
             state.playbackState = .stopped
             state.realtimeSpectrum = []
+            state.vectorScopeSnapshot = .unavailable
             if let snapshot = state.snapshot {
                 state.liveBandLevels = makeInitialLiveBandLevels(from: snapshot, target: targetToReset)
             }
@@ -242,6 +245,7 @@ final class AudioPreviewController {
         targetState.snapshot = nil
         targetState.liveBandLevels = []
         targetState.realtimeSpectrum = []
+        targetState.vectorScopeSnapshot = .unavailable
         integratedLoudnessByTarget[target] = nil
 
         previewTasks[target] = Task {
@@ -276,6 +280,7 @@ final class AudioPreviewController {
         targetState.snapshot = nil
         targetState.liveBandLevels = []
         targetState.realtimeSpectrum = []
+        targetState.vectorScopeSnapshot = .unavailable
         integratedLoudnessByTarget[target] = nil
         targetState.playbackPosition = 0
         targetState.playbackProgress = 0
@@ -311,6 +316,7 @@ final class AudioPreviewController {
         targetState.snapshot = nil
         targetState.liveBandLevels = []
         targetState.realtimeSpectrum = []
+        targetState.vectorScopeSnapshot = .unavailable
         integratedLoudnessByTarget[target] = nil
         targetState.playbackPosition = 0
         targetState.playbackProgress = 0
@@ -329,6 +335,7 @@ final class AudioPreviewController {
         targetState.liveBandLevels = makeInitialLiveBandLevels(from: snapshot, target: target)
         if targetState.playbackState == .stopped {
             targetState.realtimeSpectrum = []
+            targetState.vectorScopeSnapshot = .unavailable
         }
         if let integratedLoudnessLUFS {
             setIntegratedLoudnessLUFS(integratedLoudnessLUFS, for: target)
@@ -537,6 +544,7 @@ final class AudioPreviewController {
     private func transitionAwayFromCurrentTarget(keepingPosition: Bool) {
         guard let activeTarget else { return }
         let activeState = cardState(for: activeTarget)
+        clearVectorScopeSnapshots()
         if keepingPosition {
             storeCurrentPlaybackPosition()
             activeState.playbackState = .paused
@@ -615,6 +623,12 @@ final class AudioPreviewController {
         let frameCount = AVAudioFrameCount(min(remainingFrames, AVAudioFramePosition(UInt32.max)))
         let playbackID = UUID()
 
+        clearVectorScopeSnapshots()
+        cardState(for: target).vectorScopeSnapshot = VectorScopeSnapshot(
+            inputState: VectorScopeAnalyzer.inputState(forChannelCount: Int(format.channelCount)),
+            points: []
+        )
+
         engine.attach(playerNode)
         engine.attach(analysisMixer)
         engine.connect(playerNode, to: analysisMixer, format: format)
@@ -670,6 +684,24 @@ final class AudioPreviewController {
         cardState(for: target).realtimeSpectrum = points
     }
 
+    fileprivate func storeVectorScopeSnapshot(
+        _ snapshot: VectorScopeSnapshot,
+        for target: AudioPreviewTarget,
+        playbackID: UUID
+    ) {
+        guard activeTarget == target, activePlaybackID == playbackID else { return }
+        storeVectorScopeSnapshotIfPlaying(snapshot, for: target)
+    }
+
+    func storeVectorScopeSnapshotIfPlaying(
+        _ snapshot: VectorScopeSnapshot,
+        for target: AudioPreviewTarget
+    ) {
+        guard activeTarget == target, cardState(for: target).playbackState == .playing else { return }
+        clearVectorScopeSnapshots(except: target)
+        cardState(for: target).vectorScopeSnapshot = snapshot
+    }
+
     private func finishPlaybackIfCurrent(target: AudioPreviewTarget, playbackID: UUID) {
         guard activeTarget == target, activePlaybackID == playbackID else { return }
         finishActivePlayback()
@@ -701,6 +733,12 @@ final class AudioPreviewController {
         activeAudioFile = nil
         activePlaybackStartTime = 0
         activePlaybackDuration = 0
+    }
+
+    private func clearVectorScopeSnapshots(except preservedTarget: AudioPreviewTarget? = nil) {
+        for target in AudioPreviewTarget.allCases where target != preservedTarget {
+            cardState(for: target).vectorScopeSnapshot = .unavailable
+        }
     }
 
     private func normalizedProgress(for target: AudioPreviewTarget, duration: TimeInterval) -> Double {
@@ -740,10 +778,13 @@ private enum RealtimeSpectrumTapInstaller {
         mixer.installTap(onBus: 0, bufferSize: bufferSize, format: format) { [weak controller] buffer, _ in
             guard let sampleBuffer = RealtimeSpectrumAnalyzer.sampleBuffer(from: buffer) else { return }
             analysisQueue.async { [weak controller] in
-                let points = RealtimeSpectrumAnalyzer.points(from: sampleBuffer)
-                guard !points.isEmpty else { return }
+                let spectrumPoints = RealtimeSpectrumAnalyzer.points(from: sampleBuffer)
+                let vectorScopeSnapshot = VectorScopeAnalyzer.snapshot(from: sampleBuffer)
                 Task { @MainActor [weak controller] in
-                    controller?.storeRealtimeSpectrum(points, for: target, playbackID: playbackID)
+                    if !spectrumPoints.isEmpty {
+                        controller?.storeRealtimeSpectrum(spectrumPoints, for: target, playbackID: playbackID)
+                    }
+                    controller?.storeVectorScopeSnapshot(vectorScopeSnapshot, for: target, playbackID: playbackID)
                 }
             }
         }
@@ -864,5 +905,71 @@ enum RealtimeSpectrumAnalyzer {
             }
         }
         return mono
+    }
+}
+
+enum VectorScopeAnalyzer {
+    static let maximumPointCount = 256
+    private static let minimumAudibleSample: Float = 0.00001
+
+    static func snapshot(from buffer: AVAudioPCMBuffer) -> VectorScopeSnapshot {
+        guard let sampleBuffer = RealtimeSpectrumAnalyzer.sampleBuffer(from: buffer) else {
+            return .unavailable
+        }
+        return snapshot(from: sampleBuffer)
+    }
+
+    static func inputState(forChannelCount channelCount: Int) -> VectorScopeInputState {
+        switch channelCount {
+        case 1:
+            return .mono
+        case 2:
+            return .stereo
+        case 3...:
+            return .multichannel(channelCount)
+        default:
+            return .unavailable
+        }
+    }
+
+    fileprivate static func snapshot(from sampleBuffer: RealtimeSpectrumSampleBuffer) -> VectorScopeSnapshot {
+        let channelCount = sampleBuffer.channelSamples.count
+        let inputState = inputState(forChannelCount: channelCount)
+        guard inputState == .stereo else {
+            return VectorScopeSnapshot(inputState: inputState, points: [])
+        }
+
+        let left = sampleBuffer.channelSamples[0]
+        let right = sampleBuffer.channelSamples[1]
+        let frameLength = min(left.count, right.count)
+        guard frameLength > 0 else {
+            return VectorScopeSnapshot(inputState: .stereo, points: [])
+        }
+
+        var peak = Float.zero
+        for index in 0..<frameLength {
+            peak = max(peak, abs(left[index]), abs(right[index]))
+        }
+        guard peak > minimumAudibleSample else {
+            return VectorScopeSnapshot(inputState: .stereo, points: [])
+        }
+
+        let pointCount = min(maximumPointCount, frameLength)
+        let points = (0..<pointCount).map { pointIndex in
+            let sampleIndex: Int
+            if pointCount == 1 {
+                sampleIndex = 0
+            } else {
+                sampleIndex = pointIndex * (frameLength - 1) / (pointCount - 1)
+            }
+            let leftSample = Double(left[sampleIndex])
+            let rightSample = Double(right[sampleIndex])
+            return VectorScopePoint(
+                id: pointIndex,
+                x: max(-1, min(1, (leftSample - rightSample) / 2)),
+                y: max(-1, min(1, (leftSample + rightSample) / 2))
+            )
+        }
+        return VectorScopeSnapshot(inputState: .stereo, points: points)
     }
 }
