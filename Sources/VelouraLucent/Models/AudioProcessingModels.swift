@@ -483,17 +483,82 @@ enum VectorScopeInputState: Sendable, Equatable {
     case multichannel(Int)
 }
 
+enum VectorScopeDisplayMode: String, CaseIterable, Identifiable, Sendable {
+    case polarSample
+    case polarLevel
+    case lissajous
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .lissajous: "Lissajous"
+        case .polarSample: "Polar Sample"
+        case .polarLevel: "Polar Level"
+        }
+    }
+}
+
 struct VectorScopePoint: Sendable, Identifiable, Equatable {
     let id: Int
     let x: Double
     let y: Double
+    let isClipped: Bool
+    let age: Double
+
+    init(id: Int, x: Double, y: Double, isClipped: Bool = false, age: Double = 0) {
+        self.id = id
+        self.x = x
+        self.y = y
+        self.isClipped = isClipped
+        self.age = age
+    }
+}
+
+struct VectorScopeLine: Sendable, Identifiable, Equatable {
+    let id: Int
+    let x: Double
+    let y: Double
+    let isClipped: Bool
+    let age: Double
+
+    init(id: Int, x: Double, y: Double, isClipped: Bool = false, age: Double = 0) {
+        self.id = id
+        self.x = x
+        self.y = y
+        self.isClipped = isClipped
+        self.age = age
+    }
 }
 
 struct VectorScopeSnapshot: Sendable, Equatable {
     let inputState: VectorScopeInputState
     let points: [VectorScopePoint]
+    let polarSamplePoints: [VectorScopePoint]
+    let polarLevelLines: [VectorScopeLine]
+    let correlation: Double?
+    let balance: Double?
+    let updateDurationSeconds: Double
 
-    static let unavailable = VectorScopeSnapshot(inputState: .unavailable, points: [])
+    init(
+        inputState: VectorScopeInputState,
+        points: [VectorScopePoint] = [],
+        polarSamplePoints: [VectorScopePoint] = [],
+        polarLevelLines: [VectorScopeLine] = [],
+        correlation: Double? = nil,
+        balance: Double? = nil,
+        updateDurationSeconds: Double = 0
+    ) {
+        self.inputState = inputState
+        self.points = points
+        self.polarSamplePoints = polarSamplePoints
+        self.polarLevelLines = polarLevelLines
+        self.correlation = correlation
+        self.balance = balance
+        self.updateDurationSeconds = updateDurationSeconds
+    }
+
+    static let unavailable = VectorScopeSnapshot(inputState: .unavailable)
 }
 
 enum LoudnessMeterState: Sendable, Equatable {

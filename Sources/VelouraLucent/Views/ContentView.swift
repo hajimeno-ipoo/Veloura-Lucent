@@ -11,14 +11,21 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             VelouraSidebarView(job: job)
-            .navigationSplitViewColumnWidth(min: 160, ideal: 220, max: 260)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 380)
         } detail: {
-            VelouraMainWorkspaceView(
-                job: job,
-                preview: preview
-            )
-            .inspector(isPresented: $isInspectorPresented) {
-                VelouraInspectorView(job: job, completionReport: completionReport)
+            HStack(spacing: 0) {
+                VelouraMainWorkspaceView(
+                    job: job,
+                    preview: preview
+                )
+                .frame(minWidth: 0, maxWidth: .infinity)
+
+                if isInspectorPresented {
+                    Divider()
+                    VelouraInspectorView(job: job, completionReport: completionReport)
+                        .frame(minWidth: 300, idealWidth: 360, maxWidth: 440)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
         }
         .navigationSplitViewStyle(.balanced)
@@ -84,13 +91,16 @@ struct ContentView: View {
                 Button {
                     isInspectorPresented.toggle()
                 } label: {
-                    toolbarLabel(isInspectorPresented ? "設定を隠す" : "設定を表示", systemImage: "sidebar.right")
+                    Label(isInspectorPresented ? "設定を隠す" : "設定を表示", systemImage: "sidebar.right")
+                        .labelStyle(.iconOnly)
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel(isInspectorPresented ? "設定を隠す" : "設定を表示")
                 .help("右側の設定パネルを表示または非表示にします")
             }
         }
-        .frame(minWidth: 1_180, minHeight: 820)
+        .navigationTitle("試聴と解析")
+        .frame(minWidth: 960, minHeight: 720)
         .onChange(of: job.selectedMasteringProfile) { _, newValue in
             job.applyMasteringProfile(newValue)
         }

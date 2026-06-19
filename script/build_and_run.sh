@@ -185,7 +185,7 @@ ${ICON_PLIST_BLOCK}
 PLIST
 
 open_app() {
-  /usr/bin/open -n "$APP_BUNDLE"
+  /usr/bin/open -n -F "$APP_BUNDLE" --args -ApplePersistenceIgnoreState YES
 }
 
 case "$MODE" in

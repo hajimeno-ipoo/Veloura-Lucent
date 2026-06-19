@@ -38,7 +38,8 @@ struct UIWordingPolicyTests {
             [
                 "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
                 "Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift",
-                "Sources/VelouraLucent/Views/VectorScopeView.swift"
+                "Sources/VelouraLucent/Views/VectorScopeView.swift",
+                "Sources/VelouraLucent/Views/VectorScopeModePicker.swift"
             ]
         )
 
@@ -52,9 +53,19 @@ struct UIWordingPolicyTests {
         #expect(source.contains("マスタリング差分"))
         #expect(source.contains("ノイズ7種類比較"))
         #expect(source.contains("ステレオ相関"))
-        #expect(source.contains("VectorScopeView(preview: preview)"))
+        #expect(source.contains("VectorScopeView("))
+        #expect(source.contains("preview: preview"))
         #expect(source.contains("Text(\"ベクトルスコープ\")"))
-        #expect(source.contains(".frame(width: 280, height: 240)"))
+        #expect(source.contains("Picker(\"ベクトルスコープ表示\", selection: $displayMode)"))
+        #expect(source.contains("TermHelpButton("))
+        #expect(source.contains("Polar Sampleは、左右チャンネルのサンプルを半円上の点で表示します。"))
+        #expect(source.contains("Polar Levelは、短い時間の平均を線で表示します。"))
+        #expect(source.contains("Lissajousは、左右チャンネルの瞬間的な関係を菱形の中の点で表示します。"))
+        #expect(source.contains("Lissajous"))
+        #expect(source.contains("Polar Sample"))
+        #expect(source.contains("Polar Level"))
+        #expect(source.contains("Text(\"相関\")"))
+        #expect(source.contains("Text(\"L/Rバランス\")"))
         #expect(!source.contains("再生中ベクトルスコープ"))
         #expect(source.contains("短時間ラウドネス"))
         #expect(source.contains("ダイナミクス推移"))
@@ -62,6 +73,27 @@ struct UIWordingPolicyTests {
         #expect(source.contains("周波数帯域詳細"))
         #expect(source.contains("右側インスペクタと下部ログへ同じ表を重複表示せず"))
         #expect(source.contains("仕上がりの方向") == false)
+    }
+
+    @Test
+    func contentViewKeepsSidebarAndTogglesRightSettingsPanel() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/ContentView.swift"])
+
+        #expect(source.contains("@State private var isInspectorPresented = true"))
+        #expect(source.contains("NavigationSplitView {"))
+        #expect(source.contains("VelouraSidebarView(job: job)"))
+        #expect(source.contains("HStack(spacing: 0)"))
+        #expect(source.contains("VelouraMainWorkspaceView("))
+        #expect(source.contains("if isInspectorPresented"))
+        #expect(source.contains("VelouraInspectorView(job: job, completionReport: completionReport)"))
+        #expect(source.contains("ToolbarItem(placement: .primaryAction)"))
+        #expect(source.contains(".labelStyle(.iconOnly)"))
+        #expect(source.contains(".buttonStyle(.plain)"))
+        #expect(source.contains("設定を隠す"))
+        #expect(source.contains("設定を表示"))
+        #expect(!source.contains("NavigationSplitView(columnVisibility:"))
+        #expect(!source.contains(".inspector(isPresented:"))
+        #expect(!source.contains(".inspectorColumnWidth("))
     }
 
     @Test
@@ -86,6 +118,9 @@ struct UIWordingPolicyTests {
         #expect(source.contains("0 注意"))
         #expect(source.contains("+1 同相"))
         #expect(source.contains("-1は逆相、0は注意、+1は同相です。"))
+        #expect(source.contains("correlationScaleLabel(value: \"+1\", meaning: \"同相\")"))
+        #expect(source.contains("correlationScaleLabel(value: \"0\", meaning: \"注意\")"))
+        #expect(source.contains("correlationScaleLabel(value: \"-1\", meaning: \"逆相\")"))
         #expect(source.contains("時間ごとの相関推移"))
         #expect(source.contains("無音区間は相関値として計算せず、線を区切ります。"))
         #expect(source.contains("モノラル音源のため、ステレオ相関推移はありません。"))
@@ -93,7 +128,9 @@ struct UIWordingPolicyTests {
         #expect(source.contains("RuleMark(y: .value(\"注意ライン\", 0))"))
         #expect(source.contains("series: .value(\"区間\", point.lineGroup)"))
         #expect(source.contains("correlationTimelineDuration(stages: stages)"))
-        #expect(source.contains("縦=同相 / 横=逆相 / 斜め=左右偏り。再生中の1音源だけを表示します。"))
+        #expect(source.contains("Lissajous: 縦=同相 / 横=逆相 / 斜め=左右偏り。"))
+        #expect(source.contains("Polar Sample: 45度安全ライン内は同相、外側は位相ずれを示します。"))
+        #expect(source.contains("Polar Level: 平均線の角度でステレオ位置、長さで振幅を確認します。"))
         #expect(source.contains("モノラル音源のため、左右の関係は表示しません"))
         #expect(source.contains("チャンネル音源はベクトルスコープ未対応です"))
     }

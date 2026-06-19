@@ -13,6 +13,5 @@ struct VelouraInspectorView: View {
             }
             .padding(14)
         }
-        .inspectorColumnWidth(min: 240, ideal: 300, max: 360)
     }
 }

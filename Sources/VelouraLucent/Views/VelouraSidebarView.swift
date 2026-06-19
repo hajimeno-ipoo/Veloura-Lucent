@@ -63,7 +63,6 @@ struct VelouraSidebarView: View {
 
         }
         .listStyle(.sidebar)
-        .navigationTitle("工程")
     }
 
 }

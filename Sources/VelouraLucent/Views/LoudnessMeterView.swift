@@ -7,7 +7,7 @@ struct LoudnessMeterView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
                 LoudnessMeterColumn(
                     title: "Momentary",
                     value: snapshot.momentaryLUFS,
@@ -117,43 +117,41 @@ private struct LoudnessMeterColumn: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
 
-            ZStack(alignment: .bottom) {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.secondary.opacity(0.12))
+            HStack(alignment: .top, spacing: 6) {
+                tickLabels
 
-                if let clampedValue {
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(meterGradient)
-                        .frame(height: meterHeight * normalized(clampedValue))
+                ZStack(alignment: .bottom) {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.secondary.opacity(0.12))
+
+                    if let clampedValue {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(meterGradient)
+                            .frame(height: meterHeight * normalized(clampedValue))
+                    }
+
+                    MeterReferenceLine(
+                        normalizedPosition: normalized(referenceValue),
+                        color: referenceColor
+                    )
+                }
+                .frame(width: 52, height: meterHeight)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.secondary.opacity(0.22), lineWidth: 1)
                 }
 
-                MeterReferenceLine(
-                    normalizedPosition: normalized(referenceValue),
-                    color: referenceColor
-                )
-            }
-            .frame(width: 42, height: meterHeight)
-            .overlay(alignment: .leading) {
-                tickLabels
-                    .offset(x: -42)
-            }
-            .overlay(alignment: .trailing) {
                 referenceLabelView
-                    .offset(x: 34)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 5)
-                    .stroke(Color.secondary.opacity(0.22), lineWidth: 1)
             }
 
             Text(value.map(format) ?? "--")
-                .font(.callout.monospacedDigit().weight(.semibold))
+                .font(.title3.monospacedDigit().weight(.semibold))
                 .foregroundStyle(valueColor)
             Text(unit)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
         }
-        .frame(minWidth: 100)
+        .frame(minWidth: 108)
     }
 
     private var referenceLabelView: some View {
@@ -164,11 +162,11 @@ private struct LoudnessMeterColumn: View {
                 .padding(.horizontal, 4)
                 .background(.regularMaterial, in: Capsule())
                 .position(
-                    x: 18,
+                    x: 20,
                     y: proxy.size.height * (1 - normalized(referenceValue))
                 )
         }
-        .frame(width: 36, height: meterHeight)
+        .frame(width: 34, height: meterHeight)
     }
 
     private var tickLabels: some View {
@@ -178,7 +176,7 @@ private struct LoudnessMeterColumn: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .position(
-                        x: 16,
+                        x: 20,
                         y: proxy.size.height * (1 - normalized(tickValue))
                     )
             }
@@ -187,7 +185,7 @@ private struct LoudnessMeterColumn: View {
     }
 
     private var meterHeight: CGFloat {
-        190
+        220
     }
 
     private var valueColor: Color {

@@ -70,6 +70,7 @@ final class AudioPreviewController {
     private var meterTimer: Timer?
     private var previewTasks: [AudioPreviewTarget: Task<Void, Never>] = [:]
     private var integratedLoudnessByTarget: [AudioPreviewTarget: Float] = [:]
+    private var vectorScopeHistoryCounters: [AudioPreviewTarget: Int] = [:]
     private let realtimeSpectrumAnalysisQueue = DispatchQueue(
         label: "com.codex.VelouraLucent.realtimeSpectrumAnalysis",
         qos: .userInitiated
@@ -220,6 +221,7 @@ final class AudioPreviewController {
             state.realtimeSpectrum = []
             state.vectorScopeSnapshot = .unavailable
             state.liveLoudnessMeterSnapshot = .unavailable
+            vectorScopeHistoryCounters[targetToReset] = nil
             if let snapshot = state.snapshot {
                 state.liveBandLevels = makeInitialLiveBandLevels(from: snapshot, target: targetToReset)
             }
@@ -249,6 +251,7 @@ final class AudioPreviewController {
         targetState.realtimeSpectrum = []
         targetState.vectorScopeSnapshot = .unavailable
         targetState.liveLoudnessMeterSnapshot = .unavailable
+        vectorScopeHistoryCounters[target] = nil
         integratedLoudnessByTarget[target] = nil
 
         previewTasks[target] = Task {
@@ -285,6 +288,7 @@ final class AudioPreviewController {
         targetState.realtimeSpectrum = []
         targetState.vectorScopeSnapshot = .unavailable
         targetState.liveLoudnessMeterSnapshot = .unavailable
+        vectorScopeHistoryCounters[target] = nil
         integratedLoudnessByTarget[target] = nil
         targetState.playbackPosition = 0
         targetState.playbackProgress = 0
@@ -322,6 +326,7 @@ final class AudioPreviewController {
         targetState.realtimeSpectrum = []
         targetState.vectorScopeSnapshot = .unavailable
         targetState.liveLoudnessMeterSnapshot = .unavailable
+        vectorScopeHistoryCounters[target] = nil
         integratedLoudnessByTarget[target] = nil
         targetState.playbackPosition = 0
         targetState.playbackProgress = 0
@@ -342,6 +347,7 @@ final class AudioPreviewController {
             targetState.realtimeSpectrum = []
             targetState.vectorScopeSnapshot = .unavailable
             targetState.liveLoudnessMeterSnapshot = .unavailable
+            vectorScopeHistoryCounters[target] = nil
         }
         if let integratedLoudnessLUFS {
             setIntegratedLoudnessLUFS(integratedLoudnessLUFS, for: target)
@@ -392,6 +398,13 @@ final class AudioPreviewController {
     func finishActivePlayback() {
         guard activeTarget != nil else { return }
         stopPlayback()
+    }
+
+    func resetVectorScopeHistory() {
+        guard let activeTarget else { return }
+        let currentState = cardState(for: activeTarget).vectorScopeSnapshot.inputState
+        cardState(for: activeTarget).vectorScopeSnapshot = VectorScopeSnapshot(inputState: currentState)
+        vectorScopeHistoryCounters[activeTarget] = nil
     }
 
     private func startMetering(target: AudioPreviewTarget) {
@@ -630,6 +643,7 @@ final class AudioPreviewController {
         let playbackID = UUID()
 
         clearRealtimeVisualSnapshots()
+        vectorScopeHistoryCounters[target] = nil
         cardState(for: target).vectorScopeSnapshot = VectorScopeSnapshot(
             inputState: VectorScopeAnalyzer.inputState(forChannelCount: Int(format.channelCount)),
             points: []
@@ -715,7 +729,14 @@ final class AudioPreviewController {
     ) {
         guard activeTarget == target, cardState(for: target).playbackState == .playing else { return }
         clearVectorScopeSnapshots(except: target)
-        cardState(for: target).vectorScopeSnapshot = snapshot
+        let state = cardState(for: target)
+        let nextID = (vectorScopeHistoryCounters[target] ?? 0) + 1
+        vectorScopeHistoryCounters[target] = nextID
+        state.vectorScopeSnapshot = VectorScopeAnalyzer.merging(
+            snapshot,
+            with: state.vectorScopeSnapshot,
+            generationID: nextID
+        )
     }
 
     func storeLiveLoudnessMeterSnapshotIfPlaying(
@@ -763,6 +784,7 @@ final class AudioPreviewController {
     private func clearVectorScopeSnapshots(except preservedTarget: AudioPreviewTarget? = nil) {
         for target in AudioPreviewTarget.allCases where target != preservedTarget {
             cardState(for: target).vectorScopeSnapshot = .unavailable
+            vectorScopeHistoryCounters[target] = nil
         }
     }
 
@@ -1113,7 +1135,12 @@ enum RealtimeSpectrumAnalyzer {
 
 enum VectorScopeAnalyzer {
     static let maximumPointCount = 256
+    static let historyDurationSeconds = 3.0
     private static let minimumAudibleSample: Float = 0.00001
+    private static let maximumHistoryAge = 1.0
+    private static let defaultUpdatesPerSecond = 10.0
+    private static let maximumStoredPointCount = maximumPointCount * Int(historyDurationSeconds * defaultUpdatesPerSecond)
+    private static let maximumStoredLineCount = Int(historyDurationSeconds * defaultUpdatesPerSecond)
 
     static func snapshot(from buffer: AVAudioPCMBuffer) -> VectorScopeSnapshot {
         guard let sampleBuffer = RealtimeSpectrumAnalyzer.sampleBuffer(from: buffer) else {
@@ -1158,6 +1185,28 @@ enum VectorScopeAnalyzer {
         }
 
         let pointCount = min(maximumPointCount, frameLength)
+        var leftEnergy = 0.0
+        var rightEnergy = 0.0
+        var sharedEnergy = 0.0
+        var midEnergy = 0.0
+        var sideEnergy = 0.0
+        var sideSum = 0.0
+        var containsClipping = false
+
+        for index in 0..<frameLength {
+            let leftSample = Double(left[index])
+            let rightSample = Double(right[index])
+            let mid = (leftSample + rightSample) / 2
+            let side = (rightSample - leftSample) / 2
+            leftEnergy += leftSample * leftSample
+            rightEnergy += rightSample * rightSample
+            sharedEnergy += leftSample * rightSample
+            midEnergy += mid * mid
+            sideEnergy += side * side
+            sideSum += side
+            containsClipping = containsClipping || isClipped(leftSample, rightSample)
+        }
+
         let points = (0..<pointCount).map { pointIndex in
             let sampleIndex: Int
             if pointCount == 1 {
@@ -1167,12 +1216,197 @@ enum VectorScopeAnalyzer {
             }
             let leftSample = Double(left[sampleIndex])
             let rightSample = Double(right[sampleIndex])
+            let point = lissajousPoint(left: leftSample, right: rightSample)
             return VectorScopePoint(
                 id: pointIndex,
-                x: max(-1, min(1, (leftSample - rightSample) / 2)),
-                y: max(-1, min(1, (leftSample + rightSample) / 2))
+                x: point.x,
+                y: point.y,
+                isClipped: isClipped(leftSample, rightSample)
             )
         }
-        return VectorScopeSnapshot(inputState: .stereo, points: points)
+        let polarSamplePoints = (0..<pointCount).map { pointIndex in
+            let sampleIndex: Int
+            if pointCount == 1 {
+                sampleIndex = 0
+            } else {
+                sampleIndex = pointIndex * (frameLength - 1) / (pointCount - 1)
+            }
+            let leftSample = Double(left[sampleIndex])
+            let rightSample = Double(right[sampleIndex])
+            let point = polarSamplePoint(left: leftSample, right: rightSample)
+            return VectorScopePoint(
+                id: pointIndex,
+                x: point.x,
+                y: point.y,
+                isClipped: isClipped(leftSample, rightSample)
+            )
+        }
+
+        let denominator = sqrt(leftEnergy * rightEnergy)
+        let measuredCorrelation = denominator > 1e-12 ? max(-1, min(1, sharedEnergy / denominator)) : nil
+        let totalEnergy = leftEnergy + rightEnergy
+        let balance = totalEnergy > 1e-12 ? max(-1, min(1, (rightEnergy - leftEnergy) / totalEnergy)) : nil
+        let polarLevelLine = makePolarLevelLine(
+            id: 0,
+            frameLength: frameLength,
+            midEnergy: midEnergy,
+            sideEnergy: sideEnergy,
+            sideSum: sideSum,
+            leftEnergy: leftEnergy,
+            rightEnergy: rightEnergy,
+            balance: balance,
+            isClipped: containsClipping
+        )
+
+        return VectorScopeSnapshot(
+            inputState: .stereo,
+            points: points,
+            polarSamplePoints: polarSamplePoints,
+            polarLevelLines: polarLevelLine.map { [$0] } ?? [],
+            correlation: measuredCorrelation,
+            balance: balance,
+            updateDurationSeconds: Double(frameLength) / sampleBuffer.sampleRate
+        )
+    }
+
+    static func merging(
+        _ current: VectorScopeSnapshot,
+        with previous: VectorScopeSnapshot,
+        generationID: Int
+    ) -> VectorScopeSnapshot {
+        guard current.inputState == .stereo, previous.inputState == .stereo else {
+            return current
+        }
+
+        let currentPoints = renumber(current.points, generationID: generationID)
+        let currentPolarPoints = renumber(current.polarSamplePoints, generationID: generationID)
+        let currentLines = renumber(current.polarLevelLines, generationID: generationID)
+        let ageStep = historyAgeStep(for: current)
+
+        return VectorScopeSnapshot(
+            inputState: current.inputState,
+            points: capped(currentPoints + aged(previous.points, by: ageStep), maximumCount: maximumStoredPointCount),
+            polarSamplePoints: capped(currentPolarPoints + aged(previous.polarSamplePoints, by: ageStep), maximumCount: maximumStoredPointCount),
+            polarLevelLines: capped(currentLines + aged(previous.polarLevelLines, by: ageStep), maximumCount: maximumStoredLineCount),
+            correlation: current.correlation,
+            balance: current.balance,
+            updateDurationSeconds: current.updateDurationSeconds
+        )
+    }
+
+    private static func historyAgeStep(for snapshot: VectorScopeSnapshot) -> Double {
+        let updateDuration = snapshot.updateDurationSeconds > 0
+            ? snapshot.updateDurationSeconds
+            : 1 / defaultUpdatesPerSecond
+        return min(maximumHistoryAge, updateDuration / historyDurationSeconds)
+    }
+
+    private static func isClipped(_ leftSample: Double, _ rightSample: Double) -> Bool {
+        abs(leftSample) >= 1 || abs(rightSample) >= 1
+    }
+
+    private static func makePolarLevelLine(
+        id: Int,
+        frameLength: Int,
+        midEnergy: Double,
+        sideEnergy: Double,
+        sideSum: Double,
+        leftEnergy: Double,
+        rightEnergy: Double,
+        balance: Double?,
+        isClipped: Bool
+    ) -> VectorScopeLine? {
+        let totalEnergy = leftEnergy + rightEnergy
+        guard frameLength > 0, totalEnergy > 1e-12 else { return nil }
+
+        let midRMS = sqrt(midEnergy / Double(frameLength))
+        let sideRMS = sqrt(sideEnergy / Double(frameLength))
+        let balanceValue = balance ?? 0
+        let sideSign: Double
+        if abs(balanceValue) > 0.001 {
+            sideSign = balanceValue > 0 ? 1 : -1
+        } else if abs(sideSum) > 0.001 {
+            sideSign = sideSum > 0 ? 1 : -1
+        } else {
+            sideSign = sideEnergy > midEnergy ? 1 : 0
+        }
+
+        return VectorScopeLine(
+            id: id,
+            x: clampUnit(sideRMS * sqrt(2) * sideSign),
+            y: clampUnit(midRMS * sqrt(2)),
+            isClipped: isClipped
+        )
+    }
+
+    private static func lissajousPoint(left: Double, right: Double) -> (x: Double, y: Double) {
+        (
+            x: clampUnit((right - left) / 2),
+            y: clampUnit((left + right) / 2)
+        )
+    }
+
+    private static func polarSamplePoint(left: Double, right: Double) -> (x: Double, y: Double) {
+        let mid = (left + right) / 2
+        let side = (right - left) / 2
+        return normalizePolarPoint(x: side * sqrt(2), y: abs(mid) * sqrt(2))
+    }
+
+    private static func normalizePolarPoint(x: Double, y: Double) -> (x: Double, y: Double) {
+        let positiveY = max(0, y)
+        let length = sqrt(x * x + positiveY * positiveY)
+        guard length > 1 else {
+            return (clampUnit(x), min(positiveY, 1))
+        }
+        return (clampUnit(x / length), min(positiveY / length, 1))
+    }
+
+    private static func clampUnit(_ value: Double) -> Double {
+        max(-1, min(1, value))
+    }
+
+    private static func aged(_ points: [VectorScopePoint], by ageStep: Double) -> [VectorScopePoint] {
+        points.compactMap { point in
+            let nextAge = point.age + ageStep
+            guard nextAge <= maximumHistoryAge else { return nil }
+            return VectorScopePoint(id: point.id, x: point.x, y: point.y, isClipped: point.isClipped, age: nextAge)
+        }
+    }
+
+    private static func aged(_ lines: [VectorScopeLine], by ageStep: Double) -> [VectorScopeLine] {
+        lines.compactMap { line in
+            let nextAge = line.age + ageStep
+            guard nextAge <= maximumHistoryAge else { return nil }
+            return VectorScopeLine(id: line.id, x: line.x, y: line.y, isClipped: line.isClipped, age: nextAge)
+        }
+    }
+
+    private static func renumber(_ points: [VectorScopePoint], generationID: Int) -> [VectorScopePoint] {
+        points.enumerated().map { offset, point in
+            VectorScopePoint(
+                id: generationID * 10_000 + offset,
+                x: point.x,
+                y: point.y,
+                isClipped: point.isClipped,
+                age: 0
+            )
+        }
+    }
+
+    private static func renumber(_ lines: [VectorScopeLine], generationID: Int) -> [VectorScopeLine] {
+        lines.enumerated().map { offset, line in
+            VectorScopeLine(
+                id: generationID * 1_000 + offset,
+                x: line.x,
+                y: line.y,
+                isClipped: line.isClipped,
+                age: 0
+            )
+        }
+    }
+
+    private static func capped<T>(_ values: [T], maximumCount: Int) -> [T] {
+        guard values.count > maximumCount else { return values }
+        return Array(values.prefix(maximumCount))
     }
 }

@@ -20,13 +20,22 @@ struct AverageSpectrumComparisonView: View {
             ZStack {
                 SpectrumCanvasChart(series: spectrumSeries)
                     .frame(height: 220)
-                    .accessibilityLabel("再生中音声のリアルタイムスペクトル")
 
                 if spectrumSeries.isEmpty {
                     emptySpectrumMessage
                 }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(spectrumAccessibilityLabel)
         }
+    }
+
+    private var spectrumAccessibilityLabel: String {
+        if spectrumSeries.isEmpty {
+            return "再生中スペクトル。音声を再生すると表示します"
+        }
+        let names = spectrumSeries.map(\.name).joined(separator: "、")
+        return "再生中スペクトル。\(names)を表示中です"
     }
 
     private var spectrumLegend: some View {

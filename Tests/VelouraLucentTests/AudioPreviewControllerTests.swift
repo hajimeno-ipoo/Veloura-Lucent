@@ -366,6 +366,10 @@ struct AudioPreviewControllerTests {
         #expect(snapshot.points.count == VectorScopeAnalyzer.maximumPointCount)
         #expect(snapshot.points.allSatisfy { abs($0.x) < 0.000_001 })
         #expect((snapshot.points.map { abs($0.y) }.max() ?? 0) > 0.4)
+        #expect(snapshot.polarSamplePoints.allSatisfy { abs($0.x) < 0.000_001 })
+        #expect((snapshot.polarSamplePoints.map { abs($0.y) }.max() ?? 0) > 0.6)
+        #expect((snapshot.correlation ?? 0) > 0.99)
+        #expect(abs(snapshot.balance ?? 1) < 0.000_001)
     }
 
     @Test
@@ -375,6 +379,9 @@ struct AudioPreviewControllerTests {
         #expect(snapshot.inputState == .stereo)
         #expect(snapshot.points.allSatisfy { abs($0.y) < 0.000_001 })
         #expect((snapshot.points.map { abs($0.x) }.max() ?? 0) > 0.4)
+        #expect(snapshot.polarSamplePoints.allSatisfy { abs($0.y) < 0.000_001 })
+        #expect((snapshot.polarSamplePoints.map { abs($0.x) }.max() ?? 0) > 0.6)
+        #expect((snapshot.correlation ?? 0) < -0.99)
     }
 
     @Test
@@ -382,8 +389,85 @@ struct AudioPreviewControllerTests {
         let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in (sample, 0) })
 
         #expect(snapshot.inputState == .stereo)
-        #expect(snapshot.points.allSatisfy { abs($0.x - $0.y) < 0.000_001 })
-        #expect((snapshot.points.map { abs($0.x) }.max() ?? 0) > 0.2)
+        #expect(snapshot.points.allSatisfy { abs($0.x + $0.y) < 0.000_001 })
+        #expect((snapshot.points.map { $0.x }.min() ?? 0) < -0.2)
+        #expect(snapshot.polarSamplePoints.allSatisfy { abs(abs($0.x) - $0.y) < 0.000_001 })
+        #expect((snapshot.polarSamplePoints.map { $0.x }.min() ?? 0) < -0.3)
+        #expect((snapshot.balance ?? 0) < -0.99)
+    }
+
+    @Test
+    func vectorScopeReportsRightOnlySignalAsRightBalanced() throws {
+        let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in (0, sample) })
+
+        #expect(snapshot.inputState == .stereo)
+        #expect((snapshot.balance ?? 0) > 0.99)
+        #expect((snapshot.polarSamplePoints.map { $0.x }.max() ?? 0) > 0.3)
+        let line = try #require(snapshot.polarLevelLines.first)
+        #expect(line.x > 0.2)
+        #expect(line.y > 0.2)
+    }
+
+    @Test
+    func polarSampleMarksClippedSamples() throws {
+        let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in
+            sample > 0 ? (1, 1) : (sample, sample)
+        })
+
+        #expect(snapshot.polarSamplePoints.contains { $0.isClipped })
+        #expect(snapshot.polarLevelLines.first?.isClipped == true)
+    }
+
+    @Test
+    func polarLevelShowsInPhaseVerticallyAndReversePhaseHorizontally() throws {
+        let inPhase = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in (sample, sample) })
+        let reversePhase = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in (sample, -sample) })
+
+        let inPhaseLine = try #require(inPhase.polarLevelLines.first)
+        #expect(abs(inPhaseLine.x) < 0.000_001)
+        #expect(inPhaseLine.y > 0.4)
+
+        let reverseLine = try #require(reversePhase.polarLevelLines.first)
+        #expect(abs(reverseLine.y) < 0.000_001)
+        #expect(abs(reverseLine.x) > 0.4)
+    }
+
+    @Test
+    func vectorScopeHistoryFadesForThreeSeconds() {
+        #expect(VectorScopeAnalyzer.historyDurationSeconds == 3.0)
+    }
+
+    @Test
+    func vectorScopeSnapshotStoresActualBufferDuration() {
+        let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in (sample, sample) })
+
+        #expect(abs(snapshot.updateDurationSeconds - (2_048.0 / 48_000.0)) < 0.000_001)
+    }
+
+    @Test
+    func vectorScopeMergingKeepsAgedHistory() {
+        let previous = VectorScopeSnapshot(
+            inputState: .stereo,
+            points: [VectorScopePoint(id: 1, x: 0.1, y: 0.2)],
+            polarSamplePoints: [VectorScopePoint(id: 2, x: 0.2, y: 0.3)],
+            polarLevelLines: [VectorScopeLine(id: 3, x: 0.1, y: 0.5)]
+        )
+        let current = VectorScopeSnapshot(
+            inputState: .stereo,
+            points: [VectorScopePoint(id: 4, x: 0.3, y: 0.4)],
+            polarSamplePoints: [VectorScopePoint(id: 5, x: 0.4, y: 0.5)],
+            polarLevelLines: [VectorScopeLine(id: 6, x: 0.2, y: 0.6)],
+            updateDurationSeconds: 0.5
+        )
+
+        let merged = VectorScopeAnalyzer.merging(current, with: previous, generationID: 8)
+
+        #expect(merged.points.count == 2)
+        #expect(merged.polarSamplePoints.count == 2)
+        #expect(merged.polarLevelLines.count == 2)
+        #expect(merged.points.contains { $0.age > 0 })
+        #expect(merged.points.contains { $0.age == 0 })
+        #expect(merged.points.contains { abs($0.age - (0.5 / VectorScopeAnalyzer.historyDurationSeconds)) < 0.000_001 })
     }
 
     @Test
@@ -462,6 +546,30 @@ struct AudioPreviewControllerTests {
         )
 
         #expect(controller.cardState(for: .corrected).vectorScopeSnapshot == retainedSnapshot)
+    }
+
+    @Test
+    func resetVectorScopeHistoryClearsActiveSnapshotOnly() {
+        let controller = AudioPreviewController()
+        controller.activeTarget = .input
+        controller.cardState(for: .input).vectorScopeSnapshot = VectorScopeSnapshot(
+            inputState: .stereo,
+            points: [VectorScopePoint(id: 0, x: 0.2, y: 0.4)],
+            polarSamplePoints: [VectorScopePoint(id: 1, x: 0.2, y: 0.4)],
+            polarLevelLines: [VectorScopeLine(id: 2, x: 0.1, y: 0.5)]
+        )
+        controller.cardState(for: .corrected).vectorScopeSnapshot = VectorScopeSnapshot(
+            inputState: .stereo,
+            points: [VectorScopePoint(id: 3, x: 0.2, y: 0.4)]
+        )
+
+        controller.resetVectorScopeHistory()
+
+        #expect(controller.cardState(for: .input).vectorScopeSnapshot.inputState == .stereo)
+        #expect(controller.cardState(for: .input).vectorScopeSnapshot.points.isEmpty)
+        #expect(controller.cardState(for: .input).vectorScopeSnapshot.polarSamplePoints.isEmpty)
+        #expect(controller.cardState(for: .input).vectorScopeSnapshot.polarLevelLines.isEmpty)
+        #expect(controller.cardState(for: .corrected).vectorScopeSnapshot.points.isEmpty == false)
     }
 
     @Test

@@ -36,6 +36,6 @@ struct VelouraLucentApp: App {
         WindowGroup("Veloura Lucent") {
             ContentView()
         }
-        .defaultSize(width: 760, height: 520)
+        .defaultSize(width: 1_360, height: 860)
     }
 }
