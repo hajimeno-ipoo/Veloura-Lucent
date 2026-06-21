@@ -4,6 +4,14 @@ import Testing
 
 struct ContentViewAnalysisLoggingTests {
     @Test
+    @MainActor
+    func inspectorWindowMinimumWidthsMatchLayoutContract() {
+        #expect(ContentView.inspectorVisibleMinimumWindowWidth == 1_380)
+        #expect(ContentView.inspectorHiddenMinimumWindowWidth == 960)
+        #expect(ContentView.minimumWindowHeight == 720)
+    }
+
+    @Test
     func displayAnalysisMeasurementLogsDuration() async throws {
         let logs = ThreadSafeLogCollector()
 

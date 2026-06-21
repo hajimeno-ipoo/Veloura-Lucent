@@ -16,12 +16,6 @@ private enum InspectorSettingsSection: String, CaseIterable, Identifiable {
     }
 }
 
-private struct SettingHelp {
-    let title: String
-    let reading: String
-    let description: String
-}
-
 struct InspectorSettingsPanel: View {
     @Bindable var job: ProcessingJob
     @State private var selectedSection: InspectorSettingsSection = .correction
@@ -142,44 +136,10 @@ struct InspectorSettingsPanel: View {
                     reading: "ほせいのきほん",
                     description: "ノイズを減らす量と、元の音の自然さをどれだけ残すかを決める中心設定です。強くしすぎると音楽の細かい成分まで弱くなる場合があります。"
                 ),
-                isExpanded: $showsCorrectionBasic
+                isExpanded: $showsCorrectionBasic,
+                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
             ) {
-                inspectorSlider(
-                    title: "補正の強さ",
-                    help: SettingHelp(
-                        title: "補正の強さ",
-                        reading: "ほせいのつよさ",
-                        description: "ノイズ低減を全体的にどれくらい効かせるかです。上げるほどノイズは減りやすくなりますが、音の細かい余韻も変わりやすくなります。"
-                    ),
-                    valueText: percentText(job.editableCorrectionSettings.correctionIntensity),
-                    labels: ["弱い", "標準", "強い"],
-                    value: correctionBinding(\.correctionIntensity, range: 0 ... 1),
-                    range: 0 ... 1
-                )
-                inspectorSlider(
-                    title: "原音保持",
-                    help: SettingHelp(
-                        title: "原音保持",
-                        reading: "げんおんほじ",
-                        description: "入力音声の雰囲気や質感をどれだけ残すかです。上げるほど元の音の印象を守りやすくなります。"
-                    ),
-                    valueText: percentText(job.editableCorrectionSettings.originalRetention),
-                    labels: ["整える", "標準", "残す"],
-                    value: correctionBinding(\.originalRetention, range: 0 ... 1),
-                    range: 0 ... 1
-                )
-                inspectorSlider(
-                    title: "芯保護",
-                    help: SettingHelp(
-                        title: "芯保護",
-                        reading: "しんほご",
-                        description: "声や主旋律の中心になる帯域を守る量です。上げるほど音の中心が細くなりにくくなります。"
-                    ),
-                    valueText: percentText(job.editableCorrectionSettings.coreProtection),
-                    labels: ["整理", "標準", "芯を守る"],
-                    value: correctionBinding(\.coreProtection, range: 0 ... 1),
-                    range: 0 ... 1
-                )
+                correctionBasicKnobRow
             }
 
             settingGroup(
@@ -309,6 +269,94 @@ struct InspectorSettingsPanel: View {
         }
     }
 
+    private var correctionBasicKnobRow: some View {
+        ViewThatFits(in: .horizontal) {
+            correctionBasicThreeColumnRow
+            correctionBasicTwoColumnRow
+            correctionBasicOneColumnRow
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var correctionBasicThreeColumnRow: some View {
+        HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+            correctionIntensityKnob
+            originalRetentionKnob
+            coreProtectionKnob
+        }
+        .frame(width: DAWKnobMetrics.threeColumnWidth)
+    }
+
+    private var correctionBasicTwoColumnRow: some View {
+        VStack(spacing: DAWKnobMetrics.rowSpacing) {
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                correctionIntensityKnob
+                originalRetentionKnob
+            }
+            .frame(width: DAWKnobMetrics.twoColumnWidth)
+
+            coreProtectionKnob
+        }
+        .frame(width: DAWKnobMetrics.twoColumnWidth)
+    }
+
+    private var correctionBasicOneColumnRow: some View {
+        VStack(spacing: DAWKnobMetrics.rowSpacing) {
+            correctionIntensityKnob
+            originalRetentionKnob
+            coreProtectionKnob
+        }
+        .frame(width: DAWKnobMetrics.controlWidth)
+    }
+
+    private var correctionIntensityKnob: some View {
+        DAWKnobControl(
+            title: "補正の強さ",
+            help: SettingHelp(
+                title: "補正の強さ",
+                reading: "ほせいのつよさ",
+                description: "ノイズ低減を全体的にどれくらい効かせるかです。上げるほどノイズは減りやすくなりますが、音の細かい余韻も変わりやすくなります。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.correctionIntensity),
+            labels: ["弱い", "標準", "強い"],
+            value: correctionBinding(\.correctionIntensity, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var originalRetentionKnob: some View {
+        DAWKnobControl(
+            title: "原音保持",
+            help: SettingHelp(
+                title: "原音保持",
+                reading: "げんおんほじ",
+                description: "入力音声の雰囲気や質感をどれだけ残すかです。上げるほど元の音の印象を守りやすくなります。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.originalRetention),
+            labels: ["整える", "標準", "残す"],
+            value: correctionBinding(\.originalRetention, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var coreProtectionKnob: some View {
+        DAWKnobControl(
+            title: "芯保護",
+            help: SettingHelp(
+                title: "芯保護",
+                reading: "しんほご",
+                description: "声や主旋律の中心になる帯域を守る量です。上げるほど音の中心が細くなりにくくなります。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.coreProtection),
+            labels: ["整理", "標準", "芯を守る"],
+            value: correctionBinding(\.coreProtection, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
     @ViewBuilder
     private var masteringWarnings: some View {
         let warnings = job.editableMasteringSettings.aggressiveSettingWarnings
@@ -341,21 +389,32 @@ struct InspectorSettingsPanel: View {
         summary: String,
         help: SettingHelp?,
         isExpanded: Binding<Bool>,
+        backgroundColor: Color? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         DisclosureGroup(isExpanded: isExpanded) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(summary)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                content()
+            if isExpanded.wrappedValue {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(summary)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    content()
+                }
+                .padding(.top, 8)
             }
-            .padding(.top, 8)
         } label: {
             titleWithHelp(title, font: .headline, help: help)
         }
         .padding(12)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .background {
+            if let backgroundColor {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(backgroundColor)
+            } else {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(.thinMaterial)
+            }
+        }
     }
 
     private func inspectorSlider(

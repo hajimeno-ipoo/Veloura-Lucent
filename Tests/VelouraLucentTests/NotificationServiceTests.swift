@@ -60,6 +60,13 @@ struct NotificationServiceTests {
     }
 
     @Test
+    func sharedReporterUsesNoOpOutsideAppBundle() {
+        guard Bundle.main.bundleURL.pathExtension != "app" else { return }
+
+        #expect(NotificationService.shared is NoOpCompletionNotificationReporter)
+    }
+
+    @Test
     func enabledCompletionNotificationsRequestAlertAndSoundAuthorization() {
         let notificationCenter = NotificationCenterSpy()
         let service = NotificationService(

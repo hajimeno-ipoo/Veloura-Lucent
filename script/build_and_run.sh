@@ -141,15 +141,21 @@ generate_app_icon_assets() {
 pkill -x "$BUILD_PRODUCT_NAME" >/dev/null 2>&1 || true
 
 swift build -c release
-BUILD_BINARY="$(swift build -c release --show-bin-path)/$BUILD_PRODUCT_NAME"
+BUILD_DIR="$(swift build -c release --show-bin-path)"
+BUILD_BINARY="$BUILD_DIR/$BUILD_PRODUCT_NAME"
+RESOURCE_BUNDLE_NAME="${BUILD_PRODUCT_NAME}_${BUILD_PRODUCT_NAME}.bundle"
+RESOURCE_BUNDLE="$BUILD_DIR/$RESOURCE_BUNDLE_NAME"
 
 rm -rf "$APP_BUNDLE"
 if [[ "$LEGACY_APP_BUNDLE" != "$APP_BUNDLE" ]]; then
   rm -rf "$LEGACY_APP_BUNDLE"
 fi
-mkdir -p "$APP_MACOS"
+mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+if [[ -d "$RESOURCE_BUNDLE" ]]; then
+  cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/$RESOURCE_BUNDLE_NAME"
+fi
 generate_app_icon_assets
 if [[ -f "$ICON_SOURCE" ]]; then
   cp "$ICON_SOURCE" "$APP_RESOURCES/$RUNTIME_ICON_NAME"

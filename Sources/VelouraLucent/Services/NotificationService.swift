@@ -70,11 +70,19 @@ final class NoOpCompletionNotificationReporter: CompletionNotificationReporting 
 
 @MainActor
 final class NotificationService: CompletionNotificationReporting {
-    static let shared = NotificationService()
+    static let shared: CompletionNotificationReporting = makeSharedReporter()
 
     private let notificationCenter: UserNotificationCenterProviding
     private let preferences: CompletionNotificationPreferenceProviding
     private let logger: Logger
+
+    private static func makeSharedReporter() -> CompletionNotificationReporting {
+        guard Bundle.main.bundleURL.pathExtension == "app" else {
+            return NoOpCompletionNotificationReporter.shared
+        }
+
+        return NotificationService(notificationCenter: UNUserNotificationCenter.current())
+    }
 
     init(
         notificationCenter: UserNotificationCenterProviding = UNUserNotificationCenter.current(),

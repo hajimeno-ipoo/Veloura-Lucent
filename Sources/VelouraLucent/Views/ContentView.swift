@@ -2,6 +2,10 @@ import AppKit
 import SwiftUI
 
 struct ContentView: View {
+    static let inspectorVisibleMinimumWindowWidth: CGFloat = 1_380
+    static let inspectorHiddenMinimumWindowWidth: CGFloat = 960
+    static let minimumWindowHeight: CGFloat = 720
+
     @State private var job = ProcessingJob(notificationReporter: NotificationService.shared)
     @State private var preview = AudioPreviewController()
     @State private var inputSelectionID = UUID()
@@ -11,19 +15,19 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             VelouraSidebarView(job: job)
-                .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 380)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 300)
         } detail: {
             HStack(spacing: 0) {
                 VelouraMainWorkspaceView(
                     job: job,
                     preview: preview
                 )
-                .frame(minWidth: 0, maxWidth: .infinity)
+                .frame(minWidth: 620, maxWidth: .infinity)
 
                 if isInspectorPresented {
                     Divider()
                     VelouraInspectorView(job: job, completionReport: completionReport)
-                        .frame(minWidth: 300, idealWidth: 360, maxWidth: 440)
+                        .frame(width: 440)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
@@ -100,7 +104,12 @@ struct ContentView: View {
             }
         }
         .navigationTitle("試聴と解析")
-        .frame(minWidth: 960, minHeight: 720)
+        .frame(minWidth: minimumWindowWidth, minHeight: Self.minimumWindowHeight)
+        .background(
+            WindowMinimumSizeUpdater(
+                minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight)
+            )
+        )
         .onChange(of: job.selectedMasteringProfile) { _, newValue in
             job.applyMasteringProfile(newValue)
         }
@@ -130,6 +139,10 @@ struct ContentView: View {
             correctionSettings: job.appliedCorrectionSettings ?? job.editableCorrectionSettings,
             masteringSettings: job.appliedMasteringSettings ?? job.editableMasteringSettings
         )
+    }
+
+    private var minimumWindowWidth: CGFloat {
+        isInspectorPresented ? Self.inspectorVisibleMinimumWindowWidth : Self.inspectorHiddenMinimumWindowWidth
     }
 
     private var canStartMastering: Bool {
@@ -698,6 +711,28 @@ struct ContentView: View {
         }
     }
 
+}
+
+private struct WindowMinimumSizeUpdater: NSViewRepresentable {
+    let minSize: NSSize
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        updateWindow(for: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        updateWindow(for: nsView)
+    }
+
+    private func updateWindow(for view: NSView) {
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            guard window.minSize.width != minSize.width || window.minSize.height != minSize.height else { return }
+            window.minSize = minSize
+        }
+    }
 }
 
 #Preview {

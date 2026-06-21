@@ -14,7 +14,8 @@ let package = Package(
             name: "VelouraLucent",
             path: "Sources/VelouraLucent",
             resources: [
-                .process("Resources/AppIcon-1024.png")
+                .process("Resources/AppIcon-1024.png"),
+                .process("Resources/Rotary_Knob")
             ]
         ),
         .testTarget(
