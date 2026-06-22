@@ -164,12 +164,10 @@ struct InspectorSettingsPanel: View {
                     reading: "ほせいのじょうきゅうせってい",
                     description: "検出の敏感さ、高域補完、ステレオの守り方を細かく調整します。通常はプリセット値を基準にしてください。"
                 ),
-                isExpanded: $showsCorrectionAdvanced
+                isExpanded: $showsCorrectionAdvanced,
+                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
             ) {
-                inspectorSlider(title: "ノイズ検出しきい値", help: SettingHelp(title: "ノイズ検出しきい値", reading: "のいずけんしゅつしきいち", description: "どれくらい小さなノイズまで検出するかです。敏感にすると細かいノイズを拾いますが、音楽成分も対象になりやすくなります。"), valueText: percentText(job.editableCorrectionSettings.noiseDetectionSensitivity), labels: ["鈍い", "標準", "敏感"], value: correctionBinding(\.noiseDetectionSensitivity, range: 0 ... 1), range: 0 ... 1)
-                inspectorSlider(title: "高域補完量", help: SettingHelp(title: "高域補完量", reading: "こういきほかんりょう", description: "補正で弱くなった高域の倍音を補う量です。上げるほど明るさを戻します。"), valueText: percentText(job.editableCorrectionSettings.harmonicRepairAmount), labels: ["少ない", "標準", "多い"], value: correctionBinding(\.harmonicRepairAmount, range: 0 ... 1), range: 0 ... 1)
-                inspectorSlider(title: "foldover補完量", help: SettingHelp(title: "foldover補完量", reading: "ふぉーるどおーばーほかんりょう", description: "高域の不足を別の帯域情報から補う量です。上げるほど高域の伸びを戻しますが、不自然な明るさが出る場合があります。"), valueText: percentText(job.editableCorrectionSettings.foldoverRepairAmount), labels: ["少ない", "標準", "多い"], value: correctionBinding(\.foldoverRepairAmount, range: 0 ... 1), range: 0 ... 1)
-                inspectorSlider(title: "ステレオ保護", help: SettingHelp(title: "ステレオ保護", reading: "すてれおほご", description: "左右の広がりや位相の違いを守る量です。上げるほど補正で広がりが崩れにくくなります。"), valueText: percentText(job.editableCorrectionSettings.stereoProtection), labels: ["整理", "標準", "保護"], value: correctionBinding(\.stereoProtection, range: 0 ... 1), range: 0 ... 1)
+                correctionAdvancedKnobRow
             }
         }
     }
@@ -464,6 +462,96 @@ struct InspectorSettingsPanel: View {
             unitText: "%",
             labels: ["明るさ", "標準", "自然"],
             value: correctionBinding(\.highNaturalness, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var correctionAdvancedKnobRow: some View {
+        VStack(spacing: DAWKnobMetrics.rowSpacing) {
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                noiseDetectionSensitivityKnob
+                harmonicRepairAmountKnob
+            }
+            .frame(width: DAWKnobMetrics.twoColumnWidth)
+
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                foldoverRepairAmountKnob
+                stereoProtectionKnob
+            }
+            .frame(width: DAWKnobMetrics.twoColumnWidth)
+        }
+        .frame(width: DAWKnobMetrics.twoColumnWidth, alignment: .center)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var noiseDetectionSensitivityKnob: some View {
+        DAWKnobControl(
+            title: "ノイズ検出しきい値",
+            help: SettingHelp(
+                title: "ノイズ検出しきい値",
+                reading: "のいずけんしゅつしきいち",
+                description: "どれくらい小さなノイズまで検出するかです。敏感にすると細かいノイズを拾いますが、音楽成分も対象になりやすくなります。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.noiseDetectionSensitivity),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.noiseDetectionSensitivity),
+            unitText: "%",
+            labels: ["鈍い", "標準", "敏感"],
+            value: correctionBinding(\.noiseDetectionSensitivity, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var harmonicRepairAmountKnob: some View {
+        DAWKnobControl(
+            title: "高域補完量",
+            help: SettingHelp(
+                title: "高域補完量",
+                reading: "こういきほかんりょう",
+                description: "補正で弱くなった高域の倍音を補う量です。上げるほど明るさを戻します。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.harmonicRepairAmount),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.harmonicRepairAmount),
+            unitText: "%",
+            labels: ["少ない", "標準", "多い"],
+            value: correctionBinding(\.harmonicRepairAmount, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var foldoverRepairAmountKnob: some View {
+        DAWKnobControl(
+            title: "foldover補完量",
+            help: SettingHelp(
+                title: "foldover補完量",
+                reading: "ふぉーるどおーばーほかんりょう",
+                description: "高域の不足を別の帯域情報から補う量です。上げるほど高域の伸びを戻しますが、不自然な明るさが出る場合があります。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.foldoverRepairAmount),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.foldoverRepairAmount),
+            unitText: "%",
+            labels: ["少ない", "標準", "多い"],
+            value: correctionBinding(\.foldoverRepairAmount, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var stereoProtectionKnob: some View {
+        DAWKnobControl(
+            title: "ステレオ保護",
+            help: SettingHelp(
+                title: "ステレオ保護",
+                reading: "すてれおほご",
+                description: "左右の広がりや位相の違いを守る量です。上げるほど補正で広がりが崩れにくくなります。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.stereoProtection),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.stereoProtection),
+            unitText: "%",
+            labels: ["整理", "標準", "保護"],
+            value: correctionBinding(\.stereoProtection, range: 0 ... 1),
             range: 0 ... 1,
             step: 0.01
         )

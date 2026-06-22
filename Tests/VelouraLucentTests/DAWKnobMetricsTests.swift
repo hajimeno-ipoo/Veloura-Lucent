@@ -103,6 +103,7 @@ struct DAWKnobMetricsTests {
     func threeKnobRowFitsWithoutScalingInOriginalMaximumInspectorWidth() {
         #expect(DAWKnobMetrics.threeColumnWidth == 368)
         #expect(DAWKnobMetrics.twoColumnWidth == 243)
+        #expect(DAWKnobMetrics.fourColumnWidth == 493)
         #expect(DAWKnobMetrics.fiveColumnWidth == 618)
 
         let originalMaximumPanelContentWidth: CGFloat = 440 - 28 - 24
@@ -118,5 +119,13 @@ struct DAWKnobMetricsTests {
         #expect(DAWKnobMetrics.fiveColumnWidth > originalMaximumPanelContentWidth)
         #expect(DAWKnobMetrics.threeColumnWidth <= originalMaximumPanelContentWidth)
         #expect(DAWKnobMetrics.twoColumnWidth < DAWKnobMetrics.threeColumnWidth)
+    }
+
+    @Test
+    func fourAdvancedKnobsRequireTwoPlusTwoRowsInInspectorWidth() {
+        let originalMaximumPanelContentWidth: CGFloat = 440 - 28 - 24
+
+        #expect(DAWKnobMetrics.fourColumnWidth > originalMaximumPanelContentWidth)
+        #expect(DAWKnobMetrics.twoColumnWidth <= originalMaximumPanelContentWidth)
     }
 }

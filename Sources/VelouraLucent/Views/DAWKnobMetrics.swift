@@ -39,6 +39,10 @@ enum DAWKnobMetrics {
         controlWidth * 3 + columnSpacing * 2
     }
 
+    static var fourColumnWidth: CGFloat {
+        controlWidth * 4 + columnSpacing * 3
+    }
+
     static var fiveColumnWidth: CGFloat {
         controlWidth * 5 + columnSpacing * 4
     }
