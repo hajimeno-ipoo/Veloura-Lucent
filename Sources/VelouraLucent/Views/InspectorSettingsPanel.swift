@@ -232,13 +232,10 @@ struct InspectorSettingsPanel: View {
                     reading: "ねいろ",
                     description: "最終版の低域、中低域、前に出る感じ、空気感、耳に痛い高域を調整します。音量とは別に、聞こえ方の色合いを決める設定です。"
                 ),
-                isExpanded: $showsMasteringTone
+                isExpanded: $showsMasteringTone,
+                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
             ) {
-                inspectorSlider(title: "低域", help: SettingHelp(title: "低域", reading: "ていいき", description: "キックやベースの土台になる低い帯域です。上げるほど太くなりますが、上げすぎると重く聞こえる場合があります。"), valueText: decimalText(job.editableMasteringSettings.lowShelfGain), labels: ["軽い", "標準", "太い"], value: masteringBinding(\.lowShelfGain, range: 0 ... 2.5), range: 0 ... 2.5)
-                inspectorSlider(title: "中低域", help: SettingHelp(title: "中低域", reading: "ちゅうていいき", description: "音の厚みやこもりに関わる帯域です。下げるとすっきりし、上げると厚みが増えます。"), valueText: decimalText(job.editableMasteringSettings.lowMidGain), labels: ["すっきり", "標準", "厚い"], value: masteringBinding(\.lowMidGain, range: -1.2 ... 1.2), range: -1.2 ... 1.2)
-                inspectorSlider(title: "プレゼンス", help: SettingHelp(title: "プレゼンス", reading: "ぷれぜんす", description: "声や主旋律が前に出る感じに関わる帯域です。上げるほど明瞭になりますが、上げすぎると耳に近く感じる場合があります。"), valueText: decimalText(job.editableMasteringSettings.presenceGain), labels: ["奥", "標準", "前"], value: masteringBinding(\.presenceGain, range: 0 ... 1.2), range: 0 ... 1.2)
-                inspectorSlider(title: "空気感", help: SettingHelp(title: "空気感", reading: "くうきかん", description: "息感や高域の伸びに関わる帯域です。上げるほど明るく開いた印象になります。"), valueText: decimalText(job.editableMasteringSettings.highShelfGain), labels: ["丸い", "標準", "明るい"], value: masteringBinding(\.highShelfGain, range: 0 ... 2.5), range: 0 ... 2.5)
-                inspectorSlider(title: "ハーシュネス抑制", help: SettingHelp(title: "ハーシュネス抑制", reading: "はーしゅねすよくせい", description: "サ行や耳に痛い高域を抑える量です。強くしすぎると抜けや明るさも弱くなる場合があります。"), valueText: percentText(job.editableMasteringSettings.deEsserAmount), labels: ["弱い", "標準", "強い"], value: masteringBinding(\.deEsserAmount, range: 0 ... 1), range: 0 ... 1)
+                masteringToneKnobRow
             }
 
             settingGroup(
@@ -645,6 +642,115 @@ struct InspectorSettingsPanel: View {
         )
     }
 
+    private var masteringToneKnobRow: some View {
+        VStack(spacing: DAWKnobMetrics.rowSpacing) {
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                lowShelfGainKnob
+                lowMidGainKnob
+                presenceGainKnob
+            }
+            .frame(width: DAWKnobMetrics.threeColumnWidth)
+
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                highShelfGainKnob
+                deEsserAmountKnob
+            }
+            .frame(width: DAWKnobMetrics.twoColumnWidth)
+        }
+        .frame(width: DAWKnobMetrics.threeColumnWidth, alignment: .center)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var lowShelfGainKnob: some View {
+        DAWKnobControl(
+            title: "低域",
+            help: SettingHelp(
+                title: "低域",
+                reading: "ていいき",
+                description: "キックやベースの土台になる低い帯域です。上げるほど太くなりますが、上げすぎると重く聞こえる場合があります。"
+            ),
+            valueText: dbText(job.editableMasteringSettings.lowShelfGain),
+            displayValueText: decimalText(job.editableMasteringSettings.lowShelfGain),
+            unitText: "dB",
+            labels: ["軽い", "標準", "太い"],
+            value: masteringBinding(\.lowShelfGain, range: 0 ... 2.5),
+            range: 0 ... 2.5,
+            step: 0.01
+        )
+    }
+
+    private var lowMidGainKnob: some View {
+        DAWKnobControl(
+            title: "中低域",
+            help: SettingHelp(
+                title: "中低域",
+                reading: "ちゅうていいき",
+                description: "音の厚みやこもりに関わる帯域です。下げるとすっきりし、上げると厚みが増えます。"
+            ),
+            valueText: dbText(job.editableMasteringSettings.lowMidGain),
+            displayValueText: decimalText(job.editableMasteringSettings.lowMidGain),
+            unitText: "dB",
+            labels: ["すっきり", "標準", "厚い"],
+            value: masteringBinding(\.lowMidGain, range: -1.2 ... 1.2),
+            range: -1.2 ... 1.2,
+            step: 0.01
+        )
+    }
+
+    private var presenceGainKnob: some View {
+        DAWKnobControl(
+            title: "プレゼンス",
+            help: SettingHelp(
+                title: "プレゼンス",
+                reading: "ぷれぜんす",
+                description: "声や主旋律が前に出る感じに関わる帯域です。上げるほど明瞭になりますが、上げすぎると耳に近く感じる場合があります。"
+            ),
+            valueText: dbText(job.editableMasteringSettings.presenceGain),
+            displayValueText: decimalText(job.editableMasteringSettings.presenceGain),
+            unitText: "dB",
+            labels: ["奥", "標準", "前"],
+            value: masteringBinding(\.presenceGain, range: 0 ... 1.2),
+            range: 0 ... 1.2,
+            step: 0.01
+        )
+    }
+
+    private var highShelfGainKnob: some View {
+        DAWKnobControl(
+            title: "空気感",
+            help: SettingHelp(
+                title: "空気感",
+                reading: "くうきかん",
+                description: "息感や高域の伸びに関わる帯域です。上げるほど明るく開いた印象になります。"
+            ),
+            valueText: dbText(job.editableMasteringSettings.highShelfGain),
+            displayValueText: decimalText(job.editableMasteringSettings.highShelfGain),
+            unitText: "dB",
+            labels: ["丸い", "標準", "明るい"],
+            value: masteringBinding(\.highShelfGain, range: 0 ... 2.5),
+            range: 0 ... 2.5,
+            step: 0.01
+        )
+    }
+
+    private var deEsserAmountKnob: some View {
+        DAWKnobControl(
+            title: "ハーシュネス抑制",
+            help: SettingHelp(
+                title: "ハーシュネス抑制",
+                reading: "はーしゅねすよくせい",
+                description: "サ行や耳に痛い高域を抑える量です。強くしすぎると抜けや明るさも弱くなる場合があります。"
+            ),
+            valueText: percentText(job.editableMasteringSettings.deEsserAmount),
+            displayValueText: percentNumberText(job.editableMasteringSettings.deEsserAmount),
+            unitText: "%",
+            labels: ["弱い", "標準", "強い"],
+            value: masteringBinding(\.deEsserAmount, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
     @ViewBuilder
     private var masteringWarnings: some View {
         let warnings = job.editableMasteringSettings.aggressiveSettingWarnings
@@ -882,6 +988,10 @@ struct InspectorSettingsPanel: View {
 
     private func decimalText(_ value: Float) -> String {
         String(format: "%.2f", value)
+    }
+
+    private func dbText(_ value: Float) -> String {
+        String(format: "%.2f dB", value)
     }
 
     private func scaleAlignment(index: Int, count: Int) -> Alignment {
