@@ -11,6 +11,7 @@ struct DAWKnobControl: View {
     @Binding var value: Float
     let range: ClosedRange<Float>
     let step: Float
+    let dragValueScale: Float
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dragStartValue: Float?
@@ -33,7 +34,8 @@ struct DAWKnobControl: View {
         labels: [String],
         value: Binding<Float>,
         range: ClosedRange<Float>,
-        step: Float
+        step: Float,
+        dragValueScale: Float = 1
     ) {
         self.title = title
         self.help = help
@@ -44,6 +46,7 @@ struct DAWKnobControl: View {
         self._value = value
         self.range = range
         self.step = step
+        self.dragValueScale = dragValueScale
     }
 
     private var knobSurface: some View {
@@ -88,7 +91,7 @@ struct DAWKnobControl: View {
                     unitText,
                     font: .system(size: 11, weight: .semibold, design: .rounded),
                     at: DAWKnobMetrics.unitCenter,
-                    width: 50
+                    width: DAWKnobMetrics.unitTextWidth(for: unitText)
                 )
                     .foregroundStyle(.secondary)
             }
@@ -144,7 +147,10 @@ struct DAWKnobControl: View {
                     dragStartValue = value
                 }
                 let startValue = dragStartValue ?? value
-                let nextValue = startValue + DAWKnobMetrics.dragValueDelta(forTranslationHeight: gesture.translation.height)
+                let nextValue = startValue + DAWKnobMetrics.dragValueDelta(
+                    forTranslationHeight: gesture.translation.height,
+                    valueScale: dragValueScale
+                )
                 value = DAWKnobMetrics.clamped(nextValue, to: range)
             }
             .onEnded { _ in

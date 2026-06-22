@@ -12,6 +12,9 @@ enum DAWKnobMetrics {
     static let dragSensitivity: CGFloat = 150
     static let buttonHitExpansion: CGFloat = 8
     static let stepAnimationDuration: Double = 0.12
+    static let defaultUnitTextWidth: CGFloat = 50
+    static let wideUnitTextWidth: CGFloat = 190
+    static let targetLoudnessDragValueScale: Float = 9
     static let knobCenter = CGPoint(x: 510.03954, y: 544.94518)
     static let blueDotCenter = CGPoint(x: 596.3423423423424, y: 448.73273273273276)
     static let rotationAnchor = UnitPoint(x: knobCenter.x / sourceSize.width, y: knobCenter.y / sourceSize.height)
@@ -93,8 +96,17 @@ enum DAWKnobMetrics {
         baseAngleDegrees(value: value, range: range) + rotationOffsetDegrees
     }
 
-    static func dragValueDelta(forTranslationHeight height: CGFloat) -> Float {
-        Float(-height / dragSensitivity)
+    static func unitTextWidth(for unitText: String?) -> CGFloat {
+        switch unitText {
+        case "LUFS", "dB":
+            wideUnitTextWidth
+        default:
+            defaultUnitTextWidth
+        }
+    }
+
+    static func dragValueDelta(forTranslationHeight height: CGFloat, valueScale: Float = 1) -> Float {
+        Float(-height / dragSensitivity) * valueScale
     }
 
     static func clamped(_ value: Float, to range: ClosedRange<Float>) -> Float {

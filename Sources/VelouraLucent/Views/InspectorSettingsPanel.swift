@@ -209,8 +209,6 @@ struct InspectorSettingsPanel: View {
                 )
             }
 
-            masteringWarnings
-
             settingGroup(
                 title: "基本",
                 summary: "音量、安全上限、強弱、仕上げの量です。",
@@ -219,12 +217,11 @@ struct InspectorSettingsPanel: View {
                     reading: "ますたりんぐのきほん",
                     description: "最終版の音量、安全上限、強弱の残し方、仕上げの効き方を決めます。測定値は事故防止の目安で、最終判断は試聴で行います。"
                 ),
-                isExpanded: $showsMasteringBasic
+                isExpanded: $showsMasteringBasic,
+                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
             ) {
-                inspectorSlider(title: "目標ラウドネス", help: SettingHelp(title: "目標ラウドネス", reading: "もくひょうらうどねす", description: "最終版で目指す平均音量の目安です。必ず一致させる数値ではなく、曲の自然さと安全上限を見ながら近づけます。"), valueText: String(format: "%.1f LUFS", job.editableMasteringSettings.targetLoudness), labels: ["余裕", "標準", "大きい"], value: masteringBinding(\.targetLoudness, range: -18 ... -9), range: -18 ... -9, step: 0.1)
-                inspectorSlider(title: "True Peak", help: SettingHelp(title: "True Peak", reading: "とぅるーぴーく", description: "書き出し後に歪まないようにするピーク上限です。値を上げるほど音量の余地は増えますが、安全余裕は小さくなります。"), valueText: String(format: "%.1f dB", job.editableMasteringSettings.peakCeilingDB), labels: ["安全", "標準", "攻める"], value: masteringBinding(\.peakCeilingDB, range: -2 ... -0.2), range: -2 ... -0.2, step: 0.1)
-                inspectorSlider(title: "ダイナミクス保持", help: SettingHelp(title: "ダイナミクス保持", reading: "だいなみくすほじ", description: "音の強弱や抑揚をどれだけ残すかです。上げるほどサビや演奏の動きが残りやすくなります。"), valueText: percentText(job.editableMasteringSettings.dynamicsRetention), labels: ["密度", "標準", "開放感"], value: masteringBinding(\.dynamicsRetention, range: 0 ... 1), range: 0 ... 1)
-                inspectorSlider(title: "仕上げの強さ", help: SettingHelp(title: "仕上げの強さ", reading: "しあげのつよさ", description: "マスタリング処理を全体的にどれくらい効かせるかです。上げるほど前に出ますが、素材によっては自然さが減る場合があります。"), valueText: percentText(job.editableMasteringSettings.finishingIntensity), labels: ["自然", "標準", "前に出す"], value: masteringBinding(\.finishingIntensity, range: 0 ... 1), range: 0 ... 1)
+                masteringWarnings
+                masteringBasicKnobRow
             }
 
             settingGroup(
@@ -557,20 +554,134 @@ struct InspectorSettingsPanel: View {
         )
     }
 
+    private var masteringBasicKnobRow: some View {
+        VStack(spacing: DAWKnobMetrics.rowSpacing) {
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                targetLoudnessKnob
+                truePeakKnob
+            }
+            .frame(width: DAWKnobMetrics.twoColumnWidth)
+
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                dynamicsRetentionKnob
+                finishingIntensityKnob
+            }
+            .frame(width: DAWKnobMetrics.twoColumnWidth)
+        }
+        .frame(width: DAWKnobMetrics.twoColumnWidth, alignment: .center)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var targetLoudnessKnob: some View {
+        DAWKnobControl(
+            title: "目標ラウドネス",
+            help: SettingHelp(
+                title: "目標ラウドネス",
+                reading: "もくひょうらうどねす",
+                description: "最終版で目指す平均音量の目安です。必ず一致させる数値ではなく、曲の自然さと安全上限を見ながら近づけます。"
+            ),
+            valueText: String(format: "%.1f LUFS", job.editableMasteringSettings.targetLoudness),
+            displayValueText: String(format: "%.1f", job.editableMasteringSettings.targetLoudness),
+            unitText: "LUFS",
+            labels: ["余裕", "標準", "大きい"],
+            value: masteringBinding(\.targetLoudness, range: -18 ... -9),
+            range: -18 ... -9,
+            step: 0.1,
+            dragValueScale: DAWKnobMetrics.targetLoudnessDragValueScale
+        )
+    }
+
+    private var truePeakKnob: some View {
+        DAWKnobControl(
+            title: "True Peak",
+            help: SettingHelp(
+                title: "True Peak",
+                reading: "とぅるーぴーく",
+                description: "書き出し後に歪まないようにするピーク上限です。値を上げるほど音量の余地は増えますが、安全余裕は小さくなります。"
+            ),
+            valueText: String(format: "%.1f dB", job.editableMasteringSettings.peakCeilingDB),
+            displayValueText: String(format: "%.1f", job.editableMasteringSettings.peakCeilingDB),
+            unitText: "dB",
+            labels: ["安全", "標準", "攻める"],
+            value: masteringBinding(\.peakCeilingDB, range: -2 ... -0.2),
+            range: -2 ... -0.2,
+            step: 0.1
+        )
+    }
+
+    private var dynamicsRetentionKnob: some View {
+        DAWKnobControl(
+            title: "ダイナミクス保持",
+            help: SettingHelp(
+                title: "ダイナミクス保持",
+                reading: "だいなみくすほじ",
+                description: "音の強弱や抑揚をどれだけ残すかです。上げるほどサビや演奏の動きが残りやすくなります。"
+            ),
+            valueText: percentText(job.editableMasteringSettings.dynamicsRetention),
+            displayValueText: percentNumberText(job.editableMasteringSettings.dynamicsRetention),
+            unitText: "%",
+            labels: ["密度", "標準", "開放感"],
+            value: masteringBinding(\.dynamicsRetention, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var finishingIntensityKnob: some View {
+        DAWKnobControl(
+            title: "仕上げの強さ",
+            help: SettingHelp(
+                title: "仕上げの強さ",
+                reading: "しあげのつよさ",
+                description: "マスタリング処理を全体的にどれくらい効かせるかです。上げるほど前に出ますが、素材によっては自然さが減る場合があります。"
+            ),
+            valueText: percentText(job.editableMasteringSettings.finishingIntensity),
+            displayValueText: percentNumberText(job.editableMasteringSettings.finishingIntensity),
+            unitText: "%",
+            labels: ["自然", "標準", "前に出す"],
+            value: masteringBinding(\.finishingIntensity, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
     @ViewBuilder
     private var masteringWarnings: some View {
         let warnings = job.editableMasteringSettings.aggressiveSettingWarnings
-        if !warnings.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(warnings, id: \.self) { warning in
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                }
+        ZStack(alignment: .topLeading) {
+            masteringNormalNotice
+                .hidden()
+            masteringWarningMessages(MasteringSettings.allAggressiveSettingWarnings)
+                .hidden()
+            if warnings.isEmpty {
+                masteringNormalNotice
+            } else {
+                masteringWarningMessages(warnings)
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var masteringNormalNotice: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("現在の音量とピーク上限は安全な範囲です。", systemImage: "checkmark.circle.fill")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Text("必要に応じて試聴しながら微調整してください。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func masteringWarningMessages(_ warnings: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(warnings, id: \.self) { warning in
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+            }
         }
     }
 

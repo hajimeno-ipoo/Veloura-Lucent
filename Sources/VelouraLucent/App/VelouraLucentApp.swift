@@ -16,8 +16,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func showMainWindowIfSwiftUIWindowIsMissing() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            guard NSApp.windows.allSatisfy({ !$0.isVisible }) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            let hasVisibleMainWindow = NSApp.windows.contains { window in
+                window.isVisible &&
+                    !window.isMiniaturized &&
+                    window.frame.width >= ContentView.inspectorVisibleMinimumWindowWidth &&
+                    window.frame.height >= ContentView.minimumWindowHeight
+            }
+            guard !hasVisibleMainWindow else { return }
 
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1_380, height: 860),
@@ -35,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.center()
 
             let controller = NSWindowController(window: window)
-            self?.fallbackMainWindowController = controller
+            self.fallbackMainWindowController = controller
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
             controller.showWindow(nil)

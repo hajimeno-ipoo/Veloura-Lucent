@@ -60,6 +60,27 @@ struct DAWKnobMetricsTests {
     }
 
     @Test
+    func targetLoudnessDragScaleOnlyChangesExplicitlyScaledDrag() {
+        #expect(DAWKnobMetrics.targetLoudnessDragValueScale == 9)
+        #expect(
+            DAWKnobMetrics.dragValueDelta(
+                forTranslationHeight: -150,
+                valueScale: DAWKnobMetrics.targetLoudnessDragValueScale
+            ) == 9
+        )
+        #expect(DAWKnobMetrics.dragValueDelta(forTranslationHeight: -150) == 1)
+    }
+
+    @Test
+    func longMasteringUnitsUseWiderTextFrameThanPercent() {
+        #expect(DAWKnobMetrics.unitTextWidth(for: "%") == DAWKnobMetrics.defaultUnitTextWidth)
+        #expect(DAWKnobMetrics.unitTextWidth(for: nil) == DAWKnobMetrics.defaultUnitTextWidth)
+        #expect(DAWKnobMetrics.unitTextWidth(for: "LUFS") == DAWKnobMetrics.wideUnitTextWidth)
+        #expect(DAWKnobMetrics.unitTextWidth(for: "dB") == DAWKnobMetrics.wideUnitTextWidth)
+        #expect(DAWKnobMetrics.wideUnitTextWidth > DAWKnobMetrics.defaultUnitTextWidth)
+    }
+
+    @Test
     func valuesAreClampedToRange() {
         #expect(DAWKnobMetrics.clamped(-0.1, to: 0 ... 1) == 0)
         #expect(DAWKnobMetrics.clamped(1.1, to: 0 ... 1) == 1)

@@ -197,6 +197,13 @@ struct LoudnessAdjustmentPolicy: Sendable, Equatable {
 }
 
 extension MasteringSettings {
+    static let loudnessAggressiveWarning = "音圧重視。強弱が少なくなる場合があります。"
+    static let peakCeilingAggressiveWarning = "歪みやすい設定です。配信や再生環境によって音割れする可能性があります。"
+    static let allAggressiveSettingWarnings = [
+        loudnessAggressiveWarning,
+        peakCeilingAggressiveWarning
+    ]
+
     var loudnessAdjustmentPolicy: LoudnessAdjustmentPolicy {
         if finishingIntensity <= 0.45 {
             return LoudnessAdjustmentPolicy(
@@ -261,10 +268,10 @@ extension MasteringSettings {
     var aggressiveSettingWarnings: [String] {
         var warnings: [String] = []
         if targetLoudness >= -12 {
-            warnings.append("音圧重視。強弱が少なくなる場合があります。")
+            warnings.append(Self.loudnessAggressiveWarning)
         }
         if peakCeilingDB >= -0.7 {
-            warnings.append("歪みやすい設定です。配信や再生環境によって音割れする可能性があります。")
+            warnings.append(Self.peakCeilingAggressiveWarning)
         }
         return warnings
     }
