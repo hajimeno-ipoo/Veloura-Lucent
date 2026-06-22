@@ -150,13 +150,10 @@ struct InspectorSettingsPanel: View {
                     reading: "そうじとしゅうふく",
                     description: "低いノイズ、こもり、高域の不足を個別に調整します。ノイズを減らす設定と、失われた明るさを戻す設定を分けて扱います。"
                 ),
-                isExpanded: $showsCorrectionRepair
+                isExpanded: $showsCorrectionRepair,
+                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
             ) {
-                inspectorSlider(title: "低域整理", help: SettingHelp(title: "低域整理", reading: "ていいきせいり", description: "低いゴロゴロしたノイズや不要な低音を整理する量です。上げるほど低域の濁りを抑えます。"), valueText: percentText(job.editableCorrectionSettings.lowCleanup), labels: ["弱い", "標準", "強い"], value: correctionBinding(\.lowCleanup, range: 0 ... 1), range: 0 ... 1)
-                inspectorSlider(title: "中低域整理", help: SettingHelp(title: "中低域整理", reading: "ちゅうていいきせいり", description: "300Hzから1kHz付近のこもりを整理する量です。上げるほど暗さや詰まりを抑えます。"), valueText: percentText(job.editableCorrectionSettings.lowMidCleanup), labels: ["弱い", "標準", "強い"], value: correctionBinding(\.lowMidCleanup, range: 0 ... 1), range: 0 ... 1)
-                inspectorSlider(title: "プレゼンス修復", help: SettingHelp(title: "プレゼンス修復", reading: "ぷれぜんすしゅうふく", description: "声や主旋律が前に出る帯域を補う量です。補正で引っ込みすぎた時に戻します。"), valueText: percentText(job.editableCorrectionSettings.presenceRepair), labels: ["控えめ", "標準", "修復"], value: correctionBinding(\.presenceRepair, range: 0 ... 1), range: 0 ... 1)
-                inspectorSlider(title: "エアー修復", help: SettingHelp(title: "エアー修復", reading: "えあーしゅうふく", description: "息感や空気感に関わる高域を補う量です。高域ノイズではなく、音楽成分として残したい明るさを戻します。"), valueText: percentText(job.editableCorrectionSettings.airRepair), labels: ["控えめ", "標準", "修復"], value: correctionBinding(\.airRepair, range: 0 ... 1), range: 0 ... 1)
-                inspectorSlider(title: "高域の自然さ", help: SettingHelp(title: "高域の自然さ", reading: "こういきのしぜんさ", description: "高域が不自然に硬くならないように整える量です。上げるほど明るさより自然さを優先します。"), valueText: percentText(job.editableCorrectionSettings.highNaturalness), labels: ["明るさ", "標準", "自然"], value: correctionBinding(\.highNaturalness, range: 0 ... 1), range: 0 ... 1)
+                correctionRepairKnobRow
             }
 
             settingGroup(
@@ -318,6 +315,8 @@ struct InspectorSettingsPanel: View {
                 description: "ノイズ低減を全体的にどれくらい効かせるかです。上げるほどノイズは減りやすくなりますが、音の細かい余韻も変わりやすくなります。"
             ),
             valueText: percentText(job.editableCorrectionSettings.correctionIntensity),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.correctionIntensity),
+            unitText: "%",
             labels: ["弱い", "標準", "強い"],
             value: correctionBinding(\.correctionIntensity, range: 0 ... 1),
             range: 0 ... 1,
@@ -334,6 +333,8 @@ struct InspectorSettingsPanel: View {
                 description: "入力音声の雰囲気や質感をどれだけ残すかです。上げるほど元の音の印象を守りやすくなります。"
             ),
             valueText: percentText(job.editableCorrectionSettings.originalRetention),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.originalRetention),
+            unitText: "%",
             labels: ["整える", "標準", "残す"],
             value: correctionBinding(\.originalRetention, range: 0 ... 1),
             range: 0 ... 1,
@@ -350,8 +351,119 @@ struct InspectorSettingsPanel: View {
                 description: "声や主旋律の中心になる帯域を守る量です。上げるほど音の中心が細くなりにくくなります。"
             ),
             valueText: percentText(job.editableCorrectionSettings.coreProtection),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.coreProtection),
+            unitText: "%",
             labels: ["整理", "標準", "芯を守る"],
             value: correctionBinding(\.coreProtection, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var correctionRepairKnobRow: some View {
+        VStack(spacing: DAWKnobMetrics.rowSpacing) {
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                lowCleanupKnob
+                lowMidCleanupKnob
+                presenceRepairKnob
+            }
+            .frame(width: DAWKnobMetrics.threeColumnWidth)
+
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                airRepairKnob
+                highNaturalnessKnob
+            }
+            .frame(width: DAWKnobMetrics.twoColumnWidth)
+        }
+        .frame(width: DAWKnobMetrics.threeColumnWidth, alignment: .center)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var lowCleanupKnob: some View {
+        DAWKnobControl(
+            title: "低域整理",
+            help: SettingHelp(
+                title: "低域整理",
+                reading: "ていいきせいり",
+                description: "低いゴロゴロしたノイズや不要な低音を整理する量です。上げるほど低域の濁りを抑えます。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.lowCleanup),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.lowCleanup),
+            unitText: "%",
+            labels: ["弱い", "標準", "強い"],
+            value: correctionBinding(\.lowCleanup, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var lowMidCleanupKnob: some View {
+        DAWKnobControl(
+            title: "中低域整理",
+            help: SettingHelp(
+                title: "中低域整理",
+                reading: "ちゅうていいきせいり",
+                description: "300Hzから1kHz付近のこもりを整理する量です。上げるほど暗さや詰まりを抑えます。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.lowMidCleanup),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.lowMidCleanup),
+            unitText: "%",
+            labels: ["弱い", "標準", "強い"],
+            value: correctionBinding(\.lowMidCleanup, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var presenceRepairKnob: some View {
+        DAWKnobControl(
+            title: "プレゼンス修復",
+            help: SettingHelp(
+                title: "プレゼンス修復",
+                reading: "ぷれぜんすしゅうふく",
+                description: "声や主旋律が前に出る帯域を補う量です。補正で引っ込みすぎた時に戻します。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.presenceRepair),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.presenceRepair),
+            unitText: "%",
+            labels: ["控えめ", "標準", "修復"],
+            value: correctionBinding(\.presenceRepair, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var airRepairKnob: some View {
+        DAWKnobControl(
+            title: "エアー修復",
+            help: SettingHelp(
+                title: "エアー修復",
+                reading: "えあーしゅうふく",
+                description: "息感や空気感に関わる高域を補う量です。高域ノイズではなく、音楽成分として残したい明るさを戻します。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.airRepair),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.airRepair),
+            unitText: "%",
+            labels: ["控えめ", "標準", "修復"],
+            value: correctionBinding(\.airRepair, range: 0 ... 1),
+            range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var highNaturalnessKnob: some View {
+        DAWKnobControl(
+            title: "高域の自然さ",
+            help: SettingHelp(
+                title: "高域の自然さ",
+                reading: "こういきのしぜんさ",
+                description: "高域が不自然に硬くならないように整える量です。上げるほど明るさより自然さを優先します。"
+            ),
+            valueText: percentText(job.editableCorrectionSettings.highNaturalness),
+            displayValueText: percentNumberText(job.editableCorrectionSettings.highNaturalness),
+            unitText: "%",
+            labels: ["明るさ", "標準", "自然"],
+            value: correctionBinding(\.highNaturalness, range: 0 ... 1),
             range: 0 ... 1,
             step: 0.01
         )
@@ -563,6 +675,10 @@ struct InspectorSettingsPanel: View {
 
     private func percentText(_ value: Float) -> String {
         String(format: "%.0f%%", value * 100)
+    }
+
+    private func percentNumberText(_ value: Float) -> String {
+        String(format: "%.0f", value * 100)
     }
 
     private func decimalText(_ value: Float) -> String {

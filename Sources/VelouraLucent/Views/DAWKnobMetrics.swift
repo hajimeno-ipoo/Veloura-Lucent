@@ -24,6 +24,7 @@ enum DAWKnobMetrics {
     static let titleCenter = CGPoint(x: 510, y: 842)
     static let minusButtonCenter = CGPoint(x: 343, y: 743)
     static let plusButtonCenter = CGPoint(x: 674, y: 743)
+    static let unitCenter = CGPoint(x: 508.5, y: 743)
     static let stepButtonSize = CGSize(width: 63, height: 65)
 
     static var artworkScale: CGFloat {
@@ -36,6 +37,10 @@ enum DAWKnobMetrics {
 
     static var threeColumnWidth: CGFloat {
         controlWidth * 3 + columnSpacing * 2
+    }
+
+    static var fiveColumnWidth: CGFloat {
+        controlWidth * 5 + columnSpacing * 4
     }
 
     static var twoColumnWidth: CGFloat {

@@ -5,6 +5,8 @@ struct DAWKnobControl: View {
     let title: String
     let help: SettingHelp?
     let valueText: String
+    let displayValueText: String?
+    let unitText: String?
     let labels: [String]
     @Binding var value: Float
     let range: ClosedRange<Float>
@@ -20,6 +22,28 @@ struct DAWKnobControl: View {
             stepButtons
         }
         .frame(width: DAWKnobMetrics.controlWidth, height: DAWKnobMetrics.controlHeight)
+    }
+
+    init(
+        title: String,
+        help: SettingHelp?,
+        valueText: String,
+        displayValueText: String? = nil,
+        unitText: String? = nil,
+        labels: [String],
+        value: Binding<Float>,
+        range: ClosedRange<Float>,
+        step: Float
+    ) {
+        self.title = title
+        self.help = help
+        self.valueText = valueText
+        self.displayValueText = displayValueText
+        self.unitText = unitText
+        self.labels = labels
+        self._value = value
+        self.range = range
+        self.step = step
     }
 
     private var knobSurface: some View {
@@ -51,8 +75,23 @@ struct DAWKnobControl: View {
 
     private var overlayLabels: some View {
         ZStack(alignment: .topLeading) {
-            overlayText(valueText, font: .system(size: 15, weight: .semibold, design: .rounded).monospacedDigit(), at: DAWKnobMetrics.valueCenter, width: 165)
+            overlayText(
+                displayValueText ?? valueText,
+                font: .system(size: 15, weight: .semibold, design: .rounded).monospacedDigit(),
+                at: DAWKnobMetrics.valueCenter,
+                width: 165
+            )
                 .foregroundStyle(.primary)
+
+            if let unitText {
+                overlayText(
+                    unitText,
+                    font: .system(size: 11, weight: .semibold, design: .rounded),
+                    at: DAWKnobMetrics.unitCenter,
+                    width: 50
+                )
+                    .foregroundStyle(.secondary)
+            }
 
             if labels.indices.contains(1) {
                 overlayText(labels[1], font: .system(size: 10), at: DAWKnobMetrics.topLabelCenter, width: 120)

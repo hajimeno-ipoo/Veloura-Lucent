@@ -71,6 +71,7 @@ struct DAWKnobMetricsTests {
         let valueCenter = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.valueCenter)
         let minusCenter = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.minusButtonCenter)
         let plusCenter = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.plusButtonCenter)
+        let unitCenter = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.unitCenter)
 
         #expect(abs(valueCenter.x - 57.5654296875) < 0.000001)
         #expect(abs(valueCenter.y - 31.630859375) < 0.000001)
@@ -78,6 +79,9 @@ struct DAWKnobMetricsTests {
         #expect(abs(minusCenter.y - 141.982421875) < 0.000001)
         #expect(abs(plusCenter.x - 94.75390625) < 0.000001)
         #expect(abs(plusCenter.y - 141.982421875) < 0.000001)
+        #expect(abs(unitCenter.x - 58.2275390625) < 0.000001)
+        #expect(abs(unitCenter.y - 141.982421875) < 0.000001)
+        #expect(unitCenter.x == (minusCenter.x + plusCenter.x) / 2)
     }
 
     @Test
@@ -99,10 +103,20 @@ struct DAWKnobMetricsTests {
     func threeKnobRowFitsWithoutScalingInOriginalMaximumInspectorWidth() {
         #expect(DAWKnobMetrics.threeColumnWidth == 368)
         #expect(DAWKnobMetrics.twoColumnWidth == 243)
+        #expect(DAWKnobMetrics.fiveColumnWidth == 618)
 
         let originalMaximumPanelContentWidth: CGFloat = 440 - 28 - 24
 
         #expect(DAWKnobMetrics.threeColumnWidth <= originalMaximumPanelContentWidth)
         #expect(DAWKnobMetrics.controlWidth >= 118)
+    }
+
+    @Test
+    func fiveRepairKnobsRequireThreePlusTwoRowsInInspectorWidth() {
+        let originalMaximumPanelContentWidth: CGFloat = 440 - 28 - 24
+
+        #expect(DAWKnobMetrics.fiveColumnWidth > originalMaximumPanelContentWidth)
+        #expect(DAWKnobMetrics.threeColumnWidth <= originalMaximumPanelContentWidth)
+        #expect(DAWKnobMetrics.twoColumnWidth < DAWKnobMetrics.threeColumnWidth)
     }
 }
