@@ -15,6 +15,8 @@ enum DAWKnobMetrics {
     static let defaultUnitTextWidth: CGFloat = 50
     static let wideUnitTextWidth: CGFloat = 190
     static let targetLoudnessDragValueScale: Float = 9
+    static let deEsserThresholdDragValueScale: Float = 18
+    static let compressorThresholdDragValueScale: Float = 24
     static let knobCenter = CGPoint(x: 510.03954, y: 544.94518)
     static let blueDotCenter = CGPoint(x: 596.3423423423424, y: 448.73273273273276)
     static let rotationAnchor = UnitPoint(x: knobCenter.x / sourceSize.width, y: knobCenter.y / sourceSize.height)

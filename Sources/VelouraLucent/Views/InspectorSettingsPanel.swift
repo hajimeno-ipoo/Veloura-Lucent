@@ -246,14 +246,10 @@ struct InspectorSettingsPanel: View {
                     reading: "ますたりんぐのじょうきゅうせってい",
                     description: "高域の検出、帯域別の圧縮、ステレオ幅、倍音の濃さを調整します。音の印象が大きく変わるため、必要な時だけ触る設定です。"
                 ),
-                isExpanded: $showsMasteringAdvanced
+                isExpanded: $showsMasteringAdvanced,
+                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
             ) {
-                inspectorSlider(title: "ハーシュネス検出", help: SettingHelp(title: "ハーシュネス検出", reading: "はーしゅねすけんしゅつ", description: "耳に痛い高域を検出する基準です。敏感にすると小さな刺さりも拾いますが、明るい音楽成分も対象になりやすくなります。"), valueText: String(format: "%.1f dB", job.editableMasteringSettings.deEsserThresholdDB), labels: ["敏感", "標準", "鈍い"], value: masteringBinding(\.deEsserThresholdDB, range: -36 ... -18), range: -36 ... -18, step: 0.1)
-                compressorGroup(title: "低域コンプ", help: SettingHelp(title: "低域コンプ", reading: "ていいきこんぷ", description: "低域の音量差を整える処理です。キックやベースの暴れを抑え、低域の量感を安定させます。"), band: \.low)
-                compressorGroup(title: "中域コンプ", help: SettingHelp(title: "中域コンプ", reading: "ちゅういきこんぷ", description: "声や主旋律の中心帯域を整える処理です。前に出る感じと聞きやすさに関わります。"), band: \.mid)
-                compressorGroup(title: "高域コンプ", help: SettingHelp(title: "高域コンプ", reading: "こういきこんぷ", description: "明るさや刺激感の出過ぎを整える処理です。高域の動きを落ち着かせます。"), band: \.high)
-                inspectorSlider(title: "ステレオ幅", help: SettingHelp(title: "ステレオ幅", reading: "すてれおはば", description: "左右への広がり具合です。今の実装では低域を広げず、中高域を中心に広がりを調整します。"), valueText: decimalText(job.editableMasteringSettings.stereoWidth), labels: ["狭い", "標準", "広い"], value: masteringBinding(\.stereoWidth, range: 0.8 ... 1.4), range: 0.8 ... 1.4)
-                inspectorSlider(title: "倍音密度", help: SettingHelp(title: "倍音密度", reading: "ばいおんみつど", description: "音に厚みや存在感を加える量です。上げるほど濃くなりますが、上げすぎると透明感が減る場合があります。"), valueText: decimalText(job.editableMasteringSettings.saturationAmount), labels: ["透明", "標準", "濃い"], value: masteringBinding(\.saturationAmount, range: 0 ... 0.45), range: 0 ... 0.45)
+                masteringAdvancedKnobRow
             }
         }
     }
@@ -747,6 +743,171 @@ struct InspectorSettingsPanel: View {
             labels: ["弱い", "標準", "強い"],
             value: masteringBinding(\.deEsserAmount, range: 0 ... 1),
             range: 0 ... 1,
+            step: 0.01
+        )
+    }
+
+    private var masteringAdvancedKnobRow: some View {
+        VStack(spacing: DAWKnobMetrics.rowSpacing) {
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                deEsserThresholdKnob
+                stereoWidthKnob
+                saturationAmountKnob
+            }
+            .frame(width: DAWKnobMetrics.threeColumnWidth)
+
+            compressorKnobGroup(
+                title: "低域コンプ",
+                help: SettingHelp(
+                    title: "低域コンプ",
+                    reading: "ていいきこんぷ",
+                    description: "低域の音量差を整える処理です。キックやベースの暴れを抑え、低域の量感を安定させます。"
+                ),
+                shortTitle: "低域",
+                band: \.low
+            )
+
+            compressorKnobGroup(
+                title: "中域コンプ",
+                help: SettingHelp(
+                    title: "中域コンプ",
+                    reading: "ちゅういきこんぷ",
+                    description: "声や主旋律の中心帯域を整える処理です。前に出る感じと聞きやすさに関わります。"
+                ),
+                shortTitle: "中域",
+                band: \.mid
+            )
+
+            compressorKnobGroup(
+                title: "高域コンプ",
+                help: SettingHelp(
+                    title: "高域コンプ",
+                    reading: "こういきこんぷ",
+                    description: "明るさや刺激感の出過ぎを整える処理です。高域の動きを落ち着かせます。"
+                ),
+                shortTitle: "高域",
+                band: \.high
+            )
+        }
+        .frame(width: DAWKnobMetrics.threeColumnWidth, alignment: .center)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var deEsserThresholdKnob: some View {
+        DAWKnobControl(
+            title: "ハーシュネス検出",
+            help: SettingHelp(
+                title: "ハーシュネス検出",
+                reading: "はーしゅねすけんしゅつ",
+                description: "耳に痛い高域を検出する基準です。敏感にすると小さな刺さりも拾いますが、明るい音楽成分も対象になりやすくなります。"
+            ),
+            valueText: String(format: "%.1f dB", job.editableMasteringSettings.deEsserThresholdDB),
+            displayValueText: String(format: "%.1f", job.editableMasteringSettings.deEsserThresholdDB),
+            unitText: "dB",
+            labels: ["敏感", "標準", "鈍い"],
+            value: masteringBinding(\.deEsserThresholdDB, range: -36 ... -18),
+            range: -36 ... -18,
+            step: 0.1,
+            dragValueScale: DAWKnobMetrics.deEsserThresholdDragValueScale
+        )
+    }
+
+    private var stereoWidthKnob: some View {
+        DAWKnobControl(
+            title: "ステレオ幅",
+            help: SettingHelp(
+                title: "ステレオ幅",
+                reading: "すてれおはば",
+                description: "左右への広がり具合です。今の実装では低域を広げず、中高域を中心に広がりを調整します。"
+            ),
+            valueText: decimalText(job.editableMasteringSettings.stereoWidth),
+            displayValueText: decimalText(job.editableMasteringSettings.stereoWidth),
+            unitText: nil,
+            labels: ["狭い", "標準", "広い"],
+            value: masteringBinding(\.stereoWidth, range: 0.8 ... 1.4),
+            range: 0.8 ... 1.4,
+            step: 0.01
+        )
+    }
+
+    private var saturationAmountKnob: some View {
+        DAWKnobControl(
+            title: "倍音密度",
+            help: SettingHelp(
+                title: "倍音密度",
+                reading: "ばいおんみつど",
+                description: "音に厚みや存在感を加える量です。上げるほど濃くなりますが、上げすぎると透明感が減る場合があります。"
+            ),
+            valueText: decimalText(job.editableMasteringSettings.saturationAmount),
+            displayValueText: decimalText(job.editableMasteringSettings.saturationAmount),
+            unitText: nil,
+            labels: ["透明", "標準", "濃い"],
+            value: masteringBinding(\.saturationAmount, range: 0 ... 0.45),
+            range: 0 ... 0.45,
+            step: 0.01
+        )
+    }
+
+    private func compressorKnobGroup(
+        title: String,
+        help: SettingHelp?,
+        shortTitle: String,
+        band: WritableKeyPath<MultibandCompressionSettings, BandCompressorSettings>
+    ) -> some View {
+        VStack(spacing: 6) {
+            titleWithHelp(title, font: .callout.bold(), help: help)
+                .frame(width: DAWKnobMetrics.twoColumnWidth, alignment: .leading)
+
+            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
+                compressorThresholdKnob(title: "\(shortTitle) Threshold", groupTitle: title, band: band)
+                compressorRatioKnob(title: "\(shortTitle) Ratio", groupTitle: title, band: band)
+            }
+            .frame(width: DAWKnobMetrics.twoColumnWidth)
+        }
+        .frame(width: DAWKnobMetrics.twoColumnWidth, alignment: .center)
+    }
+
+    private func compressorThresholdKnob(
+        title: String,
+        groupTitle: String,
+        band: WritableKeyPath<MultibandCompressionSettings, BandCompressorSettings>
+    ) -> some View {
+        DAWKnobControl(
+            title: title,
+            help: SettingHelp(
+                title: "\(groupTitle) Threshold",
+                reading: "すれっしょるど",
+                description: "コンプレッサーが反応し始める音量です。値を低くするほど、より小さな音から圧縮が始まります。"
+            ),
+            valueText: String(format: "%.1f dB", job.editableMasteringSettings.multibandCompression[keyPath: band].thresholdDB),
+            displayValueText: String(format: "%.1f", job.editableMasteringSettings.multibandCompression[keyPath: band].thresholdDB),
+            unitText: "dB",
+            labels: ["深く効く", "標準", "浅く効く"],
+            value: compressorBinding(band: band, field: \.thresholdDB, range: -36 ... -12),
+            range: -36 ... -12,
+            step: 0.1,
+            dragValueScale: DAWKnobMetrics.compressorThresholdDragValueScale
+        )
+    }
+
+    private func compressorRatioKnob(
+        title: String,
+        groupTitle: String,
+        band: WritableKeyPath<MultibandCompressionSettings, BandCompressorSettings>
+    ) -> some View {
+        DAWKnobControl(
+            title: title,
+            help: SettingHelp(
+                title: "\(groupTitle) Ratio",
+                reading: "れしお",
+                description: "しきい値を超えた音をどれくらい圧縮するかです。値を上げるほど強く抑えます。"
+            ),
+            valueText: decimalText(job.editableMasteringSettings.multibandCompression[keyPath: band].ratio),
+            displayValueText: decimalText(job.editableMasteringSettings.multibandCompression[keyPath: band].ratio),
+            unitText: nil,
+            labels: ["自然", "標準", "強く圧縮"],
+            value: compressorBinding(band: band, field: \.ratio, range: 1.1 ... 4.0),
+            range: 1.1 ... 4.0,
             step: 0.01
         )
     }

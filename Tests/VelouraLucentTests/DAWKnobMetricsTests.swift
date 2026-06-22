@@ -60,13 +60,27 @@ struct DAWKnobMetricsTests {
     }
 
     @Test
-    func targetLoudnessDragScaleOnlyChangesExplicitlyScaledDrag() {
+    func wideRangeMasteringKnobsUseExplicitDragScales() {
         #expect(DAWKnobMetrics.targetLoudnessDragValueScale == 9)
+        #expect(DAWKnobMetrics.deEsserThresholdDragValueScale == 18)
+        #expect(DAWKnobMetrics.compressorThresholdDragValueScale == 24)
         #expect(
             DAWKnobMetrics.dragValueDelta(
                 forTranslationHeight: -150,
                 valueScale: DAWKnobMetrics.targetLoudnessDragValueScale
             ) == 9
+        )
+        #expect(
+            DAWKnobMetrics.dragValueDelta(
+                forTranslationHeight: -150,
+                valueScale: DAWKnobMetrics.deEsserThresholdDragValueScale
+            ) == 18
+        )
+        #expect(
+            DAWKnobMetrics.dragValueDelta(
+                forTranslationHeight: -150,
+                valueScale: DAWKnobMetrics.compressorThresholdDragValueScale
+            ) == 24
         )
         #expect(DAWKnobMetrics.dragValueDelta(forTranslationHeight: -150) == 1)
     }
