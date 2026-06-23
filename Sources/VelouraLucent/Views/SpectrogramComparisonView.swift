@@ -35,11 +35,8 @@ struct SpectrogramComparisonView: View {
                 }
                 spectrogramLegend
             }
-            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(.separator.opacity(0.7), lineWidth: 1)
-            }
+            .padding(8)
+            .glassEffect(.clear, in: .rect(cornerRadius: 16))
         }
     }
 
@@ -91,7 +88,6 @@ struct SpectrogramComparisonView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 94)
-                    .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
             }
         }
         .padding(.horizontal, 12)

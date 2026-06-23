@@ -25,6 +25,8 @@ struct AverageSpectrumComparisonView: View {
                     emptySpectrumMessage
                 }
             }
+            .padding(12)
+            .glassEffect(.clear, in: .rect(cornerRadius: 16))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(spectrumAccessibilityLabel)
         }
@@ -93,7 +95,7 @@ struct AverageSpectrumComparisonView: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(.regularMaterial, in: Capsule())
+            .glassEffect(.clear, in: .capsule)
     }
 }
 

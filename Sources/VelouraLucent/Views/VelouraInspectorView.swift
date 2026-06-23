@@ -13,5 +13,6 @@ struct VelouraInspectorView: View {
             }
             .padding(14)
         }
+        .scrollContentBackground(.hidden)
     }
 }

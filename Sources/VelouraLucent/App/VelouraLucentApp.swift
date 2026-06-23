@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 width: ContentView.inspectorVisibleMinimumWindowWidth,
                 height: ContentView.minimumWindowHeight
             )
+            self.configureLiquidGlassWindow(window)
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: ContentView())
             window.center()
@@ -64,6 +65,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.dockTile.display()
             return
         }
+    }
+
+    @MainActor
+    private func configureLiquidGlassWindow(_ window: NSWindow) {
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
     }
 }
 

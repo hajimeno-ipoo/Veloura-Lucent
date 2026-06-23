@@ -148,7 +148,7 @@ struct DetailedAnalysisWorkspaceView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(state.color.opacity(0.08), in: Capsule())
+        .glassEffect(.regular.tint(state.color.opacity(0.12)), in: .capsule)
         .accessibilityElement(children: .combine)
     }
 
@@ -224,7 +224,7 @@ struct DetailedAnalysisWorkspaceView: View {
                     }
                 }
                 .padding(10)
-                .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                .glassEffect(.clear, in: .rect(cornerRadius: 12))
             }
         }
     }
@@ -309,7 +309,7 @@ struct DetailedAnalysisWorkspaceView: View {
             noiseBarLine(title: "最終版", value: row.mastered, row: row, tint: .orange, detail: row.masteringEffectText)
         }
         .padding(12)
-        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+        .glassEffect(.clear, in: .rect(cornerRadius: 12))
     }
 
     private func noiseBarLine(
@@ -366,7 +366,7 @@ struct DetailedAnalysisWorkspaceView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(10)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .glassEffect(.clear, in: .rect(cornerRadius: 12))
     }
 
     private func correlationCard(stages: [AnalysisStageMetrics]) -> some View {
@@ -458,7 +458,7 @@ struct DetailedAnalysisWorkspaceView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-                    .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                    .glassEffect(.clear, in: .rect(cornerRadius: 12))
             } else {
                 correlationTimelineChart(points: points, maxTime: maxTime)
                     .frame(height: 220)
@@ -682,7 +682,7 @@ struct DetailedAnalysisWorkspaceView: View {
             bandBar(title: "最終版", value: row.mastered, minValue: minValue, maxValue: maxValue, tint: .orange)
         }
         .padding(10)
-        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+        .glassEffect(.clear, in: .rect(cornerRadius: 12))
     }
 
     private func bandBar(title: String, value: Double?, minValue: Double, maxValue: Double, tint: Color) -> some View {
@@ -1043,7 +1043,7 @@ private extension View {
         self
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            .glassEffect(.clear, in: .rect(cornerRadius: 16))
     }
 }
 

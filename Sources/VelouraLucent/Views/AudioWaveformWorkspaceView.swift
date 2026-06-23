@@ -13,17 +13,16 @@ struct AudioWaveformWorkspaceView: View {
             comparisonPicker
             playbackControls
 
-            VStack(spacing: 0) {
-                waveformRow(target: .input, tint: .blue)
-                Divider()
-                waveformRow(target: .corrected, tint: .green)
-                Divider()
-                waveformRow(target: .mastered, tint: .orange)
-            }
-            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(.separator.opacity(0.7), lineWidth: 1)
+            GlassEffectContainer(spacing: 12) {
+                VStack(spacing: 0) {
+                    waveformRow(target: .input, tint: .blue)
+                    Divider()
+                    waveformRow(target: .corrected, tint: .green)
+                    Divider()
+                    waveformRow(target: .mastered, tint: .orange)
+                }
+                .padding(8)
+                .glassCard(cornerRadius: 16)
             }
         }
     }
@@ -45,7 +44,6 @@ struct AudioWaveformWorkspaceView: View {
             HStack(spacing: 12) {
                 comparisonLabel
                 comparisonPairPicker
-                    .frame(maxWidth: 420)
                 comparisonSummary
                 Spacer(minLength: 0)
             }
@@ -57,7 +55,6 @@ struct AudioWaveformWorkspaceView: View {
                     Spacer(minLength: 0)
                 }
                 comparisonPairPicker
-                    .frame(maxWidth: .infinity)
             }
         }
     }
@@ -69,16 +66,15 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private var comparisonPairPicker: some View {
-        Picker("比較対象", selection: binding(
-            get: { preview.comparisonPair },
-            set: { preview.setComparisonPair($0) }
-        )) {
-            ForEach(AudioComparisonPair.allCases) { pair in
-                Text(pair.title).tag(pair)
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(.segmented)
+        LiquidGlassSegmentedControl(
+            title: "比較対象",
+            options: AudioComparisonPair.allCases,
+            selection: binding(
+                get: { preview.comparisonPair },
+                set: { preview.setComparisonPair($0) }
+            ),
+            label: \.title
+        )
     }
 
     private var comparisonSummary: some View {
@@ -112,43 +108,47 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private var transportControls: some View {
-        HStack(spacing: 6) {
-            Button("Aを再生") {
-                preview.playComparisonSide(.a)
-            }
-            .buttonStyle(.bordered)
-            .disabled(comparisonFileURL(for: .a) == nil)
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 8) {
+                Button("Aを再生") {
+                    preview.playComparisonSide(.a)
+                }
+                .buttonStyle(.glass)
+                .disabled(comparisonFileURL(for: .a) == nil)
 
-            Button(playPauseTitle, systemImage: playPauseSystemImage) {
-                togglePlayback()
-            }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .help(playPauseTitle)
-            .accessibilityLabel(playPauseTitle)
-            .disabled(activeComparisonFileURL == nil)
+                Button(playPauseTitle, systemImage: playPauseSystemImage) {
+                    togglePlayback()
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glassProminent)
+                .controlSize(.large)
+                .help(playPauseTitle)
+                .accessibilityLabel(playPauseTitle)
+                .disabled(activeComparisonFileURL == nil)
 
-            Button("停止", systemImage: "stop.fill") {
-                preview.stopPlayback()
-            }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.bordered)
-            .help("停止")
-            .disabled(preview.activeTarget == nil)
+                Button("停止", systemImage: "stop.fill") {
+                    preview.stopPlayback()
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glass)
+                .help("停止")
+                .disabled(preview.activeTarget == nil)
 
-            Button("Bを再生") {
-                preview.playComparisonSide(.b)
-            }
-            .buttonStyle(.bordered)
-            .disabled(comparisonFileURL(for: .b) == nil)
+                Button("Bを再生") {
+                    preview.playComparisonSide(.b)
+                }
+                .buttonStyle(.glass)
+                .disabled(comparisonFileURL(for: .b) == nil)
 
-            Button("A/B切替") {
-                preview.toggleComparisonSide()
+                Button("A/B切替") {
+                    preview.toggleComparisonSide()
+                }
+                .buttonStyle(.glass)
+                .keyboardShortcut("b", modifiers: [.command])
+                .disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)
             }
-            .buttonStyle(.bordered)
-            .keyboardShortcut("b", modifiers: [.command])
-            .disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)
+            .padding(6)
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
         }
         .fixedSize()
     }
@@ -212,10 +212,11 @@ struct AudioWaveformWorkspaceView: View {
                     .lineLimit(1)
                 if let comparisonSide {
                     Text(preview.comparisonPair.title(for: comparisonSide))
-                        .font(.caption2.bold())
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(tint.opacity(0.16), in: Capsule())
+                        .font(.caption.bold())
+                        .foregroundStyle(tint)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .glassEffect(.regular.tint(tint.opacity(0.16)), in: .capsule)
                 }
             }
             .frame(width: 112, alignment: .leading)
@@ -300,6 +301,13 @@ struct AudioWaveformWorkspaceView: View {
     }
 }
 
+private extension View {
+    func glassCard(cornerRadius: CGFloat) -> some View {
+        self
+            .glassEffect(.clear, in: .rect(cornerRadius: cornerRadius))
+    }
+}
+
 private struct SeekableWaveformView: View {
     let samples: [Float]
     let progress: Double
@@ -313,9 +321,6 @@ private struct SeekableWaveformView: View {
             let clampedProgress = min(max(progress, 0), 1)
 
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.secondary.opacity(0.08))
-
                 if isAvailable, !samples.isEmpty {
                     waveform(color: tint.opacity(0.28))
                     waveform(color: tint.opacity(isActive ? 0.9 : 0.65))

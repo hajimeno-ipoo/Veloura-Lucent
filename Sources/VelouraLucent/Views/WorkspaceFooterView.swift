@@ -10,17 +10,18 @@ struct WorkspaceFooterView: View {
                 events: job.recentActivityEvents,
                 isFullLogPresented: $isFullLogPresented
             )
+            .padding(12)
+            .glassEffect(.clear, in: .rect(cornerRadius: 14))
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
-            Divider()
-
             OverallWorkflowView(stages: workflowStages)
+                .padding(12)
+                .glassEffect(.clear, in: .rect(cornerRadius: 14))
                 .frame(minWidth: 260, idealWidth: 320, maxWidth: 360, alignment: .topLeading)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
         .frame(minHeight: 140, maxHeight: 158, alignment: .top)
-        .background(.bar)
         .sheet(isPresented: $isFullLogPresented) {
             FullProcessingLogView(
                 correctionLines: job.logLines,

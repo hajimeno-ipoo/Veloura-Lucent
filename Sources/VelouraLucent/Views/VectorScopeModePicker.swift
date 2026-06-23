@@ -15,14 +15,12 @@ struct VectorScopeModePicker: View {
                 )
             }
 
-            Picker("ベクトルスコープ表示", selection: $displayMode) {
-                ForEach(VectorScopeDisplayMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 420, alignment: .leading)
+            LiquidGlassSegmentedControl(
+                title: "ベクトルスコープ表示",
+                options: VectorScopeDisplayMode.allCases,
+                selection: $displayMode,
+                label: \.title
+            )
             .transaction { transaction in
                 transaction.disablesAnimations = true
             }

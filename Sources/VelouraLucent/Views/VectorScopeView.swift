@@ -79,16 +79,20 @@ struct VectorScopeView: View {
 
             VectorScopeModePicker(displayMode: $displayMode)
 
-            HStack(alignment: .top, spacing: 12) {
-                scopePlot
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                CorrelationMeterView(value: snapshot.correlation)
-                    .frame(width: 92, height: 300)
-            }
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    scopePlot
+                        .frame(minWidth: 0, maxWidth: .infinity)
+                    CorrelationMeterView(value: snapshot.correlation)
+                        .frame(width: 92, height: 300)
+                }
 
-            BalanceMeterView(value: snapshot.balance)
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
+                BalanceMeterView(value: snapshot.balance)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+            }
+            .padding(12)
+            .glassEffect(.clear, in: .rect(cornerRadius: 16))
         }
         .frame(maxWidth: .infinity, minHeight: 430, alignment: .topLeading)
     }
@@ -134,7 +138,7 @@ struct VectorScopeView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(16)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .glassEffect(.clear, in: .rect(cornerRadius: 12))
                     .padding(24)
             }
         }
@@ -219,7 +223,6 @@ private struct VectorScopePlot: View {
 
             drawLabels(context: context, metrics: metrics)
         }
-        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.secondary.opacity(0.18), lineWidth: 1)

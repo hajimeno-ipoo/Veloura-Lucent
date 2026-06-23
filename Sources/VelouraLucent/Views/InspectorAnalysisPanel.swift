@@ -19,12 +19,12 @@ struct InspectorAnalysisPanel: View {
                 }
             }
 
-            Picker("確認する音源", selection: $selectedAudio) {
-                ForEach(InspectorAudioSelection.allCases) { selection in
-                    Text(selection.title).tag(selection)
-                }
-            }
-            .pickerStyle(.segmented)
+            LiquidGlassSegmentedControl(
+                title: "確認する音源",
+                options: InspectorAudioSelection.allCases,
+                selection: $selectedAudio,
+                label: \.title
+            )
 
             if let metrics = selectedMetrics {
                 metricsGrid(metrics)

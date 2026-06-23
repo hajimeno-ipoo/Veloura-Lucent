@@ -45,6 +45,11 @@ struct UIWordingPolicyTests {
 
         #expect(source.contains("基本表示"))
         #expect(source.contains("詳細解析"))
+        #expect(source.contains("fixedHeader"))
+        #expect(source.contains("LiquidGlassSegmentedControl("))
+        #expect(source.contains("title: \"中央表示\""))
+        #expect(source.contains(".padding(.top, 16)"))
+        #expect(!source.contains(".navigationTitle(\"試聴と解析\")"))
         #expect(source.contains("AudioWaveformWorkspaceView"))
         #expect(source.contains("AverageSpectrumComparisonView"))
         #expect(source.contains("SpectrogramComparisonView"))
@@ -56,7 +61,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains("VectorScopeView("))
         #expect(source.contains("preview: preview"))
         #expect(source.contains("Text(\"ベクトルスコープ\")"))
-        #expect(source.contains("Picker(\"ベクトルスコープ表示\", selection: $displayMode)"))
+        #expect(source.contains("title: \"ベクトルスコープ表示\""))
         #expect(source.contains("TermHelpButton("))
         #expect(source.contains("Polar Sampleは、左右チャンネルのサンプルを半円上の点で表示します。"))
         #expect(source.contains("Polar Levelは、短い時間の平均を線で表示します。"))
@@ -76,6 +81,95 @@ struct UIWordingPolicyTests {
     }
 
     @Test
+    func audioWaveformWorkspaceUsesLiquidGlassForAuditionControls() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift"])
+
+        #expect(source.contains(".glassCard(cornerRadius: 16)"))
+        #expect(source.contains("GlassEffectContainer(spacing: 10)"))
+        #expect(source.contains("title: \"比較対象\""))
+        #expect(source.contains(".buttonStyle(.glassProminent)"))
+        #expect(source.contains(".buttonStyle(.glass)"))
+        #expect(source.contains(".glassEffect(.regular.tint(tint.opacity(0.16)), in: .capsule)"))
+        #expect(!source.contains("ultraThinMaterial"))
+        #expect(!source.contains("regularMaterial"))
+        #expect(!source.contains("LinearGradient"))
+    }
+
+    @Test
+    func contentViewConfiguresTransparentLiquidGlassWindow() throws {
+        let source = try combinedSource([
+            "Sources/VelouraLucent/App/VelouraLucentApp.swift",
+            "Sources/VelouraLucent/Views/ContentView.swift"
+        ])
+
+        #expect(source.contains("configureLiquidGlassWindow(window)"))
+        #expect(source.contains("WindowChromeConfigurator("))
+        #expect(source.contains(".containerBackground(.clear, for: .window)"))
+        #expect(source.contains("window.isOpaque = false"))
+        #expect(source.contains("window.backgroundColor = .clear"))
+        #expect(source.contains("window.titlebarAppearsTransparent = true"))
+        #expect(source.contains("window.titleVisibility = .hidden"))
+    }
+
+    @Test
+    func mainWorkspaceUsesLiquidGlassSurfacesWithoutBlockingBarBackground() throws {
+        let source = try combinedSource([
+            "Sources/VelouraLucent/Views/VelouraSidebarView.swift",
+            "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
+            "Sources/VelouraLucent/Views/VelouraInspectorView.swift",
+            "Sources/VelouraLucent/Views/WorkspaceFooterView.swift",
+            "Sources/VelouraLucent/Views/SpectrogramComparisonView.swift",
+            "Sources/VelouraLucent/Views/AverageSpectrumComparisonView.swift",
+            "Sources/VelouraLucent/Views/VectorScopeView.swift",
+            "Sources/VelouraLucent/Views/LoudnessMeterView.swift",
+            "Sources/VelouraLucent/Views/ProcessingLogView.swift"
+        ])
+
+        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 16))"))
+        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 14))"))
+        #expect(source.contains(".glassEffect(.clear, in: .capsule)"))
+        #expect(source.components(separatedBy: ".scrollContentBackground(.hidden)").count >= 3)
+        #expect(!source.contains(".listStyle(.sidebar)"))
+        #expect(!source.contains(".background(.bar)"))
+        #expect(!source.contains(".background(.background.secondary"))
+        #expect(!source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 0))"))
+    }
+
+    @Test
+    func realtimeAnalysisMetersUseUnifiedClearGlassSurfaces() throws {
+        let source = try combinedSource([
+            "Sources/VelouraLucent/Views/AverageSpectrumComparisonView.swift",
+            "Sources/VelouraLucent/Views/VectorScopeView.swift",
+            "Sources/VelouraLucent/Views/LoudnessMeterView.swift"
+        ])
+
+        #expect(source.contains("SpectrumCanvasChart(series: spectrumSeries)"))
+        #expect(source.contains("BalanceMeterView(value: snapshot.balance)"))
+        #expect(source.contains("LoudnessMeterColumn("))
+        #expect(source.components(separatedBy: ".glassEffect(.clear, in: .rect(cornerRadius: 16))").count >= 4)
+        #expect(source.contains(".glassEffect(.clear, in: .capsule)"))
+        #expect(!source.contains(".background(.regularMaterial"))
+        #expect(!source.contains(".background(Color.secondary.opacity(0.05)"))
+    }
+
+    @Test
+    func inspectorSettingsUsesUnifiedGlassInsteadOfLavenderCards() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/InspectorSettingsPanel.swift"])
+
+        #expect(!source.contains("Text(\"設定\")"))
+        #expect(!source.contains("右側では、1項目ずつ縦に並べて調整します。"))
+        #expect(source.contains("Text(\"詳細設定\")"))
+        #expect(source.contains("LiquidGlassSegmentedControl("))
+        #expect(source.contains("title: \"詳細設定\""))
+        #expect(source.contains("title: \"補正プリセット\""))
+        #expect(source.contains("title: \"解析モード\""))
+        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 14))"))
+        #expect(!source.contains("Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)"))
+        #expect(!source.contains(".background(.thinMaterial"))
+        #expect(!source.contains(".background(.regularMaterial"))
+    }
+
+    @Test
     func contentViewKeepsSidebarAndTogglesRightSettingsPanel() throws {
         let source = try combinedSource(["Sources/VelouraLucent/Views/ContentView.swift"])
 
@@ -83,14 +177,21 @@ struct UIWordingPolicyTests {
         #expect(source.contains("NavigationSplitView {"))
         #expect(source.contains("VelouraSidebarView(job: job)"))
         #expect(source.contains("HStack(spacing: 0)"))
+        #expect(source.contains("ZStack(alignment: .topTrailing)"))
         #expect(source.contains("VelouraMainWorkspaceView("))
         #expect(source.contains("if isInspectorPresented"))
         #expect(source.contains("VelouraInspectorView(job: job, completionReport: completionReport)"))
-        #expect(source.contains("ToolbarItem(placement: .primaryAction)"))
-        #expect(source.contains(".labelStyle(.iconOnly)"))
+        #expect(source.contains("inspectorToggleButton"))
+        #expect(source.contains("Image(systemName: \"sidebar.right\")"))
+        #expect(source.contains(".font(.system(size: 18, weight: .regular))"))
+        #expect(source.contains(".frame(width: 24, height: 24)"))
+        #expect(source.contains(".padding(.trailing, 24)"))
+        #expect(source.contains(".offset(y: -36)"))
         #expect(source.contains(".buttonStyle(.plain)"))
         #expect(source.contains("設定を隠す"))
         #expect(source.contains("設定を表示"))
+        #expect(!source.contains("ToolbarItem(placement: .primaryAction)"))
+        #expect(!source.contains(".navigationTitle(\"試聴と解析\")"))
         #expect(!source.contains("NavigationSplitView(columnVisibility:"))
         #expect(!source.contains(".inspector(isPresented:"))
         #expect(!source.contains(".inspectorColumnWidth("))
@@ -104,6 +205,55 @@ struct UIWordingPolicyTests {
         #expect(source.contains("@State private var showDynamics = false"))
         #expect(source.contains("@State private var showSpectrum = false"))
         #expect(source.contains("@State private var showBands = false"))
+    }
+
+    @Test
+    func liquidGlassSegmentedControlUsesUnifiedGlassButtons() throws {
+        let source = try combinedSource([
+            "Sources/VelouraLucent/Views/LiquidGlassSegmentedControl.swift",
+            "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
+            "Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift",
+            "Sources/VelouraLucent/Views/VectorScopeModePicker.swift",
+            "Sources/VelouraLucent/Views/InspectorSettingsPanel.swift",
+            "Sources/VelouraLucent/Views/InspectorAnalysisPanel.swift"
+        ])
+
+        for title in [
+            "中央表示",
+            "比較対象",
+            "ベクトルスコープ表示",
+            "詳細設定",
+            "補正プリセット",
+            "解析モード",
+            "確認する音源"
+        ] {
+            #expect(source.contains("title: \"\(title)\""))
+        }
+
+        #expect(source.contains("struct LiquidGlassSegmentedControl<Selection: Hashable>: View"))
+        #expect(source.contains("GlassEffectContainer(spacing: 8)"))
+        #expect(source.contains(".frame(maxWidth: maxWidth, alignment: .leading)"))
+        #expect(source.contains("var maxWidth: CGFloat = 360"))
+        #expect(source.contains(".buttonStyle(.glassProminent)"))
+        #expect(source.contains(".buttonStyle(.glass)"))
+        #expect(source.contains(".accessibilityValue(\"選択中\")"))
+        #expect(source.contains(".accessibilityValue(\"未選択\")"))
+        #expect(!source.contains(".pickerStyle(.segmented)"))
+        #expect(!source.contains(".frame(maxWidth: 420"))
+    }
+
+    @Test
+    func detailedAnalysisUsesUnifiedClearGlassCards() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"])
+
+        #expect(source.contains("func analysisCard() -> some View"))
+        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 16))"))
+        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 12))"))
+        #expect(source.contains(".glassEffect(.regular.tint(state.color.opacity(0.12)), in: .capsule)"))
+        #expect(!source.contains(".background(.regularMaterial"))
+        #expect(!source.contains(".background(Color.secondary.opacity(0.05)"))
+        #expect(!source.contains(".background(Color.secondary.opacity(0.06)"))
+        #expect(!source.contains(".background(Color.orange.opacity(0.08)"))
     }
 
     @Test
@@ -141,12 +291,17 @@ struct UIWordingPolicyTests {
             [
                 "Sources/VelouraLucent/Views/VelouraSidebarView.swift",
                 "Sources/VelouraLucent/Views/SidebarFileRow.swift",
+                "Sources/VelouraLucent/Views/SidebarProcessingStatusView.swift",
                 "Sources/VelouraLucent/Views/SidebarProcessStatusRow.swift"
             ]
         )
 
-        #expect(source.contains("Section(\"音源\")"))
-        #expect(source.contains("Section(\"工程\")"))
+        #expect(source.contains("sidebarSection(title: \"音源\")"))
+        #expect(source.contains("sidebarSection(title: \"工程\")"))
+        #expect(source.contains("Divider()"))
+        #expect(!source.contains("wrapsContentInGlass"))
+        #expect(!source.contains("sidebarCard"))
+        #expect(!source.contains(".sidebarProcessCard()"))
         #expect(!source.contains("Section(\"ファイル情報\")"))
         #expect(!source.contains("Section(\"入力\")"))
         #expect(!source.contains("Section(\"処理状態\")"))

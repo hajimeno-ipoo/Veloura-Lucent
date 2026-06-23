@@ -28,28 +28,20 @@ struct InspectorSettingsPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            header
+            VStack(alignment: .leading, spacing: 8) {
+                Text("詳細設定")
+                    .font(.headline)
 
-            Picker("詳細設定", selection: $selectedSection) {
-                ForEach(InspectorSettingsSection.allCases) { section in
-                    Text(section.title).tag(section)
-                }
+                LiquidGlassSegmentedControl(
+                    title: "詳細設定",
+                    options: InspectorSettingsSection.allCases,
+                    selection: $selectedSection,
+                    label: \.title,
+                    isDisabled: job.isProcessing || job.isMastering
+                )
             }
-            .pickerStyle(.segmented)
-            .controlSize(.regular)
-            .disabled(job.isProcessing || job.isMastering)
 
             selectedContent
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("設定")
-                .font(.title3.bold())
-            Text("右側では、1項目ずつ縦に並べて調整します。")
-                .font(.callout)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -81,13 +73,13 @@ struct InspectorSettingsPanel: View {
                         description: "補正前の音声解析に使う方式です。自動はこのMacで使える方式を選び、安定CPUは速度より安定性を優先し、実験Metalは対応MacでGPUを使います。"
                     )
                 )
-                Picker("解析モード", selection: $job.selectedAnalysisMode) {
-                    ForEach(AudioAnalysisMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(job.isProcessing)
+                LiquidGlassSegmentedControl(
+                    title: "解析モード",
+                    options: AudioAnalysisMode.allCases,
+                    selection: $job.selectedAnalysisMode,
+                    label: \.title,
+                    isDisabled: job.isProcessing
+                )
 
                 Text(job.selectedAnalysisMode.summary)
                     .foregroundStyle(job.selectedAnalysisMode == .experimentalMetal ? .orange : .secondary)
@@ -110,12 +102,12 @@ struct InspectorSettingsPanel: View {
                         description: "ノイズをどれくらい減らすかの大まかな出発点です。弱い、標準、強いから選び、その後で細かい設定を手動調整できます。"
                     )
                 )
-                Picker("補正プリセット", selection: correctionProfileBinding) {
-                    ForEach(DenoiseStrength.allCases) { strength in
-                        Text(strength.title).tag(strength)
-                    }
-                }
-                .pickerStyle(.segmented)
+                LiquidGlassSegmentedControl(
+                    title: "補正プリセット",
+                    options: DenoiseStrength.allCases,
+                    selection: correctionProfileBinding,
+                    label: \.title
+                )
 
                 Text(job.selectedDenoiseStrength.summary)
                     .font(.callout)
@@ -136,8 +128,7 @@ struct InspectorSettingsPanel: View {
                     reading: "ほせいのきほん",
                     description: "ノイズを減らす量と、元の音の自然さをどれだけ残すかを決める中心設定です。強くしすぎると音楽の細かい成分まで弱くなる場合があります。"
                 ),
-                isExpanded: $showsCorrectionBasic,
-                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
+                isExpanded: $showsCorrectionBasic
             ) {
                 correctionBasicKnobRow
             }
@@ -150,8 +141,7 @@ struct InspectorSettingsPanel: View {
                     reading: "そうじとしゅうふく",
                     description: "低いノイズ、こもり、高域の不足を個別に調整します。ノイズを減らす設定と、失われた明るさを戻す設定を分けて扱います。"
                 ),
-                isExpanded: $showsCorrectionRepair,
-                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
+                isExpanded: $showsCorrectionRepair
             ) {
                 correctionRepairKnobRow
             }
@@ -164,8 +154,7 @@ struct InspectorSettingsPanel: View {
                     reading: "ほせいのじょうきゅうせってい",
                     description: "検出の敏感さ、高域補完、ステレオの守り方を細かく調整します。通常はプリセット値を基準にしてください。"
                 ),
-                isExpanded: $showsCorrectionAdvanced,
-                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
+                isExpanded: $showsCorrectionAdvanced
             ) {
                 correctionAdvancedKnobRow
             }
@@ -217,8 +206,7 @@ struct InspectorSettingsPanel: View {
                     reading: "ますたりんぐのきほん",
                     description: "最終版の音量、安全上限、強弱の残し方、仕上げの効き方を決めます。測定値は事故防止の目安で、最終判断は試聴で行います。"
                 ),
-                isExpanded: $showsMasteringBasic,
-                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
+                isExpanded: $showsMasteringBasic
             ) {
                 masteringWarnings
                 masteringBasicKnobRow
@@ -232,8 +220,7 @@ struct InspectorSettingsPanel: View {
                     reading: "ねいろ",
                     description: "最終版の低域、中低域、前に出る感じ、空気感、耳に痛い高域を調整します。音量とは別に、聞こえ方の色合いを決める設定です。"
                 ),
-                isExpanded: $showsMasteringTone,
-                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
+                isExpanded: $showsMasteringTone
             ) {
                 masteringToneKnobRow
             }
@@ -246,8 +233,7 @@ struct InspectorSettingsPanel: View {
                     reading: "ますたりんぐのじょうきゅうせってい",
                     description: "高域の検出、帯域別の圧縮、ステレオ幅、倍音の濃さを調整します。音の印象が大きく変わるため、必要な時だけ触る設定です。"
                 ),
-                isExpanded: $showsMasteringAdvanced,
-                backgroundColor: Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)
+                isExpanded: $showsMasteringAdvanced
             ) {
                 masteringAdvancedKnobRow
             }
@@ -928,7 +914,7 @@ struct InspectorSettingsPanel: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .glassEffect(.clear, in: .rect(cornerRadius: 10))
     }
 
     private var masteringNormalNotice: some View {
@@ -959,7 +945,7 @@ struct InspectorSettingsPanel: View {
             inspectorSlider(title: "Ratio", help: SettingHelp(title: "\(title) Ratio", reading: "れしお", description: "しきい値を超えた音をどれくらい圧縮するかです。値を上げるほど強く抑えます。"), valueText: String(format: "%.2f", job.editableMasteringSettings.multibandCompression[keyPath: band].ratio), labels: ["自然", "標準", "強く圧縮"], value: compressorBinding(band: band, field: \.ratio, range: 1.1 ... 4.0), range: 1.1 ... 4.0)
         }
         .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .glassEffect(.clear, in: .rect(cornerRadius: 12))
     }
 
     private func settingGroup<Content: View>(
@@ -967,7 +953,6 @@ struct InspectorSettingsPanel: View {
         summary: String,
         help: SettingHelp?,
         isExpanded: Binding<Bool>,
-        backgroundColor: Color? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         DisclosureGroup(isExpanded: isExpanded) {
@@ -984,15 +969,7 @@ struct InspectorSettingsPanel: View {
             titleWithHelp(title, font: .headline, help: help)
         }
         .padding(12)
-        .background {
-            if let backgroundColor {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(backgroundColor)
-            } else {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(.thinMaterial)
-            }
-        }
+        .glassEffect(.clear, in: .rect(cornerRadius: 14))
     }
 
     private func inspectorSlider(

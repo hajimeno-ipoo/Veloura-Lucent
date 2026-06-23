@@ -7,19 +7,10 @@ struct VelouraMainWorkspaceView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            fixedHeader
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    header
-
-                    Picker("中央表示", selection: $displayMode) {
-                        ForEach(WorkspaceDisplayMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 360, alignment: .leading)
-                    .accessibilityLabel("中央表示")
-
                     switch displayMode {
                     case .basic:
                         basicWorkspace
@@ -27,22 +18,36 @@ struct VelouraMainWorkspaceView: View {
                         DetailedAnalysisWorkspaceView(job: job)
                     }
                 }
-                .padding(24)
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
             }
+            .scrollContentBackground(.hidden)
 
             Divider()
             WorkspaceFooterView(job: job)
         }
-        .navigationTitle("試聴と解析")
     }
 
-    private var header: some View {
+    private var fixedHeader: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Veloura Lucent")
                 .font(.largeTitle.bold())
             Text("入力、補正後、最終版を聴き比べながら、必要な解析だけを確認します。")
                 .foregroundStyle(.secondary)
+
+            LiquidGlassSegmentedControl(
+                title: "中央表示",
+                options: WorkspaceDisplayMode.allCases,
+                selection: $displayMode,
+                label: \.title
+            )
+            .padding(.top, 10)
         }
+        .padding(.horizontal, 24)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

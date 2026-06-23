@@ -17,19 +17,25 @@ struct ContentView: View {
             VelouraSidebarView(job: job)
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 300)
         } detail: {
-            HStack(spacing: 0) {
-                VelouraMainWorkspaceView(
-                    job: job,
-                    preview: preview
-                )
-                .frame(minWidth: 620, maxWidth: .infinity)
+            ZStack(alignment: .topTrailing) {
+                HStack(spacing: 0) {
+                    VelouraMainWorkspaceView(
+                        job: job,
+                        preview: preview
+                    )
+                    .frame(minWidth: 620, maxWidth: .infinity)
 
-                if isInspectorPresented {
-                    Divider()
-                    VelouraInspectorView(job: job, completionReport: completionReport)
-                        .frame(width: 440)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    if isInspectorPresented {
+                        Divider()
+                        VelouraInspectorView(job: job, completionReport: completionReport)
+                            .frame(width: 440)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
                 }
+
+                inspectorToggleButton
+                    .padding(.trailing, 24)
+                    .offset(y: -36)
             }
         }
         .navigationSplitViewStyle(.balanced)
@@ -90,23 +96,11 @@ struct ContentView: View {
                 .accessibilityLabel("書き出し")
                 .help("補正後または最終版を書き出します")
             }
-
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    isInspectorPresented.toggle()
-                } label: {
-                    Label(isInspectorPresented ? "設定を隠す" : "設定を表示", systemImage: "sidebar.right")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isInspectorPresented ? "設定を隠す" : "設定を表示")
-                .help("右側の設定パネルを表示または非表示にします")
-            }
         }
-        .navigationTitle("試聴と解析")
         .frame(minWidth: minimumWindowWidth, minHeight: Self.minimumWindowHeight)
+        .containerBackground(.clear, for: .window)
         .background(
-            WindowMinimumSizeUpdater(
+            WindowChromeConfigurator(
                 minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight)
             )
         )
@@ -117,6 +111,22 @@ struct ContentView: View {
             cancelDisplayAnalysisTasks()
             PreviewFileStore.removeAllPreviewFiles()
         }
+    }
+
+    private var inspectorToggleButton: some View {
+        Button {
+            isInspectorPresented.toggle()
+        } label: {
+            Image(systemName: "sidebar.right")
+                .font(.system(size: 18, weight: .regular))
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel(isInspectorPresented ? "設定を隠す" : "設定を表示")
+        .help("右側の設定パネルを表示または非表示にします")
     }
 
     private func toolbarLabel(_ title: String, systemImage: String) -> some View {
@@ -713,7 +723,7 @@ struct ContentView: View {
 
 }
 
-private struct WindowMinimumSizeUpdater: NSViewRepresentable {
+private struct WindowChromeConfigurator: NSViewRepresentable {
     let minSize: NSSize
 
     func makeNSView(context: Context) -> NSView {
@@ -727,11 +737,20 @@ private struct WindowMinimumSizeUpdater: NSViewRepresentable {
     }
 
     private func updateWindow(for view: NSView) {
-        DispatchQueue.main.async {
+        Task { @MainActor in
             guard let window = view.window else { return }
-            guard window.minSize.width != minSize.width || window.minSize.height != minSize.height else { return }
+            configure(window)
+        }
+    }
+
+    private func configure(_ window: NSWindow) {
+        if window.minSize.width != minSize.width || window.minSize.height != minSize.height {
             window.minSize = minSize
         }
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
     }
 }
 

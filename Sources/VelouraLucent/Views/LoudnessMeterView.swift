@@ -64,11 +64,7 @@ struct LoudnessMeterView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
-        }
+        .glassEffect(.clear, in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
     }
@@ -160,7 +156,7 @@ private struct LoudnessMeterColumn: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(referenceColor)
                 .padding(.horizontal, 4)
-                .background(.regularMaterial, in: Capsule())
+                .glassEffect(.clear, in: .capsule)
                 .position(
                     x: 20,
                     y: proxy.size.height * (1 - normalized(referenceValue))

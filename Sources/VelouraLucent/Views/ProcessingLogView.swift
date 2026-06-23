@@ -45,7 +45,7 @@ struct ProcessingLogView: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .glassEffect(.clear, in: .rect(cornerRadius: 12))
         }
         .frame(maxWidth: .infinity, alignment: .top)
     }
