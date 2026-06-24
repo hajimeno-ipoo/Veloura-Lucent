@@ -10,11 +10,12 @@ struct ContentView: View {
     @State private var preview = AudioPreviewController()
     @State private var inputSelectionID = UUID()
     @State private var displayAnalysisTasks: [DisplayAnalysisTarget: Task<Void, Never>] = [:]
+    @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
     @State private var isInspectorPresented = true
     @State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $sidebarVisibility) {
             VelouraSidebarView(job: job)
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 300)
         } detail: {
@@ -44,6 +45,8 @@ struct ContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .toolbar(removing: .sidebarToggle)
+        .toolbar(removing: .title)
         .toolbar {
             ToolbarItemGroup(placement: .principal) {
                 Button(action: chooseInputAudio) {
@@ -109,6 +112,7 @@ struct ContentView: View {
                 minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight)
             )
         )
+        .background(TitlebarSidebarToggleConfigurator(visibility: $sidebarVisibility))
         .background(WindowScrollbarAppearanceConfigurator())
         .onChange(of: job.selectedMasteringProfile) { _, newValue in
             job.applyMasteringProfile(newValue)
@@ -765,6 +769,162 @@ private struct WindowChromeConfigurator: NSViewRepresentable {
         window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+    }
+}
+
+private struct TitlebarSidebarToggleConfigurator: NSViewRepresentable {
+    @Binding var visibility: NavigationSplitViewVisibility
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        updateWindow(for: view, context: context)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.update(visibility: $visibility)
+        updateWindow(for: nsView, context: context)
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        Task { @MainActor in
+            coordinator.stopObservingToolbar()
+        }
+    }
+
+    private func updateWindow(for view: NSView, context: Context) {
+        Task { @MainActor in
+            guard let window = view.window else { return }
+            context.coordinator.observeToolbar(in: window)
+            context.coordinator.installIfNeeded(in: window)
+            context.coordinator.removeDefaultSidebarToggle(from: window)
+            await Task.yield()
+            context.coordinator.removeDefaultSidebarToggle(from: window)
+        }
+    }
+
+    @MainActor
+    final class Coordinator {
+        private static let accessoryIdentifier = NSUserInterfaceItemIdentifier("VelouraLucentSidebarToggleAccessory")
+        // SwiftUI NavigationSplitView uses this runtime toolbar item for its default sidebar toggle.
+        private static let swiftUISidebarToggleIdentifier = NSToolbarItem.Identifier(
+            "com.apple.SwiftUI.navigationSplitView.toggleSidebar"
+        )
+
+        private weak var observedToolbar: NSToolbar?
+        private var toolbarWillAddObserver: NSObjectProtocol?
+        private var accessoryController: NSTitlebarAccessoryViewController?
+        private var hostingView: NSHostingView<TitlebarSidebarToggleButton>?
+        private var visibility: Binding<NavigationSplitViewVisibility>?
+
+        func update(visibility: Binding<NavigationSplitViewVisibility>) {
+            self.visibility = visibility
+            hostingView?.rootView = TitlebarSidebarToggleButton(visibility: visibility)
+        }
+
+        func observeToolbar(in window: NSWindow) {
+            guard let toolbar = window.toolbar, toolbar !== observedToolbar else { return }
+
+            if let toolbarWillAddObserver {
+                NotificationCenter.default.removeObserver(toolbarWillAddObserver)
+            }
+
+            observedToolbar = toolbar
+            toolbarWillAddObserver = NotificationCenter.default.addObserver(
+                forName: NSToolbar.willAddItemNotification,
+                object: toolbar,
+                queue: .main
+            ) { [weak self, weak toolbar] _ in
+                Task { @MainActor in
+                    await Task.yield()
+                    guard let toolbar else { return }
+                    self?.removeDefaultSidebarToggle(from: toolbar)
+                }
+            }
+        }
+
+        func installIfNeeded(in window: NSWindow) {
+            guard accessoryController == nil, let visibility else { return }
+
+            removeStaleAccessory(from: window)
+
+            let button = TitlebarSidebarToggleButton(visibility: visibility)
+            let hostingView = NSHostingView(rootView: button)
+            hostingView.frame = NSRect(x: 0, y: 0, width: 36, height: 30)
+            hostingView.identifier = Self.accessoryIdentifier
+
+            let controller = NSTitlebarAccessoryViewController()
+            controller.view = hostingView
+            controller.layoutAttribute = .left
+
+            window.addTitlebarAccessoryViewController(controller)
+
+            self.hostingView = hostingView
+            self.accessoryController = controller
+        }
+
+        func removeDefaultSidebarToggle(from window: NSWindow) {
+            guard let toolbar = window.toolbar else { return }
+            removeDefaultSidebarToggle(from: toolbar)
+        }
+
+        func removeDefaultSidebarToggle(from toolbar: NSToolbar) {
+            let indexes = toolbar.items.enumerated().compactMap { index, item in
+                let isSidebarToggle = item.itemIdentifier == .toggleSidebar
+                    || item.itemIdentifier == Self.swiftUISidebarToggleIdentifier
+                return isSidebarToggle ? index : nil
+            }
+
+            for index in indexes.reversed() {
+                toolbar.removeItem(at: index)
+            }
+        }
+
+        func stopObservingToolbar() {
+            if let toolbarWillAddObserver {
+                NotificationCenter.default.removeObserver(toolbarWillAddObserver)
+                self.toolbarWillAddObserver = nil
+            }
+            observedToolbar = nil
+        }
+
+        private func removeStaleAccessory(from window: NSWindow) {
+            guard let index = window.titlebarAccessoryViewControllers.firstIndex(where: {
+                $0.view.identifier == Self.accessoryIdentifier
+            }) else {
+                return
+            }
+
+            window.removeTitlebarAccessoryViewController(at: index)
+        }
+    }
+}
+
+private struct TitlebarSidebarToggleButton: View {
+    @Binding var visibility: NavigationSplitViewVisibility
+
+    var body: some View {
+        Button {
+            visibility = isSidebarVisible ? .detailOnly : .all
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 18, weight: .regular))
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel(isSidebarVisible ? "サイドバーを隠す" : "サイドバーを表示")
+        .help("左側のサイドバーを表示または非表示にします")
+    }
+
+    private var isSidebarVisible: Bool {
+        visibility != .detailOnly
     }
 }
 
