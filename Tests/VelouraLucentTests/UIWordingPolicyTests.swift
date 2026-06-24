@@ -99,16 +99,29 @@ struct UIWordingPolicyTests {
     func contentViewConfiguresTransparentLiquidGlassWindow() throws {
         let source = try combinedSource([
             "Sources/VelouraLucent/App/VelouraLucentApp.swift",
-            "Sources/VelouraLucent/Views/ContentView.swift"
+            "Sources/VelouraLucent/Views/ContentView.swift",
+            "Sources/VelouraLucent/Models/AppAppearanceSettings.swift"
         ])
 
         #expect(source.contains("configureLiquidGlassWindow(window)"))
         #expect(source.contains("WindowChromeConfigurator("))
-        #expect(source.contains(".containerBackground(.clear, for: .window)"))
+        #expect(source.contains("@State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()"))
+        #expect(source.contains(".velouraWindowBackground(amount: windowBackgroundMaterialAmount)"))
+        #expect(source.contains("containerBackground(.thinMaterial.opacity(clampedAmount), for: .window)"))
+        #expect(source.contains("windowBackgroundMaterialAmountKey"))
+        #expect(source.contains("storedWindowBackgroundMaterialAmount(defaults: UserDefaults = .standard)"))
+        #expect(source.contains("saveWindowBackgroundMaterialAmount("))
         #expect(source.contains("window.isOpaque = false"))
         #expect(source.contains("window.backgroundColor = .clear"))
         #expect(source.contains("window.titlebarAppearsTransparent = true"))
         #expect(source.contains("window.titleVisibility = .hidden"))
+        #expect(!source.contains("@AppStorage(AppAppearanceSettings.windowBackgroundMaterialAmountKey)"))
+        #expect(!source.contains("containerBackground(.clear, for: .window)"))
+        #expect(!source.contains("containerBackground(for: .window)"))
+        #expect(!source.contains(".fill(.thinMaterial)"))
+        #expect(!source.contains("NSVisualEffectView"))
+        #expect(!source.contains("window.backgroundColor = NSColor"))
+        #expect(!source.contains(".glassEffect(.regular.opacity"))
     }
 
     @Test
@@ -154,16 +167,26 @@ struct UIWordingPolicyTests {
 
     @Test
     func inspectorSettingsUsesUnifiedGlassInsteadOfLavenderCards() throws {
-        let source = try combinedSource(["Sources/VelouraLucent/Views/InspectorSettingsPanel.swift"])
+        let source = try combinedSource([
+            "Sources/VelouraLucent/Views/InspectorSettingsPanel.swift",
+            "Sources/VelouraLucent/Views/AppSettingsPanel.swift"
+        ])
 
         #expect(!source.contains("Text(\"設定\")"))
         #expect(!source.contains("右側では、1項目ずつ縦に並べて調整します。"))
         #expect(source.contains("Text(\"詳細設定\")"))
+        #expect(source.contains("@SceneStorage(\"inspectorSettingsSelectedSection\")"))
+        #expect(!source.contains("@State private var selectedSection: InspectorSettingsSection"))
+        #expect(source.contains("@Binding var windowBackgroundMaterialAmount: Double"))
+        #expect(source.contains("AppSettingsPanel(windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount)"))
+        #expect(source.contains("onEditingChanged: handleWindowBackgroundMaterialEditingChanged"))
         #expect(source.contains("LiquidGlassSegmentedControl("))
         #expect(source.contains("title: \"詳細設定\""))
         #expect(source.contains("title: \"補正プリセット\""))
         #expect(source.contains("title: \"解析モード\""))
         #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 14))"))
+        #expect(source.contains("アプリ背景の透明感"))
+        #expect(source.contains("0%で現在と同じ完全透明です。"))
         #expect(!source.contains("Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)"))
         #expect(!source.contains(".background(.thinMaterial"))
         #expect(!source.contains(".background(.regularMaterial"))
@@ -180,7 +203,8 @@ struct UIWordingPolicyTests {
         #expect(source.contains("ZStack(alignment: .topTrailing)"))
         #expect(source.contains("VelouraMainWorkspaceView("))
         #expect(source.contains("if isInspectorPresented"))
-        #expect(source.contains("VelouraInspectorView(job: job, completionReport: completionReport)"))
+        #expect(source.contains("VelouraInspectorView("))
+        #expect(source.contains("windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount"))
         #expect(source.contains("inspectorToggleButton"))
         #expect(source.contains("Image(systemName: \"sidebar.right\")"))
         #expect(source.contains(".font(.system(size: 18, weight: .regular))"))

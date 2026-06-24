@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var inputSelectionID = UUID()
     @State private var displayAnalysisTasks: [DisplayAnalysisTarget: Task<Void, Never>] = [:]
     @State private var isInspectorPresented = true
+    @State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
 
     var body: some View {
         NavigationSplitView {
@@ -27,7 +28,11 @@ struct ContentView: View {
 
                     if isInspectorPresented {
                         Divider()
-                        VelouraInspectorView(job: job, completionReport: completionReport)
+                        VelouraInspectorView(
+                            job: job,
+                            completionReport: completionReport,
+                            windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount
+                        )
                             .frame(width: 440)
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
@@ -98,7 +103,7 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: minimumWindowWidth, minHeight: Self.minimumWindowHeight)
-        .containerBackground(.clear, for: .window)
+        .velouraWindowBackground(amount: windowBackgroundMaterialAmount)
         .background(
             WindowChromeConfigurator(
                 minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight)
@@ -721,6 +726,14 @@ struct ContentView: View {
         }
     }
 
+}
+
+private extension View {
+    @ViewBuilder
+    func velouraWindowBackground(amount: Double) -> some View {
+        let clampedAmount = AppAppearanceSettings.clampedWindowBackgroundMaterialAmount(amount)
+        containerBackground(.thinMaterial.opacity(clampedAmount), for: .window)
+    }
 }
 
 private struct WindowChromeConfigurator: NSViewRepresentable {

@@ -18,7 +18,9 @@ private enum InspectorSettingsSection: String, CaseIterable, Identifiable {
 
 struct InspectorSettingsPanel: View {
     @Bindable var job: ProcessingJob
-    @State private var selectedSection: InspectorSettingsSection = .correction
+    @Binding var windowBackgroundMaterialAmount: Double
+    @SceneStorage("inspectorSettingsSelectedSection")
+    private var selectedSectionRawValue = InspectorSettingsSection.correction.rawValue
     @State private var showsCorrectionBasic = true
     @State private var showsCorrectionRepair = false
     @State private var showsCorrectionAdvanced = false
@@ -35,7 +37,7 @@ struct InspectorSettingsPanel: View {
                 LiquidGlassSegmentedControl(
                     title: "詳細設定",
                     options: InspectorSettingsSection.allCases,
-                    selection: $selectedSection,
+                    selection: selectedSectionBinding,
                     label: \.title,
                     isDisabled: job.isProcessing || job.isMastering
                 )
@@ -59,9 +61,20 @@ struct InspectorSettingsPanel: View {
         }
     }
 
+    private var selectedSection: InspectorSettingsSection {
+        InspectorSettingsSection(rawValue: selectedSectionRawValue) ?? .correction
+    }
+
+    private var selectedSectionBinding: Binding<InspectorSettingsSection> {
+        Binding(
+            get: { selectedSection },
+            set: { selectedSectionRawValue = $0.rawValue }
+        )
+    }
+
     private var appSettings: some View {
         VStack(alignment: .leading, spacing: 18) {
-            AppSettingsPanel()
+            AppSettingsPanel(windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount)
 
             VStack(alignment: .leading, spacing: 10) {
                 titleWithHelp(
