@@ -40,22 +40,13 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private var comparisonPicker: some View {
-        ViewThatFits(in: .horizontal) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 comparisonLabel
-                comparisonPairPicker
                 comparisonSummary
                 Spacer(minLength: 0)
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 12) {
-                    comparisonLabel
-                    comparisonSummary
-                    Spacer(minLength: 0)
-                }
-                comparisonPairPicker
-            }
+            comparisonPairPicker
         }
     }
 
@@ -91,14 +82,10 @@ struct AudioWaveformWorkspaceView: View {
                 Divider().frame(height: 24)
                 volumeControl
                 loudnessComparisonToggle
-                activeComparisonLabel
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 14) {
-                    transportControls
-                    activeComparisonLabel
-                }
+                transportControls
                 HStack(spacing: 14) {
                     volumeControl
                     loudnessComparisonToggle
@@ -146,6 +133,8 @@ struct AudioWaveformWorkspaceView: View {
                 .buttonStyle(.glass)
                 .keyboardShortcut("b", modifiers: [.command])
                 .disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)
+
+                activeComparisonLabel
             }
             .padding(6)
             .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
@@ -190,10 +179,33 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private var activeComparisonLabel: some View {
-        Text("現在: \(preview.comparisonPair.title(for: preview.activeComparisonSide))")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
+        HStack(spacing: 6) {
+            Circle()
+                .fill(activeComparisonTint)
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+            Text("現在 \(preview.comparisonPair.title(for: preview.activeComparisonSide))")
+                .font(.callout.weight(.bold))
+                .foregroundStyle(activeComparisonTint)
+        }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .glassEffect(.regular.tint(activeComparisonTint.opacity(0.22)), in: .capsule)
             .fixedSize()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("現在再生中")
+            .accessibilityValue(preview.comparisonPair.title(for: preview.activeComparisonSide))
+    }
+
+    private var activeComparisonTint: Color {
+        switch preview.comparisonTarget(for: preview.activeComparisonSide) {
+        case .input:
+            return .blue
+        case .corrected:
+            return .green
+        case .mastered:
+            return .orange
+        }
     }
 
     private func waveformRow(target: AudioPreviewTarget, tint: Color) -> some View {

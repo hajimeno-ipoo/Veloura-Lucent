@@ -87,6 +87,16 @@ struct UIWordingPolicyTests {
         #expect(source.contains(".glassCard(cornerRadius: 16)"))
         #expect(source.contains("GlassEffectContainer(spacing: 10)"))
         #expect(source.contains("title: \"比較対象\""))
+        #expect(source.contains("VStack(alignment: .leading, spacing: 8)"))
+        #expect(source.contains("comparisonLabel\n                comparisonSummary\n                Spacer(minLength: 0)\n            }\n            comparisonPairPicker"))
+        #expect(source.contains("comparisonPairPicker"))
+        #expect(!source.contains("comparisonLabel\n                comparisonPairPicker\n                comparisonSummary"))
+        #expect(source.contains("Button(\"A/B切替\")"))
+        #expect(source.contains(".disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)\n\n                activeComparisonLabel"))
+        #expect(source.contains("Text(\"現在 \\(preview.comparisonPair.title(for: preview.activeComparisonSide))\")"))
+        #expect(source.contains(".glassEffect(.regular.tint(activeComparisonTint.opacity(0.22)), in: .capsule)"))
+        #expect(source.contains("private var activeComparisonTint: Color"))
+        #expect(!source.contains("loudnessComparisonToggle\n                activeComparisonLabel"))
         #expect(source.contains(".buttonStyle(.glassProminent)"))
         #expect(source.contains(".buttonStyle(.glass)"))
         #expect(source.contains(".glassEffect(.regular.tint(tint.opacity(0.16)), in: .capsule)"))
@@ -219,6 +229,22 @@ struct UIWordingPolicyTests {
         #expect(!source.contains("NavigationSplitView(columnVisibility:"))
         #expect(!source.contains(".inspector(isPresented:"))
         #expect(!source.contains(".inspectorColumnWidth("))
+    }
+
+    @Test
+    func windowScrollbarAppearanceKeepsLiquidGlassScrollbarsQuiet() throws {
+        let contentView = try combinedSource(["Sources/VelouraLucent/Views/ContentView.swift"])
+        let configurator = try combinedSource(["Sources/VelouraLucent/Views/WindowScrollbarAppearanceConfigurator.swift"])
+
+        #expect(contentView.contains("WindowScrollbarAppearanceConfigurator()"))
+        #expect(configurator.contains("struct WindowScrollbarAppearanceConfigurator: NSViewRepresentable"))
+        #expect(configurator.contains("contentView.descendants(ofType: NSScrollView.self)"))
+        #expect(configurator.contains("scrollView.scrollerStyle = .overlay"))
+        #expect(configurator.contains("scrollView.autohidesScrollers = true"))
+        #expect(configurator.contains("verticalScroller?.knobStyle = .light"))
+        #expect(configurator.contains("horizontalScroller?.knobStyle = .light"))
+        #expect(configurator.contains("verticalScroller?.controlSize = .small"))
+        #expect(configurator.contains("horizontalScroller?.controlSize = .small"))
     }
 
     @Test

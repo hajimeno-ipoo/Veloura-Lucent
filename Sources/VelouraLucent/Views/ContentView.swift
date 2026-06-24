@@ -109,6 +109,7 @@ struct ContentView: View {
                 minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight)
             )
         )
+        .background(WindowScrollbarAppearanceConfigurator())
         .onChange(of: job.selectedMasteringProfile) { _, newValue in
             job.applyMasteringProfile(newValue)
         }
