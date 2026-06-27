@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct FullProcessingLogView: View {
-    let correctionLines: [String]
-    let masteringLines: [String]
+    @Bindable var job: ProcessingJob
     let onDismiss: () -> Void
 
     var body: some View {
@@ -21,8 +20,8 @@ struct FullProcessingLogView: View {
 
                 ScrollView {
                     ProcessingLogView(
-                        correctionLines: correctionLines,
-                        masteringLines: masteringLines
+                        correctionLines: job.logLines,
+                        masteringLines: job.masteringLogLines
                     )
                     .padding(.horizontal, 20)
                     .padding(.bottom, 20)

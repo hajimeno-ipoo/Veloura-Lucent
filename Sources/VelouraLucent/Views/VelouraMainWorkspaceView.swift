@@ -3,45 +3,31 @@ import SwiftUI
 struct VelouraMainWorkspaceView: View {
     @Bindable var job: ProcessingJob
     let preview: AudioPreviewController
+    let onOpenFullLog: () -> Void
     @State private var displayMode: WorkspaceDisplayMode = .basic
-    @State private var isFullLogPresented = false
 
     var body: some View {
-        ZStack {
-            VStack(spacing: 0) {
-                fixedHeader
+        VStack(spacing: 0) {
+            fixedHeader
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        switch displayMode {
-                        case .basic:
-                            basicWorkspace
-                        case .detail:
-                            DetailedAnalysisWorkspaceView(job: job)
-                        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    switch displayMode {
+                    case .basic:
+                        basicWorkspace
+                    case .detail:
+                        DetailedAnalysisWorkspaceView(job: job)
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 16)
-                    .padding(.bottom, 24)
                 }
-                .scrollContentBackground(.hidden)
-
-                Divider()
-                WorkspaceFooterView(job: job, isFullLogPresented: $isFullLogPresented)
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
             }
+            .scrollContentBackground(.hidden)
 
-            if isFullLogPresented {
-                FullProcessingLogView(
-                    correctionLines: job.logLines,
-                    masteringLines: job.masteringLogLines,
-                    onDismiss: { isFullLogPresented = false }
-                )
-                .padding(24)
-                .transition(.scale(scale: 0.98).combined(with: .opacity))
-                .zIndex(1)
-            }
+            Divider()
+            WorkspaceFooterView(job: job, onOpenFullLog: onOpenFullLog)
         }
-        .animation(.easeInOut(duration: 0.16), value: isFullLogPresented)
     }
 
     private var fixedHeader: some View {

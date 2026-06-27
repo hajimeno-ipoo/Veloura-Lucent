@@ -138,6 +138,7 @@ struct UIWordingPolicyTests {
     @Test
     func mainWorkspaceUsesLiquidGlassSurfacesWithoutBlockingBarBackground() throws {
         let source = try combinedSource([
+            "Sources/VelouraLucent/Views/ContentView.swift",
             "Sources/VelouraLucent/Views/VelouraSidebarView.swift",
             "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
             "Sources/VelouraLucent/Views/VelouraInspectorView.swift",
@@ -155,12 +156,22 @@ struct UIWordingPolicyTests {
         #expect(source.contains(".glassEffect(.clear, in: .capsule)"))
         #expect(source.contains("GlassEffectContainer(spacing: 14)"))
         #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 18))"))
-        #expect(source.contains("@State private var isFullLogPresented = false"))
-        #expect(source.contains("WorkspaceFooterView(job: job, isFullLogPresented: $isFullLogPresented)"))
+        #expect(source.contains("@State private var fullLogWindowController: NSWindowController?"))
+        #expect(source.contains("VelouraMainWorkspaceView("))
+        #expect(source.contains("onOpenFullLog: openFullProcessingLogWindow"))
+        #expect(source.contains("private func openFullProcessingLogWindow()"))
+        #expect(source.contains("NSWindow("))
+        #expect(source.contains("NSWindowController(window: window)"))
         #expect(source.contains("FullProcessingLogView("))
-        #expect(source.contains("onDismiss: { isFullLogPresented = false }"))
+        #expect(source.contains("job: job"))
+        #expect(source.contains("private func closeFullProcessingLogWindow()"))
+        #expect(!source.contains("private var fullProcessingLogOverlay: some View"))
+        #expect(!source.contains("Color.white.opacity(0.50)"))
+        #expect(!source.contains(".zIndex(10)"))
         #expect(source.components(separatedBy: ".scrollContentBackground(.hidden)").count >= 3)
         #expect(!source.contains(".sheet(isPresented: $isFullLogPresented)"))
+        #expect(!source.contains("@State private var isFullLogPresented = false"))
+        #expect(!source.contains("isFullLogPresented: $isFullLogPresented"))
         #expect(!source.contains(".presentationBackground(.clear)"))
         #expect(!source.contains("FullProcessingLogWindowConfigurator"))
         #expect(!source.contains(".listStyle(.sidebar)"))
@@ -468,4 +479,5 @@ struct UIWordingPolicyTests {
             .map { try String(contentsOf: root.appendingPathComponent($0), encoding: .utf8) }
             .joined(separator: "\n")
     }
+
 }

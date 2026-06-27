@@ -12,9 +12,31 @@ struct ContentView: View {
     @State private var displayAnalysisTasks: [DisplayAnalysisTarget: Task<Void, Never>] = [:]
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
     @State private var isInspectorPresented = true
+    @State private var fullLogWindowController: NSWindowController?
     @State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
 
     var body: some View {
+        mainContent
+            .frame(minWidth: minimumWindowWidth, minHeight: Self.minimumWindowHeight)
+            .velouraWindowBackground(amount: windowBackgroundMaterialAmount)
+            .background(
+                WindowChromeConfigurator(
+                    minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight)
+                )
+            )
+            .background(TitlebarSidebarToggleConfigurator(visibility: $sidebarVisibility))
+            .background(WindowScrollbarAppearanceConfigurator())
+            .onChange(of: job.selectedMasteringProfile) { _, newValue in
+                job.applyMasteringProfile(newValue)
+            }
+            .onDisappear {
+                closeFullProcessingLogWindow()
+                cancelDisplayAnalysisTasks()
+                PreviewFileStore.removeAllPreviewFiles()
+            }
+    }
+
+    private var mainContent: some View {
         NavigationSplitView(columnVisibility: $sidebarVisibility) {
             VelouraSidebarView(job: job)
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 300)
@@ -23,7 +45,8 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     VelouraMainWorkspaceView(
                         job: job,
-                        preview: preview
+                        preview: preview,
+                        onOpenFullLog: openFullProcessingLogWindow
                     )
                     .frame(minWidth: 620, maxWidth: .infinity)
 
@@ -105,22 +128,6 @@ struct ContentView: View {
                 .help("補正後または最終版を書き出します")
             }
         }
-        .frame(minWidth: minimumWindowWidth, minHeight: Self.minimumWindowHeight)
-        .velouraWindowBackground(amount: windowBackgroundMaterialAmount)
-        .background(
-            WindowChromeConfigurator(
-                minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight)
-            )
-        )
-        .background(TitlebarSidebarToggleConfigurator(visibility: $sidebarVisibility))
-        .background(WindowScrollbarAppearanceConfigurator())
-        .onChange(of: job.selectedMasteringProfile) { _, newValue in
-            job.applyMasteringProfile(newValue)
-        }
-        .onDisappear {
-            cancelDisplayAnalysisTasks()
-            PreviewFileStore.removeAllPreviewFiles()
-        }
     }
 
     private var inspectorToggleButton: some View {
@@ -146,6 +153,44 @@ struct ContentView: View {
         }
         .fixedSize()
         .accessibilityLabel(title)
+    }
+
+    private func openFullProcessingLogWindow() {
+        if let window = fullLogWindowController?.window {
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 840, height: 680),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "処理ログ"
+        window.minSize = NSSize(width: 640, height: 520)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(
+            rootView: FullProcessingLogView(
+                job: job,
+                onDismiss: closeFullProcessingLogWindow
+            )
+            .velouraWindowBackground(amount: windowBackgroundMaterialAmount)
+        )
+        window.center()
+
+        let controller = NSWindowController(window: window)
+        fullLogWindowController = controller
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func closeFullProcessingLogWindow() {
+        fullLogWindowController?.window?.close()
     }
 
     private var completionReport: CompletionReport? {
