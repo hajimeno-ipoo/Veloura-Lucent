@@ -3,30 +3,41 @@ import SwiftUI
 struct VelouraMainWorkspaceView: View {
     @Bindable var job: ProcessingJob
     let preview: AudioPreviewController
-    let onOpenFullLog: () -> Void
     @State private var displayMode: WorkspaceDisplayMode = .basic
+    @State private var isFullLogPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
-            fixedHeader
+            if isFullLogPresented {
+                FullProcessingLogView(
+                    job: job,
+                    onDismiss: { isFullLogPresented = false }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            } else {
+                fixedHeader
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    switch displayMode {
-                    case .basic:
-                        basicWorkspace
-                    case .detail:
-                        DetailedAnalysisWorkspaceView(job: job)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        switch displayMode {
+                        case .basic:
+                            basicWorkspace
+                        case .detail:
+                            DetailedAnalysisWorkspaceView(job: job)
+                        }
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+                    .padding(.bottom, 24)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 16)
-                .padding(.bottom, 24)
-            }
-            .scrollContentBackground(.hidden)
+                .scrollContentBackground(.hidden)
 
-            Divider()
-            WorkspaceFooterView(job: job, onOpenFullLog: onOpenFullLog)
+                Divider()
+                WorkspaceFooterView(
+                    job: job,
+                    isFullLogPresented: $isFullLogPresented
+                )
+            }
         }
     }
 

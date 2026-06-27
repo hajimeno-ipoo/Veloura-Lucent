@@ -2,13 +2,13 @@ import SwiftUI
 
 struct WorkspaceFooterView: View {
     @Bindable var job: ProcessingJob
-    let onOpenFullLog: () -> Void
+    @Binding var isFullLogPresented: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 22) {
             RecentProcessingLogView(
                 events: job.recentActivityEvents,
-                onOpenFullLog: onOpenFullLog
+                isFullLogPresented: $isFullLogPresented
             )
             .padding(12)
             .glassEffect(.clear, in: .rect(cornerRadius: 14))

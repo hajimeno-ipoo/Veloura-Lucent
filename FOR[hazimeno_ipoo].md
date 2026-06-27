@@ -262,7 +262,7 @@ Macアプリ(SwiftUI)
   - `TermHelpButton.swift` は、設定項目や比較項目の `?` 説明ポップアップを担当します。
   - `SidebarFileRow.swift` は、3音源のファイル名、保存場所、形式、サンプルレート、チャンネル、長さを担当します。
   - `SidebarProcessingStatusView.swift` と `SidebarProcessStatusRow.swift` は、補正とマスタリングの現在位置、経過時間、進捗率、全工程一覧を担当します。
-  - `ProcessingLogView.swift` と `FullProcessingLogView.swift` は、補正ログとマスタリングログの全文を同じ幅の2列で表示します。詳細ログは、アプリ画面全体に重ねず、標準の外枠と影があるログ専用の別ウィンドウで表示します。
+  - `ProcessingLogView.swift` と `FullProcessingLogView.swift` は、補正ログとマスタリングログの全文を同じ幅の2列で表示します。詳細ログは、別ウィンドウや重ね表示ではなく、中央ワークスペースの通常表示領域を切り替えて表示します。
 - `Sources/VelouraLucent/Models/`
   - 画面の状態、ノイズ除去の強さ、マスタリング設定、処理ルート判定です。
   - `AudioProcessingModels.swift` の `AudioFileInfo` は、実ファイルから取得した音声形式を保持します。

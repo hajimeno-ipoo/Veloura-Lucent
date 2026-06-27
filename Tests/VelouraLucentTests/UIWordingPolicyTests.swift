@@ -147,6 +147,7 @@ struct UIWordingPolicyTests {
             "Sources/VelouraLucent/Views/AverageSpectrumComparisonView.swift",
             "Sources/VelouraLucent/Views/VectorScopeView.swift",
             "Sources/VelouraLucent/Views/LoudnessMeterView.swift",
+            "Sources/VelouraLucent/Views/RecentProcessingLogView.swift",
             "Sources/VelouraLucent/Views/ProcessingLogView.swift",
             "Sources/VelouraLucent/Views/FullProcessingLogView.swift"
         ])
@@ -156,22 +157,21 @@ struct UIWordingPolicyTests {
         #expect(source.contains(".glassEffect(.clear, in: .capsule)"))
         #expect(source.contains("GlassEffectContainer(spacing: 14)"))
         #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 18))"))
-        #expect(source.contains("@State private var fullLogWindowController: NSWindowController?"))
+        #expect(source.contains("@State private var isFullLogPresented = false"))
         #expect(source.contains("VelouraMainWorkspaceView("))
-        #expect(source.contains("onOpenFullLog: openFullProcessingLogWindow"))
-        #expect(source.contains("private func openFullProcessingLogWindow()"))
-        #expect(source.contains("NSWindow("))
-        #expect(source.contains("NSWindowController(window: window)"))
         #expect(source.contains("FullProcessingLogView("))
         #expect(source.contains("job: job"))
-        #expect(source.contains("private func closeFullProcessingLogWindow()"))
+        #expect(source.contains("isFullLogPresented: $isFullLogPresented"))
+        #expect(source.contains("isFullLogPresented = true"))
+        #expect(source.contains("onDismiss: { isFullLogPresented = false }"))
         #expect(!source.contains("private var fullProcessingLogOverlay: some View"))
         #expect(!source.contains("Color.white.opacity(0.50)"))
         #expect(!source.contains(".zIndex(10)"))
         #expect(source.components(separatedBy: ".scrollContentBackground(.hidden)").count >= 3)
         #expect(!source.contains(".sheet(isPresented: $isFullLogPresented)"))
-        #expect(!source.contains("@State private var isFullLogPresented = false"))
-        #expect(!source.contains("isFullLogPresented: $isFullLogPresented"))
+        #expect(!source.contains("@State private var fullLogWindowController: NSWindowController?"))
+        #expect(!source.contains("private func openFullProcessingLogWindow()"))
+        #expect(!source.contains("NSWindowController(window: window)"))
         #expect(!source.contains(".presentationBackground(.clear)"))
         #expect(!source.contains("FullProcessingLogWindowConfigurator"))
         #expect(!source.contains(".listStyle(.sidebar)"))

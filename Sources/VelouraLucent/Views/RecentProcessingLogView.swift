@@ -2,7 +2,7 @@ import SwiftUI
 
 struct RecentProcessingLogView: View {
     let events: [RecentActivityEvent]
-    let onOpenFullLog: () -> Void
+    @Binding var isFullLogPresented: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -11,7 +11,7 @@ struct RecentProcessingLogView: View {
                     .font(.headline)
                 Spacer()
                 Button("詳細ログ", systemImage: "list.bullet.rectangle") {
-                    onOpenFullLog()
+                    isFullLogPresented = true
                 }
                 .buttonStyle(.borderless)
                 .help("補正とマスタリングの完全なログを開きます")
