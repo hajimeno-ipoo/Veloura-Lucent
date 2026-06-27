@@ -4,29 +4,44 @@ struct VelouraMainWorkspaceView: View {
     @Bindable var job: ProcessingJob
     let preview: AudioPreviewController
     @State private var displayMode: WorkspaceDisplayMode = .basic
+    @State private var isFullLogPresented = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            fixedHeader
+        ZStack {
+            VStack(spacing: 0) {
+                fixedHeader
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    switch displayMode {
-                    case .basic:
-                        basicWorkspace
-                    case .detail:
-                        DetailedAnalysisWorkspaceView(job: job)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        switch displayMode {
+                        case .basic:
+                            basicWorkspace
+                        case .detail:
+                            DetailedAnalysisWorkspaceView(job: job)
+                        }
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+                    .padding(.bottom, 24)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 16)
-                .padding(.bottom, 24)
-            }
-            .scrollContentBackground(.hidden)
+                .scrollContentBackground(.hidden)
 
-            Divider()
-            WorkspaceFooterView(job: job)
+                Divider()
+                WorkspaceFooterView(job: job, isFullLogPresented: $isFullLogPresented)
+            }
+
+            if isFullLogPresented {
+                FullProcessingLogView(
+                    correctionLines: job.logLines,
+                    masteringLines: job.masteringLogLines,
+                    onDismiss: { isFullLogPresented = false }
+                )
+                .padding(24)
+                .transition(.scale(scale: 0.98).combined(with: .opacity))
+                .zIndex(1)
+            }
         }
+        .animation(.easeInOut(duration: 0.16), value: isFullLogPresented)
     }
 
     private var fixedHeader: some View {

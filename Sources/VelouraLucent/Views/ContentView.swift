@@ -737,7 +737,10 @@ private extension View {
     @ViewBuilder
     func velouraWindowBackground(amount: Double) -> some View {
         let clampedAmount = AppAppearanceSettings.clampedWindowBackgroundMaterialAmount(amount)
-        containerBackground(.thinMaterial.opacity(clampedAmount), for: .window)
+        containerBackground(
+            .thinMaterial.materialActiveAppearance(.active).opacity(clampedAmount),
+            for: .window
+        )
     }
 }
 

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct WorkspaceFooterView: View {
     @Bindable var job: ProcessingJob
-    @State private var isFullLogPresented = false
+    @Binding var isFullLogPresented: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 22) {
@@ -22,12 +22,6 @@ struct WorkspaceFooterView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
         .frame(minHeight: 140, maxHeight: 158, alignment: .top)
-        .sheet(isPresented: $isFullLogPresented) {
-            FullProcessingLogView(
-                correctionLines: job.logLines,
-                masteringLines: job.masteringLogLines
-            )
-        }
     }
 
     private var workflowStages: [WorkspaceFooterStage] {

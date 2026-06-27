@@ -117,7 +117,8 @@ struct UIWordingPolicyTests {
         #expect(source.contains("WindowChromeConfigurator("))
         #expect(source.contains("@State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()"))
         #expect(source.contains(".velouraWindowBackground(amount: windowBackgroundMaterialAmount)"))
-        #expect(source.contains("containerBackground(.thinMaterial.opacity(clampedAmount), for: .window)"))
+        #expect(source.contains(".thinMaterial.materialActiveAppearance(.active).opacity(clampedAmount)"))
+        #expect(source.contains("for: .window"))
         #expect(source.contains("windowBackgroundMaterialAmountKey"))
         #expect(source.contains("storedWindowBackgroundMaterialAmount(defaults: UserDefaults = .standard)"))
         #expect(source.contains("saveWindowBackgroundMaterialAmount("))
@@ -145,13 +146,23 @@ struct UIWordingPolicyTests {
             "Sources/VelouraLucent/Views/AverageSpectrumComparisonView.swift",
             "Sources/VelouraLucent/Views/VectorScopeView.swift",
             "Sources/VelouraLucent/Views/LoudnessMeterView.swift",
-            "Sources/VelouraLucent/Views/ProcessingLogView.swift"
+            "Sources/VelouraLucent/Views/ProcessingLogView.swift",
+            "Sources/VelouraLucent/Views/FullProcessingLogView.swift"
         ])
 
         #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 16))"))
         #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 14))"))
         #expect(source.contains(".glassEffect(.clear, in: .capsule)"))
+        #expect(source.contains("GlassEffectContainer(spacing: 14)"))
+        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 18))"))
+        #expect(source.contains("@State private var isFullLogPresented = false"))
+        #expect(source.contains("WorkspaceFooterView(job: job, isFullLogPresented: $isFullLogPresented)"))
+        #expect(source.contains("FullProcessingLogView("))
+        #expect(source.contains("onDismiss: { isFullLogPresented = false }"))
         #expect(source.components(separatedBy: ".scrollContentBackground(.hidden)").count >= 3)
+        #expect(!source.contains(".sheet(isPresented: $isFullLogPresented)"))
+        #expect(!source.contains(".presentationBackground(.clear)"))
+        #expect(!source.contains("FullProcessingLogWindowConfigurator"))
         #expect(!source.contains(".listStyle(.sidebar)"))
         #expect(!source.contains(".background(.bar)"))
         #expect(!source.contains(".background(.background.secondary"))
