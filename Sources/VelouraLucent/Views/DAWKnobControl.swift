@@ -111,9 +111,9 @@ struct DAWKnobControl: View {
 
             HStack(spacing: 5) {
                 Text(title)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .minimumScaleFactor(0.9)
                 if let help {
                     TermHelpButton(title: help.title, reading: help.reading, description: help.description)
                 }
@@ -179,7 +179,7 @@ struct DAWKnobControl: View {
         Text(text)
             .font(font)
             .lineLimit(1)
-            .minimumScaleFactor(0.75)
+            .minimumScaleFactor(0.9)
             .frame(width: width * DAWKnobMetrics.artworkScale)
             .position(scaled(point))
             .accessibilityHidden(true)

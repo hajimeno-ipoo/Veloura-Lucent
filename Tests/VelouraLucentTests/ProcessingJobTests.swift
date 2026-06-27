@@ -81,6 +81,33 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func recentActivityEventsReturnsLatestFourActivities() throws {
+        let directory = try makeTemporaryAudioDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let input = directory.appending(path: "input.wav")
+        let corrected = directory.appending(path: "corrected.wav")
+        try AudioFileService.saveAudio(makeAudioSignal(), to: input)
+        try AudioFileService.saveAudio(makeAudioSignal(), to: corrected)
+        let job = ProcessingJob()
+
+        job.prepareForSelection(input)
+        job.finishInputMetricAnalysis(makeSnapshot())
+        job.beginProcessing()
+        job.finishSuccess(corrected)
+        job.finishOutputMetricAnalysis(makeSnapshot())
+        job.beginMastering()
+
+        #expect(job.activityEvents.count == 5)
+        #expect(job.recentActivityEvents.count == 4)
+        #expect(job.recentActivityEvents.map(\.title) == [
+            "解析が完了しました",
+            "補正処理が完了しました",
+            "補正後の解析が完了しました",
+            "マスタリングを開始しました"
+        ])
+    }
+
+    @Test
     func progressEventsUpdateOneRunningActivityInsteadOfAddingLogRows() {
         let job = ProcessingJob()
         job.prepareForSelection(URL(fileURLWithPath: "/tmp/input.wav"))

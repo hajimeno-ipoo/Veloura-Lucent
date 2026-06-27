@@ -18,7 +18,7 @@ struct SpectrogramComparisonView: View {
                 )
                 Spacer()
                 Text("時間 →")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
@@ -85,7 +85,7 @@ struct SpectrogramComparisonView: View {
                 .accessibilityLabel("\(title)のスペクトログラム")
             } else {
                 Text(unavailableText(for: title))
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 94)
             }
@@ -119,7 +119,7 @@ struct SpectrogramComparisonView: View {
     private var spectrogramLegend: some View {
         VStack(spacing: 4) {
             Text("表示dB")
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
             HStack(alignment: .center, spacing: 4) {
                 LinearGradient(
@@ -136,7 +136,7 @@ struct SpectrogramComparisonView: View {
                 VStack {
                     ForEach(SpectrogramDisplayColorScale.legendLevels, id: \.self) { level in
                         Text("\(Int(level))")
-                            .font(.caption2.monospacedDigit())
+                            .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
                         if level != SpectrogramDisplayColorScale.legendLevels.last {
                             Spacer(minLength: 0)
@@ -183,7 +183,7 @@ private struct SpectrogramTimeAxisView: View {
                             .fill(.separator.opacity(0.8))
                             .frame(width: 1, height: 5)
                         Text(formatTime(tick.time))
-                            .font(.caption2.monospacedDigit())
+                            .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
                     .frame(width: 48)

@@ -269,11 +269,18 @@ struct UIWordingPolicyTests {
 
     @Test
     func windowScrollbarAppearanceKeepsLiquidGlassScrollbarsQuiet() throws {
-        let contentView = try combinedSource(["Sources/VelouraLucent/Views/ContentView.swift"])
+        let contentView = try combinedSource([
+            "Sources/VelouraLucent/Views/ContentView.swift",
+            "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift"
+        ])
         let configurator = try combinedSource(["Sources/VelouraLucent/Views/WindowScrollbarAppearanceConfigurator.swift"])
 
-        #expect(contentView.contains("WindowScrollbarAppearanceConfigurator()"))
+        #expect(contentView.components(separatedBy: "WindowScrollbarAppearanceConfigurator()").count >= 3)
         #expect(configurator.contains("struct WindowScrollbarAppearanceConfigurator: NSViewRepresentable"))
+        #expect(configurator.contains("func makeCoordinator() -> Coordinator"))
+        #expect(configurator.contains("private static let retryDelays: [TimeInterval]"))
+        #expect(configurator.contains("NSWindow.didUpdateNotification"))
+        #expect(configurator.contains("NSWindow.didResizeNotification"))
         #expect(configurator.contains("contentView.descendants(ofType: NSScrollView.self)"))
         #expect(configurator.contains("scrollView.scrollerStyle = .overlay"))
         #expect(configurator.contains("scrollView.autohidesScrollers = true"))
@@ -432,7 +439,9 @@ struct UIWordingPolicyTests {
         )
 
         #expect(source.contains("events: job.recentActivityEvents"))
-        #expect(source.contains("ForEach(events.suffix(3))"))
+        #expect(source.contains("ForEach(events.suffix(4))"))
+        #expect(source.contains(".frame(maxWidth: .infinity, minHeight: 139, alignment: .topLeading)"))
+        #expect(source.contains(".frame(minHeight: 206, idealHeight: 214, maxHeight: 224, alignment: .top)"))
         #expect(source.contains("event.timestamp"))
         #expect(source.contains("event.fileName"))
         #expect(source.contains("event.audioSummary"))

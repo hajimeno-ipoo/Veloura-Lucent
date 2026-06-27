@@ -78,7 +78,7 @@ struct InspectorAnalysisPanel: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 5) {
                 Text(title)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                 TermHelpButton(title: title, reading: title, description: help)
             }
@@ -86,7 +86,7 @@ struct InspectorAnalysisPanel: View {
                 .font(.title3.monospacedDigit().bold())
                 .foregroundStyle(color)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.9)
         }
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
@@ -106,7 +106,7 @@ struct InspectorAnalysisPanel: View {
                 )
                 Spacer()
                 Text(qualitySeverityText(report.severity))
-                    .font(.caption.bold())
+                    .font(.callout.bold())
                     .foregroundStyle(qualitySeverityColor(report.severity))
             }
 
@@ -124,7 +124,7 @@ struct InspectorAnalysisPanel: View {
                                 Text(item.title)
                                     .font(.callout.bold())
                                 Text(item.detail)
-                                    .font(.caption)
+                                    .font(.callout)
                                     .foregroundStyle(.secondary)
                             }
                         } icon: {

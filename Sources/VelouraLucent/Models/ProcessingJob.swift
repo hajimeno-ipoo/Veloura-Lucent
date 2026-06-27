@@ -51,7 +51,7 @@ final class ProcessingJob {
     }
     private(set) var activityEvents: [RecentActivityEvent] = []
     var recentActivityEvents: [RecentActivityEvent] {
-        Array(activityEvents.suffix(3))
+        Array(activityEvents.suffix(4))
     }
     var statusMessage = "待機中"
     var masteringStatusMessage = "待機中"

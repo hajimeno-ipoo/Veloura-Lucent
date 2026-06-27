@@ -23,7 +23,7 @@ struct SidebarProcessStatusRow: View {
                         .accessibilityHidden(true)
                     Text(title)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        .minimumScaleFactor(0.9)
                         .layoutPriority(1)
                 }
                 .font(.callout.bold())
@@ -31,7 +31,7 @@ struct SidebarProcessStatusRow: View {
                 Spacer(minLength: 6)
                 if let elapsedText {
                     Text(elapsedText)
-                        .font(.caption.monospacedDigit())
+                        .font(.callout.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
             }
@@ -43,7 +43,7 @@ struct SidebarProcessStatusRow: View {
 
             if let activeStepDetail {
                 Text(activeStepDetail)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -53,7 +53,7 @@ struct SidebarProcessStatusRow: View {
                 ProgressView(value: min(max(progress, 0), 1))
                     .tint(statusTint)
                 Text(progressText)
-                    .font(.caption.monospacedDigit())
+                    .font(.callout.monospacedDigit())
                     .foregroundStyle(statusTint)
                     .frame(minWidth: 30, alignment: .trailing)
             }
@@ -181,13 +181,13 @@ private struct SidebarProcessStepRow: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Image(systemName: step.state.iconName)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(step.state.color(tint: tint))
                     .frame(width: 12)
                     .accessibilityHidden(true)
 
                 Text(step.title)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(step.state.color(tint: tint))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -195,7 +195,7 @@ private struct SidebarProcessStepRow: View {
 
                 if let shortLabel = step.state.shortLabel {
                     Text(shortLabel)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(step.state.color(tint: tint))
                         .lineLimit(1)
                         .padding(.horizontal, 5)
@@ -209,7 +209,7 @@ private struct SidebarProcessStepRow: View {
 
             if step.state == .active, let detail = step.detail {
                 Text(detail)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)

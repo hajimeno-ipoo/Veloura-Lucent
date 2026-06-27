@@ -53,7 +53,7 @@ struct VelouraSidebarView: View {
                     .accessibilityHidden(true)
                 Text("Veloura Lucent")
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .minimumScaleFactor(0.9)
             }
             .font(.callout.bold())
             Text("流れと状態を確認します。")
@@ -67,7 +67,7 @@ struct VelouraSidebarView: View {
     private func sidebarSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption.bold())
+                .font(.callout.bold())
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()

@@ -54,7 +54,7 @@ struct AverageSpectrumComparisonView: View {
                 .fill(color)
                 .frame(width: 18, height: 3)
             Text(title)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
@@ -115,7 +115,7 @@ private struct SpectrumCanvasChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(hoverReadout ?? " ")
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
@@ -333,14 +333,14 @@ private struct AxisLabelOverlay: View {
 
             ForEach(yTicks, id: \.self) { tick in
                 Text(String(format: "%.0f", tick))
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .position(x: plotInsets.leading - 18, y: yPosition(tick, plotRect))
             }
 
             ForEach(xTicks, id: \.self) { tick in
                 Text(frequencyLabel(tick))
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .position(x: xPosition(tick, plotRect), y: plotRect.maxY + 14)
             }

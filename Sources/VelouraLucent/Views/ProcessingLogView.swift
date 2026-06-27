@@ -35,7 +35,7 @@ struct ProcessingLogView: View {
                     LazyVStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                             Text(line)
-                                .font(.caption.monospaced())
+                                .font(.callout.monospaced())
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .textSelection(.enabled)

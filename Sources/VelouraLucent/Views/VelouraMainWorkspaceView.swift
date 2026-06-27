@@ -31,6 +31,7 @@ struct VelouraMainWorkspaceView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollContentBackground(.hidden)
+                .background(WindowScrollbarAppearanceConfigurator())
 
                 Divider()
                 WorkspaceFooterView(

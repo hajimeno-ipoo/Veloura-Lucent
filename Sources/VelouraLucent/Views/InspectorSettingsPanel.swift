@@ -1019,7 +1019,7 @@ struct InspectorSettingsPanel: View {
             HStack {
                 ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
                     Text(label)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: scaleAlignment(index: index, count: labels.count))
                 }

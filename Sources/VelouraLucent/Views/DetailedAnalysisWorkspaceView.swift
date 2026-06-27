@@ -119,12 +119,12 @@ struct DetailedAnalysisWorkspaceView: View {
 
             if let statusText = job.displayAnalysisStatusText {
                 Label(statusText, systemImage: "clock")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
             if let failedText = job.failedDisplayAnalysisText {
                 Label(failedText, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.red)
             }
         }
@@ -141,7 +141,7 @@ struct DetailedAnalysisWorkspaceView: View {
                 Text(title(for: target))
                     .font(.callout.weight(.semibold))
                 Text(state.title)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
         }
@@ -232,7 +232,7 @@ struct DetailedAnalysisWorkspaceView: View {
     private func valueChip(title: String, value: Double?, format: MetricFormat, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
             metricValue(value, format: format, tint: color)
         }
@@ -241,7 +241,7 @@ struct DetailedAnalysisWorkspaceView: View {
 
     private func tableHeader(_ title: String) -> some View {
         Text(title)
-            .font(.caption.weight(.semibold))
+            .font(.callout.weight(.semibold))
             .foregroundStyle(.secondary)
     }
 
@@ -250,7 +250,7 @@ struct DetailedAnalysisWorkspaceView: View {
             .font(.callout.monospacedDigit().weight(.semibold))
             .foregroundStyle(value == nil ? .secondary : tint)
             .lineLimit(1)
-            .minimumScaleFactor(0.75)
+            .minimumScaleFactor(0.9)
     }
 
     private func noiseComparisonCard(_ report: NoiseCheckReport) -> some View {
@@ -292,10 +292,10 @@ struct DetailedAnalysisWorkspaceView: View {
                     Text(row.label)
                         .font(.headline)
                     Text(row.measurementDescription)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                     Text(row.displayDescription)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -321,7 +321,7 @@ struct DetailedAnalysisWorkspaceView: View {
     ) -> some View {
         HStack(spacing: 10) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
                 .frame(width: 48, alignment: .leading)
             GeometryReader { proxy in
                 let ratio = row.displayScale.ratio(for: value?.levelDB)
@@ -337,11 +337,11 @@ struct DetailedAnalysisWorkspaceView: View {
             }
             .frame(height: 10)
             Text(value.map { formatNoiseValue($0) } ?? "--")
-                .font(.caption.monospacedDigit().weight(.semibold))
+                .font(.callout.monospacedDigit().weight(.semibold))
                 .frame(width: 86, alignment: .trailing)
             if let detail {
                 Text(detail)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .frame(width: 132, alignment: .leading)
@@ -359,10 +359,10 @@ struct DetailedAnalysisWorkspaceView: View {
                     .font(.callout.monospacedDigit().weight(.semibold))
             }
             Text(action.reason)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
             Text(action.caution)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
         }
         .padding(10)
@@ -376,7 +376,7 @@ struct DetailedAnalysisWorkspaceView: View {
                 help: "左右の音がどれくらい同じ向きで鳴っているかを見る指標です。0より下はモノラル再生で音が痩せる可能性があります。"
             )
             Text("0未満はモノラル再生で音が痩せる可能性があります。0以上は左右の音が同じ向きに近い状態です。")
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
 
             if stages.isEmpty {
@@ -436,7 +436,7 @@ struct DetailedAnalysisWorkspaceView: View {
                 Spacer()
                 Text("+1 同相")
             }
-            .font(.caption2.monospacedDigit())
+            .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
@@ -451,7 +451,7 @@ struct DetailedAnalysisWorkspaceView: View {
             Text("時間ごとの相関推移")
                 .font(.callout.weight(.semibold))
             Text("0未満の時間帯は、モノラル再生で音が痩せる可能性があります。無音区間は相関値として計算せず、線を区切ります。")
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
             if points.isEmpty {
                 Text(correlationTimelineUnavailableText(stages: stages))
@@ -465,7 +465,7 @@ struct DetailedAnalysisWorkspaceView: View {
                     .accessibilityLabel("時間ごとのステレオ相関推移")
                 if let note = correlationTimelinePartialNote(stages: stages) {
                     Text(note)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -670,11 +670,11 @@ struct DetailedAnalysisWorkspaceView: View {
             HStack(alignment: .firstTextBaseline) {
                 termLabel(row.definition)
                 Text(row.range)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("補正 \(correctionDelta.map { formatValue($0, format: .dBDelta) } ?? "--") / 仕上げ \(masteringDelta.map { formatValue($0, format: .dBDelta) } ?? "--")")
-                    .font(.caption.monospacedDigit())
+                    .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
             bandBar(title: "入力", value: row.input, minValue: minValue, maxValue: maxValue, tint: .blue)
@@ -689,7 +689,7 @@ struct DetailedAnalysisWorkspaceView: View {
         let ratio = value.map { max(0, min(1, ($0 - minValue) / max(maxValue - minValue, 1))) } ?? 0
         return HStack(spacing: 8) {
             Text(title)
-                .font(.caption)
+                .font(.callout)
                 .frame(width: 48, alignment: .leading)
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
@@ -704,7 +704,7 @@ struct DetailedAnalysisWorkspaceView: View {
             }
             .frame(height: 10)
             Text(value.map { formatValue($0, format: .dB) } ?? "--")
-                .font(.caption.monospacedDigit())
+                .font(.callout.monospacedDigit())
                 .frame(width: 74, alignment: .trailing)
         }
     }

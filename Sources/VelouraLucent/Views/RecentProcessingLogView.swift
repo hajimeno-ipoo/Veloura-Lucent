@@ -18,16 +18,16 @@ struct RecentProcessingLogView: View {
             }
 
             if events.isEmpty {
-                Text("音声を選ぶと、直近の処理内容を最大3件表示します")
+                Text("音声を選ぶと、直近の処理内容を最大4件表示します")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 58, alignment: .topLeading)
             } else {
                 VStack(alignment: .leading, spacing: 5) {
-                    ForEach(events.suffix(3)) { event in
+                    ForEach(events.suffix(4)) { event in
                         HStack(alignment: .center, spacing: 8) {
                             Text(event.timestamp, style: .time)
-                                .font(.caption.monospacedDigit())
+                                .font(.callout.monospacedDigit())
                                 .foregroundStyle(.secondary)
                                 .frame(width: 58, alignment: .leading)
 
@@ -38,11 +38,11 @@ struct RecentProcessingLogView: View {
 
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(event.title)
-                                    .font(.caption.bold())
+                                    .font(.callout.bold())
                                     .lineLimit(1)
                                 if let summary = summary(for: event) {
                                     Text(summary)
-                                        .font(.caption)
+                                        .font(.callout)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
@@ -56,7 +56,7 @@ struct RecentProcessingLogView: View {
                                     ProgressView(value: progress)
                                         .frame(width: 54)
                                     Text("\(Int((progress * 100).rounded()))%")
-                                        .font(.caption.monospacedDigit())
+                                        .font(.callout.monospacedDigit())
                                         .foregroundStyle(event.hasFailed ? Color.red : event.domain.tint)
                                         .frame(width: 34, alignment: .trailing)
                                 }
@@ -68,7 +68,7 @@ struct RecentProcessingLogView: View {
                         .accessibilityElement(children: .combine)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 58, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: 139, alignment: .topLeading)
             }
         }
     }

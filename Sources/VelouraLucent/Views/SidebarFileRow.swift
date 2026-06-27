@@ -27,7 +27,7 @@ struct SidebarFileRow: View {
 
                 if let fileURL {
                     Text(fileURL.path(percentEncoded: false))
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -45,7 +45,7 @@ struct SidebarFileRow: View {
                             .monospacedDigit()
                             .lineLimit(1)
                     }
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                 }

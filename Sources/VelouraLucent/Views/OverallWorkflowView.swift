@@ -31,20 +31,20 @@ struct OverallWorkflowView: View {
                 .foregroundStyle(stage.state.color)
                 .accessibilityHidden(true)
             Text(stage.title)
-                .font(.caption.bold())
+                .font(.callout.bold())
                 .lineLimit(1)
             Text(stage.state.label)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(stage.state.color)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.9)
 
             if stage.state.isActive {
                 if let progress = stage.progress {
                     ProgressView(value: progress)
                         .tint(stage.state.color)
                     Text("\(Int((progress * 100).rounded()))%")
-                        .font(.caption.monospacedDigit())
+                        .font(.callout.monospacedDigit())
                         .foregroundStyle(stage.state.color)
                 } else {
                     ProgressView()

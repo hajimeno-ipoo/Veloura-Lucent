@@ -21,7 +21,7 @@ struct WorkspaceFooterView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
-        .frame(minHeight: 140, maxHeight: 158, alignment: .top)
+        .frame(minHeight: 206, idealHeight: 214, maxHeight: 224, alignment: .top)
     }
 
     private var workflowStages: [WorkspaceFooterStage] {

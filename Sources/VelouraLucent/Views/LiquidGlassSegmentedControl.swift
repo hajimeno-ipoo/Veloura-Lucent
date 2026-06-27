@@ -51,7 +51,7 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
     private func segmentLabel(for option: Selection) -> some View {
         Text(label(option))
             .lineLimit(1)
-            .minimumScaleFactor(0.72)
+            .minimumScaleFactor(0.9)
             .frame(maxWidth: .infinity)
             .accessibilityLabel("\(title)、\(label(option))")
     }

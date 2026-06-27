@@ -68,13 +68,13 @@ struct VectorScopeView: View {
                 Spacer()
                 if activeTarget != nil {
                     Button("履歴を消す", action: preview.resetVectorScopeHistory)
-                        .font(.caption)
+                        .font(.callout)
                         .buttonStyle(.borderless)
                 }
             }
 
             Text(scopeDescription)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
 
             VectorScopeModePicker(displayMode: $displayMode)
@@ -110,13 +110,13 @@ struct VectorScopeView: View {
                 Spacer()
                 if let activeTarget {
                     Text(activeTarget.rawValue)
-                        .font(.caption.weight(.semibold))
+                        .font(.callout.weight(.semibold))
                         .foregroundStyle(targetColor(activeTarget))
                 }
             }
 
             Text("目標線と上限線で、再生中の音を確認します。")
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
 
             loudnessMeter
@@ -377,17 +377,17 @@ private struct VectorScopePlot: View {
         switch mode {
         case .lissajous:
             let radius = metrics.lissajousRadius
-            context.draw(Text("同相").font(.caption.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.center.x, y: metrics.center.y - radius - 12), anchor: .bottom)
-            context.draw(Text("逆相成分").font(.caption).foregroundStyle(.secondary), at: CGPoint(x: metrics.center.x - radius - 10, y: metrics.center.y), anchor: .trailing)
-            context.draw(Text("逆相成分").font(.caption).foregroundStyle(.secondary), at: CGPoint(x: metrics.center.x + radius + 10, y: metrics.center.y), anchor: .leading)
-            context.draw(Text("L").font(.caption.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.center.x - radius * 0.72, y: metrics.center.y + radius * 0.72 + 10), anchor: .topTrailing)
-            context.draw(Text("R").font(.caption.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.center.x + radius * 0.72, y: metrics.center.y + radius * 0.72 + 10), anchor: .topLeading)
+            context.draw(Text("同相").font(.callout.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.center.x, y: metrics.center.y - radius - 12), anchor: .bottom)
+            context.draw(Text("逆相成分").font(.callout).foregroundStyle(.secondary), at: CGPoint(x: metrics.center.x - radius - 10, y: metrics.center.y), anchor: .trailing)
+            context.draw(Text("逆相成分").font(.callout).foregroundStyle(.secondary), at: CGPoint(x: metrics.center.x + radius + 10, y: metrics.center.y), anchor: .leading)
+            context.draw(Text("L").font(.callout.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.center.x - radius * 0.72, y: metrics.center.y + radius * 0.72 + 10), anchor: .topTrailing)
+            context.draw(Text("R").font(.callout.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.center.x + radius * 0.72, y: metrics.center.y + radius * 0.72 + 10), anchor: .topLeading)
         case .polarSample, .polarLevel:
             let radius = metrics.polarRadius
-            context.draw(Text("同相").font(.caption.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.origin.x, y: metrics.origin.y - radius - 12), anchor: .bottom)
-            context.draw(Text("L").font(.caption.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.origin.x - radius, y: metrics.origin.y + 10), anchor: .top)
-            context.draw(Text("R").font(.caption.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.origin.x + radius, y: metrics.origin.y + 10), anchor: .top)
-            context.draw(Text("45度安全ライン").font(.caption).foregroundStyle(.blue.opacity(0.85)), at: CGPoint(x: metrics.origin.x + radius * 0.52, y: metrics.origin.y - radius * 0.52), anchor: .bottomLeading)
+            context.draw(Text("同相").font(.callout.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.origin.x, y: metrics.origin.y - radius - 12), anchor: .bottom)
+            context.draw(Text("L").font(.callout.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.origin.x - radius, y: metrics.origin.y + 10), anchor: .top)
+            context.draw(Text("R").font(.callout.bold()).foregroundStyle(.secondary), at: CGPoint(x: metrics.origin.x + radius, y: metrics.origin.y + 10), anchor: .top)
+            context.draw(Text("45度安全ライン").font(.callout).foregroundStyle(.blue.opacity(0.85)), at: CGPoint(x: metrics.origin.x + radius * 0.52, y: metrics.origin.y - radius * 0.52), anchor: .bottomLeading)
         }
     }
 
@@ -425,7 +425,7 @@ private struct CorrelationMeterView: View {
     var body: some View {
         VStack(spacing: 6) {
             Text("相関")
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
 
             HStack(alignment: .top, spacing: 6) {
                 GeometryReader { proxy in
@@ -469,9 +469,9 @@ private struct CorrelationMeterView: View {
     private func correlationScaleLabel(value: String, meaning: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(value)
-                .font(.caption.monospacedDigit())
+                .font(.callout.monospacedDigit())
             Text(meaning)
-                .font(.caption)
+                .font(.callout)
         }
         .foregroundStyle(.secondary)
     }
@@ -490,7 +490,7 @@ private struct BalanceMeterView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("L/Rバランス")
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
             GeometryReader { proxy in
                 let safeValue = value.map { max(-1, min(1, $0)) }
                 let x = safeValue.map { proxy.size.width * CGFloat(($0 + 1) / 2) }
@@ -517,7 +517,7 @@ private struct BalanceMeterView: View {
                 Spacer()
                 Text("R")
             }
-            .font(.caption)
+            .font(.callout)
             .foregroundStyle(.secondary)
         }
     }

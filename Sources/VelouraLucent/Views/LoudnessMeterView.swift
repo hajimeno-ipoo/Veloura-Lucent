@@ -111,7 +111,7 @@ private struct LoudnessMeterColumn: View {
             Text(title)
                 .font(.callout.weight(.semibold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.9)
 
             HStack(alignment: .top, spacing: 6) {
                 tickLabels
@@ -153,7 +153,7 @@ private struct LoudnessMeterColumn: View {
     private var referenceLabelView: some View {
         GeometryReader { proxy in
             Text(referenceLabel)
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(referenceColor)
                 .padding(.horizontal, 4)
                 .glassEffect(.clear, in: .capsule)
@@ -169,7 +169,7 @@ private struct LoudnessMeterColumn: View {
         GeometryReader { proxy in
             ForEach(tickValues, id: \.self) { tickValue in
                 Text(tickLabel(tickValue))
-                    .font(.caption.monospacedDigit())
+                    .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .position(
                         x: 20,

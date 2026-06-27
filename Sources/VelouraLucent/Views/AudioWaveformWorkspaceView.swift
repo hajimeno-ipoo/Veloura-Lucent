@@ -32,7 +32,7 @@ struct AudioWaveformWorkspaceView: View {
             Text("波形と試聴比較")
                 .font(.headline)
             Text(preview.playbackLabel)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
@@ -52,7 +52,7 @@ struct AudioWaveformWorkspaceView: View {
 
     private var comparisonLabel: some View {
         Text("比較対象")
-            .font(.caption.weight(.semibold))
+            .font(.callout.weight(.semibold))
             .foregroundStyle(.secondary)
     }
 
@@ -70,7 +70,7 @@ struct AudioWaveformWorkspaceView: View {
 
     private var comparisonSummary: some View {
         Text(preview.comparisonPair.summary)
-            .font(.caption)
+            .font(.callout)
             .foregroundStyle(.secondary)
             .lineLimit(1)
     }
@@ -158,7 +158,7 @@ struct AudioWaveformWorkspaceView: View {
             .frame(minWidth: 110, idealWidth: 150, maxWidth: 180)
             .accessibilityLabel("試聴音量")
             Text("\(Int((preview.playbackVolume * 100).rounded()))%")
-                .font(.caption.monospacedDigit())
+                .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 38, alignment: .trailing)
         }
@@ -224,7 +224,7 @@ struct AudioWaveformWorkspaceView: View {
                     .lineLimit(1)
                 if let comparisonSide {
                     Text(preview.comparisonPair.title(for: comparisonSide))
-                        .font(.caption.bold())
+                        .font(.callout.bold())
                         .foregroundStyle(tint)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -246,7 +246,7 @@ struct AudioWaveformWorkspaceView: View {
             .frame(minWidth: 240, maxWidth: .infinity)
 
             Text(preview.playbackTimeText(for: target))
-                .font(.caption.monospacedDigit())
+                .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 92, alignment: .trailing)
 
@@ -347,7 +347,7 @@ private struct SeekableWaveformView: View {
                         .offset(x: min(proxy.size.width * clampedProgress, max(proxy.size.width - 2, 0)))
                 } else {
                     Text("音声なし")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
