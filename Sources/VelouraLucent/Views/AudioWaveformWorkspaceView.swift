@@ -100,15 +100,18 @@ struct AudioWaveformWorkspaceView: View {
                 Button("Aを再生") {
                     preview.playComparisonSide(.a)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
                 .disabled(comparisonFileURL(for: .a) == nil)
 
                 Button(playPauseTitle, systemImage: playPauseSystemImage) {
                     togglePlayback()
                 }
                 .labelStyle(.iconOnly)
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.plain)
                 .controlSize(.large)
+                .padding(10)
                 .help(playPauseTitle)
                 .accessibilityLabel(playPauseTitle)
                 .disabled(activeComparisonFileURL == nil)
@@ -117,27 +120,32 @@ struct AudioWaveformWorkspaceView: View {
                     preview.stopPlayback()
                 }
                 .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
+                .buttonStyle(.plain)
+                .padding(10)
                 .help("停止")
                 .disabled(preview.activeTarget == nil)
 
                 Button("Bを再生") {
                     preview.playComparisonSide(.b)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
                 .disabled(comparisonFileURL(for: .b) == nil)
 
                 Button("A/B切替") {
                     preview.toggleComparisonSide()
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
                 .keyboardShortcut("b", modifiers: [.command])
                 .disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)
 
                 activeComparisonLabel
             }
             .padding(6)
-            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
+            .glassEffect(.clear.interactive(), in: .capsule)
         }
         .fixedSize()
     }
@@ -190,7 +198,6 @@ struct AudioWaveformWorkspaceView: View {
         }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .glassEffect(.regular.tint(activeComparisonTint.opacity(0.22)), in: .capsule)
             .fixedSize()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("現在再生中")

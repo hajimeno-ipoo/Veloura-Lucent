@@ -21,12 +21,18 @@ struct InspectorSettingsPanel: View {
     @Binding var windowBackgroundMaterialAmount: Double
     @SceneStorage("inspectorSettingsSelectedSection")
     private var selectedSectionRawValue = InspectorSettingsSection.correction.rawValue
-    @State private var showsCorrectionBasic = true
-    @State private var showsCorrectionRepair = false
-    @State private var showsCorrectionAdvanced = false
-    @State private var showsMasteringBasic = true
-    @State private var showsMasteringTone = false
-    @State private var showsMasteringAdvanced = false
+    @SceneStorage("inspectorSettingsShowsCorrectionBasic")
+    private var showsCorrectionBasic = true
+    @SceneStorage("inspectorSettingsShowsCorrectionRepair")
+    private var showsCorrectionRepair = false
+    @SceneStorage("inspectorSettingsShowsCorrectionAdvanced")
+    private var showsCorrectionAdvanced = false
+    @SceneStorage("inspectorSettingsShowsMasteringBasic")
+    private var showsMasteringBasic = true
+    @SceneStorage("inspectorSettingsShowsMasteringTone")
+    private var showsMasteringTone = false
+    @SceneStorage("inspectorSettingsShowsMasteringAdvanced")
+    private var showsMasteringAdvanced = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -95,10 +101,10 @@ struct InspectorSettingsPanel: View {
                 )
 
                 Text(job.selectedAnalysisMode.summary)
-                    .foregroundStyle(job.selectedAnalysisMode == .experimentalMetal ? .orange : .secondary)
+                    .foregroundStyle(job.selectedAnalysisMode == .experimentalMetal ? VelouraTextColors.orange : .secondary)
                 Text(job.selectedAnalysisMode.resolvedSummary)
-                    .font(.callout)
-                    .foregroundStyle(job.selectedAnalysisMode.resolvedMode == .experimentalMetal ? .orange : .secondary)
+                    .font(.body)
+                    .foregroundStyle(job.selectedAnalysisMode.resolvedMode == .experimentalMetal ? VelouraTextColors.orange : .secondary)
             }
         }
     }
@@ -945,8 +951,8 @@ struct InspectorSettingsPanel: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(warnings, id: \.self) { warning in
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
+                    .font(.body)
+                    .foregroundStyle(VelouraTextColors.orange)
             }
         }
     }
@@ -968,21 +974,68 @@ struct InspectorSettingsPanel: View {
         isExpanded: Binding<Bool>,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        DisclosureGroup(isExpanded: isExpanded) {
-            if isExpanded.wrappedValue {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(summary)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    content()
+        ZStack(alignment: .topTrailing) {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(.clear)
+                .glassEffect(.clear, in: .rect(cornerRadius: 14))
+                .allowsHitTesting(false)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    settingsDisclosureButton(title: title, isExpanded: isExpanded)
+                    Text(title)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                 }
-                .padding(.top, 8)
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, isExpanded.wrappedValue ? 0 : 12)
+
+                if isExpanded.wrappedValue {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(summary)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        content()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
+                    .transition(.identity)
+                    .transaction { transaction in
+                        transaction.animation = nil
+                    }
+                }
+            }
+            .transaction { transaction in
+                transaction.animation = nil
+            }
+
+            if let help {
+                TermHelpButton(title: help.title, reading: help.reading, description: help.description)
+                    .padding(12)
+            }
+        }
+    }
+
+    private func settingsDisclosureButton(title: String, isExpanded: Binding<Bool>) -> some View {
+        Button {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isExpanded.wrappedValue.toggle()
             }
         } label: {
-            titleWithHelp(title, font: .headline, help: help)
+            Image(systemName: isExpanded.wrappedValue ? "chevron.down.circle.fill" : "chevron.right.circle.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.primary)
+                .frame(width: 32, height: 32)
         }
-        .padding(12)
-        .glassEffect(.clear, in: .rect(cornerRadius: 14))
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(isExpanded.wrappedValue ? "開いています" : "閉じています")
+        .accessibilityHint("設定項目を開閉します")
     }
 
     private func inspectorSlider(
@@ -1076,8 +1129,8 @@ struct InspectorSettingsPanel: View {
 
     private func resetStatusText(isCustom: Bool) -> some View {
         Text(isCustom ? "手動調整中です" : "既定値を使用しています")
-            .font(.callout)
-            .foregroundStyle(isCustom ? .orange : .secondary)
+            .font(.body)
+            .foregroundStyle(isCustom ? VelouraTextColors.orange : .secondary)
     }
 
     private func resetButton(title: String, isCustom: Bool, action: @escaping () -> Void) -> some View {

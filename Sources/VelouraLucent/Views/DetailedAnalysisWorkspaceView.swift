@@ -28,43 +28,39 @@ struct DetailedAnalysisWorkspaceView: View {
                 correlationCard(stages: comparisonStages)
 
                 LazyVGrid(columns: adaptiveColumns, alignment: .leading, spacing: 16) {
-                    DisclosureGroup(isExpanded: $showLoudness) {
+                    analysisDisclosureSection(
+                        title: "短時間ラウドネス",
+                        help: "場面ごとの音量感です。入力、補正後、最終版を同じ基準で比べます。",
+                        isExpanded: $showLoudness
+                    ) {
                         shortTermLoudnessChart(stages: comparisonStages)
-                    } label: {
-                        sectionLabel(
-                            title: "短時間ラウドネス",
-                            help: "場面ごとの音量感です。入力、補正後、最終版を同じ基準で比べます。"
-                        )
                     }
                     .analysisCard()
 
-                    DisclosureGroup(isExpanded: $showDynamics) {
+                    analysisDisclosureSection(
+                        title: "ダイナミクス推移",
+                        help: "音の山と平均音量の差です。小さくなりすぎると、音が押し固められている可能性があります。",
+                        isExpanded: $showDynamics
+                    ) {
                         dynamicsChart(stages: comparisonStages)
-                    } label: {
-                        sectionLabel(
-                            title: "ダイナミクス推移",
-                            help: "音の山と平均音量の差です。小さくなりすぎると、音が押し固められている可能性があります。"
-                        )
                     }
                     .analysisCard()
 
-                    DisclosureGroup(isExpanded: $showSpectrum) {
+                    analysisDisclosureSection(
+                        title: "平均スペクトル比較",
+                        help: "曲全体の周波数ごとの相対量です。再生中スペクトルとは別に、全体の傾向を比べます。",
+                        isExpanded: $showSpectrum
+                    ) {
                         spectrumComparisonCharts(stages: comparisonStages)
-                    } label: {
-                        sectionLabel(
-                            title: "平均スペクトル比較",
-                            help: "曲全体の周波数ごとの相対量です。再生中スペクトルとは別に、全体の傾向を比べます。"
-                        )
                     }
                     .analysisCard()
 
-                    DisclosureGroup(isExpanded: $showBands) {
+                    analysisDisclosureSection(
+                        title: "周波数帯域詳細",
+                        help: "8つの帯域を、入力、補正後、最終版、補正差分、マスタリング差分で確認します。",
+                        isExpanded: $showBands
+                    ) {
                         bandDetailRows(input: input, corrected: job.outputMetrics, mastered: job.masteredMetrics)
-                    } label: {
-                        sectionLabel(
-                            title: "周波数帯域詳細",
-                            help: "8つの帯域を、入力、補正後、最終版、補正差分、マスタリング差分で確認します。"
-                        )
                     }
                     .analysisCard()
                 }
@@ -713,6 +709,44 @@ struct DetailedAnalysisWorkspaceView: View {
         ContentUnavailableView(title, systemImage: "chart.bar.doc.horizontal", description: Text(description))
             .frame(maxWidth: .infinity, minHeight: 180)
             .analysisCard()
+    }
+
+    private func analysisDisclosureSection<Content: View>(
+        title: String,
+        help: String,
+        isExpanded: Binding<Bool>,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                analysisDisclosureButton(title: title, isExpanded: isExpanded)
+                sectionLabel(title: title, help: help)
+            }
+
+            if isExpanded.wrappedValue {
+                content()
+            }
+        }
+    }
+
+    private func analysisDisclosureButton(title: String, isExpanded: Binding<Bool>) -> some View {
+        Button {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isExpanded.wrappedValue.toggle()
+            }
+        } label: {
+            Image(systemName: isExpanded.wrappedValue ? "chevron.down.circle.fill" : "chevron.right.circle.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.primary)
+                .frame(width: 32, height: 32)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(isExpanded.wrappedValue ? "開いています" : "閉じています")
+        .accessibilityHint("解析項目を開閉します")
     }
 
     private func sectionLabel(title: String, help: String) -> some View {

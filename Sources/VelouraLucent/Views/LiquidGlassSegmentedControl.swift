@@ -7,6 +7,7 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
     let label: (Selection) -> String
     var maxWidth: CGFloat = 360
     var isDisabled = false
+    @FocusState private var focusedOption: Selection?
 
     var body: some View {
         GlassEffectContainer(spacing: 8) {
@@ -18,6 +19,11 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
             .frame(maxWidth: maxWidth, alignment: .leading)
         }
         .disabled(isDisabled)
+        .defaultFocus($focusedOption, nil)
+        .task {
+            await Task.yield()
+            focusedOption = nil
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }
@@ -30,9 +36,10 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
             Button {
                 selection = option
             } label: {
-                segmentLabel(for: option)
+                segmentLabel(for: option, isSelected: true)
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(.plain)
+            .focused($focusedOption, equals: option)
             .frame(maxWidth: .infinity)
             .accessibilityValue("選択中")
             .accessibilityAddTraits(.isSelected)
@@ -40,19 +47,25 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
             Button {
                 selection = option
             } label: {
-                segmentLabel(for: option)
+                segmentLabel(for: option, isSelected: false)
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.plain)
+            .focused($focusedOption, equals: option)
             .frame(maxWidth: .infinity)
             .accessibilityValue("未選択")
         }
     }
 
-    private func segmentLabel(for option: Selection) -> some View {
+    private func segmentLabel(for option: Selection, isSelected: Bool) -> some View {
         Text(label(option))
+            .font(.callout)
+            .foregroundStyle(isSelected ? Color.accentColor : .primary)
             .lineLimit(1)
             .minimumScaleFactor(0.9)
             .frame(maxWidth: .infinity)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .glassEffect(.clear.interactive(), in: .capsule)
             .accessibilityLabel("\(title)、\(label(option))")
     }
 }

@@ -5,18 +5,28 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fallbackMainWindowController: NSWindowController?
 
-    @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
-        applyDockIcon()
-        NotificationService.shared.requestAuthorization()
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        showMainWindowIfSwiftUIWindowIsMissing()
+        Task { @MainActor in
+            applyDockIcon()
+            NotificationService.shared.requestAuthorization()
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            showMainWindowIfSwiftUIWindowIsMissing()
+        }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            Task { @MainActor in
+                showMainWindowIfSwiftUIWindowIsMissing(delay: 0)
+            }
+        }
+        return true
     }
 
     @MainActor
-    private func showMainWindowIfSwiftUIWindowIsMissing() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+    private func showMainWindowIfSwiftUIWindowIsMissing(delay: TimeInterval = 0.8) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             let hasVisibleMainWindow = NSApp.windows.contains { window in
                 window.isVisible &&
                     !window.isMiniaturized &&
@@ -85,6 +95,7 @@ struct VelouraLucentApp: App {
             ContentView()
         }
         .defaultSize(width: 1_380, height: 860)
+        .defaultLaunchBehavior(.presented)
         .windowResizability(.contentMinSize)
     }
 }

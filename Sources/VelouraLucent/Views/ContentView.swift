@@ -68,28 +68,14 @@ struct ContentView: View {
         .toolbar(removing: .sidebarToggle)
         .toolbar(removing: .title)
         .toolbar {
-            ToolbarItemGroup(placement: .principal) {
-                Button(action: chooseInputAudio) {
-                    toolbarLabel("音声を選ぶ", systemImage: "waveform.badge.plus")
-                }
-                .accessibilityLabel("音声を選ぶ")
-                .help("入力音声を選びます")
-                .disabled(job.isProcessing || job.isMastering)
+            ToolbarItem(placement: .principal) {
+                toolbarActionGroup
+            }
+            .sharedBackgroundVisibility(.hidden)
 
-                Button(action: startCorrectionProcessing) {
-                    toolbarLabel(job.isProcessing ? "補正中..." : "補正を実行", systemImage: "wand.and.sparkles")
-                }
-                .accessibilityLabel(job.isProcessing ? "補正中" : "補正を実行")
-                .help("入力音声に補正処理をかけます")
-                .disabled(job.inputFile == nil || job.isProcessing || job.isMastering)
+            ToolbarSpacer(.fixed, placement: .principal)
 
-                Button(action: startMasteringProcessing) {
-                    toolbarLabel(job.isMastering ? "マスタリング中..." : "マスタリングを実行", systemImage: "slider.horizontal.3")
-                }
-                .accessibilityLabel(job.isMastering ? "マスタリング中" : "マスタリングを実行")
-                .help("補正後音声を最終版へ仕上げます")
-                .disabled(!canStartMastering)
-
+            ToolbarItem(placement: .principal) {
                 Menu {
                     Section("補正後") {
                         ForEach(AudioExportFormat.allCases) { format in
@@ -119,12 +105,46 @@ struct ContentView: View {
                         .disabled(!job.hasExistingMasteredOutput || job.isMastering)
                     }
                 } label: {
-                    toolbarLabel("書き出し", systemImage: "square.and.arrow.down")
+                    toolbarExportLabel("書き出し", systemImage: "square.and.arrow.down")
                 }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .glassEffect(.clear.interactive(), in: .capsule)
                 .accessibilityLabel("書き出し")
                 .help("補正後または最終版を書き出します")
             }
+            .sharedBackgroundVisibility(.hidden)
         }
+    }
+
+    private var toolbarActionGroup: some View {
+        GlassEffectContainer(spacing: 0) {
+            HStack(spacing: 4) {
+                Button(action: chooseInputAudio) {
+                    toolbarActionLabel("音声を選ぶ", systemImage: "waveform.badge.plus")
+                }
+                .buttonStyle(.plain)
+                .help("入力音声を選びます")
+                .disabled(job.isProcessing || job.isMastering)
+
+                Button(action: startCorrectionProcessing) {
+                    toolbarActionLabel(job.isProcessing ? "補正中..." : "補正を実行", systemImage: "wand.and.sparkles")
+                }
+                .buttonStyle(.plain)
+                .help("入力音声に補正処理をかけます")
+                .disabled(job.inputFile == nil || job.isProcessing || job.isMastering)
+
+                Button(action: startMasteringProcessing) {
+                    toolbarActionLabel(job.isMastering ? "マスタリング中..." : "マスタリングを実行", systemImage: "slider.horizontal.3")
+                }
+                .buttonStyle(.plain)
+                .help("補正後音声を最終版へ仕上げます")
+                .disabled(!canStartMastering)
+            }
+            .padding(4)
+            .glassEffect(.clear.interactive(), in: .capsule)
+        }
+        .accessibilityElement(children: .contain)
     }
 
     private var inspectorToggleButton: some View {
@@ -143,13 +163,23 @@ struct ContentView: View {
         .help("右側の設定パネルを表示または非表示にします")
     }
 
+    private func toolbarActionLabel(_ title: String, systemImage: String) -> some View {
+        toolbarLabel(title, systemImage: systemImage)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+    }
+
+    private func toolbarExportLabel(_ title: String, systemImage: String) -> some View {
+        toolbarLabel(title, systemImage: systemImage)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+    }
+
     private func toolbarLabel(_ title: String, systemImage: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-            Text(title)
-        }
+        Label(title, systemImage: systemImage)
+            .labelStyle(.titleAndIcon)
+        .font(.callout)
         .fixedSize()
-        .accessibilityLabel(title)
     }
 
     private var completionReport: CompletionReport? {

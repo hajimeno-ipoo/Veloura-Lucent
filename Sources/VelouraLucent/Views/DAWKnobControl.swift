@@ -82,7 +82,7 @@ struct DAWKnobControl: View {
                 displayValueText ?? valueText,
                 font: .system(size: 15, weight: .semibold, design: .rounded).monospacedDigit(),
                 at: DAWKnobMetrics.valueCenter,
-                width: 165
+                width: DAWKnobMetrics.valueTextWidth
             )
                 .foregroundStyle(.primary)
 

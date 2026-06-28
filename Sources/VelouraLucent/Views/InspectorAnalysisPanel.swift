@@ -106,7 +106,7 @@ struct InspectorAnalysisPanel: View {
                 )
                 Spacer()
                 Text(qualitySeverityText(report.severity))
-                    .font(.callout.bold())
+                    .font(.body)
                     .foregroundStyle(qualitySeverityColor(report.severity))
             }
 
@@ -117,14 +117,14 @@ struct InspectorAnalysisPanel: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("聴いて気になる場合の調整候補")
-                        .font(.callout.bold())
+                        .font(.body)
                     ForEach(Array(report.items.enumerated()), id: \.offset) { _, item in
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(item.title)
-                                    .font(.callout.bold())
+                                    .font(.body)
                                 Text(item.detail)
-                                    .font(.callout)
+                                    .font(.body)
                                     .foregroundStyle(.secondary)
                             }
                         } icon: {
@@ -205,7 +205,7 @@ struct InspectorAnalysisPanel: View {
         case .info:
             return .secondary
         case .caution:
-            return .orange
+            return VelouraTextColors.orange
         case .warning:
             return .red
         }
