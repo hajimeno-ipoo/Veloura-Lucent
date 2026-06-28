@@ -19,7 +19,7 @@ struct InspectorAnalysisPanel: View {
                 }
             }
 
-            LiquidGlassSegmentedControl(
+            LiquidGlassTabBar(
                 title: "確認する音源",
                 options: InspectorAudioSelection.allCases,
                 selection: $selectedAudio,
