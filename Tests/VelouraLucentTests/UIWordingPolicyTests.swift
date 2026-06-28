@@ -299,6 +299,8 @@ struct UIWordingPolicyTests {
         #expect(source.contains("@State private var showDynamics = false"))
         #expect(source.contains("@State private var showSpectrum = false"))
         #expect(source.contains("@State private var showBands = false"))
+        #expect(source.contains("VStack(alignment: .leading, spacing: 16)"))
+        #expect(!source.contains("adaptiveColumns"))
     }
 
     @Test

@@ -27,7 +27,7 @@ struct DetailedAnalysisWorkspaceView: View {
 
                 correlationCard(stages: comparisonStages)
 
-                LazyVGrid(columns: adaptiveColumns, alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 16) {
                     analysisDisclosureSection(
                         title: "短時間ラウドネス",
                         help: "場面ごとの音量感です。入力、補正後、最終版を同じ基準で比べます。",
@@ -64,6 +64,7 @@ struct DetailedAnalysisWorkspaceView: View {
                     }
                     .analysisCard()
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ContentUnavailableView(
                     "入力音声は未解析です",
@@ -763,10 +764,6 @@ struct DetailedAnalysisWorkspaceView: View {
                 .font(.callout.weight(.semibold))
             TermHelpButton(title: definition.label, reading: definition.reading, description: definition.description)
         }
-    }
-
-    private var adaptiveColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 420), spacing: 16, alignment: .top)]
     }
 
     private var noiseReport: NoiseCheckReport? {
