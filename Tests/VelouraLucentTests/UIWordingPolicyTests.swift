@@ -46,7 +46,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains("基本表示"))
         #expect(source.contains("詳細解析"))
         #expect(source.contains("fixedHeader"))
-        #expect(source.contains("LiquidGlassSegmentedControl("))
+        #expect(source.contains("LiquidGlassTabBar("))
         #expect(source.contains("title: \"中央表示\""))
         #expect(source.contains(".padding(.top, 16)"))
         #expect(!source.contains(".navigationTitle(\"試聴と解析\")"))
@@ -213,7 +213,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains("@Binding var windowBackgroundMaterialAmount: Double"))
         #expect(source.contains("AppSettingsPanel(windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount)"))
         #expect(source.contains("onEditingChanged: handleWindowBackgroundMaterialEditingChanged"))
-        #expect(source.contains("LiquidGlassSegmentedControl("))
+        #expect(source.contains("LiquidGlassTabBar("))
         #expect(source.contains("title: \"詳細設定\""))
         #expect(source.contains("title: \"補正プリセット\""))
         #expect(source.contains("title: \"解析モード\""))
@@ -305,6 +305,7 @@ struct UIWordingPolicyTests {
     func liquidGlassSegmentedControlUsesUnifiedGlassButtons() throws {
         let source = try combinedSource([
             "Sources/VelouraLucent/Views/LiquidGlassSegmentedControl.swift",
+            "Sources/VelouraLucent/Views/LiquidGlassTabBar.swift",
             "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
             "Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift",
             "Sources/VelouraLucent/Views/VectorScopeModePicker.swift",

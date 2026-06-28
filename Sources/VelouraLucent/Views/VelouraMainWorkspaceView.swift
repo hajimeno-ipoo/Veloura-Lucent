@@ -49,7 +49,7 @@ struct VelouraMainWorkspaceView: View {
             Text("入力、補正後、最終版を聴き比べながら、必要な解析だけを確認します。")
                 .foregroundStyle(.secondary)
 
-            LiquidGlassSegmentedControl(
+            LiquidGlassTabBar(
                 title: "中央表示",
                 options: WorkspaceDisplayMode.allCases,
                 selection: $displayMode,

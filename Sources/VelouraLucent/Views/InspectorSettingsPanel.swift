@@ -40,7 +40,7 @@ struct InspectorSettingsPanel: View {
                 Text("詳細設定")
                     .font(.headline)
 
-                LiquidGlassSegmentedControl(
+                LiquidGlassTabBar(
                     title: "詳細設定",
                     options: InspectorSettingsSection.allCases,
                     selection: selectedSectionBinding,
