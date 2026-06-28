@@ -34,6 +34,52 @@ struct AudioPreviewControllerTests {
     }
 
     @Test
+    func switchingComparisonPairPreservesPausedPlaybackPosition() {
+        let controller = AudioPreviewController()
+        let snapshot = previewSnapshot(duration: 10)
+        controller.setPreviewSnapshot(snapshot, for: .input, sourceURL: URL(filePath: "/tmp/input.wav"))
+        controller.setPreviewSnapshot(snapshot, for: .corrected, sourceURL: URL(filePath: "/tmp/corrected.wav"))
+        controller.setPreviewSnapshot(snapshot, for: .mastered, sourceURL: URL(filePath: "/tmp/mastered.wav"))
+        controller.setComparisonPair(.inputVsMastered)
+        controller.seek(to: 0.4, target: .input)
+        controller.activeTarget = .input
+        controller.activeComparisonSide = .a
+        controller.cardState(for: .input).playbackState = .paused
+
+        controller.setComparisonPair(.correctedVsMastered)
+
+        #expect(controller.comparisonPair == .correctedVsMastered)
+        #expect(controller.activeComparisonSide == .a)
+        #expect(controller.cardState(for: .input).playbackPosition == 4)
+        #expect(controller.cardState(for: .corrected).playbackPosition == 4)
+        #expect(controller.cardState(for: .mastered).playbackPosition == 4)
+        #expect(controller.cardState(for: .corrected).playbackProgress == 0.4)
+        #expect(controller.cardState(for: .mastered).playbackProgress == 0.4)
+    }
+
+    @Test
+    func switchingComparisonPairKeepsCommonActiveTargetSide() {
+        let controller = AudioPreviewController()
+        let snapshot = previewSnapshot(duration: 10)
+        controller.setPreviewSnapshot(snapshot, for: .input, sourceURL: URL(filePath: "/tmp/input.wav"))
+        controller.setPreviewSnapshot(snapshot, for: .corrected, sourceURL: URL(filePath: "/tmp/corrected.wav"))
+        controller.setPreviewSnapshot(snapshot, for: .mastered, sourceURL: URL(filePath: "/tmp/mastered.wav"))
+        controller.setComparisonPair(.inputVsMastered)
+        controller.seek(to: 0.5, target: .mastered)
+        controller.activeTarget = .mastered
+        controller.activeComparisonSide = .b
+        controller.cardState(for: .mastered).playbackState = .paused
+
+        controller.setComparisonPair(.correctedVsMastered)
+
+        #expect(controller.comparisonPair == .correctedVsMastered)
+        #expect(controller.activeTarget == .mastered)
+        #expect(controller.activeComparisonSide == .b)
+        #expect(controller.cardState(for: .corrected).playbackPosition == 5)
+        #expect(controller.cardState(for: .mastered).playbackPosition == 5)
+    }
+
+    @Test
     func loudnessMatchedComparisonToggleUpdatesState() {
         let controller = AudioPreviewController()
 

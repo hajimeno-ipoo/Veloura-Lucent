@@ -46,7 +46,7 @@ struct VelouraMainWorkspaceView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Veloura Lucent")
                 .font(.largeTitle.bold())
-            Text("入力、補正後、最終版を聴き比べながら、必要な解析だけを確認します。")
+            Text("音声を補正し、マスタリングで最終版に仕上げます。")
                 .foregroundStyle(.secondary)
 
             LiquidGlassTabBar(

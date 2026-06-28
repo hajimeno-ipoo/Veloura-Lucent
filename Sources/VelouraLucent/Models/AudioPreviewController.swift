@@ -123,10 +123,28 @@ final class AudioPreviewController {
     }
 
     func setComparisonPair(_ pair: AudioComparisonPair) {
+        guard pair != comparisonPair else { return }
+
+        let previousActiveTarget = activeTarget
+        let previousActiveSide = activeComparisonSide
+        let preservedPosition = comparisonPositionForPairChange()
+        if let previousActiveTarget, !pair.targets.contains(previousActiveTarget) {
+            transitionAwayFromCurrentTarget(keepingPosition: true)
+        }
+
         comparisonPair = pair
-        activeComparisonSide = .a
-        if let activeTarget, !pair.targets.contains(activeTarget) {
-            stopPlayback()
+        if
+            let previousActiveTarget,
+            pair.targets.contains(previousActiveTarget),
+            let newSide = comparisonSide(for: previousActiveTarget)
+        {
+            activeComparisonSide = newSide
+        } else {
+            activeComparisonSide = previousActiveSide
+        }
+
+        if let preservedPosition {
+            synchronizePlaybackPositions(to: preservedPosition, updatesLiveBandLevels: true)
         }
         refreshPlaybackVolumeIfNeeded()
     }
@@ -623,6 +641,26 @@ final class AudioPreviewController {
         if pairedPosition > 0 {
             cardState(for: target).playbackPosition = pairedPosition
         }
+    }
+
+    private func comparisonPositionForPairChange() -> TimeInterval? {
+        if let activeTarget {
+            let position = playerNode == nil ? cardState(for: activeTarget).playbackPosition : currentPlaybackPosition()
+            if position > 0 {
+                return position
+            }
+        }
+
+        let selectedTarget = comparisonTarget(for: activeComparisonSide)
+        let selectedPosition = cardState(for: selectedTarget).playbackPosition
+        if selectedPosition > 0 {
+            return selectedPosition
+        }
+
+        let otherSide: AudioComparisonSide = activeComparisonSide == .a ? .b : .a
+        let otherTarget = comparisonTarget(for: otherSide)
+        let otherPosition = cardState(for: otherTarget).playbackPosition
+        return otherPosition > 0 ? otherPosition : nil
     }
 
     private func prepareEnginePlayback(

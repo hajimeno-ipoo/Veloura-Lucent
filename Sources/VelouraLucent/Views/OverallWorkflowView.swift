@@ -33,6 +33,7 @@ struct OverallWorkflowView: View {
             Text(stage.title)
                 .font(.callout.bold())
                 .lineLimit(1)
+                .minimumScaleFactor(0.75)
             Text(stage.state.label)
                 .font(.callout)
                 .foregroundStyle(stage.state.color)

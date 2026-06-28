@@ -6,8 +6,6 @@ struct VelouraSidebarView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                sidebarHeader
-
                 sidebarSection(title: "音源") {
                     SidebarFileRow(
                         title: "入力音声",
@@ -44,24 +42,6 @@ struct VelouraSidebarView: View {
             .padding(.vertical, 18)
         }
         .scrollContentBackground(.hidden)
-    }
-
-    private var sidebarHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "waveform")
-                    .accessibilityHidden(true)
-                Text("Veloura Lucent")
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.9)
-            }
-            .font(.callout.bold())
-            Text("流れと状態を確認します。")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func sidebarSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
