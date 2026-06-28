@@ -139,10 +139,13 @@ struct InspectorAnalysisPanel: View {
     }
 
     private var completionReportControl: some View {
-        Button("完了後レポートを開く", systemImage: "doc.text.magnifyingglass") {
+        LiquidGlassActionButton(
+            title: "完了後レポートを開く",
+            systemImage: "doc.text.magnifyingglass",
+            isDisabled: completionReport == nil
+        ) {
             isCompletionReportPresented = true
         }
-        .disabled(completionReport == nil)
         .help(completionReport == nil ? "最終版と必要な解析が揃うと開けます" : "音量、ノイズ、高域保持の完了後レポートを開きます")
         .popover(isPresented: $isCompletionReportPresented, arrowEdge: .leading) {
             if let completionReport {

@@ -1134,8 +1134,11 @@ struct InspectorSettingsPanel: View {
     }
 
     private func resetButton(title: String, isCustom: Bool, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .disabled(!isCustom)
+        LiquidGlassActionButton(
+            title: title,
+            isDisabled: !isCustom,
+            action: action
+        )
     }
 
     private var correctionProfileBinding: Binding<DenoiseStrength> {
