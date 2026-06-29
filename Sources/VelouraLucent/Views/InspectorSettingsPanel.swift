@@ -192,13 +192,41 @@ struct InspectorSettingsPanel: View {
                         description: "最終版の音量感、明るさ、押し出し方の出発点です。配信用、安全重視、音圧重視など、仕上げたい方向に合わせて選びます。"
                     )
                 )
-                Picker("仕上がりプロファイル", selection: $job.selectedMasteringProfile) {
+                Menu {
                     ForEach(MasteringProfile.allCases) { profile in
-                        Text(profile.title).tag(profile)
+                        Button {
+                            job.selectedMasteringProfile = profile
+                        } label: {
+                            if profile == job.selectedMasteringProfile {
+                                Label(profile.title, systemImage: "checkmark")
+                            } else {
+                                Text(profile.title)
+                            }
+                        }
                     }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("仕上がりプロファイル")
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                        Text(job.selectedMasteringProfile.title)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.9)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption)
+                            .accessibilityHidden(true)
+                    }
+                    .font(.callout)
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                    .glassEffect(.clear.interactive(), in: .rect(cornerRadius: 10))
+                    .contentShape(.rect(cornerRadius: 10))
+                    .accessibilityElement(children: .combine)
                 }
-                .pickerStyle(.menu)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .accessibilityLabel("仕上がりプロファイル")
+                .accessibilityValue(job.selectedMasteringProfile.title)
 
                 Text(job.selectedMasteringProfile.summary)
                     .font(.callout)
