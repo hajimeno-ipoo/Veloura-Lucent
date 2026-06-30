@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import VelouraLucent
@@ -27,6 +28,15 @@ struct InputAudioDropSupportTests {
         #expect(InputAudioDropSupport.validate([movieURL]) == .rejected)
         #expect(InputAudioDropSupport.validate([directory]) == .rejected)
         #expect(InputAudioDropSupport.validate([audioURL, textURL]) == .rejected)
+
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("veloura-drop-support-\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.writeObjects([audioURL as NSURL])
+        defer { pasteboard.releaseGlobally() }
+
+        let droppedURLs = InputAudioDropSupport.fileURLs(from: pasteboard)
+        #expect(droppedURLs == [audioURL])
+        #expect(InputAudioDropSupport.validate(droppedURLs) == .accepted(audioURL))
     }
 
     private func testSignal() -> AudioSignal {

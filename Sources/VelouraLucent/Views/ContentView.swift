@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct ContentView: View {
     static let inspectorVisibleMinimumWindowWidth: CGFloat = 1_380
@@ -14,8 +13,6 @@ struct ContentView: View {
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
     @State private var isInspectorPresented = true
     @State private var inputAudioDropVisualState: InputAudioDropVisualState = .inactive
-    @State private var inputAudioDropAcceptedURLs: [URL] = []
-    @State private var inputAudioDropValidationRequestID = UUID()
     @State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
 
     var body: some View {
@@ -52,8 +49,16 @@ struct ContentView: View {
                         )
                         .frame(minWidth: 620, maxWidth: .infinity)
 
+                        InputAudioDropReceiver(
+                            isEnabled: canAcceptInputAudioDrop,
+                            visualState: $inputAudioDropVisualState,
+                            onDrop: acceptDroppedInputAudio
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .accessibilityHidden(true)
+
                         switch inputAudioDropVisualState {
-                        case .inactive, .validating:
+                        case .inactive:
                             EmptyView()
                         case .accepted:
                             InputAudioDropOverlay(kind: .accepted)
@@ -66,17 +71,6 @@ struct ContentView: View {
                         }
                     }
                     .frame(minWidth: 620, maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .onDrop(
-                        of: [.fileURL],
-                        delegate: InputAudioDropDelegate(
-                            isEnabled: canAcceptInputAudioDrop,
-                            visualState: $inputAudioDropVisualState,
-                            acceptedURLs: $inputAudioDropAcceptedURLs,
-                            validationRequestID: $inputAudioDropValidationRequestID,
-                            onDrop: acceptDroppedInputAudio
-                        )
-                    )
 
                     if isInspectorPresented {
                         Divider()

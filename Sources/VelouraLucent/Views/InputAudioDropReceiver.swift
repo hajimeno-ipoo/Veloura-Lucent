@@ -1,126 +1,113 @@
-import Foundation
+import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 enum InputAudioDropVisualState: Equatable {
     case inactive
-    case validating
     case accepted
     case rejected
 }
 
-struct InputAudioDropDelegate: DropDelegate {
+struct InputAudioDropReceiver: NSViewRepresentable {
     let isEnabled: Bool
     @Binding var visualState: InputAudioDropVisualState
-    @Binding var acceptedURLs: [URL]
-    @Binding var validationRequestID: UUID
     let onDrop: ([URL]) -> Bool
 
-    func validateDrop(info: DropInfo) -> Bool {
-        isEnabled && info.hasItemsConforming(to: [.fileURL])
+    func makeNSView(context: Context) -> DropReceiverView {
+        let view = DropReceiverView()
+        view.registerForDraggedTypes([.fileURL])
+        return view
     }
 
-    func dropEntered(info: DropInfo) {
-        updateVisualState(for: info)
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        updateVisualState(for: info)
-        return DropProposal(operation: visualState == .accepted ? .copy : .cancel)
-    }
-
-    func dropExited(info: DropInfo) {
-        resetDropState()
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard isEnabled,
-              visualState == .accepted,
-              info.hasItemsConforming(to: [.fileURL]),
-              case .accepted = InputAudioDropSupport.validate(acceptedURLs) else {
-            resetDropState()
-            return false
+    func updateNSView(_ nsView: DropReceiverView, context: Context) {
+        nsView.isEnabled = isEnabled
+        nsView.onVisualStateChange = { state in
+            visualState = state
         }
+        nsView.onDrop = onDrop
 
-        let didDrop = onDrop(acceptedURLs)
-        resetDropState()
-        return didDrop
-    }
-
-    private func updateVisualState(for info: DropInfo) {
-        guard isEnabled else {
-            resetDropState()
-            return
-        }
-        guard visualState == .inactive else { return }
-
-        let requestID = UUID()
-        validationRequestID = requestID
-        acceptedURLs = []
-        visualState = .validating
-
-        loadFileURLs(from: info) { urls in
-            guard validationRequestID == requestID else { return }
-            updateAcceptedDropState(for: urls)
-        }
-    }
-
-    private func updateAcceptedDropState(for urls: [URL]) {
-        switch InputAudioDropSupport.validate(urls) {
-        case let .accepted(url):
-            acceptedURLs = [url]
-            visualState = .accepted
-        case .rejected:
-            acceptedURLs = []
-            visualState = urls.isEmpty ? .inactive : .rejected
-        }
-    }
-
-    private func resetDropState() {
-        validationRequestID = UUID()
-        acceptedURLs = []
-        visualState = .inactive
-    }
-
-    private func loadFileURLs(from info: DropInfo, completion: @escaping ([URL]) -> Void) {
-        let providers = info.itemProviders(for: [.fileURL])
-        guard !providers.isEmpty else {
-            completion([])
-            return
-        }
-
-        let group = DispatchGroup()
-        let loadedURLs = LoadedFileURLs()
-
-        for provider in providers {
-            group.enter()
-            provider.loadInPlaceFileRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { url, _, _ in
-                if let url {
-                    loadedURLs.append(url)
-                }
-                group.leave()
-            }
-        }
-
-        group.notify(queue: .main) {
-            completion(loadedURLs.values())
+        if !isEnabled, visualState != .inactive {
+            visualState = .inactive
         }
     }
 }
 
-private final class LoadedFileURLs: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [URL] = []
+final class DropReceiverView: NSView {
+    var isEnabled = true
+    var onVisualStateChange: ((InputAudioDropVisualState) -> Void)?
+    var onDrop: (([URL]) -> Bool)?
 
-    func append(_ url: URL) {
-        lock.withLock {
-            storage.append(url)
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        updateVisualState(for: sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        updateVisualState(for: sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        onVisualStateChange?(.inactive)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        onVisualStateChange?(.inactive)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard isEnabled else { return false }
+        return isAcceptedAudioDrop(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard isEnabled,
+              case let .accepted(url) = InputAudioDropSupport.validate(fileURLs(from: sender)) else {
+            onVisualStateChange?(.inactive)
+            return false
+        }
+
+        let didDrop = onDrop?([url]) ?? false
+        onVisualStateChange?(.inactive)
+        return didDrop
+    }
+
+    private func updateVisualState(for sender: NSDraggingInfo) -> NSDragOperation {
+        guard isEnabled else {
+            onVisualStateChange?(.inactive)
+            return []
+        }
+
+        let urls = fileURLs(from: sender)
+        switch InputAudioDropSupport.validate(urls) {
+        case .accepted:
+            onVisualStateChange?(.accepted)
+            return .copy
+        case .rejected:
+            onVisualStateChange?(urls.isEmpty ? .inactive : .rejected)
+            return []
         }
     }
 
-    func values() -> [URL] {
-        lock.withLock {
-            storage
+    private func isAcceptedAudioDrop(_ sender: NSDraggingInfo) -> Bool {
+        if case .accepted = InputAudioDropSupport.validate(fileURLs(from: sender)) {
+            return true
         }
+        return false
+    }
+
+    private func fileURLs(from sender: NSDraggingInfo) -> [URL] {
+        InputAudioDropSupport.fileURLs(from: sender.draggingPasteboard)
     }
 }
