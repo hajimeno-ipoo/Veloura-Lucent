@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     static let inspectorVisibleMinimumWindowWidth: CGFloat = 1_380
@@ -12,6 +13,9 @@ struct ContentView: View {
     @State private var displayAnalysisTasks: [DisplayAnalysisTarget: Task<Void, Never>] = [:]
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
     @State private var isInspectorPresented = true
+    @State private var inputAudioDropVisualState: InputAudioDropVisualState = .inactive
+    @State private var inputAudioDropAcceptedURLs: [URL] = []
+    @State private var inputAudioDropValidationRequestID = UUID()
     @State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
 
     var body: some View {
@@ -41,11 +45,38 @@ struct ContentView: View {
         } detail: {
             ZStack(alignment: .topTrailing) {
                 HStack(spacing: 0) {
-                    VelouraMainWorkspaceView(
-                        job: job,
-                        preview: preview
+                    ZStack {
+                        VelouraMainWorkspaceView(
+                            job: job,
+                            preview: preview
+                        )
+                        .frame(minWidth: 620, maxWidth: .infinity)
+
+                        switch inputAudioDropVisualState {
+                        case .inactive, .validating:
+                            EmptyView()
+                        case .accepted:
+                            InputAudioDropOverlay(kind: .accepted)
+                                .transition(.opacity)
+                                .allowsHitTesting(false)
+                        case .rejected:
+                            InputAudioDropOverlay(kind: .rejected)
+                                .transition(.opacity)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .frame(minWidth: 620, maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .onDrop(
+                        of: [.fileURL],
+                        delegate: InputAudioDropDelegate(
+                            isEnabled: canAcceptInputAudioDrop,
+                            visualState: $inputAudioDropVisualState,
+                            acceptedURLs: $inputAudioDropAcceptedURLs,
+                            validationRequestID: $inputAudioDropValidationRequestID,
+                            onDrop: acceptDroppedInputAudio
+                        )
                     )
-                    .frame(minWidth: 620, maxWidth: .infinity)
 
                     if isInspectorPresented {
                         Divider()
@@ -206,12 +237,27 @@ struct ContentView: View {
             && !job.isProcessing
     }
 
+    private var canAcceptInputAudioDrop: Bool {
+        !job.isProcessing && !job.isMastering
+    }
+
     private func chooseInputAudio() {
         FilePanelService.chooseAudioFile { url in
             guard let url else { return }
             let selectionID = beginInputSelection(for: url)
             analyzeMetrics(for: url, target: .input, selectionID: selectionID)
         }
+    }
+
+    private func acceptDroppedInputAudio(_ urls: [URL]) -> Bool {
+        guard canAcceptInputAudioDrop else { return false }
+        guard case let .accepted(url) = InputAudioDropSupport.validate(urls) else {
+            return false
+        }
+
+        let selectionID = beginInputSelection(for: url)
+        analyzeMetrics(for: url, target: .input, selectionID: selectionID)
+        return true
     }
 
     private func openCorrectedPreview() {
