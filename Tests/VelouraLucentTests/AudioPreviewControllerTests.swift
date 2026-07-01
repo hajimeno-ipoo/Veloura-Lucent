@@ -462,6 +462,7 @@ struct AudioPreviewControllerTests {
 
         #expect(snapshot.polarSamplePoints.contains { $0.isClipped })
         #expect(snapshot.polarLevelLines.first?.isClipped == true)
+        #expect(snapshot.polarLevelLines(for: .peak).first?.isClipped == true)
     }
 
     @Test
@@ -476,6 +477,47 @@ struct AudioPreviewControllerTests {
         let reverseLine = try #require(reversePhase.polarLevelLines.first)
         #expect(abs(reverseLine.y) < 0.000_001)
         #expect(abs(reverseLine.x) > 0.4)
+    }
+
+    @Test
+    func polarLevelStoresRMSAndPeakLines() throws {
+        let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in (sample, sample) })
+
+        let rmsLine = try #require(snapshot.polarLevelLines(for: .rms).first)
+        let peakLine = try #require(snapshot.polarLevelLines(for: .peak).first)
+
+        #expect(abs(rmsLine.x) < 0.000_001)
+        #expect(abs(peakLine.x) < 0.000_001)
+        #expect(peakLine.y > rmsLine.y)
+        #expect(abs(rmsLine.y - 0.5) < 0.01)
+        #expect(abs(peakLine.y - sqrt(0.5)) < 0.01)
+    }
+
+    @Test
+    func polarLevelPeakUsesMidSideMaximum() throws {
+        let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer { sample in (sample, -sample) })
+
+        let rmsLine = try #require(snapshot.polarLevelLines(for: .rms).first)
+        let peakLine = try #require(snapshot.polarLevelLines(for: .peak).first)
+
+        #expect(abs(rmsLine.y) < 0.000_001)
+        #expect(abs(peakLine.y) < 0.000_001)
+        #expect(abs(peakLine.x) > abs(rmsLine.x))
+        #expect(abs(abs(rmsLine.x) - 0.5) < 0.01)
+        #expect(abs(abs(peakLine.x) - sqrt(0.5)) < 0.01)
+    }
+
+    @Test
+    func polarLevelPeakKeepsMidSideValuesFromSameSample() throws {
+        var samples = Array(repeating: (Float(0), Float(0)), count: 2_048)
+        samples[0] = (0.8, 0.8)
+        samples[1] = (-0.7, 0.7)
+        let snapshot = VectorScopeAnalyzer.snapshot(from: stereoBuffer(samples: samples))
+
+        let peakLine = try #require(snapshot.polarLevelLines(for: .peak).first)
+
+        #expect(abs(peakLine.x) < 0.000_001)
+        #expect(abs(peakLine.y - 1) < 0.000_001)
     }
 
     @Test
@@ -496,13 +538,19 @@ struct AudioPreviewControllerTests {
             inputState: .stereo,
             points: [VectorScopePoint(id: 1, x: 0.1, y: 0.2)],
             polarSamplePoints: [VectorScopePoint(id: 2, x: 0.2, y: 0.3)],
-            polarLevelLines: [VectorScopeLine(id: 3, x: 0.1, y: 0.5)]
+            polarLevelLinesByDetectionMode: [
+                .rms: [VectorScopeLine(id: 3, x: 0.1, y: 0.5)],
+                .peak: [VectorScopeLine(id: 4, x: 0.2, y: 0.6)]
+            ]
         )
         let current = VectorScopeSnapshot(
             inputState: .stereo,
             points: [VectorScopePoint(id: 4, x: 0.3, y: 0.4)],
             polarSamplePoints: [VectorScopePoint(id: 5, x: 0.4, y: 0.5)],
-            polarLevelLines: [VectorScopeLine(id: 6, x: 0.2, y: 0.6)],
+            polarLevelLinesByDetectionMode: [
+                .rms: [VectorScopeLine(id: 6, x: 0.2, y: 0.6)],
+                .peak: [VectorScopeLine(id: 7, x: 0.3, y: 0.7)]
+            ],
             updateDurationSeconds: 0.5
         )
 
@@ -511,6 +559,7 @@ struct AudioPreviewControllerTests {
         #expect(merged.points.count == 2)
         #expect(merged.polarSamplePoints.count == 2)
         #expect(merged.polarLevelLines.count == 2)
+        #expect(merged.polarLevelLines(for: .peak).count == 2)
         #expect(merged.points.contains { $0.age > 0 })
         #expect(merged.points.contains { $0.age == 0 })
         #expect(merged.points.contains { abs($0.age - (0.5 / VectorScopeAnalyzer.historyDurationSeconds)) < 0.000_001 })
@@ -615,6 +664,7 @@ struct AudioPreviewControllerTests {
         #expect(controller.cardState(for: .input).vectorScopeSnapshot.points.isEmpty)
         #expect(controller.cardState(for: .input).vectorScopeSnapshot.polarSamplePoints.isEmpty)
         #expect(controller.cardState(for: .input).vectorScopeSnapshot.polarLevelLines.isEmpty)
+        #expect(controller.cardState(for: .input).vectorScopeSnapshot.polarLevelLines(for: .peak).isEmpty)
         #expect(controller.cardState(for: .corrected).vectorScopeSnapshot.points.isEmpty == false)
     }
 
@@ -671,6 +721,19 @@ struct AudioPreviewControllerTests {
             let transformed = transform(sample)
             channels[0][index] = transformed.0
             channels[1][index] = transformed.1
+        }
+        return buffer
+    }
+
+    private func stereoBuffer(samples: [(Float, Float)]) -> AVAudioPCMBuffer {
+        let sampleRate = 48_000.0
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count))!
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        let channels = buffer.floatChannelData!
+        for (index, sample) in samples.enumerated() {
+            channels[0][index] = sample.0
+            channels[1][index] = sample.1
         }
         return buffer
     }

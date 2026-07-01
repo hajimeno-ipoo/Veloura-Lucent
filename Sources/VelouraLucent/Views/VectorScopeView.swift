@@ -4,6 +4,7 @@ struct VectorScopeView: View {
     let preview: AudioPreviewController
     let masteringSettings: MasteringSettings
     @State private var displayMode: VectorScopeDisplayMode = .polarSample
+    @State private var levelDetectionMode: VectorScopeLevelDetectionMode = .rms
     @State private var contentWidth: CGFloat = 0
 
     private let horizontalLayoutMinimumWidth: CGFloat = 1_024
@@ -78,6 +79,18 @@ struct VectorScopeView: View {
                 .foregroundStyle(.secondary)
 
             VectorScopeModePicker(displayMode: $displayMode)
+            if displayMode == .polarLevel {
+                LiquidGlassSegmentedControl(
+                    title: "Polar Level検出方式",
+                    options: VectorScopeLevelDetectionMode.allCases,
+                    selection: $levelDetectionMode,
+                    label: \.title,
+                    maxWidth: 240
+                )
+                .transaction { transaction in
+                    transaction.disablesAnimations = true
+                }
+            }
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 12) {
@@ -129,6 +142,7 @@ struct VectorScopeView: View {
             VectorScopePlot(
                 snapshot: snapshot,
                 mode: displayMode,
+                levelDetectionMode: levelDetectionMode,
                 color: activeTarget.map(targetColor) ?? .secondary
             )
 
@@ -161,7 +175,7 @@ struct VectorScopeView: View {
         case .polarSample:
             return "Polar Sample: 45度安全ライン内は同相、外側は位相ずれを示します。"
         case .polarLevel:
-            return "Polar Level: 平均線の角度でステレオ位置、長さで振幅を確認します。"
+            return "Polar Level: 線の角度でステレオ位置を確認します。\(levelDetectionMode.description)"
         case .lissajous:
             return "Lissajous: 縦=同相 / 横=逆相 / 斜め=左右偏り。"
         }
@@ -174,7 +188,9 @@ struct VectorScopeView: View {
         case .mono:
             return "モノラル音源のため、左右の関係は表示しません"
         case .stereo:
-            return snapshot.points.isEmpty && snapshot.polarSamplePoints.isEmpty && snapshot.polarLevelLines.isEmpty
+            return snapshot.points.isEmpty
+                && snapshot.polarSamplePoints.isEmpty
+                && snapshot.polarLevelLinesByDetectionMode.values.allSatisfy { $0.isEmpty }
                 ? "音声信号を待っています"
                 : nil
         case let .multichannel(channelCount):
@@ -190,6 +206,9 @@ struct VectorScopeView: View {
             return "ベクトルスコープ。\(statusMessage)"
         }
         let targetName = activeTarget?.rawValue ?? "音源"
+        if displayMode == .polarLevel {
+            return "ベクトルスコープ。\(targetName)の\(displayMode.title)、\(levelDetectionMode.title)を表示中です"
+        }
         return "ベクトルスコープ。\(targetName)の\(displayMode.title)を表示中です"
     }
 
@@ -205,6 +224,7 @@ struct VectorScopeView: View {
 private struct VectorScopePlot: View {
     let snapshot: VectorScopeSnapshot
     let mode: VectorScopeDisplayMode
+    let levelDetectionMode: VectorScopeLevelDetectionMode
     let color: Color
 
     var body: some View {
@@ -216,7 +236,7 @@ private struct VectorScopePlot: View {
             case .polarSample:
                 draw(points: snapshot.polarSamplePoints, context: context, metrics: metrics)
             case .polarLevel:
-                draw(lines: snapshot.polarLevelLines, context: context, metrics: metrics)
+                draw(lines: snapshot.polarLevelLines(for: levelDetectionMode), context: context, metrics: metrics)
             case .lissajous:
                 draw(points: snapshot.points, context: context, metrics: metrics)
             }

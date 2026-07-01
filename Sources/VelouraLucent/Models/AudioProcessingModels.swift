@@ -499,6 +499,29 @@ enum VectorScopeDisplayMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum VectorScopeLevelDetectionMode: String, CaseIterable, Identifiable, Sendable {
+    case rms
+    case peak
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .rms: "RMS"
+        case .peak: "Peak"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .rms:
+            "RMS: 短い時間の平均レベルを線の長さで表示します。"
+        case .peak:
+            "Peak: 短い時間の瞬間最大レベルを線の長さで表示します。"
+        }
+    }
+}
+
 struct VectorScopePoint: Sendable, Identifiable, Equatable {
     let id: Int
     let x: Double
@@ -535,16 +558,21 @@ struct VectorScopeSnapshot: Sendable, Equatable {
     let inputState: VectorScopeInputState
     let points: [VectorScopePoint]
     let polarSamplePoints: [VectorScopePoint]
-    let polarLevelLines: [VectorScopeLine]
+    let polarLevelLinesByDetectionMode: [VectorScopeLevelDetectionMode: [VectorScopeLine]]
     let correlation: Double?
     let balance: Double?
     let updateDurationSeconds: Double
+
+    var polarLevelLines: [VectorScopeLine] {
+        polarLevelLines(for: .rms)
+    }
 
     init(
         inputState: VectorScopeInputState,
         points: [VectorScopePoint] = [],
         polarSamplePoints: [VectorScopePoint] = [],
         polarLevelLines: [VectorScopeLine] = [],
+        polarLevelLinesByDetectionMode: [VectorScopeLevelDetectionMode: [VectorScopeLine]]? = nil,
         correlation: Double? = nil,
         balance: Double? = nil,
         updateDurationSeconds: Double = 0
@@ -552,10 +580,14 @@ struct VectorScopeSnapshot: Sendable, Equatable {
         self.inputState = inputState
         self.points = points
         self.polarSamplePoints = polarSamplePoints
-        self.polarLevelLines = polarLevelLines
+        self.polarLevelLinesByDetectionMode = polarLevelLinesByDetectionMode ?? [.rms: polarLevelLines]
         self.correlation = correlation
         self.balance = balance
         self.updateDurationSeconds = updateDurationSeconds
+    }
+
+    func polarLevelLines(for detectionMode: VectorScopeLevelDetectionMode) -> [VectorScopeLine] {
+        polarLevelLinesByDetectionMode[detectionMode] ?? []
     }
 
     static let unavailable = VectorScopeSnapshot(inputState: .unavailable)

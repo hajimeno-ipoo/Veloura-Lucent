@@ -1228,6 +1228,8 @@ enum VectorScopeAnalyzer {
         var sharedEnergy = 0.0
         var midEnergy = 0.0
         var sideEnergy = 0.0
+        var peakPolarPoint: (x: Double, y: Double)?
+        var peakPolarMagnitude = 0.0
         var sideSum = 0.0
         var containsClipping = false
 
@@ -1241,6 +1243,13 @@ enum VectorScopeAnalyzer {
             sharedEnergy += leftSample * rightSample
             midEnergy += mid * mid
             sideEnergy += side * side
+            let rawPeakX = side * sqrt(2)
+            let rawPeakY = abs(mid) * sqrt(2)
+            let peakMagnitude = sqrt(rawPeakX * rawPeakX + rawPeakY * rawPeakY)
+            if peakMagnitude > peakPolarMagnitude {
+                peakPolarMagnitude = peakMagnitude
+                peakPolarPoint = normalizePolarPoint(x: rawPeakX, y: rawPeakY)
+            }
             sideSum += side
             containsClipping = containsClipping || isClipped(leftSample, rightSample)
         }
@@ -1284,11 +1293,11 @@ enum VectorScopeAnalyzer {
         let measuredCorrelation = denominator > 1e-12 ? max(-1, min(1, sharedEnergy / denominator)) : nil
         let totalEnergy = leftEnergy + rightEnergy
         let balance = totalEnergy > 1e-12 ? max(-1, min(1, (rightEnergy - leftEnergy) / totalEnergy)) : nil
-        let polarLevelLine = makePolarLevelLine(
-            id: 0,
+        let polarLevelLinesByDetectionMode = makePolarLevelLines(
             frameLength: frameLength,
             midEnergy: midEnergy,
             sideEnergy: sideEnergy,
+            peakPolarPoint: peakPolarPoint,
             sideSum: sideSum,
             leftEnergy: leftEnergy,
             rightEnergy: rightEnergy,
@@ -1300,7 +1309,7 @@ enum VectorScopeAnalyzer {
             inputState: .stereo,
             points: points,
             polarSamplePoints: polarSamplePoints,
-            polarLevelLines: polarLevelLine.map { [$0] } ?? [],
+            polarLevelLinesByDetectionMode: polarLevelLinesByDetectionMode,
             correlation: measuredCorrelation,
             balance: balance,
             updateDurationSeconds: Double(frameLength) / sampleBuffer.sampleRate
@@ -1318,14 +1327,20 @@ enum VectorScopeAnalyzer {
 
         let currentPoints = renumber(current.points, generationID: generationID)
         let currentPolarPoints = renumber(current.polarSamplePoints, generationID: generationID)
-        let currentLines = renumber(current.polarLevelLines, generationID: generationID)
+        let currentLinesByDetectionMode = renumber(current.polarLevelLinesByDetectionMode, generationID: generationID)
         let ageStep = historyAgeStep(for: current)
+        let agedPreviousLinesByDetectionMode = aged(previous.polarLevelLinesByDetectionMode, by: ageStep)
 
         return VectorScopeSnapshot(
             inputState: current.inputState,
             points: capped(currentPoints + aged(previous.points, by: ageStep), maximumCount: maximumStoredPointCount),
             polarSamplePoints: capped(currentPolarPoints + aged(previous.polarSamplePoints, by: ageStep), maximumCount: maximumStoredPointCount),
-            polarLevelLines: capped(currentLines + aged(previous.polarLevelLines, by: ageStep), maximumCount: maximumStoredLineCount),
+            polarLevelLinesByDetectionMode: VectorScopeLevelDetectionMode.allCases.reduce(into: [:]) { result, detectionMode in
+                result[detectionMode] = capped(
+                    (currentLinesByDetectionMode[detectionMode] ?? []) + (agedPreviousLinesByDetectionMode[detectionMode] ?? []),
+                    maximumCount: maximumStoredLineCount
+                )
+            },
             correlation: current.correlation,
             balance: current.balance,
             updateDurationSeconds: current.updateDurationSeconds
@@ -1343,19 +1358,19 @@ enum VectorScopeAnalyzer {
         abs(leftSample) >= 1 || abs(rightSample) >= 1
     }
 
-    private static func makePolarLevelLine(
-        id: Int,
+    private static func makePolarLevelLines(
         frameLength: Int,
         midEnergy: Double,
         sideEnergy: Double,
+        peakPolarPoint: (x: Double, y: Double)?,
         sideSum: Double,
         leftEnergy: Double,
         rightEnergy: Double,
         balance: Double?,
         isClipped: Bool
-    ) -> VectorScopeLine? {
+    ) -> [VectorScopeLevelDetectionMode: [VectorScopeLine]] {
         let totalEnergy = leftEnergy + rightEnergy
-        guard frameLength > 0, totalEnergy > 1e-12 else { return nil }
+        guard frameLength > 0, totalEnergy > 1e-12 else { return [:] }
 
         let midRMS = sqrt(midEnergy / Double(frameLength))
         let sideRMS = sqrt(sideEnergy / Double(frameLength))
@@ -1369,12 +1384,24 @@ enum VectorScopeAnalyzer {
             sideSign = sideEnergy > midEnergy ? 1 : 0
         }
 
-        return VectorScopeLine(
-            id: id,
-            x: clampUnit(sideRMS * sqrt(2) * sideSign),
-            y: clampUnit(midRMS * sqrt(2)),
-            isClipped: isClipped
-        )
+        return [
+            .rms: [
+                VectorScopeLine(
+                    id: 0,
+                    x: clampUnit(sideRMS * sqrt(2) * sideSign),
+                    y: clampUnit(midRMS * sqrt(2)),
+                    isClipped: isClipped
+                )
+            ],
+            .peak: [
+                VectorScopeLine(
+                    id: 0,
+                    x: peakPolarPoint?.x ?? 0,
+                    y: peakPolarPoint?.y ?? 0,
+                    isClipped: isClipped
+                )
+            ]
+        ]
     }
 
     private static func lissajousPoint(left: Double, right: Double) -> (x: Double, y: Double) {
@@ -1419,6 +1446,13 @@ enum VectorScopeAnalyzer {
         }
     }
 
+    private static func aged(
+        _ linesByDetectionMode: [VectorScopeLevelDetectionMode: [VectorScopeLine]],
+        by ageStep: Double
+    ) -> [VectorScopeLevelDetectionMode: [VectorScopeLine]] {
+        linesByDetectionMode.mapValues { aged($0, by: ageStep) }
+    }
+
     private static func renumber(_ points: [VectorScopePoint], generationID: Int) -> [VectorScopePoint] {
         points.enumerated().map { offset, point in
             VectorScopePoint(
@@ -1441,6 +1475,13 @@ enum VectorScopeAnalyzer {
                 age: 0
             )
         }
+    }
+
+    private static func renumber(
+        _ linesByDetectionMode: [VectorScopeLevelDetectionMode: [VectorScopeLine]],
+        generationID: Int
+    ) -> [VectorScopeLevelDetectionMode: [VectorScopeLine]] {
+        linesByDetectionMode.mapValues { renumber($0, generationID: generationID) }
     }
 
     private static func capped<T>(_ values: [T], maximumCount: Int) -> [T] {

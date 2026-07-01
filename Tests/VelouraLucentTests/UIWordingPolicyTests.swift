@@ -64,7 +64,8 @@ struct UIWordingPolicyTests {
         #expect(source.contains("title: \"ベクトルスコープ表示\""))
         #expect(source.contains("TermHelpButton("))
         #expect(source.contains("Polar Sampleは、左右チャンネルのサンプルを半円上の点で表示します。"))
-        #expect(source.contains("Polar Levelは、短い時間の平均を線で表示します。"))
+        #expect(source.contains("Polar Levelは、短い時間のレベルを線で表示します。"))
+        #expect(source.contains("title: \"Polar Level検出方式\""))
         #expect(source.contains("Lissajousは、左右チャンネルの瞬間的な関係を菱形の中の点で表示します。"))
         #expect(source.contains("Lissajous"))
         #expect(source.contains("Polar Sample"))
@@ -310,6 +311,7 @@ struct UIWordingPolicyTests {
             "Sources/VelouraLucent/Views/LiquidGlassTabBar.swift",
             "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
             "Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift",
+            "Sources/VelouraLucent/Views/VectorScopeView.swift",
             "Sources/VelouraLucent/Views/VectorScopeModePicker.swift",
             "Sources/VelouraLucent/Views/InspectorSettingsPanel.swift",
             "Sources/VelouraLucent/Views/InspectorAnalysisPanel.swift"
@@ -319,6 +321,7 @@ struct UIWordingPolicyTests {
             "中央表示",
             "比較対象",
             "ベクトルスコープ表示",
+            "Polar Level検出方式",
             "詳細設定",
             "補正プリセット",
             "解析モード",
@@ -357,6 +360,7 @@ struct UIWordingPolicyTests {
     @Test
     func stereoCorrelationMeterShowsReadableScale() throws {
         let source = try combinedSource([
+            "Sources/VelouraLucent/Models/AudioProcessingModels.swift",
             "Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift",
             "Sources/VelouraLucent/Views/VectorScopeView.swift"
         ])
@@ -378,7 +382,9 @@ struct UIWordingPolicyTests {
         #expect(source.contains("correlationTimelineDuration(stages: stages)"))
         #expect(source.contains("Lissajous: 縦=同相 / 横=逆相 / 斜め=左右偏り。"))
         #expect(source.contains("Polar Sample: 45度安全ライン内は同相、外側は位相ずれを示します。"))
-        #expect(source.contains("Polar Level: 平均線の角度でステレオ位置、長さで振幅を確認します。"))
+        #expect(source.contains("Polar Level: 線の角度でステレオ位置を確認します。"))
+        #expect(source.contains("RMS: 短い時間の平均レベルを線の長さで表示します。"))
+        #expect(source.contains("Peak: 短い時間の瞬間最大レベルを線の長さで表示します。"))
         #expect(source.contains("モノラル音源のため、左右の関係は表示しません"))
         #expect(source.contains("チャンネル音源はベクトルスコープ未対応です"))
     }
