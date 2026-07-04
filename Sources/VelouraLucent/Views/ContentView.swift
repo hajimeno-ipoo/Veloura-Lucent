@@ -14,6 +14,10 @@ struct ContentView: View {
     @State private var isInspectorPresented = true
     @State private var inputAudioDropVisualState: InputAudioDropVisualState = .inactive
     @State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
+    @State private var highlightedToolbarTarget: LiquidGlassToolbarTarget?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var toolbarGlassNamespace
+    @Namespace private var inspectorGlassNamespace
 
     var body: some View {
         mainContent
@@ -80,7 +84,9 @@ struct ContentView: View {
                             windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount
                         )
                             .frame(width: 440)
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                            .glassEffectID("right-inspector-panel", in: inspectorGlassNamespace)
+                            .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
+                            .transition(inspectorTransition)
                     }
                 }
 
@@ -134,7 +140,9 @@ struct ContentView: View {
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
+                .padding(4)
                 .glassEffect(.clear.interactive(), in: .capsule)
+                .onHover { updateToolbarHighlight(.export, isHovering: $0) }
                 .accessibilityLabel("書き出し")
                 .help("補正後または最終版を書き出します")
             }
@@ -146,23 +154,34 @@ struct ContentView: View {
         GlassEffectContainer(spacing: 0) {
             HStack(spacing: 4) {
                 Button(action: chooseInputAudio) {
-                    toolbarActionLabel("音声を選ぶ", systemImage: "waveform.badge.plus")
+                    toolbarActionLabel("音声を選ぶ", systemImage: "waveform.badge.plus", target: .chooseInput)
                 }
                 .buttonStyle(.plain)
+                .onHover { updateToolbarHighlight(.chooseInput, isHovering: $0) }
                 .help("入力音声を選びます")
                 .disabled(job.isProcessing || job.isMastering)
 
                 Button(action: startCorrectionProcessing) {
-                    toolbarActionLabel(job.isProcessing ? "補正中..." : "補正を実行", systemImage: "wand.and.sparkles")
+                    toolbarActionLabel(
+                        job.isProcessing ? "補正中..." : "補正を実行",
+                        systemImage: "wand.and.sparkles",
+                        target: .runCorrection
+                    )
                 }
                 .buttonStyle(.plain)
+                .onHover { updateToolbarHighlight(.runCorrection, isHovering: $0) }
                 .help("入力音声に補正処理をかけます")
                 .disabled(job.inputFile == nil || job.isProcessing || job.isMastering)
 
                 Button(action: startMasteringProcessing) {
-                    toolbarActionLabel(job.isMastering ? "マスタリング中..." : "マスタリングを実行", systemImage: "slider.horizontal.3")
+                    toolbarActionLabel(
+                        job.isMastering ? "マスタリング中..." : "マスタリングを実行",
+                        systemImage: "slider.horizontal.3",
+                        target: .runMastering
+                    )
                 }
                 .buttonStyle(.plain)
+                .onHover { updateToolbarHighlight(.runMastering, isHovering: $0) }
                 .help("補正後音声を最終版へ仕上げます")
                 .disabled(!canStartMastering)
             }
@@ -174,13 +193,25 @@ struct ContentView: View {
 
     private var inspectorToggleButton: some View {
         Button {
-            isInspectorPresented.toggle()
+            LiquidGlassMotion.perform(
+                reduceMotion: reduceMotion,
+                animation: LiquidGlassMotion.panel
+            ) {
+                isInspectorPresented.toggle()
+            }
         } label: {
             Image(systemName: "sidebar.right")
                 .font(.system(size: 18, weight: .regular))
                 .symbolRenderingMode(.hierarchical)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
+                .frame(width: 30, height: 30)
+                .glassEffect(.clear.interactive(), in: Circle())
+                .liquidGlassEffectID(
+                    "right-inspector-panel",
+                    in: inspectorGlassNamespace,
+                    isActive: !isInspectorPresented
+                )
+                .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
@@ -188,16 +219,39 @@ struct ContentView: View {
         .help("右側の設定パネルを表示または非表示にします")
     }
 
-    private func toolbarActionLabel(_ title: String, systemImage: String) -> some View {
+    private var inspectorTransition: AnyTransition {
+        if reduceMotion {
+            return .opacity
+        }
+        return .move(edge: .trailing).combined(with: .opacity)
+    }
+
+    private func toolbarActionLabel(
+        _ title: String,
+        systemImage: String,
+        target: LiquidGlassToolbarTarget
+    ) -> some View {
         toolbarLabel(title, systemImage: systemImage)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
+            .liquidGlassCapsuleMorphSurface(
+                isActive: highlightedToolbarTarget == target,
+                effectID: "toolbar-action-highlight",
+                namespace: toolbarGlassNamespace,
+                reduceMotion: reduceMotion
+            )
     }
 
     private func toolbarExportLabel(_ title: String, systemImage: String) -> some View {
         toolbarLabel(title, systemImage: systemImage)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .liquidGlassCapsuleMorphSurface(
+                isActive: highlightedToolbarTarget == .export,
+                effectID: "toolbar-action-highlight",
+                namespace: toolbarGlassNamespace,
+                reduceMotion: reduceMotion
+            )
     }
 
     private func toolbarLabel(_ title: String, systemImage: String) -> some View {
@@ -205,6 +259,18 @@ struct ContentView: View {
             .labelStyle(.titleAndIcon)
         .font(.callout)
         .fixedSize()
+    }
+
+    @MainActor
+    private func updateToolbarHighlight(_ target: LiquidGlassToolbarTarget, isHovering: Bool) {
+        let nextTarget = isHovering ? target : (highlightedToolbarTarget == target ? nil : highlightedToolbarTarget)
+        guard nextTarget != highlightedToolbarTarget else { return }
+        LiquidGlassMotion.perform(
+            reduceMotion: reduceMotion,
+            animation: LiquidGlassMotion.selection
+        ) {
+            highlightedToolbarTarget = nextTarget
+        }
     }
 
     private var completionReport: CompletionReport? {

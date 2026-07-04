@@ -57,7 +57,7 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private var comparisonPairPicker: some View {
-        LiquidGlassSegmentedControl(
+        LiquidGlassSegmentedPicker(
             title: "比較対象",
             options: AudioComparisonPair.allCases,
             selection: binding(

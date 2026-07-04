@@ -8,6 +8,7 @@ struct LiquidGlassTabBar<Selection: Hashable>: View {
     var maxWidth: CGFloat = 360
     var isDisabled = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focusedOption: Selection?
     @Namespace private var glassNamespace
 
@@ -38,7 +39,7 @@ struct LiquidGlassTabBar<Selection: Hashable>: View {
 
         if isSelected {
             Button {
-                selection = option
+                select(option)
             } label: {
                 tabLabel(for: option, isSelected: true)
             }
@@ -49,7 +50,7 @@ struct LiquidGlassTabBar<Selection: Hashable>: View {
             .accessibilityAddTraits(.isSelected)
         } else {
             Button {
-                selection = option
+                select(option)
             } label: {
                 tabLabel(for: option, isSelected: false)
             }
@@ -70,20 +71,39 @@ struct LiquidGlassTabBar<Selection: Hashable>: View {
             .frame(maxWidth: .infinity, minHeight: 32)
             .padding(.horizontal, 12)
             .contentShape(Capsule())
-            .modifier(SelectedGlassTabModifier(isSelected: isSelected, namespace: glassNamespace))
+            .modifier(
+                SelectedGlassTabModifier(
+                    isSelected: isSelected,
+                    namespace: glassNamespace,
+                    reduceMotion: reduceMotion
+                )
+            )
             .accessibilityLabel("\(title)、\(label(option))")
+    }
+
+    @MainActor
+    private func select(_ option: Selection) {
+        guard option != selection else { return }
+        LiquidGlassMotion.perform(
+            reduceMotion: reduceMotion,
+            animation: LiquidGlassMotion.selection
+        ) {
+            selection = option
+        }
     }
 }
 
 private struct SelectedGlassTabModifier: ViewModifier {
     let isSelected: Bool
     let namespace: Namespace.ID
+    let reduceMotion: Bool
 
     func body(content: Content) -> some View {
         if isSelected {
             content
-                .glassEffect(.regular.interactive(), in: .capsule)
+                .glassEffect(.clear.interactive(), in: .capsule)
                 .glassEffectID("selected-tab", in: namespace)
+                .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
         } else {
             content
         }

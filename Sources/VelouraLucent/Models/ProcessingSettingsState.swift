@@ -1,5 +1,6 @@
 import Observation
 
+@MainActor
 @Observable
 final class ProcessingSettingsState {
     var selectedMasteringProfile: MasteringProfile = .streaming

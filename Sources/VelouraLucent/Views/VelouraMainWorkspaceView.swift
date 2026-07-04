@@ -31,6 +31,7 @@ struct VelouraMainWorkspaceView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollContentBackground(.hidden)
+                .scrollEdgeEffectStyle(.soft, for: .top)
                 .background(WindowScrollbarAppearanceConfigurator())
 
                 Divider()
@@ -49,7 +50,7 @@ struct VelouraMainWorkspaceView: View {
             Text("音声を補正し、マスタリングで最終版に仕上げます。")
                 .foregroundStyle(.secondary)
 
-            LiquidGlassTabBar(
+            LiquidGlassSegmentedPicker(
                 title: "中央表示",
                 options: WorkspaceDisplayMode.allCases,
                 selection: $displayMode,

@@ -80,16 +80,13 @@ struct VectorScopeView: View {
 
             VectorScopeModePicker(displayMode: $displayMode)
             if displayMode == .polarLevel {
-                LiquidGlassSegmentedControl(
+                LiquidGlassSegmentedPicker(
                     title: "Polar Level検出方式",
                     options: VectorScopeLevelDetectionMode.allCases,
                     selection: $levelDetectionMode,
                     label: \.title,
                     maxWidth: 240
                 )
-                .transaction { transaction in
-                    transaction.disablesAnimations = true
-                }
             }
 
             VStack(alignment: .leading, spacing: 12) {

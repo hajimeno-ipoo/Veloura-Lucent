@@ -21,18 +21,6 @@ struct InspectorSettingsPanel: View {
     @Binding var windowBackgroundMaterialAmount: Double
     @SceneStorage("inspectorSettingsSelectedSection")
     private var selectedSectionRawValue = InspectorSettingsSection.correction.rawValue
-    @SceneStorage("inspectorSettingsShowsCorrectionBasic")
-    private var showsCorrectionBasic = true
-    @SceneStorage("inspectorSettingsShowsCorrectionRepair")
-    private var showsCorrectionRepair = false
-    @SceneStorage("inspectorSettingsShowsCorrectionAdvanced")
-    private var showsCorrectionAdvanced = false
-    @SceneStorage("inspectorSettingsShowsMasteringBasic")
-    private var showsMasteringBasic = true
-    @SceneStorage("inspectorSettingsShowsMasteringTone")
-    private var showsMasteringTone = false
-    @SceneStorage("inspectorSettingsShowsMasteringAdvanced")
-    private var showsMasteringAdvanced = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -40,7 +28,7 @@ struct InspectorSettingsPanel: View {
                 Text("詳細設定")
                     .font(.headline)
 
-                LiquidGlassTabBar(
+                LiquidGlassSegmentedPicker(
                     title: "詳細設定",
                     options: InspectorSettingsSection.allCases,
                     selection: selectedSectionBinding,
@@ -92,7 +80,7 @@ struct InspectorSettingsPanel: View {
                         description: "補正前の音声解析に使う方式です。自動はこのMacで使える方式を選び、安定CPUは速度より安定性を優先し、実験Metalは対応MacでGPUを使います。"
                     )
                 )
-                LiquidGlassSegmentedControl(
+                LiquidGlassSegmentedPicker(
                     title: "解析モード",
                     options: AudioAnalysisMode.allCases,
                     selection: $job.selectedAnalysisMode,
@@ -121,7 +109,7 @@ struct InspectorSettingsPanel: View {
                         description: "ノイズをどれくらい減らすかの大まかな出発点です。弱い、標準、強いから選び、その後で細かい設定を手動調整できます。"
                     )
                 )
-                LiquidGlassSegmentedControl(
+                LiquidGlassSegmentedPicker(
                     title: "補正プリセット",
                     options: DenoiseStrength.allCases,
                     selection: correctionProfileBinding,
@@ -147,7 +135,7 @@ struct InspectorSettingsPanel: View {
                     reading: "ほせいのきほん",
                     description: "ノイズを減らす量と、元の音の自然さをどれだけ残すかを決める中心設定です。強くしすぎると音楽の細かい成分まで弱くなる場合があります。"
                 ),
-                isExpanded: $showsCorrectionBasic
+                initiallyExpanded: true
             ) {
                 correctionBasicKnobRow
             }
@@ -160,7 +148,7 @@ struct InspectorSettingsPanel: View {
                     reading: "そうじとしゅうふく",
                     description: "低いノイズ、こもり、高域の不足を個別に調整します。ノイズを減らす設定と、失われた明るさを戻す設定を分けて扱います。"
                 ),
-                isExpanded: $showsCorrectionRepair
+                initiallyExpanded: false
             ) {
                 correctionRepairKnobRow
             }
@@ -173,7 +161,7 @@ struct InspectorSettingsPanel: View {
                     reading: "ほせいのじょうきゅうせってい",
                     description: "検出の敏感さ、高域補完、ステレオの守り方を細かく調整します。通常はプリセット値を基準にしてください。"
                 ),
-                isExpanded: $showsCorrectionAdvanced
+                initiallyExpanded: false
             ) {
                 correctionAdvancedKnobRow
             }
@@ -253,7 +241,7 @@ struct InspectorSettingsPanel: View {
                     reading: "ますたりんぐのきほん",
                     description: "最終版の音量、安全上限、強弱の残し方、仕上げの効き方を決めます。測定値は事故防止の目安で、最終判断は試聴で行います。"
                 ),
-                isExpanded: $showsMasteringBasic
+                initiallyExpanded: true
             ) {
                 masteringWarnings
                 masteringBasicKnobRow
@@ -267,7 +255,7 @@ struct InspectorSettingsPanel: View {
                     reading: "ねいろ",
                     description: "最終版の低域、中低域、前に出る感じ、空気感、耳に痛い高域を調整します。音量とは別に、聞こえ方の色合いを決める設定です。"
                 ),
-                isExpanded: $showsMasteringTone
+                initiallyExpanded: false
             ) {
                 masteringToneKnobRow
             }
@@ -280,7 +268,7 @@ struct InspectorSettingsPanel: View {
                     reading: "ますたりんぐのじょうきゅうせってい",
                     description: "高域の検出、帯域別の圧縮、ステレオ幅、倍音の濃さを調整します。音の印象が大きく変わるため、必要な時だけ触る設定です。"
                 ),
-                isExpanded: $showsMasteringAdvanced
+                initiallyExpanded: false
             ) {
                 masteringAdvancedKnobRow
             }
@@ -999,71 +987,16 @@ struct InspectorSettingsPanel: View {
         title: String,
         summary: String,
         help: SettingHelp?,
-        isExpanded: Binding<Bool>,
+        initiallyExpanded: Bool,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        ZStack(alignment: .topTrailing) {
-            RoundedRectangle(cornerRadius: 14)
-                .fill(.clear)
-                .glassEffect(.clear, in: .rect(cornerRadius: 14))
-                .allowsHitTesting(false)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    settingsDisclosureButton(title: title, isExpanded: isExpanded)
-                    Text(title)
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-                .padding(.bottom, isExpanded.wrappedValue ? 0 : 12)
-
-                if isExpanded.wrappedValue {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text(summary)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        content()
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 24)
-                    .transition(.identity)
-                    .transaction { transaction in
-                        transaction.animation = nil
-                    }
-                }
-            }
-            .transaction { transaction in
-                transaction.animation = nil
-            }
-
-            if let help {
-                TermHelpButton(title: help.title, reading: help.reading, description: help.description)
-                    .padding(12)
-            }
-        }
-    }
-
-    private func settingsDisclosureButton(title: String, isExpanded: Binding<Bool>) -> some View {
-        Button {
-            var transaction = Transaction(animation: nil)
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                isExpanded.wrappedValue.toggle()
-            }
-        } label: {
-            Image(systemName: isExpanded.wrappedValue ? "chevron.down.circle.fill" : "chevron.right.circle.fill")
-                .font(.system(size: 22, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.primary)
-                .frame(width: 32, height: 32)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityValue(isExpanded.wrappedValue ? "開いています" : "閉じています")
-        .accessibilityHint("設定項目を開閉します")
+        SettingsDisclosureCard(
+            title: title,
+            summary: summary,
+            help: help,
+            initiallyExpanded: initiallyExpanded,
+            content: content
+        )
     }
 
     private func inspectorSlider(

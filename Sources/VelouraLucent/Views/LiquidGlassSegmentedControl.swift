@@ -7,7 +7,9 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
     let label: (Selection) -> String
     var maxWidth: CGFloat = 360
     var isDisabled = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focusedOption: Selection?
+    @Namespace private var glassNamespace
 
     var body: some View {
         GlassEffectContainer(spacing: 8) {
@@ -16,7 +18,9 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
                     segmentButton(for: option)
                 }
             }
+            .padding(4)
             .frame(maxWidth: maxWidth, alignment: .leading)
+            .glassEffect(.clear.interactive(), in: .capsule)
         }
         .disabled(isDisabled)
         .defaultFocus($focusedOption, nil)
@@ -34,7 +38,7 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
 
         if isSelected {
             Button {
-                selection = option
+                select(option)
             } label: {
                 segmentLabel(for: option, isSelected: true)
             }
@@ -45,7 +49,7 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
             .accessibilityAddTraits(.isSelected)
         } else {
             Button {
-                selection = option
+                select(option)
             } label: {
                 segmentLabel(for: option, isSelected: false)
             }
@@ -65,7 +69,42 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .glassEffect(.clear.interactive(), in: .capsule)
+            .contentShape(Capsule())
+            .modifier(
+                SelectedGlassSegmentModifier(
+                    isSelected: isSelected,
+                    namespace: glassNamespace,
+                    reduceMotion: reduceMotion
+                )
+            )
             .accessibilityLabel("\(title)、\(label(option))")
+    }
+
+    @MainActor
+    private func select(_ option: Selection) {
+        guard option != selection else { return }
+        LiquidGlassMotion.perform(
+            reduceMotion: reduceMotion,
+            animation: LiquidGlassMotion.selection
+        ) {
+            selection = option
+        }
+    }
+}
+
+private struct SelectedGlassSegmentModifier: ViewModifier {
+    let isSelected: Bool
+    let namespace: Namespace.ID
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        if isSelected {
+            content
+                .glassEffect(.clear.interactive(), in: .capsule)
+                .glassEffectID("selected-segment", in: namespace)
+                .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
+        } else {
+            content
+        }
     }
 }

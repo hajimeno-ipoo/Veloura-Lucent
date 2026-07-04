@@ -46,7 +46,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains("基本表示"))
         #expect(source.contains("詳細解析"))
         #expect(source.contains("fixedHeader"))
-        #expect(source.contains("LiquidGlassTabBar("))
+        #expect(source.contains("LiquidGlassSegmentedPicker("))
         #expect(source.contains("title: \"中央表示\""))
         #expect(source.contains(".padding(.top, 16)"))
         #expect(!source.contains(".navigationTitle(\"試聴と解析\")"))
@@ -203,7 +203,8 @@ struct UIWordingPolicyTests {
     func inspectorSettingsUsesUnifiedGlassInsteadOfLavenderCards() throws {
         let source = try combinedSource([
             "Sources/VelouraLucent/Views/InspectorSettingsPanel.swift",
-            "Sources/VelouraLucent/Views/AppSettingsPanel.swift"
+            "Sources/VelouraLucent/Views/AppSettingsPanel.swift",
+            "Sources/VelouraLucent/Views/SettingsDisclosureCard.swift"
         ])
 
         #expect(!source.contains("Text(\"設定\")"))
@@ -214,7 +215,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains("@Binding var windowBackgroundMaterialAmount: Double"))
         #expect(source.contains("AppSettingsPanel(windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount)"))
         #expect(source.contains("onEditingChanged: handleWindowBackgroundMaterialEditingChanged"))
-        #expect(source.contains("LiquidGlassTabBar("))
+        #expect(source.contains("LiquidGlassSegmentedPicker("))
         #expect(source.contains("title: \"詳細設定\""))
         #expect(source.contains("title: \"補正プリセット\""))
         #expect(source.contains("title: \"解析モード\""))
@@ -305,10 +306,9 @@ struct UIWordingPolicyTests {
     }
 
     @Test
-    func liquidGlassSegmentedControlUsesUnifiedGlassButtons() throws {
+    func liquidGlassSegmentedPickerReplacesSeparateCustomPickers() throws {
         let source = try combinedSource([
-            "Sources/VelouraLucent/Views/LiquidGlassSegmentedControl.swift",
-            "Sources/VelouraLucent/Views/LiquidGlassTabBar.swift",
+            "Sources/VelouraLucent/Views/LiquidGlassSegmentedPicker.swift",
             "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
             "Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift",
             "Sources/VelouraLucent/Views/VectorScopeView.swift",
@@ -330,15 +330,22 @@ struct UIWordingPolicyTests {
             #expect(source.contains("title: \"\(title)\""))
         }
 
-        #expect(source.contains("struct LiquidGlassSegmentedControl<Selection: Hashable>: View"))
-        #expect(source.contains("GlassEffectContainer(spacing: 8)"))
+        #expect(source.contains("struct LiquidGlassSegmentedPicker<Selection: Hashable>: View"))
+        #expect(source.contains("GlassEffectContainer(spacing: 6)"))
+        #expect(source.contains(".glassEffect(.clear.interactive(), in: .capsule)"))
+        #expect(source.contains("Color(red: 222 / 255, green: 209 / 255, blue: 254 / 255)"))
+        #expect(source.contains("Color(red: 111 / 255, green: 85 / 255, blue: 200 / 255)"))
+        #expect(source.contains(".foregroundStyle(isSelected ? LiquidGlassSegmentedPickerStyle.selectedText : Color.secondary)"))
+        #expect(source.contains(".glassEffect(.clear.tint(LiquidGlassSegmentedPickerStyle.selectedTint.opacity(0.30)).interactive(), in: .capsule)"))
+        #expect(source.contains("SelectedLiquidGlassSegmentModifier("))
+        #expect(source.contains(".glassEffectID(\"selected-liquid-glass-segment\", in: namespace)"))
+        #expect(source.contains(".glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)"))
         #expect(source.contains(".frame(maxWidth: maxWidth, alignment: .leading)"))
         #expect(source.contains("var maxWidth: CGFloat = 360"))
-        #expect(source.contains(".buttonStyle(.plain)"))
-        #expect(source.contains(".glassEffect(.clear.interactive(), in: .capsule)"))
-        #expect(!source.contains(".buttonStyle(.glassProminent)"))
-        #expect(source.contains(".accessibilityValue(\"選択中\")"))
-        #expect(source.contains(".accessibilityValue(\"未選択\")"))
+        #expect(source.contains(".accessibilityLabel(title)"))
+        #expect(source.contains(".accessibilityValue(isSelected ? \"選択中\" : \"未選択\")"))
+        #expect(!source.contains("LiquidGlassTabBar("))
+        #expect(!source.contains("LiquidGlassSegmentedControl("))
         #expect(!source.contains(".pickerStyle(.segmented)"))
         #expect(!source.contains(".frame(maxWidth: 420"))
     }

@@ -373,6 +373,22 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func masteringSettingsObservationChangesWhenMasteringSettingsChange() async {
+        let job = ProcessingJob()
+
+        await confirmation("マスタリング設定の変更通知") { confirmation in
+            withObservationTracking {
+                _ = job.editableMasteringSettings.targetLoudness
+            } onChange: {
+                confirmation()
+            }
+            job.updateMasteringSettings { settings in
+                settings.targetLoudness = -15
+            }
+        }
+    }
+
+    @Test
     func correctionCompletionNotificationIsSentOncePerRun() {
         let reporter = CompletionNotificationReporterSpy()
         let job = ProcessingJob(notificationReporter: reporter)

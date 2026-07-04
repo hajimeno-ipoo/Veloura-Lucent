@@ -15,15 +15,12 @@ struct VectorScopeModePicker: View {
                 )
             }
 
-            LiquidGlassSegmentedControl(
+            LiquidGlassSegmentedPicker(
                 title: "ベクトルスコープ表示",
                 options: VectorScopeDisplayMode.allCases,
                 selection: $displayMode,
                 label: \.title
             )
-            .transaction { transaction in
-                transaction.disablesAnimations = true
-            }
         }
     }
 }
