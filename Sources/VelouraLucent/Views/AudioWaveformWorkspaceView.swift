@@ -163,6 +163,7 @@ struct AudioWaveformWorkspaceView: View {
                 in: 0 ... 1,
                 step: 0.01
             )
+            .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
             .frame(minWidth: 110, idealWidth: 150, maxWidth: 180)
             .accessibilityLabel("試聴音量")
             Text("\(Int((preview.playbackVolume * 100).rounded()))%")
@@ -181,6 +182,7 @@ struct AudioWaveformWorkspaceView: View {
             )
         )
         .toggleStyle(.switch)
+        .tint(LiquidGlassSegmentedPickerStyle.switchTint)
         .controlSize(.small)
         .fixedSize()
         .help("音量差を揃えて音質の違いを比較します")

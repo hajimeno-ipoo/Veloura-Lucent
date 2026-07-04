@@ -1029,6 +1029,7 @@ struct InspectorSettingsPanel: View {
             }
 
             Slider(value: value, in: range, step: step)
+                .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
 
             HStack {
                 ForEach(Array(labels.enumerated()), id: \.offset) { index, label in

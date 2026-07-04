@@ -108,8 +108,10 @@ struct LiquidGlassSegmentedPicker<Selection: Hashable>: View {
     }
 }
 
-private enum LiquidGlassSegmentedPickerStyle {
+enum LiquidGlassSegmentedPickerStyle {
     static let selectedTint = Color(red: 222 / 255, green: 209 / 255, blue: 254 / 255)
+    static let sliderTint = selectedTint.opacity(0.65)
+    static let switchTint = Color(red: 236 / 255, green: 229 / 255, blue: 251 / 255)
     static let selectedText = Color(red: 111 / 255, green: 85 / 255, blue: 200 / 255)
 }
 

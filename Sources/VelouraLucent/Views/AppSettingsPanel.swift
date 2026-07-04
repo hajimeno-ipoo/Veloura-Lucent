@@ -38,6 +38,7 @@ struct AppSettingsPanel: View {
                     step: 0.01,
                     onEditingChanged: handleWindowBackgroundMaterialEditingChanged
                 )
+                .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
                 .accessibilityLabel("アプリ背景の透明感")
                 .accessibilityValue(backgroundMaterialAccessibilityValue)
                 .onChange(of: windowBackgroundMaterialAmount) { _, newValue in
@@ -55,6 +56,7 @@ struct AppSettingsPanel: View {
 
             Toggle("完了通知", isOn: completionNotificationsBinding)
                 .toggleStyle(.switch)
+                .tint(LiquidGlassSegmentedPickerStyle.switchTint)
         }
     }
 
