@@ -111,26 +111,26 @@ struct SidebarProcessingStatusView: View {
 
     private var correctionTint: Color {
         if job.isProcessing {
-            return .orange
+            return ProcessingStatusColors.active
         }
         if job.lastError != nil {
             return .red
         }
         if job.hasExistingOutput {
-            return .green
+            return ProcessingStatusColors.complete
         }
         return .secondary
     }
 
     private var masteringTint: Color {
         if job.isMastering {
-            return .orange
+            return ProcessingStatusColors.active
         }
         if job.masteringLastError != nil {
             return .red
         }
         if job.hasExistingMasteredOutput {
-            return .green
+            return ProcessingStatusColors.complete
         }
         return .secondary
     }

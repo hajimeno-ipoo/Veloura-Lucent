@@ -54,10 +54,11 @@ struct RecentProcessingLogView: View {
                             if let progress = event.progress, event.isRunning || event.hasFailed {
                                 HStack(spacing: 5) {
                                     ProgressView(value: progress)
+                                        .tint(event.hasFailed ? Color.red : ProcessingStatusColors.active)
                                         .frame(width: 54)
                                     Text("\(Int((progress * 100).rounded()))%")
                                         .font(.callout.monospacedDigit())
-                                        .foregroundStyle(event.hasFailed ? Color.red : event.domain.tint)
+                                        .foregroundStyle(event.hasFailed ? Color.red : ProcessingStatusColors.active)
                                         .frame(width: 34, alignment: .trailing)
                                 }
                                 .accessibilityElement(children: .combine)

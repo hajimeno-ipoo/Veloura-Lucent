@@ -31,9 +31,9 @@ enum WorkspaceFooterStageState {
         case .pending:
             return .secondary
         case .active:
-            return .orange
+            return ProcessingStatusColors.active
         case .complete:
-            return .green
+            return ProcessingStatusColors.complete
         case .failed:
             return .red
         }

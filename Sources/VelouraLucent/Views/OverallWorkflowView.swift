@@ -68,10 +68,8 @@ struct OverallWorkflowView: View {
 
     private func connectorColor(after stage: WorkspaceFooterStage) -> Color {
         switch stage.state {
-        case .complete:
-            return .green.opacity(0.6)
-        case .active:
-            return .orange.opacity(0.6)
+        case .complete, .active:
+            return stage.state.color.opacity(0.6)
         case .pending, .failed:
             return .secondary.opacity(0.25)
         }
