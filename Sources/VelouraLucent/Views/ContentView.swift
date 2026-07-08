@@ -108,32 +108,18 @@ struct ContentView: View {
 
             ToolbarItem(placement: .principal) {
                 Menu {
-                    Section("補正後") {
-                        ForEach(AudioExportFormat.allCases) { format in
-                            Button(format.menuTitle) {
+                    ForEach(AudioExportFormat.allCases) { format in
+                        Menu(format.menuTitle) {
+                            Button("補正後を書き出し") {
                                 exportCorrectedAudio(as: format)
                             }
                             .disabled(!job.hasExistingOutput || job.isProcessing)
-                        }
-                        Divider()
-                        Button("補正後プレビューを開く") {
-                            openCorrectedPreview()
-                        }
-                        .disabled(!job.hasExistingOutput || job.isProcessing)
-                    }
 
-                    Section("最終版") {
-                        ForEach(AudioExportFormat.allCases) { format in
-                            Button(format.menuTitle) {
+                            Button("最終版を書き出し") {
                                 exportMasteredAudio(as: format)
                             }
                             .disabled(!job.hasExistingMasteredOutput || job.isMastering)
                         }
-                        Divider()
-                        Button("最終版プレビューを開く") {
-                            openMasteredPreview()
-                        }
-                        .disabled(!job.hasExistingMasteredOutput || job.isMastering)
                     }
                 } label: {
                     toolbarExportLabel("書き出し", systemImage: "square.and.arrow.down")
@@ -204,7 +190,6 @@ struct ContentView: View {
                 .font(.system(size: 18, weight: .regular))
                 .symbolRenderingMode(.hierarchical)
                 .frame(width: 30, height: 30)
-                .glassEffect(.clear.interactive(), in: Circle())
                 .liquidGlassEffectID(
                     "right-inspector-panel",
                     in: inspectorGlassNamespace,
@@ -318,16 +303,6 @@ struct ContentView: View {
         let selectionID = beginInputSelection(for: url)
         analyzeMetrics(for: url, target: .input, selectionID: selectionID)
         return true
-    }
-
-    private func openCorrectedPreview() {
-        guard let outputFile = job.outputFile else { return }
-        NSWorkspace.shared.open(outputFile)
-    }
-
-    private func openMasteredPreview() {
-        guard let masteredOutputFile = job.masteredOutputFile else { return }
-        NSWorkspace.shared.open(masteredOutputFile)
     }
 
     private func startCorrectionProcessing() {

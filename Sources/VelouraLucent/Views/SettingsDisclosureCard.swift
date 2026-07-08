@@ -63,18 +63,12 @@ struct SettingsDisclosureCard<Content: View>: View {
     }
 
     private var disclosureButton: some View {
-        Button(action: toggleExpanded) {
-            Image(systemName: isExpanded ? "chevron.down.circle.fill" : "chevron.right.circle.fill")
-                .font(.system(size: 22, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.primary)
-                .frame(width: 32, height: 32)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityValue(isExpanded ? "開いています" : "閉じています")
-        .accessibilityHint("設定項目を開閉します")
+        DisclosureToggleButton(
+            title: title,
+            isExpanded: isExpanded,
+            accessibilityHint: "設定項目を開閉します",
+            action: toggleExpanded
+        )
     }
 
     private func toggleExpanded() {

@@ -259,14 +259,25 @@ struct AudioWaveformWorkspaceView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 92, alignment: .trailing)
 
-            Button("Finderに表示", systemImage: "folder") {
-                guard let fileURL else { return }
-                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+            HStack(spacing: 6) {
+                Button("外部プレイヤーで開く", systemImage: "music.quarternote.3") {
+                    guard let fileURL else { return }
+                    openWithQuickTimePlayer(fileURL)
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .disabled(fileURL == nil)
+                .help(fileURL == nil ? "音声ファイルがありません" : "外部プレイヤーで開く")
+
+                Button("Finderに表示", systemImage: "folder") {
+                    guard let fileURL else { return }
+                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .disabled(fileURL == nil)
+                .help(fileURL == nil ? "音声ファイルがありません" : "Finderに表示")
             }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
-            .disabled(fileURL == nil)
-            .help(fileURL == nil ? "音声ファイルがありません" : "Finderに表示")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
@@ -309,6 +320,17 @@ struct AudioWaveformWorkspaceView: View {
         case .mastered:
             return masteredFileURL
         }
+    }
+
+    private func openWithQuickTimePlayer(_ fileURL: URL) {
+        guard let quickTimeURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.QuickTimePlayerX") else {
+            NSWorkspace.shared.open(fileURL)
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open([fileURL], withApplicationAt: quickTimeURL, configuration: configuration)
     }
 
     private func binding<Value>(

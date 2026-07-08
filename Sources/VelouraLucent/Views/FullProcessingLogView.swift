@@ -11,9 +11,18 @@ struct FullProcessingLogView: View {
                     Text("処理ログ")
                         .font(.title2.bold())
                     Spacer()
-                    Button("閉じる", action: onDismiss)
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Circle())
+                            .glassEffect(.clear.interactive(), in: Circle())
+                    }
                         .keyboardShortcut(.cancelAction)
-                        .buttonStyle(.glass)
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("閉じる")
+                        .help("詳細ログを閉じます")
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 18)

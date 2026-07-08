@@ -18,12 +18,12 @@ struct TermHelpButton: View {
             }
         } label: {
             Image(systemName: "questionmark.circle")
-                .font(.callout)
+                .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 24, height: 24)
                 .glassEffect(.clear.interactive(), in: Circle())
                 .liquidGlassEffectID("term-help", in: glassNamespace, isActive: !isPresented)
                 .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
+                .frame(width: 24, height: 24)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

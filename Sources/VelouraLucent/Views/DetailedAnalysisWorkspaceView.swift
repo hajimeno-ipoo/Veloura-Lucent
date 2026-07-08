@@ -731,23 +731,17 @@ struct DetailedAnalysisWorkspaceView: View {
     }
 
     private func analysisDisclosureButton(title: String, isExpanded: Binding<Bool>) -> some View {
-        Button {
+        DisclosureToggleButton(
+            title: title,
+            isExpanded: isExpanded.wrappedValue,
+            accessibilityHint: "解析項目を開閉します"
+        ) {
             var transaction = Transaction(animation: nil)
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 isExpanded.wrappedValue.toggle()
             }
-        } label: {
-            Image(systemName: isExpanded.wrappedValue ? "chevron.down.circle.fill" : "chevron.right.circle.fill")
-                .font(.system(size: 22, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.primary)
-                .frame(width: 32, height: 32)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityValue(isExpanded.wrappedValue ? "開いています" : "閉じています")
-        .accessibilityHint("解析項目を開閉します")
     }
 
     private func sectionLabel(title: String, help: String) -> some View {
@@ -1074,7 +1068,12 @@ private extension View {
         self
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .glassEffect(.clear, in: .rect(cornerRadius: 16))
+            .background {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.clear)
+                    .glassEffect(.clear, in: .rect(cornerRadius: 16))
+                    .allowsHitTesting(false)
+            }
     }
 }
 
