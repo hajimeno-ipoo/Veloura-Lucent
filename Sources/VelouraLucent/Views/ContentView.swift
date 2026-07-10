@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var displayAnalysisTasks: [DisplayAnalysisTarget: Task<Void, Never>] = [:]
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
     @State private var isInspectorPresented = true
+    @State private var isWindowFullScreen = false
     @State private var inputAudioDropVisualState: InputAudioDropVisualState = .inactive
     @State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
     @State private var highlightedToolbarTarget: LiquidGlassToolbarTarget?
@@ -22,13 +23,18 @@ struct ContentView: View {
     var body: some View {
         mainContent
             .frame(minWidth: minimumWindowWidth, minHeight: Self.minimumWindowHeight)
-            .velouraWindowBackground(amount: windowBackgroundMaterialAmount)
+            .velouraWindowBackground(
+                amount: windowBackgroundMaterialAmount,
+                isFullScreen: isWindowFullScreen
+            )
             .background(
                 WindowChromeConfigurator(
-                    minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight)
+                    minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight),
+                    isFullScreen: $isWindowFullScreen
                 )
             )
             .background(TitlebarSidebarToggleConfigurator(visibility: $sidebarVisibility))
+            .background(TitlebarInspectorToggleConfigurator(isPresented: $isInspectorPresented))
             .background(WindowScrollbarAppearanceConfigurator())
             .onChange(of: job.selectedMasteringProfile) { _, newValue in
                 job.applyMasteringProfile(newValue)
@@ -44,55 +50,50 @@ struct ContentView: View {
             VelouraSidebarView(job: job)
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 300)
         } detail: {
-            ZStack(alignment: .topTrailing) {
-                HStack(spacing: 0) {
-                    ZStack {
-                        VelouraMainWorkspaceView(
-                            job: job,
-                            preview: preview
-                        )
-                        .frame(minWidth: 620, maxWidth: .infinity)
+            HStack(spacing: 0) {
+                ZStack {
+                    VelouraMainWorkspaceView(
+                        job: job,
+                        preview: preview
+                    )
+                    .frame(minWidth: 620, maxWidth: .infinity)
 
-                        InputAudioDropReceiver(
-                            isEnabled: canAcceptInputAudioDrop,
-                            visualState: $inputAudioDropVisualState,
-                            onDrop: acceptDroppedInputAudio
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .accessibilityHidden(true)
+                    InputAudioDropReceiver(
+                        isEnabled: canAcceptInputAudioDrop,
+                        visualState: $inputAudioDropVisualState,
+                        onDrop: acceptDroppedInputAudio
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityHidden(true)
 
-                        switch inputAudioDropVisualState {
-                        case .inactive:
-                            EmptyView()
-                        case .accepted:
-                            InputAudioDropOverlay(kind: .accepted)
-                                .transition(.opacity)
-                                .allowsHitTesting(false)
-                        case .rejected:
-                            InputAudioDropOverlay(kind: .rejected)
-                                .transition(.opacity)
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    .frame(minWidth: 620, maxWidth: .infinity, maxHeight: .infinity)
-
-                    if isInspectorPresented {
-                        Divider()
-                        VelouraInspectorView(
-                            job: job,
-                            completionReport: completionReport,
-                            windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount
-                        )
-                            .frame(width: 440)
-                            .glassEffectID("right-inspector-panel", in: inspectorGlassNamespace)
-                            .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
-                            .transition(inspectorTransition)
+                    switch inputAudioDropVisualState {
+                    case .inactive:
+                        EmptyView()
+                    case .accepted:
+                        InputAudioDropOverlay(kind: .accepted)
+                            .transition(.opacity)
+                            .allowsHitTesting(false)
+                    case .rejected:
+                        InputAudioDropOverlay(kind: .rejected)
+                            .transition(.opacity)
+                            .allowsHitTesting(false)
                     }
                 }
+                .frame(minWidth: 620, maxWidth: .infinity, maxHeight: .infinity)
 
-                inspectorToggleButton
-                    .padding(.trailing, 24)
-                    .offset(y: -36)
+                if isInspectorPresented {
+                    Divider()
+                    VelouraInspectorView(
+                        job: job,
+                        completionReport: completionReport,
+                        windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
+                        isWindowFullScreen: isWindowFullScreen
+                    )
+                    .frame(width: 440)
+                    .glassEffectID("right-inspector-panel", in: inspectorGlassNamespace)
+                    .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
+                    .transition(inspectorTransition)
+                }
             }
         }
         .navigationSplitViewStyle(.balanced)
@@ -175,33 +176,6 @@ struct ContentView: View {
             .glassEffect(.clear.interactive(), in: .capsule)
         }
         .accessibilityElement(children: .contain)
-    }
-
-    private var inspectorToggleButton: some View {
-        Button {
-            LiquidGlassMotion.perform(
-                reduceMotion: reduceMotion,
-                animation: LiquidGlassMotion.panel
-            ) {
-                isInspectorPresented.toggle()
-            }
-        } label: {
-            Image(systemName: "sidebar.right")
-                .font(.system(size: 18, weight: .regular))
-                .symbolRenderingMode(.hierarchical)
-                .frame(width: 30, height: 30)
-                .liquidGlassEffectID(
-                    "right-inspector-panel",
-                    in: inspectorGlassNamespace,
-                    isActive: !isInspectorPresented
-                )
-                .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .accessibilityLabel(isInspectorPresented ? "設定を隠す" : "設定を表示")
-        .help("右側の設定パネルを表示または非表示にします")
     }
 
     private var inspectorTransition: AnyTransition {
@@ -850,43 +824,154 @@ struct ContentView: View {
 
 private extension View {
     @ViewBuilder
-    func velouraWindowBackground(amount: Double) -> some View {
-        let clampedAmount = AppAppearanceSettings.clampedWindowBackgroundMaterialAmount(amount)
-        containerBackground(
-            .thinMaterial.materialActiveAppearance(.active).opacity(clampedAmount),
-            for: .window
-        )
+    func velouraWindowBackground(amount: Double, isFullScreen: Bool) -> some View {
+        if isFullScreen {
+            self
+        } else {
+            let clampedAmount = AppAppearanceSettings.clampedWindowBackgroundMaterialAmount(amount)
+            containerBackground(
+                .thinMaterial.materialActiveAppearance(.active).opacity(clampedAmount),
+                for: .window
+            )
+        }
     }
+
 }
 
 private struct WindowChromeConfigurator: NSViewRepresentable {
     let minSize: NSSize
+    @Binding var isFullScreen: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        updateWindow(for: view)
+        context.coordinator.update(isFullScreen: $isFullScreen)
+        updateWindow(for: view, context: context)
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        updateWindow(for: nsView)
+        context.coordinator.update(isFullScreen: $isFullScreen)
+        updateWindow(for: nsView, context: context)
     }
 
-    private func updateWindow(for view: NSView) {
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
         Task { @MainActor in
-            guard let window = view.window else { return }
-            configure(window)
+            coordinator.stopObservingWindow()
         }
     }
 
-    private func configure(_ window: NSWindow) {
+    private func updateWindow(for view: NSView, context: Context) {
+        Task { @MainActor in
+            guard let window = view.window else { return }
+            context.coordinator.observe(window)
+            configure(window, coordinator: context.coordinator)
+        }
+    }
+
+    private func configure(_ window: NSWindow, coordinator: Coordinator) {
         if window.minSize.width != minSize.width || window.minSize.height != minSize.height {
             window.minSize = minSize
         }
-        window.isOpaque = false
-        window.backgroundColor = .clear
+        coordinator.applyChrome(to: window)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+    }
+
+    final class Coordinator: @unchecked Sendable {
+        private weak var observedWindow: NSWindow?
+        private var observers: [NSObjectProtocol] = []
+        private var isFullScreen: Binding<Bool>?
+        private var restoresFullSizeContentView = false
+
+        @MainActor
+        func update(isFullScreen: Binding<Bool>) {
+            self.isFullScreen = isFullScreen
+        }
+
+        @MainActor
+        func observe(_ window: NSWindow) {
+            guard observedWindow !== window else { return }
+            stopObservingWindow()
+            observedWindow = window
+            restoresFullSizeContentView = window.styleMask.contains(.fullSizeContentView)
+
+            let notificationCenter = NotificationCenter.default
+            observers = [
+                notificationCenter.addObserver(
+                    forName: NSWindow.willEnterFullScreenNotification,
+                    object: window,
+                    queue: .main
+                ) { [weak self, weak window] _ in
+                    Task { @MainActor in
+                        guard let self, let window else { return }
+                        self.applyChrome(to: window, isFullScreen: true)
+                    }
+                },
+                notificationCenter.addObserver(
+                    forName: NSWindow.didEnterFullScreenNotification,
+                    object: window,
+                    queue: .main
+                ) { [weak self, weak window] _ in
+                    Task { @MainActor in
+                        guard let self, let window else { return }
+                        self.applyChrome(to: window, isFullScreen: true)
+                    }
+                },
+                notificationCenter.addObserver(
+                    forName: NSWindow.didExitFullScreenNotification,
+                    object: window,
+                    queue: .main
+                ) { [weak self, weak window] _ in
+                    Task { @MainActor in
+                        guard let self, let window else { return }
+                        self.applyChrome(to: window, isFullScreen: false)
+                    }
+                },
+                notificationCenter.addObserver(
+                    forName: NSWindow.willCloseNotification,
+                    object: window,
+                    queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor in
+                        self?.stopObservingWindow()
+                    }
+                }
+            ]
+        }
+
+        func stopObservingWindow() {
+            let notificationCenter = NotificationCenter.default
+            observers.forEach(notificationCenter.removeObserver)
+            observers.removeAll()
+            observedWindow = nil
+        }
+
+        @MainActor
+        func applyChrome(to window: NSWindow) {
+            applyChrome(to: window, isFullScreen: window.styleMask.contains(.fullScreen))
+        }
+
+        @MainActor
+        private func applyChrome(to window: NSWindow, isFullScreen: Bool) {
+            if isFullScreen {
+                window.styleMask.remove(.fullSizeContentView)
+            } else if restoresFullSizeContentView {
+                window.styleMask.insert(.fullSizeContentView)
+            }
+            window.isOpaque = isFullScreen
+            window.backgroundColor = isFullScreen ? .windowBackgroundColor : .clear
+            if self.isFullScreen?.wrappedValue != isFullScreen {
+                self.isFullScreen?.wrappedValue = isFullScreen
+            }
+        }
+
+        deinit {
+            stopObservingWindow()
+        }
     }
 }
 
@@ -899,6 +984,7 @@ private struct TitlebarSidebarToggleConfigurator: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
+        context.coordinator.update(visibility: $visibility)
         updateWindow(for: view, context: context)
         return view
     }
@@ -1033,8 +1119,9 @@ private struct TitlebarSidebarToggleButton: View {
                 .font(.system(size: 18, weight: .regular))
                 .symbolRenderingMode(.hierarchical)
                 .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
         .accessibilityLabel(isSidebarVisible ? "サイドバーを隠す" : "サイドバーを表示")
@@ -1043,6 +1130,173 @@ private struct TitlebarSidebarToggleButton: View {
 
     private var isSidebarVisible: Bool {
         visibility != .detailOnly
+    }
+}
+
+private struct TitlebarInspectorToggleConfigurator: NSViewRepresentable {
+    @Binding var isPresented: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.update(isPresented: $isPresented)
+        updateWindow(for: view, context: context)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.update(isPresented: $isPresented)
+        updateWindow(for: nsView, context: context)
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        Task { @MainActor in
+            coordinator.stopObservingWindow()
+        }
+    }
+
+    private func updateWindow(for view: NSView, context: Context) {
+        Task { @MainActor in
+            guard let window = view.window else { return }
+            context.coordinator.observeWindow(in: window)
+            context.coordinator.installIfNeeded(in: window)
+        }
+    }
+
+    @MainActor
+    final class Coordinator {
+        private static let accessoryIdentifier = NSUserInterfaceItemIdentifier("VelouraLucentInspectorToggleAccessory")
+
+        private weak var observedWindow: NSWindow?
+        private var windowObservers: [NSObjectProtocol] = []
+        private var accessoryController: NSTitlebarAccessoryViewController?
+        private var hostingView: NSHostingView<TitlebarInspectorToggleButton>?
+        private var isPresented: Binding<Bool>?
+
+        func update(isPresented: Binding<Bool>) {
+            self.isPresented = isPresented
+            hostingView?.rootView = TitlebarInspectorToggleButton(isPresented: isPresented)
+        }
+
+        func observeWindow(in window: NSWindow) {
+            guard observedWindow !== window else { return }
+            stopObservingWindow()
+            observedWindow = window
+
+            let notificationCenter = NotificationCenter.default
+            windowObservers = [
+                notificationCenter.addObserver(
+                    forName: NSWindow.didEnterFullScreenNotification,
+                    object: window,
+                    queue: .main
+                ) { [weak self, weak window] _ in
+                    Task { @MainActor in
+                        guard let self, let window else { return }
+                        await Task.yield()
+                        self.reinstallAccessory(in: window)
+                    }
+                },
+                notificationCenter.addObserver(
+                    forName: NSWindow.didExitFullScreenNotification,
+                    object: window,
+                    queue: .main
+                ) { [weak self, weak window] _ in
+                    Task { @MainActor in
+                        guard let self, let window else { return }
+                        await Task.yield()
+                        self.reinstallAccessory(in: window)
+                    }
+                },
+                notificationCenter.addObserver(
+                    forName: NSWindow.willCloseNotification,
+                    object: window,
+                    queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor in
+                        self?.stopObservingWindow()
+                    }
+                }
+            ]
+        }
+
+        func installIfNeeded(in window: NSWindow) {
+            guard accessoryController == nil, let isPresented else { return }
+
+            removeStaleAccessory(from: window)
+
+            let button = TitlebarInspectorToggleButton(isPresented: isPresented)
+            let hostingView = NSHostingView(rootView: button)
+            hostingView.frame = NSRect(x: 0, y: 0, width: 36, height: 30)
+            hostingView.identifier = Self.accessoryIdentifier
+
+            let controller = NSTitlebarAccessoryViewController()
+            controller.view = hostingView
+            controller.layoutAttribute = .right
+
+            window.addTitlebarAccessoryViewController(controller)
+
+            self.hostingView = hostingView
+            self.accessoryController = controller
+        }
+
+        func stopObservingWindow() {
+            let notificationCenter = NotificationCenter.default
+            windowObservers.forEach(notificationCenter.removeObserver)
+            windowObservers.removeAll()
+            observedWindow = nil
+        }
+
+        private func removeStaleAccessory(from window: NSWindow) {
+            guard let index = window.titlebarAccessoryViewControllers.firstIndex(where: {
+                $0.view.identifier == Self.accessoryIdentifier
+            }) else {
+                return
+            }
+
+            window.removeTitlebarAccessoryViewController(at: index)
+        }
+
+        private func reinstallAccessory(in window: NSWindow) {
+            if let accessoryController,
+               let index = window.titlebarAccessoryViewControllers.firstIndex(where: { $0 === accessoryController }) {
+                window.removeTitlebarAccessoryViewController(at: index)
+            } else {
+                removeStaleAccessory(from: window)
+            }
+
+            accessoryController = nil
+            hostingView = nil
+            installIfNeeded(in: window)
+        }
+    }
+}
+
+private struct TitlebarInspectorToggleButton: View {
+    @Binding var isPresented: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button {
+            LiquidGlassMotion.perform(
+                reduceMotion: reduceMotion,
+                animation: LiquidGlassMotion.panel
+            ) {
+                isPresented.toggle()
+            }
+        } label: {
+            Image(systemName: "sidebar.right")
+                .font(.system(size: 18, weight: .regular))
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel(isPresented ? "設定を隠す" : "設定を表示")
+        .help("右側の設定パネルを表示または非表示にします")
     }
 }
 

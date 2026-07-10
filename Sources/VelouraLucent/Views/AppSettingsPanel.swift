@@ -4,15 +4,18 @@ struct AppSettingsPanel: View {
     private let preferences: CompletionNotificationPreferenceProviding
     private let notificationReporter: CompletionNotificationReporting
     @Binding private var windowBackgroundMaterialAmount: Double
+    private let isWindowFullScreen: Bool
     @State private var completionNotificationsEnabled: Bool
     @State private var isEditingWindowBackgroundMaterialAmount = false
 
     init(
         windowBackgroundMaterialAmount: Binding<Double>,
+        isWindowFullScreen: Bool,
         preferences: CompletionNotificationPreferenceProviding = UserDefaultsCompletionNotificationPreferences.shared,
         notificationReporter: CompletionNotificationReporting = NotificationService.shared
     ) {
         _windowBackgroundMaterialAmount = windowBackgroundMaterialAmount
+        self.isWindowFullScreen = isWindowFullScreen
         self.preferences = preferences
         self.notificationReporter = notificationReporter
         _completionNotificationsEnabled = State(initialValue: preferences.completionNotificationsEnabled)
@@ -39,8 +42,10 @@ struct AppSettingsPanel: View {
                     onEditingChanged: handleWindowBackgroundMaterialEditingChanged
                 )
                 .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
+                .disabled(isWindowFullScreen)
                 .accessibilityLabel("アプリ背景の透明感")
                 .accessibilityValue(backgroundMaterialAccessibilityValue)
+                .accessibilityHint(backgroundMaterialAccessibilityHint)
                 .onChange(of: windowBackgroundMaterialAmount) { _, newValue in
                     guard !isEditingWindowBackgroundMaterialAmount else { return }
                     AppAppearanceSettings.saveWindowBackgroundMaterialAmount(newValue)
@@ -66,6 +71,13 @@ struct AppSettingsPanel: View {
             return "0パーセント、現在と同じ完全透明"
         }
         return "\(percent)パーセント、アプリ全体の背景だけを曇らせます"
+    }
+
+    private var backgroundMaterialAccessibilityHint: String {
+        if isWindowFullScreen {
+            return "フルスクリーン中は変更できません。通常表示に戻すと変更できます。"
+        }
+        return "アプリ全体の背景の曇り具合を変更します。"
     }
 
     private var windowBackgroundMaterialAmountBinding: Binding<Double> {
