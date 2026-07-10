@@ -83,6 +83,15 @@ struct SpectrogramComparisonView: View {
                 }
                 .frame(height: 94)
                 .accessibilityLabel("\(title)のスペクトログラム")
+                .graphHoverOverlay { time, frequency in
+                    spectrogramHoverReadout(
+                        title: title,
+                        snapshot: snapshot,
+                        time: time,
+                        frequency: frequency,
+                        tint: tint
+                    )
+                }
             } else {
                 Text(unavailableText(for: title))
                     .font(.callout)
@@ -101,6 +110,57 @@ struct SpectrogramComparisonView: View {
                 return snapshot.duration
             }
             .max()
+    }
+
+    private func spectrogramHoverReadout(
+        title: String,
+        snapshot: SpectrogramSnapshot,
+        time: Double,
+        frequency: Double,
+        tint: Color
+    ) -> GraphHoverReadout? {
+        guard snapshot.duration > 0, snapshot.timeBucketCount > 0, snapshot.frequencyBucketCount > 0 else {
+            return nil
+        }
+        let timeIndex = min(
+            max(Int(time / snapshot.duration * Double(snapshot.timeBucketCount)), 0),
+            snapshot.timeBucketCount - 1
+        )
+        guard let frequencyCell = snapshot.cells.prefix(snapshot.frequencyBucketCount).first(where: {
+            $0.frequencyStart <= frequency && frequency < $0.frequencyEnd
+        }) else { return nil }
+        let cellIndex = timeIndex * snapshot.frequencyBucketCount + frequencyCell.bandIndex
+        guard snapshot.cells.indices.contains(cellIndex) else { return nil }
+        let cell = snapshot.cells[cellIndex]
+        guard
+            cell.timeStart <= time && time < cell.timeEnd,
+            cell.frequencyStart <= frequency && frequency < cell.frequencyEnd
+        else { return nil }
+
+        return GraphHoverReadout(
+            axisLabel: "\(formatHoverTime(time)) / \(formatHoverFrequency(frequency))",
+            values: [
+                GraphHoverValue(
+                    label: title,
+                    value: String(format: "%.1f dB", cell.levelDB),
+                    color: tint
+                )
+            ]
+        )
+    }
+
+    private func formatHoverTime(_ time: Double) -> String {
+        let clampedTime = max(time, 0)
+        let minutes = Int(clampedTime) / 60
+        let seconds = clampedTime - Double(minutes * 60)
+        return String(format: "%d:%04.1f", minutes, seconds)
+    }
+
+    private func formatHoverFrequency(_ frequency: Double) -> String {
+        if frequency >= 1_000 {
+            return String(format: "%.1f kHz", frequency / 1_000)
+        }
+        return String(format: "%.0f Hz", frequency)
     }
 
     private func timeAxis(duration: Double) -> some View {

@@ -458,7 +458,6 @@ struct DetailedAnalysisWorkspaceView: View {
                     .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
             } else {
                 correlationTimelineChart(points: points, maxTime: maxTime)
-                    .frame(height: 220)
                     .accessibilityLabel("時間ごとのステレオ相関推移")
                 if let note = correlationTimelinePartialNote(stages: stages) {
                     Text(note)
@@ -518,6 +517,15 @@ struct DetailedAnalysisWorkspaceView: View {
                 }
             }
         }
+        .frame(height: 220)
+        .graphHoverOverlay { time, _ in
+            timelineHoverReadout(
+                points: points,
+                time: time,
+                restrictsToLineSegments: true,
+                valueFormatter: { String(format: "%+.2f", $0) }
+            )
+        }
     }
 
     private func correlationTimelineDuration(stages: [AnalysisStageMetrics]) -> Double {
@@ -532,7 +540,6 @@ struct DetailedAnalysisWorkspaceView: View {
         let points = timelinePoints(stages: stages) { $0.shortTermLoudness.map { ($0.time, $0.levelDB) } }
         let domain = paddedDomain(values: points.map(\.value), fallback: -36 ... -12, step: 2)
         return timelineChart(points: points, yDomain: domain, valueLabel: "LUFS")
-            .frame(height: 250)
             .accessibilityLabel("短時間ラウドネス推移")
     }
 
@@ -540,7 +547,6 @@ struct DetailedAnalysisWorkspaceView: View {
         let points = timelinePoints(stages: stages) { $0.dynamics.map { ($0.time, $0.crestFactorDB) } }
         let domain = paddedDomain(values: points.map(\.value), fallback: 0 ... 18, step: 2)
         return timelineChart(points: points, yDomain: domain, valueLabel: "dB")
-            .frame(height: 250)
             .accessibilityLabel("ダイナミクス推移")
     }
 
@@ -567,6 +573,14 @@ struct DetailedAnalysisWorkspaceView: View {
                     }
                 }
             }
+        }
+        .frame(height: 250)
+        .graphHoverOverlay { time, _ in
+            timelineHoverReadout(
+                points: points,
+                time: time,
+                valueFormatter: { String(format: "%.1f %@", $0, valueLabel) }
+            )
         }
     }
 
@@ -600,6 +614,9 @@ struct DetailedAnalysisWorkspaceView: View {
             .chartXAxis { spectrumAxisMarks() }
             .frame(height: 220)
             .accessibilityLabel("平均スペクトル比較")
+            .graphHoverOverlay { frequency, _ in
+                spectrumHoverReadout(points: points, frequency: frequency)
+            }
 
             if !delta.isEmpty {
                 Chart {
@@ -625,6 +642,82 @@ struct DetailedAnalysisWorkspaceView: View {
                 .frame(height: 160)
                 .accessibilityLabel("平均スペクトル差分")
             }
+        }
+    }
+
+    private func timelineHoverReadout(
+        points: [TimelinePoint],
+        time: Double,
+        restrictsToLineSegments: Bool = false,
+        valueFormatter: (Double) -> String
+    ) -> GraphHoverReadout? {
+        let values = ["入力", "補正後", "最終版"].compactMap { series -> GraphHoverValue? in
+            let seriesPoints = points.filter { $0.series == series }
+            let eligiblePoints: [TimelinePoint]
+            if restrictsToLineSegments {
+                let segments = Dictionary(grouping: seriesPoints, by: \TimelinePoint.lineGroup)
+                guard let segment = segments.values.first(where: { segment in
+                    guard let start = segment.map(\.time).min(), let end = segment.map(\.time).max() else {
+                        return false
+                    }
+                    return start <= time && time <= end
+                }) else { return nil }
+                eligiblePoints = segment
+            } else {
+                eligiblePoints = seriesPoints
+            }
+            guard let point = eligiblePoints.min(by: { abs($0.time - time) < abs($1.time - time) }) else {
+                return nil
+            }
+            return GraphHoverValue(
+                label: series,
+                value: valueFormatter(point.value),
+                color: stageColor(for: series)
+            )
+        }
+        guard !values.isEmpty else { return nil }
+        return GraphHoverReadout(
+            axisLabel: String(format: "%.1fs", time),
+            values: values
+        )
+    }
+
+    private func spectrumHoverReadout(
+        points: [SpectrumPoint],
+        frequency: Double
+    ) -> GraphHoverReadout? {
+        let values = ["入力", "補正後", "最終版"].compactMap { series -> GraphHoverValue? in
+            guard let point = points.lazy
+                .filter({ $0.series == series })
+                .min(by: { logarithmicDistance($0.frequencyHz, frequency) < logarithmicDistance($1.frequencyHz, frequency) })
+            else { return nil }
+            return GraphHoverValue(
+                label: series,
+                value: String(format: "%.1f dB", point.levelDB),
+                color: stageColor(for: series)
+            )
+        }
+        guard !values.isEmpty else { return nil }
+        return GraphHoverReadout(axisLabel: frequencyReadout(frequency), values: values)
+    }
+
+    private func logarithmicDistance(_ lhs: Double, _ rhs: Double) -> Double {
+        abs(log(max(lhs, 1)) - log(max(rhs, 1)))
+    }
+
+    private func frequencyReadout(_ frequency: Double) -> String {
+        if frequency >= 1_000 {
+            return String(format: "%.1f kHz", frequency / 1_000)
+        }
+        return String(format: "%.0f Hz", frequency)
+    }
+
+    private func stageColor(for series: String) -> Color {
+        switch series {
+        case "入力": .blue
+        case "補正後": .green
+        case "最終版": .orange
+        default: .secondary
         }
     }
 

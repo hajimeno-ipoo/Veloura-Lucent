@@ -501,6 +501,28 @@ struct UIWordingPolicyTests {
     }
 
     @Test
+    func analyzedGraphsExposeCursorReadouts() throws {
+        let detailSource = try combinedSource([
+            "Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"
+        ])
+        let spectrogramSource = try combinedSource([
+            "Sources/VelouraLucent/Views/SpectrogramComparisonView.swift"
+        ])
+        let hoverOverlaySource = try combinedSource([
+            "Sources/VelouraLucent/Views/GraphHoverOverlay.swift"
+        ])
+
+        #expect(detailSource.components(separatedBy: ".graphHoverOverlay").count - 1 == 3)
+        #expect(detailSource.contains("timelineHoverReadout"))
+        #expect(detailSource.contains("restrictsToLineSegments: true"))
+        #expect(detailSource.contains("spectrumHoverReadout"))
+        #expect(spectrogramSource.contains("spectrogramHoverReadout"))
+        #expect(spectrogramSource.contains(".graphHoverOverlay"))
+        #expect(hoverOverlaySource.contains("VStack(alignment: .leading, spacing: 4)"))
+        #expect(hoverOverlaySource.contains(".frame(height: 28, alignment: .leading)"))
+    }
+
+    @Test
     func spectrogramShowsSharedTimeAxis() throws {
         let source = try combinedSource(["Sources/VelouraLucent/Views/SpectrogramComparisonView.swift"])
 
