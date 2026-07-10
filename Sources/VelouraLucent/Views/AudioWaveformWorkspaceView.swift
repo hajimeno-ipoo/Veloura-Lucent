@@ -145,7 +145,7 @@ struct AudioWaveformWorkspaceView: View {
                 activeComparisonLabel
             }
             .padding(6)
-            .glassEffect(.clear.interactive(), in: .capsule)
+            .velouraAdaptiveGlass(in: .capsule, interactive: true)
         }
         .fixedSize()
     }
@@ -347,7 +347,7 @@ struct AudioWaveformWorkspaceView: View {
 private extension View {
     func glassCard(cornerRadius: CGFloat) -> some View {
         self
-            .glassEffect(.clear, in: .rect(cornerRadius: cornerRadius))
+            .velouraAdaptiveGlass(in: .rect(cornerRadius: cornerRadius))
     }
 }
 

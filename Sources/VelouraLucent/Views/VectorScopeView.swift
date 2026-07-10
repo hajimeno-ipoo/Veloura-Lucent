@@ -102,7 +102,7 @@ struct VectorScopeView: View {
                     .frame(height: 46)
             }
             .padding(12)
-            .glassEffect(.clear, in: .rect(cornerRadius: 16))
+            .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
         }
         .frame(maxWidth: .infinity, minHeight: 430, alignment: .topLeading)
     }
@@ -149,7 +149,7 @@ struct VectorScopeView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(16)
-                    .glassEffect(.clear, in: .rect(cornerRadius: 12))
+                    .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
                     .padding(24)
             }
         }

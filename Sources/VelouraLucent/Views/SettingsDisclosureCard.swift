@@ -40,7 +40,7 @@ struct SettingsDisclosureCard<Content: View>: View {
         .background {
             RoundedRectangle(cornerRadius: 14)
                 .fill(.clear)
-                .glassEffect(.clear, in: .rect(cornerRadius: 14))
+                .velouraAdaptiveGlass(in: .rect(cornerRadius: 14))
                 .allowsHitTesting(false)
         }
     }

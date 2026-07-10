@@ -64,7 +64,7 @@ struct LoudnessMeterView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .glassEffect(.clear, in: .rect(cornerRadius: 16))
+        .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
     }

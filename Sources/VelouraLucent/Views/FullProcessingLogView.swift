@@ -17,7 +17,7 @@ struct FullProcessingLogView: View {
                             .foregroundStyle(.primary)
                             .frame(width: 32, height: 32)
                             .contentShape(Circle())
-                            .glassEffect(.clear.interactive(), in: Circle())
+                            .velouraAdaptiveGlass(in: Circle(), interactive: true)
                     }
                         .keyboardShortcut(.cancelAction)
                         .buttonStyle(.plain)
@@ -37,7 +37,7 @@ struct FullProcessingLogView: View {
                 }
                 .scrollContentBackground(.hidden)
             }
-            .glassEffect(.clear, in: .rect(cornerRadius: 18))
+            .velouraAdaptiveGlass(in: .rect(cornerRadius: 18))
         }
         .frame(minWidth: 640, idealWidth: 840, minHeight: 520, idealHeight: 680)
         .padding(18)

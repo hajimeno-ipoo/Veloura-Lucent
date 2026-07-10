@@ -95,7 +95,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains("Button(\"A/B切替\")"))
         #expect(source.contains(".disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)\n\n                activeComparisonLabel"))
         #expect(source.contains("Text(\"現在 \\(preview.comparisonPair.title(for: preview.activeComparisonSide))\")"))
-        #expect(source.contains(".glassEffect(.clear.interactive(), in: .capsule)"))
+        #expect(source.contains(".velouraAdaptiveGlass(in: .capsule, interactive: true)"))
         #expect(source.contains("private var activeComparisonTint: Color"))
         #expect(!source.contains("loudnessComparisonToggle\n                activeComparisonLabel"))
         #expect(source.contains(".buttonStyle(.plain)"))
@@ -112,13 +112,18 @@ struct UIWordingPolicyTests {
         let source = try combinedSource([
             "Sources/VelouraLucent/App/VelouraLucentApp.swift",
             "Sources/VelouraLucent/Views/ContentView.swift",
+            "Sources/VelouraLucent/Views/VelouraAdaptiveGlassEffect.swift",
             "Sources/VelouraLucent/Models/AppAppearanceSettings.swift"
         ])
 
         #expect(source.contains("configureLiquidGlassWindow(window)"))
         #expect(source.contains("WindowChromeConfigurator("))
         #expect(source.contains("@State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()"))
-        #expect(source.contains(".velouraWindowBackground(amount: windowBackgroundMaterialAmount)"))
+        #expect(source.contains(".velouraWindowBackground(\n                amount: windowBackgroundMaterialAmount,\n                isFullScreen: isWindowFullScreen\n            )"))
+        #expect(source.contains("if isFullScreen"))
+        #expect(source.contains(".thinMaterial.materialActiveAppearance(.active),\n                for: .window"))
+        #expect(source.contains("let baseGlass: Glass = isFullScreen ? .regular : .clear"))
+        #expect(source.contains(".environment(\\.velouraIsFullScreen, isWindowFullScreen)"))
         #expect(source.contains(".thinMaterial.materialActiveAppearance(.active).opacity(clampedAmount)"))
         #expect(source.contains("for: .window"))
         #expect(source.contains("windowBackgroundMaterialAmountKey"))
@@ -151,14 +156,15 @@ struct UIWordingPolicyTests {
             "Sources/VelouraLucent/Views/LoudnessMeterView.swift",
             "Sources/VelouraLucent/Views/RecentProcessingLogView.swift",
             "Sources/VelouraLucent/Views/ProcessingLogView.swift",
-            "Sources/VelouraLucent/Views/FullProcessingLogView.swift"
+            "Sources/VelouraLucent/Views/FullProcessingLogView.swift",
+            "Sources/VelouraLucent/Views/VelouraAdaptiveGlassEffect.swift"
         ])
 
-        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 16))"))
-        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 14))"))
+        #expect(source.contains(".velouraAdaptiveGlass(in: .rect(cornerRadius: 16))"))
+        #expect(source.contains(".velouraAdaptiveGlass(in: .rect(cornerRadius: 14))"))
         #expect(source.contains(".glassEffect(.clear, in: .capsule)"))
         #expect(source.contains("GlassEffectContainer(spacing: 14)"))
-        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 18))"))
+        #expect(source.contains(".velouraAdaptiveGlass(in: .rect(cornerRadius: 18))"))
         #expect(source.contains("@State private var isFullLogPresented = false"))
         #expect(source.contains("VelouraMainWorkspaceView("))
         #expect(source.contains("FullProcessingLogView("))
@@ -183,7 +189,7 @@ struct UIWordingPolicyTests {
     }
 
     @Test
-    func realtimeAnalysisMetersUseUnifiedClearGlassSurfaces() throws {
+    func realtimeAnalysisMetersUseAdaptiveGlassSurfaces() throws {
         let source = try combinedSource([
             "Sources/VelouraLucent/Views/AverageSpectrumComparisonView.swift",
             "Sources/VelouraLucent/Views/VectorScopeView.swift",
@@ -193,7 +199,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains("SpectrumCanvasChart(series: spectrumSeries)"))
         #expect(source.contains("BalanceMeterView(value: snapshot.balance)"))
         #expect(source.contains("LoudnessMeterColumn("))
-        #expect(source.components(separatedBy: ".glassEffect(.clear, in: .rect(cornerRadius: 16))").count >= 4)
+        #expect(source.components(separatedBy: ".velouraAdaptiveGlass(in: .rect(cornerRadius: 16))").count >= 4)
         #expect(source.contains(".glassEffect(.clear, in: .capsule)"))
         #expect(!source.contains(".background(.regularMaterial"))
         #expect(!source.contains(".background(Color.secondary.opacity(0.05)"))
@@ -219,7 +225,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains("title: \"詳細設定\""))
         #expect(source.contains("title: \"補正プリセット\""))
         #expect(source.contains("title: \"解析モード\""))
-        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 14))"))
+        #expect(source.contains(".velouraAdaptiveGlass(in: .rect(cornerRadius: 14))"))
         #expect(source.contains("アプリ背景の透明感"))
         #expect(source.contains("0%で現在と同じ完全透明です。"))
         #expect(!source.contains("Color(red: 234.0 / 255.0, green: 225.0 / 255.0, blue: 255.0 / 255.0)"))
@@ -332,11 +338,11 @@ struct UIWordingPolicyTests {
 
         #expect(source.contains("struct LiquidGlassSegmentedPicker<Selection: Hashable>: View"))
         #expect(source.contains("GlassEffectContainer(spacing: 6)"))
-        #expect(source.contains(".glassEffect(.clear.interactive(), in: .capsule)"))
+        #expect(source.contains(".velouraAdaptiveGlass(in: .capsule, interactive: true)"))
         #expect(source.contains("Color(red: 222 / 255, green: 209 / 255, blue: 254 / 255)"))
         #expect(source.contains("Color(red: 111 / 255, green: 85 / 255, blue: 200 / 255)"))
         #expect(source.contains(".foregroundStyle(isSelected ? LiquidGlassSegmentedPickerStyle.selectedText : Color.secondary)"))
-        #expect(source.contains(".glassEffect(.clear.tint(LiquidGlassSegmentedPickerStyle.selectedTint.opacity(0.30)).interactive(), in: .capsule)"))
+        #expect(source.contains("tint: LiquidGlassSegmentedPickerStyle.selectedTint.opacity(0.30)"))
         #expect(source.contains("SelectedLiquidGlassSegmentModifier("))
         #expect(source.contains(".glassEffectID(\"selected-liquid-glass-segment\", in: namespace)"))
         #expect(source.contains(".glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)"))
@@ -351,12 +357,12 @@ struct UIWordingPolicyTests {
     }
 
     @Test
-    func detailedAnalysisUsesUnifiedClearGlassCards() throws {
+    func detailedAnalysisUsesAdaptiveGlassCards() throws {
         let source = try combinedSource(["Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"])
 
         #expect(source.contains("func analysisCard() -> some View"))
-        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 16))"))
-        #expect(source.contains(".glassEffect(.clear, in: .rect(cornerRadius: 12))"))
+        #expect(source.contains(".velouraAdaptiveGlass(in: .rect(cornerRadius: 16))"))
+        #expect(source.contains(".velouraAdaptiveGlass(in: .rect(cornerRadius: 12))"))
         #expect(source.contains(".glassEffect(.regular.tint(state.color.opacity(0.12)), in: .capsule)"))
         #expect(!source.contains(".background(.regularMaterial"))
         #expect(!source.contains(".background(Color.secondary.opacity(0.05)"))

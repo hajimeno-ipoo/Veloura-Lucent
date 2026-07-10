@@ -21,7 +21,7 @@ struct LiquidGlassTabBar<Selection: Hashable>: View {
             }
             .padding(4)
             .frame(maxWidth: maxWidth, alignment: .leading)
-            .glassEffect(.clear.interactive(), in: .capsule)
+            .velouraAdaptiveGlass(in: .capsule, interactive: true)
         }
         .disabled(isDisabled)
         .defaultFocus($focusedOption, nil)
@@ -101,7 +101,7 @@ private struct SelectedGlassTabModifier: ViewModifier {
     func body(content: Content) -> some View {
         if isSelected {
             content
-                .glassEffect(.clear.interactive(), in: .capsule)
+                .velouraAdaptiveGlass(in: .capsule, interactive: true)
                 .glassEffectID("selected-tab", in: namespace)
                 .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
         } else {

@@ -36,7 +36,7 @@ struct SpectrogramComparisonView: View {
                 spectrogramLegend
             }
             .padding(8)
-            .glassEffect(.clear, in: .rect(cornerRadius: 16))
+            .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
         }
     }
 

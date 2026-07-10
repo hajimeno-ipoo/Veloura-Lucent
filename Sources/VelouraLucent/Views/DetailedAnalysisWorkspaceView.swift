@@ -221,7 +221,7 @@ struct DetailedAnalysisWorkspaceView: View {
                     }
                 }
                 .padding(10)
-                .glassEffect(.clear, in: .rect(cornerRadius: 12))
+                .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
             }
         }
     }
@@ -306,7 +306,7 @@ struct DetailedAnalysisWorkspaceView: View {
             noiseBarLine(title: "最終版", value: row.mastered, row: row, tint: .orange, detail: row.masteringEffectText)
         }
         .padding(12)
-        .glassEffect(.clear, in: .rect(cornerRadius: 12))
+        .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
     }
 
     private func noiseBarLine(
@@ -363,7 +363,7 @@ struct DetailedAnalysisWorkspaceView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(10)
-        .glassEffect(.clear, in: .rect(cornerRadius: 12))
+        .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
     }
 
     private func correlationCard(stages: [AnalysisStageMetrics]) -> some View {
@@ -455,7 +455,7 @@ struct DetailedAnalysisWorkspaceView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-                    .glassEffect(.clear, in: .rect(cornerRadius: 12))
+                    .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
             } else {
                 correlationTimelineChart(points: points, maxTime: maxTime)
                     .frame(height: 220)
@@ -679,7 +679,7 @@ struct DetailedAnalysisWorkspaceView: View {
             bandBar(title: "最終版", value: row.mastered, minValue: minValue, maxValue: maxValue, tint: .orange)
         }
         .padding(10)
-        .glassEffect(.clear, in: .rect(cornerRadius: 12))
+        .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
     }
 
     private func bandBar(title: String, value: Double?, minValue: Double, maxValue: Double, tint: Color) -> some View {
@@ -1071,7 +1071,7 @@ private extension View {
             .background {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(.clear)
-                    .glassEffect(.clear, in: .rect(cornerRadius: 16))
+                    .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
                     .allowsHitTesting(false)
             }
     }

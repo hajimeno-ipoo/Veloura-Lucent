@@ -22,6 +22,7 @@ struct ContentView: View {
 
     var body: some View {
         mainContent
+            .environment(\.velouraIsFullScreen, isWindowFullScreen)
             .frame(minWidth: minimumWindowWidth, minHeight: Self.minimumWindowHeight)
             .velouraWindowBackground(
                 amount: windowBackgroundMaterialAmount,
@@ -128,7 +129,7 @@ struct ContentView: View {
                 .menuStyle(.button)
                 .buttonStyle(.plain)
                 .padding(4)
-                .glassEffect(.clear.interactive(), in: .capsule)
+                .velouraAdaptiveGlass(in: .capsule, interactive: true)
                 .onHover { updateToolbarHighlight(.export, isHovering: $0) }
                 .accessibilityLabel("書き出し")
                 .help("補正後または最終版を書き出します")
@@ -173,7 +174,7 @@ struct ContentView: View {
                 .disabled(!canStartMastering)
             }
             .padding(4)
-            .glassEffect(.clear.interactive(), in: .capsule)
+            .velouraAdaptiveGlass(in: .capsule, interactive: true)
         }
         .accessibilityElement(children: .contain)
     }

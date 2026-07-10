@@ -35,7 +35,7 @@ private extension View {
             .minimumScaleFactor(0.9)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .glassEffect(.clear.interactive(), in: .capsule)
+            .velouraAdaptiveGlass(in: .capsule, interactive: true)
             .contentShape(Capsule())
     }
 }

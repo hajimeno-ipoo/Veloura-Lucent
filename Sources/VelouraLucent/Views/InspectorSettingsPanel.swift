@@ -211,7 +211,7 @@ struct InspectorSettingsPanel: View {
                     .font(.callout)
                     .padding(.horizontal, 12)
                     .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-                    .glassEffect(.clear.interactive(), in: .rect(cornerRadius: 10))
+                    .velouraAdaptiveGlass(in: .rect(cornerRadius: 10), interactive: true)
                     .contentShape(.rect(cornerRadius: 10))
                     .accessibilityElement(children: .combine)
                 }
@@ -953,7 +953,7 @@ struct InspectorSettingsPanel: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.clear, in: .rect(cornerRadius: 10))
+        .velouraAdaptiveGlass(in: .rect(cornerRadius: 10))
     }
 
     private var masteringNormalNotice: some View {
@@ -984,7 +984,7 @@ struct InspectorSettingsPanel: View {
             inspectorSlider(title: "Ratio", help: SettingHelp(title: "\(title) Ratio", reading: "れしお", description: "しきい値を超えた音をどれくらい圧縮するかです。値を上げるほど強く抑えます。"), valueText: String(format: "%.2f", job.editableMasteringSettings.multibandCompression[keyPath: band].ratio), labels: ["自然", "標準", "強く圧縮"], value: compressorBinding(band: band, field: \.ratio, range: 1.1 ... 4.0), range: 1.1 ... 4.0)
         }
         .padding(10)
-        .glassEffect(.clear, in: .rect(cornerRadius: 12))
+        .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
     }
 
     private func settingGroup<Content: View>(

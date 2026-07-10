@@ -11,12 +11,12 @@ struct WorkspaceFooterView: View {
                 isFullLogPresented: $isFullLogPresented
             )
             .padding(12)
-            .glassEffect(.clear, in: .rect(cornerRadius: 14))
+            .velouraAdaptiveGlass(in: .rect(cornerRadius: 14))
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
             OverallWorkflowView(stages: workflowStages)
                 .padding(12)
-                .glassEffect(.clear, in: .rect(cornerRadius: 14))
+                .velouraAdaptiveGlass(in: .rect(cornerRadius: 14))
                 .frame(minWidth: 260, idealWidth: 320, maxWidth: 360, alignment: .topLeading)
         }
         .padding(.horizontal, 18)

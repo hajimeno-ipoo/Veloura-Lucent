@@ -26,7 +26,7 @@ struct AverageSpectrumComparisonView: View {
                 }
             }
             .padding(12)
-            .glassEffect(.clear, in: .rect(cornerRadius: 16))
+            .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(spectrumAccessibilityLabel)
         }

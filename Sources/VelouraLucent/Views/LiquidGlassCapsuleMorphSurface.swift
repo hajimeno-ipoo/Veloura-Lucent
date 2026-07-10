@@ -9,7 +9,7 @@ struct LiquidGlassCapsuleMorphSurface: ViewModifier {
     func body(content: Content) -> some View {
         if isActive {
             content
-                .glassEffect(.clear.interactive(), in: .capsule)
+                .velouraAdaptiveGlass(in: .capsule, interactive: true)
                 .glassEffectID(effectID, in: namespace)
                 .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
         } else {

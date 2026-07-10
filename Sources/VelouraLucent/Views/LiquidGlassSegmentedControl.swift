@@ -20,7 +20,7 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
             }
             .padding(4)
             .frame(maxWidth: maxWidth, alignment: .leading)
-            .glassEffect(.clear.interactive(), in: .capsule)
+            .velouraAdaptiveGlass(in: .capsule, interactive: true)
         }
         .disabled(isDisabled)
         .defaultFocus($focusedOption, nil)
@@ -100,7 +100,7 @@ private struct SelectedGlassSegmentModifier: ViewModifier {
     func body(content: Content) -> some View {
         if isSelected {
             content
-                .glassEffect(.clear.interactive(), in: .capsule)
+                .velouraAdaptiveGlass(in: .capsule, interactive: true)
                 .glassEffectID("selected-segment", in: namespace)
                 .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
         } else {
