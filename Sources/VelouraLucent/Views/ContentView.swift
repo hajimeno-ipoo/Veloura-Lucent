@@ -882,95 +882,93 @@ private struct WindowChromeConfigurator: NSViewRepresentable {
         window.titleVisibility = .hidden
     }
 
-    final class Coordinator: @unchecked Sendable {
+    @MainActor
+    final class Coordinator: NSObject, NSWindowDelegate {
         private weak var observedWindow: NSWindow?
-        private var observers: [NSObjectProtocol] = []
+        private weak var previousWindowDelegate: NSWindowDelegate?
         private var isFullScreen: Binding<Bool>?
         private var restoresFullSizeContentView = false
 
-        @MainActor
         func update(isFullScreen: Binding<Bool>) {
             self.isFullScreen = isFullScreen
         }
 
-        @MainActor
         func observe(_ window: NSWindow) {
             guard observedWindow !== window else { return }
             stopObservingWindow()
             observedWindow = window
+            previousWindowDelegate = window.delegate
+            window.delegate = self
             restoresFullSizeContentView = window.styleMask.contains(.fullSizeContentView)
-
-            let notificationCenter = NotificationCenter.default
-            observers = [
-                notificationCenter.addObserver(
-                    forName: NSWindow.willEnterFullScreenNotification,
-                    object: window,
-                    queue: .main
-                ) { [weak self, weak window] _ in
-                    Task { @MainActor in
-                        guard let self, let window else { return }
-                        self.applyChrome(to: window, isFullScreen: true)
-                    }
-                },
-                notificationCenter.addObserver(
-                    forName: NSWindow.didEnterFullScreenNotification,
-                    object: window,
-                    queue: .main
-                ) { [weak self, weak window] _ in
-                    Task { @MainActor in
-                        guard let self, let window else { return }
-                        self.applyChrome(to: window, isFullScreen: true)
-                    }
-                },
-                notificationCenter.addObserver(
-                    forName: NSWindow.didExitFullScreenNotification,
-                    object: window,
-                    queue: .main
-                ) { [weak self, weak window] _ in
-                    Task { @MainActor in
-                        guard let self, let window else { return }
-                        self.applyChrome(to: window, isFullScreen: false)
-                    }
-                },
-                notificationCenter.addObserver(
-                    forName: NSWindow.willCloseNotification,
-                    object: window,
-                    queue: .main
-                ) { [weak self] _ in
-                    Task { @MainActor in
-                        self?.stopObservingWindow()
-                    }
-                }
-            ]
         }
 
         func stopObservingWindow() {
-            let notificationCenter = NotificationCenter.default
-            observers.forEach(notificationCenter.removeObserver)
-            observers.removeAll()
+            if let observedWindow, observedWindow.delegate === self {
+                observedWindow.delegate = previousWindowDelegate
+            }
             observedWindow = nil
+            previousWindowDelegate = nil
         }
 
-        @MainActor
         func applyChrome(to window: NSWindow) {
             applyChrome(to: window, isFullScreen: window.styleMask.contains(.fullScreen))
         }
 
-        @MainActor
         private func applyChrome(to window: NSWindow, isFullScreen: Bool) {
             if isFullScreen {
-                window.styleMask.remove(.fullSizeContentView)
-            } else if restoresFullSizeContentView {
-                window.styleMask.insert(.fullSizeContentView)
+                prepareWindowForFullScreenTransition(window)
+            } else {
+                if restoresFullSizeContentView {
+                    window.styleMask.insert(.fullSizeContentView)
+                }
+                window.isOpaque = false
+                window.backgroundColor = .clear
             }
-            window.isOpaque = isFullScreen
-            window.backgroundColor = isFullScreen ? .windowBackgroundColor : .clear
             if self.isFullScreen?.wrappedValue != isFullScreen {
                 self.isFullScreen?.wrappedValue = isFullScreen
             }
         }
 
-        deinit {
+        private func prepareWindowForFullScreenTransition(_ window: NSWindow) {
+            window.styleMask.remove(.fullSizeContentView)
+            window.isOpaque = true
+            window.backgroundColor = .windowBackgroundColor
+            window.contentView?.needsDisplay = true
+            window.displayIfNeeded()
+        }
+
+        func window(
+            _ window: NSWindow,
+            willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions
+        ) -> NSApplication.PresentationOptions {
+            prepareWindowForFullScreenTransition(window)
+            return proposedOptions
+        }
+
+        func windowWillEnterFullScreen(_ notification: Notification) {
+            guard let window = notification.object as? NSWindow else { return }
+            applyChrome(to: window, isFullScreen: true)
+        }
+
+        func windowDidEnterFullScreen(_ notification: Notification) {
+            guard let window = notification.object as? NSWindow else { return }
+            applyChrome(to: window, isFullScreen: true)
+        }
+
+        func windowDidFailToEnterFullScreen(_ window: NSWindow) {
+            applyChrome(to: window, isFullScreen: false)
+        }
+
+        func windowDidExitFullScreen(_ notification: Notification) {
+            guard let window = notification.object as? NSWindow else { return }
+            applyChrome(to: window, isFullScreen: false)
+        }
+
+        func windowDidFailToExitFullScreen(_ window: NSWindow) {
+            applyChrome(to: window, isFullScreen: true)
+        }
+
+        func windowWillClose(_ notification: Notification) {
             stopObservingWindow()
         }
     }
