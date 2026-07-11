@@ -462,6 +462,21 @@ struct AudioPreviewSnapshot: Sendable {
     let duration: TimeInterval
     let bandLevels: [String: [Float]]
     let bandLevelDBs: [String: [Float]]
+    let realtimeSpectrumTimeline: [[RealtimeSpectrumPoint]]
+
+    init(
+        waveform: [Float],
+        duration: TimeInterval,
+        bandLevels: [String: [Float]],
+        bandLevelDBs: [String: [Float]],
+        realtimeSpectrumTimeline: [[RealtimeSpectrumPoint]] = []
+    ) {
+        self.waveform = waveform
+        self.duration = duration
+        self.bandLevels = bandLevels
+        self.bandLevelDBs = bandLevelDBs
+        self.realtimeSpectrumTimeline = realtimeSpectrumTimeline
+    }
 }
 
 struct LiveBandSample: Sendable, Identifiable {

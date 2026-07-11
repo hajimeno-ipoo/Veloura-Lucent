@@ -498,6 +498,8 @@ struct UIWordingPolicyTests {
         #expect(source.contains("SpectrumCanvasChart(series: spectrumSeries)"))
         #expect(source.contains("if spectrumSeries.isEmpty"))
         #expect(source.contains("emptySpectrumMessage"))
+        #expect(source.contains("preview.comparisonPair.targets.compactMap"))
+        #expect(!source.contains("AudioPreviewTarget.allCases.compactMap"))
     }
 
     @Test

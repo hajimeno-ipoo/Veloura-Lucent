@@ -11,7 +11,7 @@ struct AverageSpectrumComparisonView: View {
                 TermHelpButton(
                     title: "再生中スペクトル",
                     reading: "さいせいちゅうすぺくとる",
-                    description: "再生している音声バッファをその場で解析し、周波数ごとの強さを表示します。入力、補正後、最終版を切り替えた時に、いま鳴っている音の変化を確認する表示です。"
+                    description: "音声を0.1秒ごとに解析した結果を再生位置に合わせ、周波数ごとの強さとして表示します。選択中の2音源を同じ時刻で比較できます。"
                 )
                 Spacer()
                 spectrumLegend
@@ -61,7 +61,7 @@ struct AverageSpectrumComparisonView: View {
     }
 
     private var spectrumSeries: [SpectrumSeries] {
-        AudioPreviewTarget.allCases.compactMap { target in
+        preview.comparisonPair.targets.compactMap { target in
             series(from: preview.cardState(for: target).realtimeSpectrum, target: target)
         }
     }

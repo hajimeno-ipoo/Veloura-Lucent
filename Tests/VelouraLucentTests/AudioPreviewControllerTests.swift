@@ -131,6 +131,70 @@ struct AudioPreviewControllerTests {
     }
 
     @Test
+    func realtimeSpectrumUsesSelectedPairAtTheSamePlaybackPosition() {
+        let controller = AudioPreviewController()
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 10, spectrumLevels: [-11, -21]),
+            for: .input,
+            sourceURL: URL(filePath: "/tmp/input.wav")
+        )
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 10, spectrumLevels: [-31, -41]),
+            for: .corrected,
+            sourceURL: URL(filePath: "/tmp/corrected.wav")
+        )
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 10, spectrumLevels: [-51, -61]),
+            for: .mastered,
+            sourceURL: URL(filePath: "/tmp/mastered.wav")
+        )
+        controller.activeTarget = .input
+        controller.cardState(for: .input).playbackState = .paused
+
+        controller.seek(to: 1, target: .input)
+
+        #expect(controller.cardState(for: .input).realtimeSpectrum.first?.levelDB == -21)
+        #expect(controller.cardState(for: .corrected).realtimeSpectrum.first?.levelDB == -41)
+        #expect(controller.cardState(for: .mastered).realtimeSpectrum.isEmpty)
+
+        controller.setComparisonPair(.inputVsMastered)
+
+        #expect(controller.cardState(for: .input).realtimeSpectrum.first?.levelDB == -21)
+        #expect(controller.cardState(for: .corrected).realtimeSpectrum.isEmpty)
+        #expect(controller.cardState(for: .mastered).realtimeSpectrum.first?.levelDB == -61)
+
+        controller.stopPlayback()
+
+        for target in AudioPreviewTarget.allCases {
+            #expect(controller.cardState(for: target).realtimeSpectrum.isEmpty)
+        }
+    }
+
+    @Test
+    func realtimeSpectrumAlignsDifferentDurationTargetsBySeconds() {
+        let controller = AudioPreviewController()
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 10, spectrumLevels: [-10, -11, -12]),
+            for: .input,
+            sourceURL: URL(filePath: "/tmp/input.wav")
+        )
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 20, spectrumLevels: [-20, -21, -22, -23, -24]),
+            for: .corrected,
+            sourceURL: URL(filePath: "/tmp/corrected.wav")
+        )
+        controller.activeTarget = .input
+        controller.cardState(for: .input).playbackState = .paused
+
+        controller.seek(to: 0.5, target: .input)
+
+        #expect(controller.cardState(for: .input).playbackPosition == 5)
+        #expect(controller.cardState(for: .corrected).playbackPosition == 5)
+        #expect(controller.cardState(for: .input).realtimeSpectrum.first?.levelDB == -11)
+        #expect(controller.cardState(for: .corrected).realtimeSpectrum.first?.levelDB == -21)
+    }
+
+    @Test
     func waveformSeekClampsShorterABTargetToItsDuration() {
         let controller = AudioPreviewController()
         controller.setComparisonPair(.inputVsCorrected)
@@ -381,6 +445,25 @@ struct AudioPreviewControllerTests {
         #expect(points.contains { $0.frequencyHz == 1_000 })
         #expect(points.allSatisfy { $0.levelDB >= -100 && $0.levelDB <= 0 })
         #expect((points.map(\.levelDB).max() ?? -100) > -60)
+    }
+
+    @Test
+    func realtimeSpectrumAnalyzerCreatesTenthSecondTimeline() throws {
+        let sampleRate = 48_000.0
+        let samples = (0..<Int(sampleRate)).map { index in
+            Float(sin(2 * Double.pi * 1_000 * Double(index) / sampleRate) * 0.5)
+        }
+
+        let timeline = RealtimeSpectrumAnalyzer.timeline(
+            from: samples,
+            sampleRate: sampleRate
+        )
+
+        #expect(RealtimeSpectrumAnalyzer.timelineInterval == 0.1)
+        #expect(timeline.count == 11)
+        #expect(timeline.allSatisfy { frame in
+            frame.contains { $0.frequencyHz == 1_000 && $0.levelDB > -60 }
+        })
     }
 
     @Test
@@ -689,12 +772,24 @@ struct AudioPreviewControllerTests {
         let url: URL
     }
 
-    private func previewSnapshot(duration: TimeInterval) -> AudioPreviewSnapshot {
+    private func previewSnapshot(
+        duration: TimeInterval,
+        spectrumLevels: [Double] = []
+    ) -> AudioPreviewSnapshot {
         AudioPreviewSnapshot(
             waveform: [0, 0.5, 0],
             duration: duration,
             bandLevels: [:],
-            bandLevelDBs: [:]
+            bandLevelDBs: [:],
+            realtimeSpectrumTimeline: spectrumLevels.map { level in
+                [
+                    RealtimeSpectrumPoint(
+                        id: "1000",
+                        frequencyHz: 1_000,
+                        levelDB: level
+                    )
+                ]
+            }
         )
     }
 

@@ -332,7 +332,11 @@ enum AudioFileService {
             waveform: Array(waveform),
             duration: Double(mono.count) / signal.sampleRate,
             bandLevels: bandLevels,
-            bandLevelDBs: bandLevelDBs
+            bandLevelDBs: bandLevelDBs,
+            realtimeSpectrumTimeline: RealtimeSpectrumAnalyzer.timeline(
+                from: mono,
+                sampleRate: signal.sampleRate
+            )
         )
     }
 

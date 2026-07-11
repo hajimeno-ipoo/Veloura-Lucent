@@ -71,8 +71,8 @@ final class AudioPreviewController {
     private var previewTasks: [AudioPreviewTarget: Task<Void, Never>] = [:]
     private var integratedLoudnessByTarget: [AudioPreviewTarget: Float] = [:]
     private var vectorScopeHistoryCounters: [AudioPreviewTarget: Int] = [:]
-    private let realtimeSpectrumAnalysisQueue = DispatchQueue(
-        label: "com.codex.VelouraLucent.realtimeSpectrumAnalysis",
+    private let realtimeAnalysisQueue = DispatchQueue(
+        label: "com.codex.VelouraLucent.realtimeAnalysis",
         qos: .userInitiated
     )
     private let meterInterval: TimeInterval = 0.05
@@ -103,6 +103,7 @@ final class AudioPreviewController {
             }
             targetState.playbackPosition = resumeTime
             targetState.playbackProgress = duration > 0 ? max(0, min(1, resumeTime / duration)) : 0
+            updateComparisonSpectra(at: resumeTime)
             startMetering(target: target)
             playerNode?.play()
         } catch {
@@ -145,6 +146,9 @@ final class AudioPreviewController {
 
         if let preservedPosition {
             synchronizePlaybackPositions(to: preservedPosition, updatesLiveBandLevels: true)
+            updateComparisonSpectra(at: preservedPosition)
+        } else {
+            updateComparisonSpectra(at: nil)
         }
         refreshPlaybackVolumeIfNeeded()
     }
@@ -167,6 +171,9 @@ final class AudioPreviewController {
         let requestedTime = sourceSnapshot.duration * min(max(progress, 0), 1)
 
         synchronizePlaybackPositions(to: requestedTime, updatesLiveBandLevels: true)
+        if activeTarget != nil {
+            updateComparisonSpectra(at: requestedTime)
+        }
 
         guard let activeTarget, playerNode != nil else { return }
         let activeState = cardState(for: activeTarget)
@@ -210,6 +217,7 @@ final class AudioPreviewController {
         let currentTime = currentPlaybackPosition()
         targetState.playbackPosition = currentTime
         targetState.playbackProgress = activePlaybackDuration > 0 ? max(0, min(1, currentTime / activePlaybackDuration)) : 0
+        updateComparisonSpectra(at: currentTime)
         meterTimer?.invalidate()
         meterTimer = nil
         playerNode.pause()
@@ -439,7 +447,9 @@ final class AudioPreviewController {
         guard playerNode != nil else { return }
 
         if activePlaybackDuration > 0 {
-            synchronizePlaybackPositions(to: currentPlaybackPosition(), updatesLiveBandLevels: false)
+            let currentPosition = currentPlaybackPosition()
+            synchronizePlaybackPositions(to: currentPosition, updatesLiveBandLevels: false)
+            updateComparisonSpectra(at: currentPosition)
         }
 
         let snapshot = snapshot(for: target)
@@ -563,6 +573,34 @@ final class AudioPreviewController {
             state.playbackProgress = state.playbackPosition / snapshot.duration
             if updatesLiveBandLevels {
                 state.liveBandLevels = makeInitialLiveBandLevels(from: snapshot, target: target)
+            }
+        }
+    }
+
+    private func updateComparisonSpectra(at requestedTime: TimeInterval?) {
+        for target in AudioPreviewTarget.allCases {
+            let state = cardState(for: target)
+            guard
+                comparisonPair.targets.contains(target),
+                let requestedTime,
+                let snapshot = state.snapshot,
+                snapshot.duration > 0,
+                !snapshot.realtimeSpectrumTimeline.isEmpty
+            else {
+                if !state.realtimeSpectrum.isEmpty {
+                    state.realtimeSpectrum = []
+                }
+                continue
+            }
+
+            let progress = min(max(requestedTime / snapshot.duration, 0), 1)
+            let frameIndex = min(
+                max(Int((progress * Double(snapshot.realtimeSpectrumTimeline.count - 1)).rounded()), 0),
+                snapshot.realtimeSpectrumTimeline.count - 1
+            )
+            let nextSpectrum = snapshot.realtimeSpectrumTimeline[frameIndex]
+            if state.realtimeSpectrum != nextSpectrum {
+                state.realtimeSpectrum = nextSpectrum
             }
         }
     }
@@ -698,7 +736,7 @@ final class AudioPreviewController {
             on: analysisMixer,
             bufferSize: tapBufferSize,
             format: format,
-            analysisQueue: realtimeSpectrumAnalysisQueue,
+            analysisQueue: realtimeAnalysisQueue,
             controller: self,
             target: target,
             playbackID: playbackID
@@ -732,15 +770,6 @@ final class AudioPreviewController {
                 self?.finishPlaybackIfCurrent(target: target, playbackID: playbackID)
             }
         }
-    }
-
-    fileprivate func storeRealtimeSpectrum(
-        _ points: [RealtimeSpectrumPoint],
-        for target: AudioPreviewTarget,
-        playbackID: UUID
-    ) {
-        guard activeTarget == target, activePlaybackID == playbackID else { return }
-        cardState(for: target).realtimeSpectrum = points
     }
 
     fileprivate func storeVectorScopeSnapshot(
@@ -875,13 +904,9 @@ private enum RealtimeSpectrumTapInstaller {
         mixer.installTap(onBus: 0, bufferSize: bufferSize, format: format) { [weak controller] buffer, _ in
             guard let sampleBuffer = RealtimeSpectrumAnalyzer.sampleBuffer(from: buffer) else { return }
             analysisQueue.async { [weak controller] in
-                let spectrumPoints = RealtimeSpectrumAnalyzer.points(from: sampleBuffer)
                 let vectorScopeSnapshot = VectorScopeAnalyzer.snapshot(from: sampleBuffer)
                 let loudnessSnapshot = loudnessAnalyzer.snapshot(from: sampleBuffer)
                 Task { @MainActor [weak controller] in
-                    if !spectrumPoints.isEmpty {
-                        controller?.storeRealtimeSpectrum(spectrumPoints, for: target, playbackID: playbackID)
-                    }
                     controller?.storeVectorScopeSnapshot(vectorScopeSnapshot, for: target, playbackID: playbackID)
                     controller?.storeLiveLoudnessMeterSnapshot(loudnessSnapshot, for: target, playbackID: playbackID)
                 }
@@ -1061,6 +1086,7 @@ fileprivate struct LiveBiquadCoefficients {
 
 enum RealtimeSpectrumAnalyzer {
     static let analysisSampleCount = 2_048
+    static let timelineInterval: TimeInterval = 0.1
     private static let minimumAudibleSample: Float = 0.00001
     private static let displayedFrequencies = [
         80.0, 100.0, 125.0, 160.0, 200.0, 250.0, 315.0, 400.0,
@@ -1076,6 +1102,33 @@ enum RealtimeSpectrumAnalyzer {
     static func points(from buffer: AVAudioPCMBuffer) -> [RealtimeSpectrumPoint] {
         guard let sampleBuffer = sampleBuffer(from: buffer) else { return [] }
         return points(from: sampleBuffer)
+    }
+
+    static func timeline(
+        from mono: [Float],
+        sampleRate: Double,
+        frameInterval: TimeInterval = timelineInterval
+    ) -> [[RealtimeSpectrumPoint]] {
+        guard !mono.isEmpty, sampleRate > 0, frameInterval > 0, let dft = makeTransform() else {
+            return []
+        }
+
+        let segmentLength = max(analysisSampleCount, Int(sampleRate * 0.1))
+        let maximumStart = max(mono.count - segmentLength, 0)
+        let duration = Double(mono.count) / sampleRate
+        let frameCount = max(1, Int(ceil(duration / frameInterval)) + 1)
+        return (0..<frameCount).map { frameIndex in
+            let time = min(Double(frameIndex) * frameInterval, duration)
+            let centerIndex = min(Int((time * sampleRate).rounded()), mono.count - 1)
+            let startIndex = min(max(centerIndex - segmentLength / 2, 0), maximumStart)
+            var segment = Array(repeating: Float.zero, count: segmentLength)
+            let copiedCount = min(segmentLength, mono.count - startIndex)
+            if copiedCount > 0 {
+                segment.replaceSubrange(0..<copiedCount, with: mono[startIndex..<(startIndex + copiedCount)])
+            }
+            let window = loudestWindow(from: [segment])
+            return points(from: window, sampleRate: sampleRate, dft: dft)
+        }
     }
 
     fileprivate static func sampleBuffer(from buffer: AVAudioPCMBuffer) -> RealtimeSpectrumSampleBuffer? {
@@ -1103,19 +1156,25 @@ enum RealtimeSpectrumAnalyzer {
 
     fileprivate static func points(from sampleBuffer: RealtimeSpectrumSampleBuffer) -> [RealtimeSpectrumPoint] {
         let mono = loudestWindow(from: sampleBuffer.channelSamples)
-        guard !mono.isEmpty else { return [] }
+        guard !mono.isEmpty, let dft = makeTransform() else { return [] }
+        return points(from: mono, sampleRate: sampleBuffer.sampleRate, dft: dft)
+    }
 
-        let dft: vDSP.DiscreteFourierTransform<Float>
-        do {
-            dft = try vDSP.DiscreteFourierTransform<Float>(
-                count: analysisSampleCount,
-                direction: .forward,
-                transformType: .complexReal,
-                ofType: Float.self
-            )
-        } catch {
-            return []
-        }
+    private static func makeTransform() -> vDSP.DiscreteFourierTransform<Float>? {
+        try? vDSP.DiscreteFourierTransform<Float>(
+            count: analysisSampleCount,
+            direction: .forward,
+            transformType: .complexReal,
+            ofType: Float.self
+        )
+    }
+
+    private static func points(
+        from mono: [Float],
+        sampleRate: Double,
+        dft: vDSP.DiscreteFourierTransform<Float>
+    ) -> [RealtimeSpectrumPoint] {
+        guard mono.count == analysisSampleCount else { return [] }
 
         let inputImaginary = [Float](repeating: .zero, count: analysisSampleCount)
         var outputReal = Array(repeating: Float.zero, count: analysisSampleCount)
@@ -1127,7 +1186,6 @@ enum RealtimeSpectrumAnalyzer {
             outputImaginary: &outputImaginary
         )
 
-        let sampleRate = sampleBuffer.sampleRate
         let frequencyStep = sampleRate / Double(analysisSampleCount)
         let halfCount = analysisSampleCount / 2
         return displayedFrequencies.compactMap { frequency in
