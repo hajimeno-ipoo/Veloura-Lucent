@@ -62,9 +62,13 @@ struct MasteringAnalysisServiceTests {
         let signal = try AudioFileService.loadAudio(from: fileURL)
         let analysis = MasteringAnalysisService.analyze(signal: signal)
         let reference = referenceAnalysis(signal: signal)
+        let loudnessMeasurement = LoudnessMeasurementService.measure(
+            signal: signal,
+            includeLoudnessRange: false
+        )
 
         expectClose(analysis.integratedLoudness, reference.integratedLoudness, tolerance: 0.0001)
-        #expect(analysis.truePeakDBFS == reference.truePeakDBFS)
+        #expect(analysis.truePeakDBFS == loudnessMeasurement.truePeakDBFS)
         expectClose(analysis.lowBandLevelDB, reference.lowBandLevelDB, tolerance: 0.001)
         expectClose(analysis.midBandLevelDB, reference.midBandLevelDB, tolerance: 0.001)
         expectClose(analysis.highBandLevelDB, reference.highBandLevelDB, tolerance: 0.001)

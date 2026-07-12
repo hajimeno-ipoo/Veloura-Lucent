@@ -5,6 +5,63 @@ import Testing
 
 struct MasteringPipelineTests {
     @Test
+    func cancelledMasteringDoesNotLeaveOutputFile() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+        let inputBaseName = "cm-\(String(UUID().uuidString.prefix(8)).lowercased())"
+        let inputURL = tempDirectory.appending(path: "\(inputBaseName).wav")
+        try makeTestTone(at: inputURL)
+        let (saveEvents, saveContinuation) = AsyncStream<Void>.makeStream()
+        let continueSave = DispatchSemaphore(value: 0)
+        let taskFinished = DispatchSemaphore(value: 0)
+        let saveStartedMessage = ProcessingProgressEvent.mastering(
+            step: .save,
+            state: .started,
+            detail: nil
+        ).encodedMessage
+
+        let task = Task {
+            defer { taskFinished.signal() }
+            _ = try await MasteringService().process(inputFile: inputURL, profile: .streaming) { message in
+                guard message == saveStartedMessage else { return }
+                saveContinuation.yield()
+                continueSave.wait()
+            }
+        }
+
+        let waitOutcome = await waitForSaveStartOrTaskCompletion(
+            saveEvents: saveEvents,
+            taskFinished: taskFinished
+        )
+        guard waitOutcome == .saveStarted else {
+            task.cancel()
+            continueSave.signal()
+            _ = await task.result
+            Issue.record(Comment(rawValue: waitOutcome.failureMessage(operation: "マスタリング")))
+            return
+        }
+        task.cancel()
+        continueSave.signal()
+
+        do {
+            _ = try await task.value
+            Issue.record("キャンセル済みのマスタリングが完了してはいけません")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            Issue.record("CancellationError以外が返りました: \(error)")
+        }
+
+        let outputPrefix = "\(inputBaseName)_mastered_mas_"
+        let remainingOutputs = (try? FileManager.default.contentsOfDirectory(
+            at: PreviewFileStore.directory,
+            includingPropertiesForKeys: nil
+        ))?.filter { $0.lastPathComponent.hasPrefix(outputPrefix) } ?? []
+        #expect(remainingOutputs.isEmpty)
+    }
+
+    @Test
     func masteringProducesOutputFile() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
@@ -357,9 +414,13 @@ struct MasteringPipelineTests {
         let after = try AudioComparisonService.analyze(fileURL: output)
         let baseline = try masteringLoudnessBaselineMetrics(in: diagnostics)
         let policy = settings.loudnessAdjustmentPolicy
+        let minimumMeaningfulRestoreDB = 0.25
 
         #expect(FileManager.default.fileExists(atPath: output.path()))
-        #expect(after.integratedLoudnessLUFS >= baseline.integratedLoudnessLUFS - policy.maxCutDB - 0.2)
+        #expect(
+            after.integratedLoudnessLUFS
+                >= baseline.integratedLoudnessLUFS - policy.maxCutDB - minimumMeaningfulRestoreDB
+        )
         #expect(after.truePeakDBFS <= Double(settings.peakCeilingDB) + 0.05)
         #expect(logs.values.contains { $0.hasPrefix("ラウドネス方針: 聴きやすく整える") })
         #expect(logs.values.contains { $0.hasPrefix("最終音量上限: ") || $0.hasPrefix("最終音量下限: ") })

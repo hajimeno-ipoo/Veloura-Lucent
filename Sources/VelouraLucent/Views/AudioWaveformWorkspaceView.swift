@@ -106,7 +106,7 @@ struct AudioWaveformWorkspaceView: View {
                 .disabled(comparisonFileURL(for: .a) == nil)
 
                 Button(playPauseTitle, systemImage: playPauseSystemImage) {
-                    togglePlayback()
+                    preview.toggleComparisonPlayback()
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
@@ -139,7 +139,6 @@ struct AudioWaveformWorkspaceView: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .keyboardShortcut("b", modifiers: [.command])
                 .disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)
 
                 activeComparisonLabel
@@ -297,14 +296,6 @@ struct AudioWaveformWorkspaceView: View {
 
     private var activeComparisonFileURL: URL? {
         comparisonFileURL(for: preview.activeComparisonSide)
-    }
-
-    private func togglePlayback() {
-        if let activeTarget = preview.activeTarget, preview.playbackState(for: activeTarget) == .playing {
-            preview.pausePlayback(target: activeTarget)
-        } else {
-            preview.playComparisonSide(preview.activeComparisonSide)
-        }
     }
 
     private func comparisonFileURL(for side: AudioComparisonSide) -> URL? {

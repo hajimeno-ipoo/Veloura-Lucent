@@ -5,6 +5,63 @@ import Testing
 
 struct AudioProcessingPipelineTests {
     @Test
+    func cancelledPipelineDoesNotLeaveOutputFile() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+        let inputBaseName = "ci-\(String(UUID().uuidString.prefix(8)).lowercased())"
+        let inputURL = tempDirectory.appending(path: "\(inputBaseName).wav")
+        try makeTestTone(at: inputURL)
+        let (saveEvents, saveContinuation) = AsyncStream<Void>.makeStream()
+        let continueSave = DispatchSemaphore(value: 0)
+        let taskFinished = DispatchSemaphore(value: 0)
+        let saveStartedMessage = ProcessingProgressEvent.correction(
+            step: .save,
+            state: .started,
+            detail: nil
+        ).encodedMessage
+
+        let task = Task {
+            defer { taskFinished.signal() }
+            _ = try await AudioProcessingService().process(inputFile: inputURL) { message in
+                guard message == saveStartedMessage else { return }
+                saveContinuation.yield()
+                continueSave.wait()
+            }
+        }
+
+        let waitOutcome = await waitForSaveStartOrTaskCompletion(
+            saveEvents: saveEvents,
+            taskFinished: taskFinished
+        )
+        guard waitOutcome == .saveStarted else {
+            task.cancel()
+            continueSave.signal()
+            _ = await task.result
+            Issue.record(Comment(rawValue: waitOutcome.failureMessage(operation: "補正処理")))
+            return
+        }
+        task.cancel()
+        continueSave.signal()
+
+        do {
+            _ = try await task.value
+            Issue.record("キャンセル済みの補正処理が完了してはいけません")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            Issue.record("CancellationError以外が返りました: \(error)")
+        }
+
+        let outputPrefix = "\(inputBaseName)_lifter_"
+        let remainingOutputs = (try? FileManager.default.contentsOfDirectory(
+            at: PreviewFileStore.directory,
+            includingPropertiesForKeys: nil
+        ))?.filter { $0.lastPathComponent.hasPrefix(outputPrefix) } ?? []
+        #expect(remainingOutputs.isEmpty)
+    }
+
+    @Test
     func pipelineProducesOutputFile() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)

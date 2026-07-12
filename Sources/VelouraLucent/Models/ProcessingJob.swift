@@ -57,6 +57,8 @@ final class ProcessingJob {
     var masteringStatusMessage = "待機中"
     var isProcessing = false
     var isMastering = false
+    var isCancellingProcessing = false
+    var isCancellingMastering = false
     var processingStartedAt: Date?
     var processingFinishedAt: Date?
     var masteringStartedAt: Date?
@@ -234,6 +236,8 @@ final class ProcessingJob {
         masteringFinishedAt = nil
         lastError = nil
         masteringLastError = nil
+        isCancellingProcessing = false
+        isCancellingMastering = false
         // Selecting a source file should not surface old outputs from prior runs.
         hasExistingOutput = false
         hasExistingMasteredOutput = false
@@ -249,6 +253,7 @@ final class ProcessingJob {
         didSendCorrectionCompletion = false
         didSendMasteringCompletion = false
         isProcessing = true
+        isCancellingProcessing = false
         lastError = nil
         correctionLog.reset()
         statusMessage = "処理中"
@@ -285,6 +290,7 @@ final class ProcessingJob {
         guard outputFile != nil else { return }
         didSendMasteringCompletion = false
         isMastering = true
+        isCancellingMastering = false
         masteringLastError = nil
         masteringLog.reset()
         masteringStatusMessage = "マスタリング中"
@@ -474,6 +480,7 @@ final class ProcessingJob {
 
     func finishSuccess(_ outputURL: URL, appliedSettings: CorrectionSettings? = nil) {
         isProcessing = false
+        isCancellingProcessing = false
         outputFile = outputURL
         outputFileInfo = try? AudioFileService.fileInfo(for: outputURL)
         masteredOutputFile = nil
@@ -500,6 +507,7 @@ final class ProcessingJob {
 
     func finishMasteringSuccess(_ outputURL: URL, appliedSettings: MasteringSettings? = nil) {
         isMastering = false
+        isCancellingMastering = false
         masteredOutputFile = outputURL
         masteredFileInfo = try? AudioFileService.fileInfo(for: outputURL)
         masteringStatusMessage = "完了"
@@ -544,6 +552,7 @@ final class ProcessingJob {
     func finishFailure(_ message: String) {
         let failureProgress = progressValue
         isProcessing = false
+        isCancellingProcessing = false
         lastError = message
         statusMessage = "失敗"
         processingFinishedAt = Date()
@@ -562,6 +571,7 @@ final class ProcessingJob {
     func finishMasteringFailure(_ message: String) {
         let failureProgress = masteringProgressValue
         isMastering = false
+        isCancellingMastering = false
         masteringLastError = message
         masteringStatusMessage = "失敗"
         masteringFinishedAt = Date()
@@ -572,6 +582,74 @@ final class ProcessingJob {
             title: "マスタリングに失敗しました",
             detail: message,
             progress: failureProgress,
+            hasFailed: true
+        )
+        appendMasteringLog(message)
+    }
+
+    func requestProcessingCancellation() {
+        guard isProcessing, !isCancellingProcessing else { return }
+        isCancellingProcessing = true
+        statusMessage = "キャンセル中"
+        appendLog("補正処理のキャンセルを受け付けました")
+    }
+
+    func requestMasteringCancellation() {
+        guard isMastering, !isCancellingMastering else { return }
+        isCancellingMastering = true
+        masteringStatusMessage = "キャンセル中"
+        appendMasteringLog("マスタリングのキャンセルを受け付けました")
+    }
+
+    func finishProcessingCancellation() {
+        let cancellationProgress = progressValue
+        isProcessing = false
+        isCancellingProcessing = false
+        statusMessage = "処理待ち"
+        processingFinishedAt = Date()
+        hasExistingOutput = false
+        correctionProgress.reset()
+        completeRunningActivity(
+            domain: .correction,
+            title: "補正処理をキャンセルしました",
+            detail: "利用者が処理を停止しました",
+            progress: cancellationProgress
+        )
+        appendLog("補正処理をキャンセルしました")
+    }
+
+    func finishMasteringCancellation() {
+        let cancellationProgress = masteringProgressValue
+        isMastering = false
+        isCancellingMastering = false
+        masteringStatusMessage = "実行できます"
+        masteringFinishedAt = Date()
+        hasExistingMasteredOutput = false
+        masteringProgress.reset()
+        completeRunningActivity(
+            domain: .mastering,
+            title: "マスタリングをキャンセルしました",
+            detail: "利用者が処理を停止しました",
+            progress: cancellationProgress
+        )
+        appendMasteringLog("マスタリングをキャンセルしました")
+    }
+
+    func recordCorrectedExportFailure(_ message: String) {
+        appendActivity(
+            domain: .export,
+            title: "補正後の書き出しに失敗しました",
+            detail: message,
+            hasFailed: true
+        )
+        appendLog(message)
+    }
+
+    func recordMasteredExportFailure(_ message: String) {
+        appendActivity(
+            domain: .export,
+            title: "最終版の書き出しに失敗しました",
+            detail: message,
             hasFailed: true
         )
         appendMasteringLog(message)

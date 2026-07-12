@@ -50,13 +50,13 @@ struct NotificationServiceTests {
     }
 
     @Test
-    func userDefaultsPreferencesDefaultToEnabled() {
+    func userDefaultsPreferencesDefaultToDisabledUntilUserOptsIn() {
         let suiteName = "NotificationServiceTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         let preferences = UserDefaultsCompletionNotificationPreferences(defaults: defaults)
 
-        #expect(preferences.completionNotificationsEnabled)
+        #expect(preferences.completionNotificationsEnabled == false)
     }
 
     @Test

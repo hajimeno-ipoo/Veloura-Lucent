@@ -14,7 +14,10 @@ struct DAWKnobControl: View {
     let dragValueScale: Float
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var isFocused: Bool
     @State private var dragStartValue: Float?
+    @State private var isActivelyInteracting = false
+    @State private var keyRepeatTask: Task<Void, Never>?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -59,8 +62,37 @@ struct DAWKnobControl: View {
                 )
         }
         .frame(width: DAWKnobMetrics.controlWidth, height: DAWKnobMetrics.controlHeight)
-        .contentShape(Rectangle())
-        .gesture(dragGesture)
+        .contentShape(.interaction, Path(ellipseIn: DAWKnobMetrics.knobHitRect))
+        .highPriorityGesture(dragGesture)
+        .focusable()
+        .focused($isFocused)
+        .focusEffectDisabled()
+        .onKeyPress(keys: [.upArrow, .rightArrow, .downArrow, .leftArrow], phases: .all) { keyPress in
+            if keyPress.phase == .up {
+                stopKeyRepeat()
+                return .handled
+            }
+
+            if keyPress.phase == .down {
+                switch keyPress.key {
+                case .upArrow, .rightArrow:
+                    beginKeyRepeat(delta: step)
+                case .downArrow, .leftArrow:
+                    beginKeyRepeat(delta: -step)
+                default:
+                    return .ignored
+                }
+            }
+
+            // The repeat cadence is driven by NSEvent's system settings below.
+            return .handled
+        }
+        .onChange(of: isFocused) { _, focused in
+            if !focused {
+                stopKeyRepeat()
+            }
+        }
+        .onDisappear(perform: stopKeyRepeat)
         .accessibilityElement()
         .accessibilityLabel(title)
         .accessibilityValue(valueText)
@@ -110,6 +142,12 @@ struct DAWKnobControl: View {
             }
 
             HStack(spacing: 5) {
+                Circle()
+                    .fill(isActivelyInteracting ? Color.green : Color.clear)
+                    .stroke(Color.secondary, lineWidth: 1)
+                    .frame(width: 9, height: 9)
+                    .accessibilityHidden(true)
+
                 Text(title)
                     .font(.system(size: 14, weight: .bold))
                     .lineLimit(1)
@@ -138,14 +176,16 @@ struct DAWKnobControl: View {
                 delta: step
             )
         }
+        .frame(width: DAWKnobMetrics.controlWidth, height: DAWKnobMetrics.controlHeight)
     }
 
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 0)
             .onChanged { gesture in
                 if dragStartValue == nil {
                     dragStartValue = value
                 }
+                isActivelyInteracting = true
                 let startValue = dragStartValue ?? value
                 let nextValue = startValue + DAWKnobMetrics.dragValueDelta(
                     forTranslationHeight: gesture.translation.height,
@@ -155,6 +195,7 @@ struct DAWKnobControl: View {
             }
             .onEnded { _ in
                 dragStartValue = nil
+                isActivelyInteracting = false
             }
     }
 
@@ -197,13 +238,39 @@ struct DAWKnobControl: View {
             Color.clear
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(
+            PressTrackingPlainButtonStyle { isPressed in
+                isActivelyInteracting = isPressed
+            }
+        )
         .frame(
-            width: (size.width + DAWKnobMetrics.buttonHitExpansion * 2) * DAWKnobMetrics.artworkScale,
-            height: (size.height + DAWKnobMetrics.buttonHitExpansion * 2) * DAWKnobMetrics.artworkScale
+            width: DAWKnobMetrics.stepButtonHitSize.width,
+            height: DAWKnobMetrics.stepButtonHitSize.height
         )
         .position(scaled(center))
+        .buttonRepeatBehavior(.enabled)
         .accessibilityLabel(label)
+    }
+
+    private func beginKeyRepeat(delta: Float) {
+        stopKeyRepeat()
+        isActivelyInteracting = true
+        adjust(by: delta, animated: true)
+
+        keyRepeatTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(NSEvent.keyRepeatDelay))
+
+            while !Task.isCancelled {
+                adjust(by: delta, animated: true)
+                try? await Task.sleep(for: .seconds(NSEvent.keyRepeatInterval))
+            }
+        }
+    }
+
+    private func stopKeyRepeat() {
+        keyRepeatTask?.cancel()
+        keyRepeatTask = nil
+        isActivelyInteracting = false
     }
 
     private func adjust(by delta: Float, animated: Bool) {
@@ -219,5 +286,16 @@ struct DAWKnobControl: View {
 
     private func scaled(_ point: CGPoint) -> CGPoint {
         DAWKnobMetrics.scaledPoint(point)
+    }
+}
+
+private struct PressTrackingPlainButtonStyle: ButtonStyle {
+    let onPressingChanged: (Bool) -> Void
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                onPressingChanged(isPressed)
+            }
     }
 }

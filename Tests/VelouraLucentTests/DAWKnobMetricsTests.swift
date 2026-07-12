@@ -14,6 +14,14 @@ struct DAWKnobMetricsTests {
         #expect(DAWKnobMetrics.artworkSize == 226)
         #expect(DAWKnobMetrics.controlWidth == 118)
         #expect(DAWKnobMetrics.controlHeight == 181)
+        #expect(DAWKnobMetrics.knobSourceDiameter == 342)
+        #expect(abs(DAWKnobMetrics.knobHitDiameter - 75.48046875) < 0.000001)
+        #expect(DAWKnobMetrics.knobHitRect.midX == DAWKnobMetrics.scaledPoint(DAWKnobMetrics.knobCenter).x)
+        #expect(DAWKnobMetrics.knobHitRect.midY == DAWKnobMetrics.scaledPoint(DAWKnobMetrics.knobCenter).y)
+        #expect(DAWKnobMetrics.knobHitRect.width == DAWKnobMetrics.knobHitDiameter)
+        #expect(DAWKnobMetrics.knobHitRect.height == DAWKnobMetrics.knobHitDiameter)
+        #expect(abs(DAWKnobMetrics.stepButtonHitSize.width - 29.904296875) < 0.000001)
+        #expect(abs(DAWKnobMetrics.stepButtonHitSize.height - 30.345703125) < 0.000001)
         #expect(DAWKnobMetrics.columnSpacing == 7)
         #expect(DAWKnobMetrics.rowSpacing == 8)
         #expect(abs(DAWKnobMetrics.artworkScale - (226.0 / 1024.0)) < 0.000001)
@@ -117,6 +125,14 @@ struct DAWKnobMetricsTests {
         #expect(abs(unitCenter.x - 58.2275390625) < 0.000001)
         #expect(abs(unitCenter.y - 141.982421875) < 0.000001)
         #expect(unitCenter.x == (minusCenter.x + plusCenter.x) / 2)
+    }
+
+    @Test
+    func stepButtonHitAreaAddsEightPointsOutsideScaledArtwork() {
+        let visibleSize = DAWKnobMetrics.scaledSize(DAWKnobMetrics.stepButtonSize)
+
+        #expect(DAWKnobMetrics.stepButtonHitSize.width - visibleSize.width == 16)
+        #expect(DAWKnobMetrics.stepButtonHitSize.height - visibleSize.height == 16)
     }
 
     @Test

@@ -40,7 +40,7 @@ final class UserDefaultsCompletionNotificationPreferences: CompletionNotificatio
 
     var completionNotificationsEnabled: Bool {
         get {
-            defaults.object(forKey: Self.completionNotificationsEnabledKey) as? Bool ?? true
+            defaults.object(forKey: Self.completionNotificationsEnabledKey) as? Bool ?? false
         }
         set {
             defaults.set(newValue, forKey: Self.completionNotificationsEnabledKey)

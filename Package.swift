@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "VelouraLucent",
+    defaultLocalization: "ja",
     platforms: [
         .macOS(.v26)
     ],

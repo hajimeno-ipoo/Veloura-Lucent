@@ -19,74 +19,86 @@ struct MasteringService {
         let outputPath = outputURL.path(percentEncoded: false)
         let logger = MasteringClosureLogger(logHandler: logHandler)
 
-        try await Task.detached(priority: .userInitiated) {
-            let recorder = MasteringStageTimingRecorder()
-            let totalStart = DispatchTime.now().uptimeNanoseconds
-            logger.start(MasteringStep.loadAudio)
-            logger.log(MasteringStep.loadAudio.rawValue)
-            logger.log("解析モード: マスタリングCPU")
-            let signal = try recorder.measure(label: "読み込み", logger: logger) {
-                try AudioFileService.loadAudio(from: inputFile)
-            }
-            let originalReferenceSignal: AudioSignal?
-            if let originalReferenceFile {
-                originalReferenceSignal = try recorder.measure(label: "原音参照読み込み", logger: logger) {
-                    try AudioFileService.loadAudio(from: originalReferenceFile)
+        do {
+            try await runCancellableDetachedWorker {
+                let recorder = MasteringStageTimingRecorder()
+                let totalStart = DispatchTime.now().uptimeNanoseconds
+                try Task.checkCancellation()
+                logger.start(MasteringStep.loadAudio)
+                logger.log(MasteringStep.loadAudio.rawValue)
+                logger.log("解析モード: マスタリングCPU")
+                let signal = try recorder.measure(label: "読み込み", logger: logger) {
+                    try AudioFileService.loadAudio(from: inputFile)
                 }
-            } else {
-                originalReferenceSignal = nil
-            }
-            logger.complete(MasteringStep.loadAudio)
-
-            let analysis: MasteringAnalysis
-            logger.start(MasteringStep.analyze)
-            logger.log(MasteringStep.analyze.rawValue)
-            if let initialAnalysis {
-                analysis = initialAnalysis
-                logger.skip(MasteringStep.analyze, reason: "既存の解析結果を使用")
-                logger.log("解析: 既存結果を使用")
-            } else {
-                analysis = recorder.measure(label: "解析", logger: logger) {
-                    let benchmark = MasteringAnalysisService.analyzeWithBenchmark(signal: signal)
-                    for stage in benchmark.stages {
-                        logger.log("解析/\(masteringAnalysisStageDisplayName(stage.name)): \(formatProcessingDuration(stage.durationSeconds))")
+                try Task.checkCancellation()
+                let originalReferenceSignal: AudioSignal?
+                if let originalReferenceFile {
+                    originalReferenceSignal = try recorder.measure(label: "原音参照読み込み", logger: logger) {
+                        try AudioFileService.loadAudio(from: originalReferenceFile)
                     }
-                    return benchmark.analysis
+                } else {
+                    originalReferenceSignal = nil
                 }
-                logger.complete(MasteringStep.analyze)
-            }
+                logger.complete(MasteringStep.loadAudio)
 
-            let routeNoiseMeasurements: NoiseMeasurementSnapshot
-            logger.start(MasteringStep.routeNoiseMeasurement)
-            logger.log(MasteringStep.routeNoiseMeasurement.rawValue)
-            if let referenceNoiseMeasurements {
-                routeNoiseMeasurements = referenceNoiseMeasurements
-                logger.skip(MasteringStep.routeNoiseMeasurement, reason: "既存の測定結果を使用")
-                logger.log("ノイズ測定: 既存結果を使用")
-            } else {
-                routeNoiseMeasurements = recorder.measure(label: "ルート用ノイズ測定", logger: logger) {
-                    NoiseMeasurementService.analyze(signal: signal)
+                try Task.checkCancellation()
+                let analysis: MasteringAnalysis
+                logger.start(MasteringStep.analyze)
+                logger.log(MasteringStep.analyze.rawValue)
+                if let initialAnalysis {
+                    analysis = initialAnalysis
+                    logger.skip(MasteringStep.analyze, reason: "既存の解析結果を使用")
+                    logger.log("解析: 既存結果を使用")
+                } else {
+                    analysis = recorder.measure(label: "解析", logger: logger) {
+                        let benchmark = MasteringAnalysisService.analyzeWithBenchmark(signal: signal)
+                        for stage in benchmark.stages {
+                            logger.log("解析/\(masteringAnalysisStageDisplayName(stage.name)): \(formatProcessingDuration(stage.durationSeconds))")
+                        }
+                        return benchmark.analysis
+                    }
+                    logger.complete(MasteringStep.analyze)
                 }
-                logger.complete(MasteringStep.routeNoiseMeasurement)
+
+                try Task.checkCancellation()
+                let routeNoiseMeasurements: NoiseMeasurementSnapshot
+                logger.start(MasteringStep.routeNoiseMeasurement)
+                logger.log(MasteringStep.routeNoiseMeasurement.rawValue)
+                if let referenceNoiseMeasurements {
+                    routeNoiseMeasurements = referenceNoiseMeasurements
+                    logger.skip(MasteringStep.routeNoiseMeasurement, reason: "既存の測定結果を使用")
+                    logger.log("ノイズ測定: 既存結果を使用")
+                } else {
+                    routeNoiseMeasurements = recorder.measure(label: "ルート用ノイズ測定", logger: logger) {
+                        NoiseMeasurementService.analyze(signal: signal)
+                    }
+                    logger.complete(MasteringStep.routeNoiseMeasurement)
+                }
+                try Task.checkCancellation()
+                let mastered = try MasteringProcessor().process(
+                    signal: signal,
+                    analysis: analysis,
+                    settings: settings,
+                    referenceNoiseMeasurements: routeNoiseMeasurements,
+                    originalReferenceSignal: originalReferenceSignal,
+                    originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
+                    diagnosticOutputDirectory: diagnosticOutputDirectory,
+                    logger: logger
+                )
+                try Task.checkCancellation()
+                logger.start(MasteringStep.save)
+                logger.log(MasteringStep.save.rawValue)
+                try recorder.measure(label: "保存", logger: logger) {
+                    try AudioFileService.saveAudio(mastered, to: outputURL)
+                }
+                logger.complete(MasteringStep.save)
+                logger.log("合計: \(formatProcessingDuration(durationSeconds(since: totalStart)))")
             }
-            let mastered = MasteringProcessor().process(
-                signal: signal,
-                analysis: analysis,
-                settings: settings,
-                referenceNoiseMeasurements: routeNoiseMeasurements,
-                originalReferenceSignal: originalReferenceSignal,
-                originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
-                diagnosticOutputDirectory: diagnosticOutputDirectory,
-                logger: logger
-            )
-            logger.start(MasteringStep.save)
-            logger.log(MasteringStep.save.rawValue)
-            try recorder.measure(label: "保存", logger: logger) {
-                try AudioFileService.saveAudio(mastered, to: outputURL)
-            }
-            logger.complete(MasteringStep.save)
-            logger.log("合計: \(formatProcessingDuration(durationSeconds(since: totalStart)))")
-        }.value
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            removeFileIfPresent(at: outputURL)
+            throw CancellationError()
+        }
 
         guard FileManager.default.fileExists(atPath: outputPath) else {
             throw AppError.outputNotFound(outputPath)

@@ -19,6 +19,7 @@ enum DAWKnobMetrics {
     static let deEsserThresholdDragValueScale: Float = 18
     static let compressorThresholdDragValueScale: Float = 24
     static let knobCenter = CGPoint(x: 510.03954, y: 544.94518)
+    static let knobSourceDiameter: CGFloat = 342
     static let blueDotCenter = CGPoint(x: 596.3423423423424, y: 448.73273273273276)
     static let rotationAnchor = UnitPoint(x: knobCenter.x / sourceSize.width, y: knobCenter.y / sourceSize.height)
     static let rotationOffsetDegrees = -41.892183586331
@@ -39,6 +40,29 @@ enum DAWKnobMetrics {
 
     static var artworkOrigin: CGPoint {
         CGPoint(x: (controlWidth - artworkSize) / 2, y: artworkVerticalOffset)
+    }
+
+    static var knobHitDiameter: CGFloat {
+        knobSourceDiameter * artworkScale
+    }
+
+    static var knobHitRect: CGRect {
+        let center = scaledPoint(knobCenter)
+        let radius = knobHitDiameter / 2
+        return CGRect(
+            x: center.x - radius,
+            y: center.y - radius,
+            width: knobHitDiameter,
+            height: knobHitDiameter
+        )
+    }
+
+    static var stepButtonHitSize: CGSize {
+        let visibleSize = scaledSize(stepButtonSize)
+        return CGSize(
+            width: visibleSize.width + buttonHitExpansion * 2,
+            height: visibleSize.height + buttonHitExpansion * 2
+        )
     }
 
     static var threeColumnWidth: CGFloat {

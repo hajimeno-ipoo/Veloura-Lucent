@@ -193,6 +193,78 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func cancellingCorrectionStopsRunningStateWithoutMarkingFailure() {
+        let job = ProcessingJob()
+        job.prepareForSelection(URL(fileURLWithPath: "/tmp/input.wav"))
+        job.beginProcessing()
+        job.appendLog(
+            ProcessingProgressEvent.correction(step: .denoise, state: .started, detail: nil).encodedMessage
+        )
+        let cancellationProgress = job.progressValue
+
+        job.requestProcessingCancellation()
+        #expect(job.isProcessing)
+        #expect(job.isCancellingProcessing)
+        #expect(job.statusMessage == "キャンセル中")
+
+        job.finishProcessingCancellation()
+
+        #expect(job.isProcessing == false)
+        #expect(job.isCancellingProcessing == false)
+        #expect(job.statusMessage == "処理待ち")
+        #expect(job.progressValue == 0)
+        #expect(job.activeStep == nil)
+        #expect(job.completedSteps.isEmpty)
+        #expect(job.skippedSteps.isEmpty)
+        #expect(job.failedSteps.isEmpty)
+        #expect(job.recentActivityEvents.last?.title == "補正処理をキャンセルしました")
+        #expect(job.recentActivityEvents.last?.progress == cancellationProgress)
+        #expect(job.recentActivityEvents.last?.hasFailed == false)
+    }
+
+    @Test
+    func cancellingMasteringKeepsCorrectedOutputAvailable() {
+        let job = ProcessingJob()
+        let corrected = URL(fileURLWithPath: "/tmp/corrected.wav")
+        job.outputFile = corrected
+        job.hasExistingOutput = true
+        job.beginMastering()
+        job.appendMasteringLog(
+            ProcessingProgressEvent.mastering(step: .tone, state: .started, detail: nil).encodedMessage
+        )
+        let cancellationProgress = job.masteringProgressValue
+
+        job.requestMasteringCancellation()
+        job.finishMasteringCancellation()
+
+        #expect(job.isMastering == false)
+        #expect(job.isCancellingMastering == false)
+        #expect(job.masteringStatusMessage == "実行できます")
+        #expect(job.masteringProgressValue == 0)
+        #expect(job.masteringActiveStep == nil)
+        #expect(job.completedMasteringSteps.isEmpty)
+        #expect(job.skippedMasteringSteps.isEmpty)
+        #expect(job.failedMasteringSteps.isEmpty)
+        #expect(job.hasExistingOutput)
+        #expect(job.hasExistingMasteredOutput == false)
+        #expect(job.recentActivityEvents.last?.progress == cancellationProgress)
+    }
+
+    @Test
+    func exportFailureDoesNotChangeCompletedProcessingState() {
+        let job = ProcessingJob()
+        job.statusMessage = "完了"
+        job.hasExistingOutput = true
+
+        job.recordCorrectedExportFailure("保存先へ書き込めませんでした")
+
+        #expect(job.statusMessage == "完了")
+        #expect(job.hasExistingOutput)
+        #expect(job.recentActivityEvents.last?.domain == .export)
+        #expect(job.recentActivityEvents.last?.hasFailed == true)
+    }
+
+    @Test
     func startingNewProcessingClearsPreviousExportState() {
         let job = ProcessingJob()
         job.finishCorrectedExport(URL(fileURLWithPath: "/tmp/old-corrected.wav"))

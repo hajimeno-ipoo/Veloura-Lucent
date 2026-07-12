@@ -118,6 +118,29 @@ final class AudioPreviewController {
         startPlayback(for: cardState(for: target).sourceURL, target: target)
     }
 
+    func toggleComparisonPlayback() {
+        let target = comparisonTarget(for: activeComparisonSide)
+        if activeTarget == target, cardState(for: target).playbackState == .playing {
+            pausePlayback(target: target)
+        } else {
+            playComparisonSide(activeComparisonSide)
+        }
+    }
+
+    var canToggleComparisonPlayback: Bool {
+        let target = comparisonTarget(for: activeComparisonSide)
+        return cardState(for: target).sourceURL != nil
+    }
+
+    var canToggleComparisonSide: Bool {
+        comparisonPair.targets.allSatisfy { cardState(for: $0).sourceURL != nil }
+    }
+
+    var isComparisonPlaybackRunning: Bool {
+        guard let activeTarget else { return false }
+        return cardState(for: activeTarget).playbackState == .playing
+    }
+
     func toggleComparisonSide() {
         let next: AudioComparisonSide = activeComparisonSide == .a ? .b : .a
         playComparisonSide(next)

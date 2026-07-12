@@ -8,7 +8,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
             applyDockIcon()
-            NotificationService.shared.requestAuthorization()
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
             showMainWindowIfSwiftUIWindowIsMissing()
@@ -97,5 +96,9 @@ struct VelouraLucentApp: App {
         .defaultSize(width: 1_380, height: 860)
         .defaultLaunchBehavior(.presented)
         .windowResizability(.contentMinSize)
+        .commands {
+            SidebarCommands()
+            VelouraCommands()
+        }
     }
 }

@@ -10,7 +10,8 @@ struct MasteringProcessor {
         originalReferenceNoiseMeasurements: NoiseMeasurementSnapshot? = nil,
         diagnosticOutputDirectory: URL? = nil,
         logger: AudioProcessingLogger? = nil
-    ) -> AudioSignal {
+    ) throws -> AudioSignal {
+        try Task.checkCancellation()
         let dynamicsRetention = MasteringSignalMath.clamped(settings.dynamicsRetention, min: 0, max: 1)
         let finishingIntensity = MasteringSignalMath.clamped(settings.finishingIntensity, min: 0, max: 1)
         let loudnessPolicy = settings.loudnessAdjustmentPolicy
@@ -27,6 +28,7 @@ struct MasteringProcessor {
         var current = measure(label: "音色", logger: logger, progressStep: .tone) {
             applyTone(signal: signal, analysis: analysis, settings: settings, finishingIntensity: finishingIntensity)
         }
+        try Task.checkCancellation()
         saveDiagnostic(current, to: diagnosticOutputDirectory, order: 1, id: "tone", label: "音色調整後", logger: logger)
 
         let deEssDecision = routePlan.decision(for: .deEss)
@@ -41,6 +43,7 @@ struct MasteringProcessor {
             }
         }
         saveDiagnostic(current, to: diagnosticOutputDirectory, order: 2, id: "deEss", label: "ディエッサー後", logger: logger)
+        try Task.checkCancellation()
 
         logger?.start(.dynamics)
         logger?.log(MasteringStep.dynamics.rawValue)
@@ -54,6 +57,7 @@ struct MasteringProcessor {
             )
         }
         saveDiagnostic(current, to: diagnosticOutputDirectory, order: 3, id: "dynamics", label: "ダイナミクス後", logger: logger)
+        try Task.checkCancellation()
 
         let saturateDecision = routePlan.decision(for: .saturate)
         if saturateDecision.action == .skip {
@@ -67,6 +71,7 @@ struct MasteringProcessor {
             }
         }
         saveDiagnostic(current, to: diagnosticOutputDirectory, order: 4, id: "saturate", label: "倍音調整後", logger: logger)
+        try Task.checkCancellation()
 
         let airDecision = routePlan.decision(for: .air)
         if airDecision.action == .skip {
@@ -85,6 +90,7 @@ struct MasteringProcessor {
             }
         }
         saveDiagnostic(current, to: diagnosticOutputDirectory, order: 5, id: "air", label: "空気感調整後", logger: logger)
+        try Task.checkCancellation()
 
         let stereoDecision = routePlan.decision(for: .stereo)
         if stereoDecision.action == .skip {
@@ -98,6 +104,7 @@ struct MasteringProcessor {
             }
         }
         saveDiagnostic(current, to: diagnosticOutputDirectory, order: 6, id: "stereo", label: "ステレオ調整後", logger: logger)
+        try Task.checkCancellation()
 
         logger?.start(.loudness)
         logger?.log(MasteringStep.loudness.rawValue)
@@ -141,6 +148,7 @@ struct MasteringProcessor {
                 peakCeilingDB: settings.peakCeilingDB
             )
         }
+        try Task.checkCancellation()
         saveDiagnostic(lowBodyProtectedLoud, to: diagnosticOutputDirectory, order: 7, id: "loudness", label: "ラウドネス調整後", logger: logger)
 
         let highReturnDecision = routePlan.decision(for: .highReturnGuard)
@@ -162,6 +170,7 @@ struct MasteringProcessor {
             }
         }
         saveDiagnostic(guarded, to: diagnosticOutputDirectory, order: 8, id: "highReturnGuard", label: "高域戻りガード後", logger: logger)
+        try Task.checkCancellation()
 
         let noiseReturnDecision = routePlan.decision(for: .noiseReturnGuard)
         logger?.start(.noiseReturnGuard)
@@ -174,6 +183,7 @@ struct MasteringProcessor {
                 maxPasses: noiseReturnDecision.action == .light ? 1 : 3
             )
         }
+        try Task.checkCancellation()
         saveDiagnostic(noiseGuarded, to: diagnosticOutputDirectory, order: 9, id: "noiseReturnGuard", label: "ノイズ戻りガード後", logger: logger)
         logger?.start(.highPreserve)
         logger?.log(MasteringStep.highPreserve.rawValue)
@@ -196,6 +206,7 @@ struct MasteringProcessor {
                 referenceLevels
             )
         }
+        try Task.checkCancellation()
         saveDiagnostic(mastered, to: diagnosticOutputDirectory, order: 10, id: "highPreserve", label: "高域保持後", logger: logger)
         var finalNoiseReturnReferenceLevels: [NoiseReturnHighBandReferenceLevel]?
         let allowsOriginalReferenceHighRecovery = MasteringHighFloorPreserver.originalReferenceNeedsHighRecovery(highFloorReferenceLevels)
@@ -213,6 +224,7 @@ struct MasteringProcessor {
                 logger: logger
             )
         }
+        try Task.checkCancellation()
         saveDiagnostic(finalGuarded, to: diagnosticOutputDirectory, order: 11, id: "finalNoiseCeiling", label: "最終ノイズ上限後", logger: logger)
         logger?.start(.finalHighPreserve)
         logger?.log(MasteringStep.finalHighPreserve.rawValue)
@@ -227,6 +239,7 @@ struct MasteringProcessor {
                 logger: logger
             )
         }
+        try Task.checkCancellation()
         saveDiagnostic(finalHighPreserved, to: diagnosticOutputDirectory, order: 12, id: "finalHighPreserve", label: "最終高域保持後", logger: logger)
         logger?.start(.finalLoudnessRestore)
         logger?.log(MasteringStep.finalLoudnessRestore.rawValue)
@@ -243,6 +256,7 @@ struct MasteringProcessor {
                 logger: logger
             )
         }
+        try Task.checkCancellation()
         saveDiagnostic(finalLoudnessRestored, to: diagnosticOutputDirectory, order: 13, id: "finalLoudnessRestore", label: "最終音量復帰後", logger: logger)
         logger?.start(.finalNoiseConfirm)
         logger?.log(MasteringStep.finalNoiseConfirm.rawValue)
@@ -259,6 +273,7 @@ struct MasteringProcessor {
                 logger: logger
             )
         }
+        try Task.checkCancellation()
         saveDiagnostic(finalNoiseConfirmed, to: diagnosticOutputDirectory, order: 14, id: "finalNoiseConfirm", label: "最終ノイズ確認後", logger: logger)
         let finalLowMidProtected = measure(label: "マスタリング/計測: 最終低中域保護", logger: logger) {
             let activityReference = loudnessMatchedFinalLowMidReference(
@@ -296,6 +311,7 @@ struct MasteringProcessor {
             logger?.log("最終低中域保護: 演奏中の150Hz〜500Hzを最大+0.5dB")
             return candidate
         }
+        try Task.checkCancellation()
         saveDiagnostic(finalLowMidProtected, to: diagnosticOutputDirectory, order: 15, id: "finalLowMidBody", label: "最終低中域保護後", logger: logger)
         logger?.start(.finalLoudnessBounds)
         logger?.log(MasteringStep.finalLoudnessBounds.rawValue)
@@ -310,6 +326,7 @@ struct MasteringProcessor {
                 logger: logger
             )
         }
+        try Task.checkCancellation()
         saveDiagnostic(finalLoudnessBounded, to: diagnosticOutputDirectory, order: 16, id: "finalLoudnessBounds", label: "マスタリング最終", logger: logger)
         logger?.log("ルート/マスタリング/実行工程数: \(routePlan.runLikeCount)/\(MasteringRouteStep.allCases.count)")
         logger?.log("ルート/マスタリング/スキップ工程数: \(MasteringRouteStep.allCases.count - routePlan.runLikeCount)/\(MasteringRouteStep.allCases.count)")

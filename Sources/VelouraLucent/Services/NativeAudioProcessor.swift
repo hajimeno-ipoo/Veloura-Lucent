@@ -143,30 +143,37 @@ struct NativeAudioProcessor {
             noiseMeasurementCache: NoiseMeasurementRunCache()
         )
 
+        try Task.checkCancellation()
         let signal = try loadInputSignal(from: inputFile, context: context)
+        try Task.checkCancellation()
         let originalAnalysis = resolveOriginalAnalysis(
             for: signal,
             analysisMode: analysisMode,
             initialAnalysis: initialAnalysis,
             context: context
         )
+        try Task.checkCancellation()
         let routeNoiseMeasurements = resolveRouteNoiseMeasurements(
             for: signal,
             initialNoiseMeasurements: initialNoiseMeasurements,
             context: context
         )
+        try Task.checkCancellation()
         let routePlan = makeCorrectionRoutePlan(
             analysis: originalAnalysis,
             routeNoiseMeasurements: routeNoiseMeasurements,
             logger: logger
         )
+        try Task.checkCancellation()
         let lowCleaned = applyLowNoiseCleanup(
             to: signal,
             routePlan: routePlan,
             routeNoiseMeasurements: routeNoiseMeasurements,
             context: context
         )
+        try Task.checkCancellation()
         let denoised = applyDenoise(to: lowCleaned, context: context)
+        try Task.checkCancellation()
         let sibilanceGuarded = applySibilanceShimmerGuard(
             to: denoised,
             reference: signal,
@@ -174,28 +181,33 @@ struct NativeAudioProcessor {
             routePlan: routePlan,
             context: context
         )
+        try Task.checkCancellation()
         let repairPreparation = prepareHarmonicRepair(
             for: sibilanceGuarded,
             originalAnalysis: originalAnalysis,
             context: context
         )
+        try Task.checkCancellation()
         let repaired = applyHarmonicRepair(
             to: sibilanceGuarded,
             postDenoiseAnalysis: repairPreparation.postDenoiseAnalysis,
             repairPrediction: repairPreparation.repairPrediction,
             context: context
         )
+        try Task.checkCancellation()
         let repairGuarded = applyRepairShimmerGuard(
             to: repaired,
             routePlan: routePlan,
             routeNoiseMeasurements: routeNoiseMeasurements,
             context: context
         )
+        try Task.checkCancellation()
         let residueGuarded = applyLowMidResidueGuard(
             to: repairGuarded,
             routePlan: routePlan,
             context: context
         )
+        try Task.checkCancellation()
         let shimmerLimited = applyShimmerPeakLimit(
             to: residueGuarded,
             reference: signal,
@@ -203,18 +215,22 @@ struct NativeAudioProcessor {
             routeNoiseMeasurements: routeNoiseMeasurements,
             context: context
         )
+        try Task.checkCancellation()
         let highPreserved = applyCorrectionHighPreserve(
             to: shimmerLimited,
             reference: signal,
             routeNoiseMeasurements: routeNoiseMeasurements,
             context: context
         )
+        try Task.checkCancellation()
         let mudControlled = applyCorrectionMudGuard(
             to: highPreserved,
             routeNoiseMeasurements: routeNoiseMeasurements,
             context: context
         )
+        try Task.checkCancellation()
         let finalized = applyPeakSafety(to: mudControlled, context: context)
+        try Task.checkCancellation()
         try saveFinalizedAudio(
             finalized,
             to: outputFile,

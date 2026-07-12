@@ -34,6 +34,26 @@ struct AudioPreviewControllerTests {
     }
 
     @Test
+    func commandAvailabilityFollowsComparisonSourcesAndPlaybackState() {
+        let controller = AudioPreviewController()
+
+        #expect(controller.canToggleComparisonPlayback == false)
+        #expect(controller.canToggleComparisonSide == false)
+        #expect(controller.isComparisonPlaybackRunning == false)
+
+        controller.cardState(for: .input).sourceURL = URL(filePath: "/tmp/input.wav")
+        #expect(controller.canToggleComparisonPlayback)
+        #expect(controller.canToggleComparisonSide == false)
+
+        controller.cardState(for: .corrected).sourceURL = URL(filePath: "/tmp/corrected.wav")
+        #expect(controller.canToggleComparisonSide)
+
+        controller.activeTarget = .input
+        controller.cardState(for: .input).playbackState = .playing
+        #expect(controller.isComparisonPlaybackRunning)
+    }
+
+    @Test
     func switchingComparisonPairPreservesPausedPlaybackPosition() {
         let controller = AudioPreviewController()
         let snapshot = previewSnapshot(duration: 10)

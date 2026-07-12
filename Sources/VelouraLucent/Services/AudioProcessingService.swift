@@ -15,19 +15,25 @@ struct AudioProcessingService {
         let outputPath = outputURL.path(percentEncoded: false)
 
         let logger = ClosureLogger(logHandler: logHandler)
-        try await Task.detached(priority: .userInitiated) {
-            try NativeAudioProcessor().process(
-                inputFile: inputFile,
-                outputFile: outputURL,
-                denoiseStrength: denoiseStrength,
-                correctionSettings: correctionSettings ?? denoiseStrength.settings,
-                analysisMode: analysisMode,
-                initialAnalysis: initialAnalysis,
-                initialNoiseMeasurements: initialNoiseMeasurements,
-                diagnosticOutputDirectory: diagnosticOutputDirectory,
-                logger: logger
-            )
-        }.value
+        do {
+            try await runCancellableDetachedWorker {
+                try NativeAudioProcessor().process(
+                    inputFile: inputFile,
+                    outputFile: outputURL,
+                    denoiseStrength: denoiseStrength,
+                    correctionSettings: correctionSettings ?? denoiseStrength.settings,
+                    analysisMode: analysisMode,
+                    initialAnalysis: initialAnalysis,
+                    initialNoiseMeasurements: initialNoiseMeasurements,
+                    diagnosticOutputDirectory: diagnosticOutputDirectory,
+                    logger: logger
+                )
+            }
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            removeFileIfPresent(at: outputURL)
+            throw CancellationError()
+        }
 
         guard FileManager.default.fileExists(atPath: outputPath) else {
             throw AppError.outputNotFound(outputPath)

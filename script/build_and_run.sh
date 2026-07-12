@@ -14,6 +14,7 @@ LEGACY_APP_BUNDLE="$DIST_DIR/SpectralLifter.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
+APP_LOCALIZATION_SOURCE="$ROOT_DIR/Resources/ja.lproj"
 APP_BINARY="$APP_MACOS/$BUILD_PRODUCT_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 ICON_SOURCE="$ROOT_DIR/Resources/AppIcon-1024.png"
@@ -160,6 +161,9 @@ generate_app_icon_assets
 if [[ -f "$ICON_SOURCE" ]]; then
   cp "$ICON_SOURCE" "$APP_RESOURCES/$RUNTIME_ICON_NAME"
 fi
+if [[ -d "$APP_LOCALIZATION_SOURCE" ]]; then
+  cp -R "$APP_LOCALIZATION_SOURCE" "$APP_RESOURCES/ja.lproj"
+fi
 
 ICON_PLIST_BLOCK=""
 if [[ -f "$ICON_SOURCE" ]]; then
@@ -179,6 +183,12 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$DISPLAY_NAME</string>
   <key>CFBundleDisplayName</key>
   <string>$DISPLAY_NAME</string>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>ja</string>
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>ja</string>
+  </array>
 ${ICON_PLIST_BLOCK}
   <key>CFBundlePackageType</key>
   <string>APPL</string>

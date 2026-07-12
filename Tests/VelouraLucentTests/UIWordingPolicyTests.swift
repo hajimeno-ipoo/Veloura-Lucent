@@ -225,7 +225,9 @@ struct UIWordingPolicyTests {
         #expect(source.contains("@SceneStorage(\"inspectorSettingsSelectedSection\")"))
         #expect(!source.contains("@State private var selectedSection: InspectorSettingsSection"))
         #expect(source.contains("@Binding var windowBackgroundMaterialAmount: Double"))
-        #expect(source.contains("AppSettingsPanel(windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount)"))
+        #expect(source.contains("AppSettingsPanel("))
+        #expect(source.contains("windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount"))
+        #expect(source.contains("isWindowFullScreen: isWindowFullScreen"))
         #expect(source.contains("onEditingChanged: handleWindowBackgroundMaterialEditingChanged"))
         #expect(source.contains("LiquidGlassSegmentedPicker("))
         #expect(source.contains("title: \"詳細設定\""))
@@ -248,17 +250,16 @@ struct UIWordingPolicyTests {
         #expect(source.contains("NavigationSplitView(columnVisibility: $sidebarVisibility)"))
         #expect(source.contains("VelouraSidebarView(job: job)"))
         #expect(source.contains("HStack(spacing: 0)"))
-        #expect(source.contains("ZStack(alignment: .topTrailing)"))
         #expect(source.contains("VelouraMainWorkspaceView("))
         #expect(source.contains("if isInspectorPresented"))
         #expect(source.contains("VelouraInspectorView("))
         #expect(source.contains("windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount"))
-        #expect(source.contains("inspectorToggleButton"))
+        #expect(source.contains("TitlebarInspectorToggleConfigurator(isPresented: $isInspectorPresented)"))
+        #expect(source.contains("TitlebarInspectorToggleButton"))
         #expect(source.contains("Image(systemName: \"sidebar.right\")"))
         #expect(source.contains(".font(.system(size: 18, weight: .regular))"))
         #expect(source.contains(".frame(width: 24, height: 24)"))
-        #expect(source.contains(".padding(.trailing, 24)"))
-        #expect(source.contains(".offset(y: -36)"))
+        #expect(source.contains("controller.layoutAttribute = .right"))
         #expect(source.contains(".buttonStyle(.plain)"))
         #expect(source.contains("設定を隠す"))
         #expect(source.contains("設定を表示"))
@@ -280,6 +281,97 @@ struct UIWordingPolicyTests {
         #expect(source.contains("サイドバーを表示"))
         #expect(!source.contains(".inspector(isPresented:"))
         #expect(!source.contains(".inspectorColumnWidth("))
+    }
+
+    @Test
+    func contentViewPreservesDetailWidthWhenSidebarVisibilityChanges() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/ContentView.swift"])
+
+        #expect(source.contains(".navigationSplitViewStyle(.prominentDetail)"))
+        #expect(!source.contains(".navigationSplitViewStyle(.balanced)"))
+    }
+
+    @Test
+    func dawKnobUsesPersistentCustomInteractionIndicator() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/DAWKnobControl.swift"])
+
+        #expect(source.contains("@FocusState private var isFocused: Bool"))
+        #expect(source.contains(".focusEffectDisabled()"))
+        #expect(source.contains(".fill(isActivelyInteracting ? Color.green : Color.clear)"))
+        #expect(source.contains(".stroke(Color.secondary, lineWidth: 1)"))
+        #expect(source.contains(".contentShape(.interaction, Path(ellipseIn: DAWKnobMetrics.knobHitRect))"))
+        #expect(source.contains(".highPriorityGesture(dragGesture)"))
+        #expect(source.contains("DragGesture(minimumDistance: 0)"))
+        #expect(source.contains("phases: .all"))
+        #expect(source.contains(".buttonRepeatBehavior(.enabled)"))
+        #expect(source.contains("PressTrackingPlainButtonStyle"))
+        #expect(source.contains("NSEvent.keyRepeatDelay"))
+        #expect(source.contains("NSEvent.keyRepeatInterval"))
+        #expect(source.contains("keyRepeatTask?.cancel()"))
+        #expect(source.contains(".frame(width: DAWKnobMetrics.controlWidth, height: DAWKnobMetrics.controlHeight)"))
+        #expect(!source.contains("private var knobInteractionSurface"))
+        #expect(!source.contains(".contentShape(Rectangle())\n        .gesture(dragGesture)"))
+    }
+
+    @Test
+    func menuCommandsExposeProcessingPlaybackAndInspectorShortcuts() throws {
+        let commands = try combinedSource(["Sources/VelouraLucent/App/VelouraCommands.swift"])
+        let preview = try combinedSource(["Sources/VelouraLucent/Models/AudioPreviewController.swift"])
+        let waveform = try combinedSource(["Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift"])
+
+        #expect(commands.contains("CommandMenu(\"再生\")"))
+        #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: .command)"))
+        #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: [.command, .shift])"))
+        #expect(commands.contains(".keyboardShortcut(.space, modifiers: [])"))
+        #expect(commands.contains(".keyboardShortcut(.cancelAction)"))
+        #expect(commands.contains(".keyboardShortcut(\"b\", modifiers: .command)"))
+        #expect(commands.contains(".keyboardShortcut(\"i\", modifiers: [.command, .option])"))
+        #expect(preview.contains("func toggleComparisonPlayback()"))
+        #expect(waveform.contains("preview.toggleComparisonPlayback()"))
+        #expect(!waveform.contains("private func togglePlayback()"))
+        #expect(!waveform.contains(".keyboardShortcut(\"b\", modifiers: [.command])"))
+    }
+
+    @Test
+    func appBundleDeclaresJapaneseAsItsLocalization() throws {
+        let package = try combinedSource(["Package.swift"])
+        let buildScript = try combinedSource(["script/build_and_run.sh"])
+        let localizedInfo = try combinedSource(["Resources/ja.lproj/InfoPlist.strings"])
+
+        #expect(package.contains("defaultLocalization: \"ja\""))
+        #expect(buildScript.contains("<key>CFBundleDevelopmentRegion</key>\n  <string>ja</string>"))
+        #expect(buildScript.contains("<key>CFBundleLocalizations</key>"))
+        #expect(buildScript.contains("cp -R \"$APP_LOCALIZATION_SOURCE\" \"$APP_RESOURCES/ja.lproj\""))
+        #expect(localizedInfo.contains("\"CFBundleDisplayName\" = \"Veloura Lucent\";"))
+    }
+
+    @Test
+    func contentViewDelegatesProcessingAndAnalysisTaskOwnership() throws {
+        let contentView = try combinedSource(["Sources/VelouraLucent/Views/ContentView.swift"])
+        let processingActions = try combinedSource(["Sources/VelouraLucent/App/ProcessingActions.swift"])
+        let analysisCoordinator = try combinedSource(["Sources/VelouraLucent/App/DisplayAnalysisCoordinator.swift"])
+
+        #expect(contentView.contains("@State private var processingActions = ProcessingActions("))
+        #expect(contentView.contains("processingActions.performCorrectionAction"))
+        #expect(contentView.contains("processingActions.performMasteringAction"))
+        #expect(contentView.contains("processingActions.acceptDroppedInputAudio"))
+        #expect(contentView.contains("processingActions.shutdown()"))
+        #expect(!contentView.contains("private func startCorrectionProcessing()"))
+        #expect(!contentView.contains("private func startMasteringProcessing()"))
+        #expect(!contentView.contains("private func runDisplayAnalysis("))
+        #expect(!contentView.contains("Task<Void, Never>?"))
+
+        #expect(processingActions.contains("final class ProcessingActions"))
+        #expect(processingActions.contains("private var correctionTask: Task<Void, Never>?"))
+        #expect(processingActions.contains("private var masteringTask: Task<Void, Never>?"))
+        #expect(processingActions.contains("func startCorrectionProcessing()"))
+        #expect(processingActions.contains("func startMasteringProcessing()"))
+        #expect(processingActions.contains("func exportCorrectedAudio(as format: AudioExportFormat)"))
+
+        #expect(analysisCoordinator.contains("final class DisplayAnalysisCoordinator"))
+        #expect(analysisCoordinator.contains("private var inputSelectionID = UUID()"))
+        #expect(analysisCoordinator.contains("private var tasks: [DisplayAnalysisTarget: Task<Void, Never>]"))
+        #expect(analysisCoordinator.contains("private func runDisplayAnalysis("))
     }
 
     @Test
