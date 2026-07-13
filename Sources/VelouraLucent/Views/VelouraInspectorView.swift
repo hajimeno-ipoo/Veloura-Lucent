@@ -18,6 +18,7 @@ struct VelouraInspectorView: View {
                 InspectorAnalysisPanel(job: job, completionReport: completionReport)
             }
             .padding(14)
+            .velouraTransientOverlayScrollIndicators()
         }
         .scrollContentBackground(.hidden)
     }

@@ -164,10 +164,11 @@ flowchart TB
 
 アプリは macOS の透明ウィンドウ設定と SwiftUI の `glassEffect` を使っています。
 
-- メインウィンドウは `isOpaque = false`、`backgroundColor = .clear` です。
-- ツールバー、タブバー、セグメント、主要ボタンに `glassEffect` を使っています。
+- 通常のメインウィンドウは `isOpaque = false`、`backgroundColor = .clear` です。フルスクリーンまたは「透明度を下げる」が有効な時は、標準の `windowBackgroundColor` で不透明にします。
+- ツールバー、タブバー、セグメント、A/B切り替え、主要ボタンなどの操作部品に `glassEffect` を使っています。
 - `LiquidGlassTabBar`、`LiquidGlassSegmentedControl`、`LiquidGlassActionButton` などの共通部品があります。
-- アプリ設定で、背景の透明感を調整できます。
+- アプリ設定で、通常ウィンドウの背景の透明感を調整して保存できます。「透明度を下げる」の切り替えでは保存値を変えず、無効に戻すと元の透明感へ戻ります。
+- アプリ内のスクロールバーは、各スクロール領域だけで細いOverlayとしてスクロール中に濃さを抑えて表示します。色は固定せず、macOSの外観へ適応します。「コントラストを上げる」が有効な時は、標準の濃さで表示します。
 
 ## 実行と確認
 

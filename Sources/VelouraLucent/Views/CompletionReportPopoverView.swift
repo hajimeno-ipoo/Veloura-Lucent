@@ -25,6 +25,7 @@ struct CompletionReportPopoverView: View {
                     .padding(.top, 2)
             }
             .padding(18)
+            .velouraTransientOverlayScrollIndicators()
         }
         .frame(width: 540, height: 620)
     }

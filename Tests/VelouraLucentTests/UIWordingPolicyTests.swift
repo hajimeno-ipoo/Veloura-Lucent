@@ -108,7 +108,7 @@ struct UIWordingPolicyTests {
     }
 
     @Test
-    func contentViewConfiguresTransparentLiquidGlassWindow() throws {
+    func contentViewConfiguresAccessibleTransparentWindow() throws {
         let source = try combinedSource([
             "Sources/VelouraLucent/App/VelouraLucentApp.swift",
             "Sources/VelouraLucent/Views/ContentView.swift",
@@ -119,7 +119,12 @@ struct UIWordingPolicyTests {
         #expect(source.contains("configureLiquidGlassWindow(window)"))
         #expect(source.contains("WindowChromeConfigurator("))
         #expect(source.contains("@State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()"))
-        #expect(source.contains(".velouraWindowBackground(\n                amount: windowBackgroundMaterialAmount,\n                isFullScreen: isWindowFullScreen\n            )"))
+        #expect(source.contains("@Environment(\\.accessibilityReduceTransparency) private var reduceTransparency"))
+        #expect(source.contains("let windowAppearanceState = AppAppearanceSettings.windowAppearanceState("))
+        #expect(source.contains(".velouraWindowBackground(state: windowAppearanceState)"))
+        #expect(source.contains("appearanceState: windowAppearanceState"))
+        #expect(source.contains("if state.usesOpaqueBackground"))
+        #expect(source.contains("appearanceState?.updatingFullScreen(isFullScreen)"))
         #expect(source.contains("if isFullScreen"))
         #expect(source.contains("willUseFullScreenPresentationOptions"))
         #expect(source.contains("windowWillEnterFullScreen"))
@@ -130,7 +135,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains("window.displayIfNeeded()"))
         #expect(source.contains("let baseGlass: Glass = isFullScreen ? .regular : .clear"))
         #expect(source.contains(".environment(\\.velouraIsFullScreen, isWindowFullScreen)"))
-        #expect(source.contains(".thinMaterial.materialActiveAppearance(.active).opacity(clampedAmount)"))
+        #expect(source.contains(".thinMaterial.materialActiveAppearance(.active).opacity(state.materialAmount)"))
         #expect(source.contains("for: .window"))
         #expect(source.contains("windowBackgroundMaterialAmountKey"))
         #expect(source.contains("storedWindowBackgroundMaterialAmount(defaults: UserDefaults = .standard)"))
@@ -375,26 +380,41 @@ struct UIWordingPolicyTests {
     }
 
     @Test
-    func windowScrollbarAppearanceKeepsLiquidGlassScrollbarsQuiet() throws {
-        let contentView = try combinedSource([
-            "Sources/VelouraLucent/Views/ContentView.swift",
-            "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift"
+    func scrollIndicatorsAreTransientOverlayAndSmallInEachScrollableRegion() throws {
+        let source = try combinedSource([
+            "Sources/VelouraLucent/Views/VelouraScrollIndicators.swift",
+            "Sources/VelouraLucent/Views/VelouraSidebarView.swift",
+            "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
+            "Sources/VelouraLucent/Views/VelouraInspectorView.swift",
+            "Sources/VelouraLucent/Views/FullProcessingLogView.swift",
+            "Sources/VelouraLucent/Views/CompletionReportPopoverView.swift"
         ])
-        let configurator = try combinedSource(["Sources/VelouraLucent/Views/WindowScrollbarAppearanceConfigurator.swift"])
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let oldConfiguratorURL = root.appendingPathComponent(
+            "Sources/VelouraLucent/Views/WindowScrollbarAppearanceConfigurator.swift"
+        )
 
-        #expect(contentView.components(separatedBy: "WindowScrollbarAppearanceConfigurator()").count >= 3)
-        #expect(configurator.contains("struct WindowScrollbarAppearanceConfigurator: NSViewRepresentable"))
-        #expect(configurator.contains("func makeCoordinator() -> Coordinator"))
-        #expect(configurator.contains("private static let retryDelays: [TimeInterval]"))
-        #expect(configurator.contains("NSWindow.didUpdateNotification"))
-        #expect(configurator.contains("NSWindow.didResizeNotification"))
-        #expect(configurator.contains("contentView.descendants(ofType: NSScrollView.self)"))
-        #expect(configurator.contains("scrollView.scrollerStyle = .overlay"))
-        #expect(configurator.contains("scrollView.autohidesScrollers = true"))
-        #expect(configurator.contains("verticalScroller?.knobStyle = .light"))
-        #expect(configurator.contains("horizontalScroller?.knobStyle = .light"))
-        #expect(configurator.contains("verticalScroller?.controlSize = .small"))
-        #expect(configurator.contains("horizontalScroller?.controlSize = .small"))
+        #expect(source.components(separatedBy: ".velouraTransientOverlayScrollIndicators()").count == 6)
+        #expect(source.contains("hostView?.enclosingScrollView"))
+        #expect(source.contains("scrollView.scrollerStyle = .overlay"))
+        #expect(source.contains("scrollView.autohidesScrollers = false"))
+        #expect(source.contains("scroller.controlSize = .small"))
+        #expect(source.contains("NSView.boundsDidChangeNotification"))
+        #expect(source.contains("private static let hideDelay: TimeInterval"))
+        #expect(source.contains("final class VelouraTransientOverlayScroller: NSScroller"))
+        #expect(source.contains("override class var isCompatibleWithOverlayScrollers: Bool"))
+        #expect(source.contains("self == VelouraTransientOverlayScroller.self"))
+        #expect(source.contains("private static let subduedAlpha: CGFloat = 0.55"))
+        #expect(source.contains("NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast"))
+        #expect(source.contains("alphaValue = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast"))
+        #expect(source.contains("guard isScrollActive else { return }"))
+        #expect(source.contains("configure(scrollView)\n            setScrollActive(true, in: scrollView)"))
+        #expect(source.contains("setScrollActive(true, in: scrollView)"))
+        #expect(source.contains("setScrollActive(false, in: scrollView)"))
+        #expect(!source.contains("knobStyle"))
+        #expect(!source.contains("window?.contentView"))
+        #expect(!source.contains("descendants(ofType:"))
+        #expect(!FileManager.default.fileExists(atPath: oldConfiguratorURL.path))
     }
 
     @Test

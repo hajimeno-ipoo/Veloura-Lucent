@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
     @State private var highlightedToolbarTarget: LiquidGlassToolbarTarget?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Namespace private var toolbarGlassNamespace
     @Namespace private var inspectorGlassNamespace
 
@@ -27,23 +28,25 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var actions = processingActions
+        let windowAppearanceState = AppAppearanceSettings.windowAppearanceState(
+            materialAmount: windowBackgroundMaterialAmount,
+            isFullScreen: isWindowFullScreen,
+            reduceTransparency: reduceTransparency
+        )
 
         mainContent
             .environment(\.velouraIsFullScreen, isWindowFullScreen)
             .frame(minWidth: minimumWindowWidth, minHeight: Self.minimumWindowHeight)
-            .velouraWindowBackground(
-                amount: windowBackgroundMaterialAmount,
-                isFullScreen: isWindowFullScreen
-            )
+            .velouraWindowBackground(state: windowAppearanceState)
             .background(
                 WindowChromeConfigurator(
                     minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight),
+                    appearanceState: windowAppearanceState,
                     isFullScreen: $isWindowFullScreen
                 )
             )
             .background(TitlebarSidebarToggleConfigurator(visibility: $sidebarVisibility))
             .background(TitlebarInspectorToggleConfigurator(isPresented: $isInspectorPresented))
-            .background(WindowScrollbarAppearanceConfigurator())
             .focusedSceneValue(\.velouraCommandActions, commandActions)
             .alert(item: $actions.presentedError) { error in
                 Alert(
@@ -334,13 +337,12 @@ struct ContentView: View {
 
 private extension View {
     @ViewBuilder
-    func velouraWindowBackground(amount: Double, isFullScreen: Bool) -> some View {
-        if isFullScreen {
+    func velouraWindowBackground(state: WindowAppearanceState) -> some View {
+        if state.usesOpaqueBackground {
             self
         } else {
-            let clampedAmount = AppAppearanceSettings.clampedWindowBackgroundMaterialAmount(amount)
             containerBackground(
-                .thinMaterial.materialActiveAppearance(.active).opacity(clampedAmount),
+                .thinMaterial.materialActiveAppearance(.active).opacity(state.materialAmount),
                 for: .window
             )
         }
@@ -350,6 +352,7 @@ private extension View {
 
 private struct WindowChromeConfigurator: NSViewRepresentable {
     let minSize: NSSize
+    let appearanceState: WindowAppearanceState
     @Binding var isFullScreen: Bool
 
     func makeCoordinator() -> Coordinator {
@@ -358,13 +361,13 @@ private struct WindowChromeConfigurator: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        context.coordinator.update(isFullScreen: $isFullScreen)
+        context.coordinator.update(isFullScreen: $isFullScreen, appearanceState: appearanceState)
         updateWindow(for: view, context: context)
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.update(isFullScreen: $isFullScreen)
+        context.coordinator.update(isFullScreen: $isFullScreen, appearanceState: appearanceState)
         updateWindow(for: nsView, context: context)
     }
 
@@ -396,10 +399,12 @@ private struct WindowChromeConfigurator: NSViewRepresentable {
         private weak var observedWindow: NSWindow?
         private weak var previousWindowDelegate: NSWindowDelegate?
         private var isFullScreen: Binding<Bool>?
+        private var appearanceState: WindowAppearanceState?
         private var restoresFullSizeContentView = false
 
-        func update(isFullScreen: Binding<Bool>) {
+        func update(isFullScreen: Binding<Bool>, appearanceState: WindowAppearanceState) {
             self.isFullScreen = isFullScreen
+            self.appearanceState = appearanceState
         }
 
         func observe(_ window: NSWindow) {
@@ -424,14 +429,19 @@ private struct WindowChromeConfigurator: NSViewRepresentable {
         }
 
         private func applyChrome(to window: NSWindow, isFullScreen: Bool) {
+            let appearanceState = appearanceState?.updatingFullScreen(isFullScreen)
             if isFullScreen {
                 prepareWindowForFullScreenTransition(window)
             } else {
                 if restoresFullSizeContentView {
                     window.styleMask.insert(.fullSizeContentView)
                 }
-                window.isOpaque = false
-                window.backgroundColor = .clear
+                if appearanceState?.usesOpaqueBackground == true {
+                    applyOpaqueBackground(to: window)
+                } else {
+                    window.isOpaque = false
+                    window.backgroundColor = .clear
+                }
             }
             if self.isFullScreen?.wrappedValue != isFullScreen {
                 self.isFullScreen?.wrappedValue = isFullScreen
@@ -440,10 +450,14 @@ private struct WindowChromeConfigurator: NSViewRepresentable {
 
         private func prepareWindowForFullScreenTransition(_ window: NSWindow) {
             window.styleMask.remove(.fullSizeContentView)
-            window.isOpaque = true
-            window.backgroundColor = .windowBackgroundColor
+            applyOpaqueBackground(to: window)
             window.contentView?.needsDisplay = true
             window.displayIfNeeded()
+        }
+
+        private func applyOpaqueBackground(to window: NSWindow) {
+            window.isOpaque = true
+            window.backgroundColor = .windowBackgroundColor
         }
 
         func window(

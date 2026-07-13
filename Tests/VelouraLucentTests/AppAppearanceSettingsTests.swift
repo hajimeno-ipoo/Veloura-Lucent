@@ -44,4 +44,41 @@ struct AppAppearanceSettingsTests {
         #expect(defaults.double(forKey: AppAppearanceSettings.windowBackgroundMaterialAmountKey) == 1)
         #expect(AppAppearanceSettings.storedWindowBackgroundMaterialAmount(defaults: defaults) == 1)
     }
+
+    @Test
+    func windowAppearanceStateKeepsSavedAmountAcrossAccessibilityChanges() {
+        let normal = AppAppearanceSettings.windowAppearanceState(
+            materialAmount: 0.37,
+            isFullScreen: false,
+            reduceTransparency: false
+        )
+        let reducedTransparency = AppAppearanceSettings.windowAppearanceState(
+            materialAmount: normal.materialAmount,
+            isFullScreen: false,
+            reduceTransparency: true
+        )
+        let restored = AppAppearanceSettings.windowAppearanceState(
+            materialAmount: reducedTransparency.materialAmount,
+            isFullScreen: false,
+            reduceTransparency: false
+        )
+
+        #expect(!normal.usesOpaqueBackground)
+        #expect(reducedTransparency.usesOpaqueBackground)
+        #expect(reducedTransparency.materialAmount == 0.37)
+        #expect(restored == normal)
+    }
+
+    @Test
+    func windowAppearanceStateUsesOpaqueBackgroundInFullScreen() {
+        let state = AppAppearanceSettings.windowAppearanceState(
+            materialAmount: 0.42,
+            isFullScreen: true,
+            reduceTransparency: false
+        )
+
+        #expect(state.usesOpaqueBackground)
+        #expect(state.materialAmount == 0.42)
+        #expect(state.updatingFullScreen(false).usesOpaqueBackground == false)
+    }
 }

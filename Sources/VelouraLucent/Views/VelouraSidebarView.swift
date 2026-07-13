@@ -40,6 +40,7 @@ struct VelouraSidebarView: View {
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 18)
+            .velouraTransientOverlayScrollIndicators()
         }
         .scrollContentBackground(.hidden)
     }
