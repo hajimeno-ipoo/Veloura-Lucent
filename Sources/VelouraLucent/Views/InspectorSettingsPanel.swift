@@ -19,6 +19,8 @@ private enum InspectorSettingsSection: String, CaseIterable, Identifiable {
 struct InspectorSettingsPanel: View {
     @Bindable var job: ProcessingJob
     @Binding var windowBackgroundMaterialAmount: Double
+    @Binding var isWindowBackgroundBlurEnabled: Bool
+    @Binding var windowBackgroundBlurLevel: WindowBackgroundBlurLevel
     let isWindowFullScreen: Bool
     @SceneStorage("inspectorSettingsSelectedSection")
     private var selectedSectionRawValue = InspectorSettingsSection.correction.rawValue
@@ -71,6 +73,8 @@ struct InspectorSettingsPanel: View {
         VStack(alignment: .leading, spacing: 18) {
             AppSettingsPanel(
                 windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
+                isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
+                windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
                 isWindowFullScreen: isWindowFullScreen
             )
 

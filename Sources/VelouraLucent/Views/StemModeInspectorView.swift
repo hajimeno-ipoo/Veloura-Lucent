@@ -5,6 +5,8 @@ struct StemModeInspectorView: View {
     @Bindable var model: StemModeWorkspaceModel
     @Bindable var modelManager: StemModelManager
     @Binding var windowBackgroundMaterialAmount: Double
+    @Binding var isWindowBackgroundBlurEnabled: Bool
+    @Binding var windowBackgroundBlurLevel: WindowBackgroundBlurLevel
     let isWindowFullScreen: Bool
 
     var body: some View {
@@ -14,6 +16,8 @@ struct StemModeInspectorView: View {
                     model: model,
                     modelManager: modelManager,
                     windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
+                    isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
+                    windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
                     isWindowFullScreen: isWindowFullScreen
                 )
                 Divider()
@@ -46,6 +50,8 @@ private struct StemModeInspectorSettingsPanel: View {
     @Bindable var model: StemModeWorkspaceModel
     @Bindable var modelManager: StemModelManager
     @Binding var windowBackgroundMaterialAmount: Double
+    @Binding var isWindowBackgroundBlurEnabled: Bool
+    @Binding var windowBackgroundBlurLevel: WindowBackgroundBlurLevel
     let isWindowFullScreen: Bool
     @SceneStorage("stemModeInspectorSettingsSelectedSection")
     private var selectedSectionRawValue = StemModeInspectorSettingsSection.correction.rawValue
@@ -75,6 +81,8 @@ private struct StemModeInspectorSettingsPanel: View {
                 VStack(alignment: .leading, spacing: 18) {
                     AppSettingsPanel(
                         windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
+                        isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
+                        windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
                         isWindowFullScreen: isWindowFullScreen
                     )
                     StemModeAnalysisModeSettings(model: model)

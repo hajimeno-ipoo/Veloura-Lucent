@@ -83,12 +83,26 @@ extension View {
             self
         } else {
             containerBackground(
-                .thinMaterial.materialActiveAppearance(.active).opacity(state.materialAmount),
+                state.effectiveBlurLevel.material
+                    .materialActiveAppearance(.active)
+                    .opacity(state.materialAmount),
                 for: .window
             )
         }
     }
 
+}
+
+private extension WindowBackgroundBlurLevel {
+    var material: Material {
+        switch self {
+        case .ultraThin: .ultraThin
+        case .thin: .thin
+        case .regular: .regular
+        case .thick: .thick
+        case .ultraThick: .ultraThick
+        }
+    }
 }
 
 struct WindowChromeConfigurator: NSViewRepresentable {

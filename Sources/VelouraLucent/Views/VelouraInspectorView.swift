@@ -4,6 +4,8 @@ struct VelouraInspectorView: View {
     @Bindable var job: ProcessingJob
     let completionReport: CompletionReport?
     @Binding var windowBackgroundMaterialAmount: Double
+    @Binding var isWindowBackgroundBlurEnabled: Bool
+    @Binding var windowBackgroundBlurLevel: WindowBackgroundBlurLevel
     let isWindowFullScreen: Bool
 
     var body: some View {
@@ -12,6 +14,8 @@ struct VelouraInspectorView: View {
                 InspectorSettingsPanel(
                     job: job,
                     windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
+                    isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
+                    windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
                     isWindowFullScreen: isWindowFullScreen
                 )
                 Divider()

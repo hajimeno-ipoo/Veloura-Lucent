@@ -16,6 +16,10 @@ struct VelouraRootView: View {
     @State private var isWindowFullScreen = false
     @State private var windowBackgroundMaterialAmount =
         AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
+    @State private var isWindowBackgroundBlurEnabled =
+        AppAppearanceSettings.storedWindowBackgroundBlurEnabled()
+    @State private var windowBackgroundBlurLevel =
+        AppAppearanceSettings.storedWindowBackgroundBlurLevel()
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     init(runtime: VelouraAppRuntime = .shared) {
@@ -25,6 +29,8 @@ struct VelouraRootView: View {
     var body: some View {
         let appearanceState = AppAppearanceSettings.windowAppearanceState(
             materialAmount: windowBackgroundMaterialAmount,
+            isBlurEnabled: isWindowBackgroundBlurEnabled,
+            blurLevel: windowBackgroundBlurLevel,
             isFullScreen: isWindowFullScreen,
             reduceTransparency: reduceTransparency
         )
@@ -119,6 +125,8 @@ struct VelouraRootView: View {
                     job: runtime.standardActions.job,
                     completionReport: standardCompletionReport,
                     windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
+                    isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
+                    windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
                     isWindowFullScreen: isWindowFullScreen
                 )
             case .stem:
@@ -126,6 +134,8 @@ struct VelouraRootView: View {
                     model: runtime.stemWorkspaceModel,
                     modelManager: runtime.stemModelManager,
                     windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
+                    isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
+                    windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
                     isWindowFullScreen: isWindowFullScreen
                 )
             }
