@@ -4,8 +4,12 @@ import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fallbackMainWindowController: NSWindowController?
+    private var runtimeStartTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        runtimeStartTask = Task { @MainActor in
+            await VelouraAppRuntime.shared.startIfNeeded()
+        }
         Task { @MainActor in
             applyDockIcon()
             NSApp.setActivationPolicy(.regular)
@@ -19,8 +23,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 showMainWindowIfSwiftUIWindowIsMissing(delay: 0)
             }
+            return false
         }
         return true
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        runtimeStartTask?.cancel()
+        runtimeStartTask = nil
+        MainActor.assumeIsolated {
+            VelouraAppRuntime.shared.shutdown()
+        }
     }
 
     @MainActor
@@ -29,8 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let hasVisibleMainWindow = NSApp.windows.contains { window in
                 window.isVisible &&
                     !window.isMiniaturized &&
-                    window.frame.width >= ContentView.inspectorVisibleMinimumWindowWidth &&
-                    window.frame.height >= ContentView.minimumWindowHeight
+                    window.frame.width >= WorkspaceLayoutMetrics.inspectorVisibleMinimumWindowWidth &&
+                    window.frame.height >= WorkspaceLayoutMetrics.minimumWindowHeight
             }
             guard !hasVisibleMainWindow else { return }
 
@@ -42,12 +55,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             window.title = "試聴と解析"
             window.minSize = NSSize(
-                width: ContentView.inspectorVisibleMinimumWindowWidth,
-                height: ContentView.minimumWindowHeight
+                width: WorkspaceLayoutMetrics.inspectorVisibleMinimumWindowWidth,
+                height: WorkspaceLayoutMetrics.minimumWindowHeight
             )
             self.configureLiquidGlassWindow(window)
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: ContentView())
+            window.contentView = NSHostingView(rootView: VelouraRootView())
             window.center()
 
             let controller = NSWindowController(window: window)
@@ -62,14 +75,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func applyDockIcon() {
-        let bundles = [Bundle.main, Bundle.module]
-
-        for bundle in bundles {
-            guard let url = bundle.url(forResource: "AppIcon-1024", withExtension: "png"),
-                  let image = NSImage(contentsOf: url) else {
-                continue
-            }
-
+        let candidateURLs = [
+            Bundle.main.url(forResource: "AppIcon-1024", withExtension: "png"),
+            AppResourceBundle.url(forResource: "AppIcon-1024", withExtension: "png"),
+        ]
+        for url in candidateURLs.compactMap({ $0 }) {
+            guard let image = NSImage(contentsOf: url) else { continue }
             NSApp.applicationIconImage = image
             NSApp.dockTile.display()
             return
@@ -91,13 +102,12 @@ struct VelouraLucentApp: App {
 
     var body: some Scene {
         WindowGroup("Veloura Lucent") {
-            ContentView()
+            VelouraRootView()
         }
         .defaultSize(width: 1_380, height: 860)
         .defaultLaunchBehavior(.presented)
         .windowResizability(.contentMinSize)
         .commands {
-            SidebarCommands()
             VelouraCommands()
         }
     }

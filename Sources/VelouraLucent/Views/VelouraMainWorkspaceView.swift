@@ -7,61 +7,42 @@ struct VelouraMainWorkspaceView: View {
     @State private var isFullLogPresented = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            if isFullLogPresented {
-                FullProcessingLogView(
-                    job: job,
-                    onDismiss: { isFullLogPresented = false }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            } else {
-                fixedHeader
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        switch displayMode {
-                        case .basic:
-                            basicWorkspace
-                        case .detail:
-                            DetailedAnalysisWorkspaceView(job: job)
-                        }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 16)
-                    .padding(.bottom, 24)
-                    .velouraTransientOverlayScrollIndicators()
-                }
-                .scrollContentBackground(.hidden)
-                .scrollEdgeEffectStyle(.soft, for: .top)
-
-                Divider()
-                WorkspaceFooterView(
-                    job: job,
-                    isFullLogPresented: $isFullLogPresented
-                )
+        WorkspaceCenterLayout(
+            isFullLogPresented: isFullLogPresented
+        ) {
+            fixedHeader
+        } mainContent: {
+            switch displayMode {
+            case .basic:
+                basicWorkspace
+            case .detail:
+                DetailedAnalysisWorkspaceView(job: job)
             }
+        } footer: {
+            WorkspaceFooterView(
+                job: job,
+                isFullLogPresented: $isFullLogPresented
+            )
+        } fullLog: {
+            FullProcessingLogView(
+                job: job,
+                onDismiss: { isFullLogPresented = false }
+            )
         }
     }
 
     private var fixedHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Veloura Lucent")
-                .font(.largeTitle.bold())
-            Text("音声を補正し、マスタリングで最終版に仕上げます。")
-                .foregroundStyle(.secondary)
-
+        WorkspaceFixedHeaderView(
+            title: "Veloura Lucent",
+            summary: "音声を補正し、マスタリングで最終版に仕上げます。"
+        ) {
             LiquidGlassSegmentedPicker(
                 title: "中央表示",
                 options: WorkspaceDisplayMode.allCases,
                 selection: $displayMode,
                 label: \.title
             )
-            .padding(.top, 10)
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 16)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -86,7 +67,6 @@ struct VelouraMainWorkspaceView: View {
             mastered: job.masteredSpectrogram
         )
     }
-
 }
 
 private enum WorkspaceDisplayMode: String, CaseIterable, Identifiable {

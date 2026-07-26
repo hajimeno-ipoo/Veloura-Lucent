@@ -3,6 +3,93 @@ import SwiftUI
 
 struct DetailedAnalysisWorkspaceView: View {
     @Bindable var job: ProcessingJob
+
+    var body: some View {
+        DetailedAnalysisComparisonView(
+            presentation: DetailedAnalysisPresentation(job: job)
+        )
+    }
+}
+
+@MainActor
+struct DetailedAnalysisPresentation {
+    let inputMetrics: AudioMetricSnapshot?
+    let correctedMetrics: AudioMetricSnapshot?
+    let masteredMetrics: AudioMetricSnapshot?
+    let noiseReport: NoiseCheckReport?
+    let isAnalyzing: Bool
+    let statusText: String?
+    let failedText: String?
+    let analyzingTargets: Set<DisplayAnalysisTarget>
+    let failedTargets: Set<DisplayAnalysisTarget>
+    let emptyTitle: String
+    let emptyDescription: String
+
+    init(job: ProcessingJob) {
+        inputMetrics = job.inputMetrics
+        correctedMetrics = job.outputMetrics
+        masteredMetrics = job.masteredMetrics
+        noiseReport = NoiseCheckReportService.makeReport(
+            input: job.inputNoiseMeasurements,
+            corrected: job.outputNoiseMeasurements,
+            mastered: job.masteredNoiseMeasurements,
+            correctionSettings: job.appliedCorrectionSettings ?? job.editableCorrectionSettings,
+            settings: job.appliedMasteringSettings ?? job.editableMasteringSettings
+        )
+        isAnalyzing = job.isAnalyzingDisplayAnalysis
+        statusText = job.displayAnalysisStatusText
+        failedText = job.failedDisplayAnalysisText
+        analyzingTargets = Set(
+            DisplayAnalysisTarget.allDisplayTargets.filter {
+                job.isAnalyzingDisplayAnalysis(for: $0)
+            }
+        )
+        failedTargets = Set(
+            DisplayAnalysisTarget.allDisplayTargets.filter {
+                job.hasFailedDisplayAnalysis(for: $0)
+            }
+        )
+        emptyTitle = "入力音声は未解析です"
+        emptyDescription = "音声を選ぶと、入力、補正後、最終版の詳細解析を表示します。"
+    }
+
+    init(
+        inputMetrics: AudioMetricSnapshot?,
+        correctedMetrics: AudioMetricSnapshot?,
+        masteredMetrics: AudioMetricSnapshot?,
+        noiseReport: NoiseCheckReport?,
+        isAnalyzing: Bool,
+        statusText: String?,
+        failedText: String?,
+        analyzingTargets: Set<DisplayAnalysisTarget>,
+        failedTargets: Set<DisplayAnalysisTarget>,
+        emptyTitle: String,
+        emptyDescription: String
+    ) {
+        self.inputMetrics = inputMetrics
+        self.correctedMetrics = correctedMetrics
+        self.masteredMetrics = masteredMetrics
+        self.noiseReport = noiseReport
+        self.isAnalyzing = isAnalyzing
+        self.statusText = statusText
+        self.failedText = failedText
+        self.analyzingTargets = analyzingTargets
+        self.failedTargets = failedTargets
+        self.emptyTitle = emptyTitle
+        self.emptyDescription = emptyDescription
+    }
+
+    func metrics(for target: DisplayAnalysisTarget) -> AudioMetricSnapshot? {
+        switch target {
+        case .input: inputMetrics
+        case .corrected: correctedMetrics
+        case .mastered: masteredMetrics
+        }
+    }
+}
+
+struct DetailedAnalysisComparisonView: View {
+    let presentation: DetailedAnalysisPresentation
     @State private var showLoudness = false
     @State private var showDynamics = false
     @State private var showSpectrum = false
@@ -10,11 +97,14 @@ struct DetailedAnalysisWorkspaceView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            header
             analysisStateSummary
 
-            if let input = job.inputMetrics {
-                metricComparisonCard(input: input, corrected: job.outputMetrics, mastered: job.masteredMetrics)
+            if let input = presentation.inputMetrics {
+                metricComparisonCard(
+                    input: input,
+                    corrected: presentation.correctedMetrics,
+                    mastered: presentation.masteredMetrics
+                )
 
                 if let noiseReport {
                     noiseComparisonCard(noiseReport)
@@ -60,16 +150,20 @@ struct DetailedAnalysisWorkspaceView: View {
                         help: "8つの帯域を、入力、補正後、最終版、補正差分、マスタリング差分で確認します。",
                         isExpanded: $showBands
                     ) {
-                        bandDetailRows(input: input, corrected: job.outputMetrics, mastered: job.masteredMetrics)
+                        bandDetailRows(
+                            input: input,
+                            corrected: presentation.correctedMetrics,
+                            mastered: presentation.masteredMetrics
+                        )
                     }
                     .analysisCard()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ContentUnavailableView(
-                    "入力音声は未解析です",
+                    presentation.emptyTitle,
                     systemImage: "waveform.path.ecg",
-                    description: Text("音声を選ぶと、入力、補正後、最終版の詳細解析を表示します。")
+                    description: Text(presentation.emptyDescription)
                 )
                 .frame(maxWidth: .infinity, minHeight: 260)
                 .analysisCard()
@@ -78,30 +172,13 @@ struct DetailedAnalysisWorkspaceView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text("詳細解析")
-                    .font(.title2.bold())
-                TermHelpButton(
-                    title: "詳細解析",
-                    reading: "しょうさいかいせき",
-                    description: "元からあった数値比較、ノイズ比較、周波数グラフ、ラウドネス推移、ダイナミクス推移、相関表示を、入力、補正後、最終版で見比べる画面です。"
-                )
-            }
-            Text("右側インスペクタと下部ログへ同じ表を重複表示せず、中央で3音源の変化を確認します。")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
-    }
-
     private var analysisStateSummary: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("解析状態")
                     .font(.headline)
                 Spacer()
-                if job.isAnalyzingDisplayAnalysis {
+                if presentation.isAnalyzing {
                     ProgressView()
                         .controlSize(.small)
                         .accessibilityLabel("解析中")
@@ -114,12 +191,12 @@ struct DetailedAnalysisWorkspaceView: View {
                 }
             }
 
-            if let statusText = job.displayAnalysisStatusText {
+            if let statusText = presentation.statusText {
                 Label(statusText, systemImage: "clock")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
-            if let failedText = job.failedDisplayAnalysisText {
+            if let failedText = presentation.failedText {
                 Label(failedText, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout)
                     .foregroundStyle(.red)
@@ -150,10 +227,10 @@ struct DetailedAnalysisWorkspaceView: View {
     }
 
     private func aggregateState(for target: DisplayAnalysisTarget) -> AnalysisVisualState {
-        if job.isAnalyzingDisplayAnalysis(for: target) {
+        if presentation.analyzingTargets.contains(target) {
             return .running
         }
-        if job.hasFailedDisplayAnalysis(for: target) {
+        if presentation.failedTargets.contains(target) {
             return .failed
         }
         if metrics(for: target) != nil {
@@ -854,24 +931,18 @@ struct DetailedAnalysisWorkspaceView: View {
     }
 
     private var noiseReport: NoiseCheckReport? {
-        NoiseCheckReportService.makeReport(
-            input: job.inputNoiseMeasurements,
-            corrected: job.outputNoiseMeasurements,
-            mastered: job.masteredNoiseMeasurements,
-            correctionSettings: job.appliedCorrectionSettings ?? job.editableCorrectionSettings,
-            settings: job.appliedMasteringSettings ?? job.editableMasteringSettings
-        )
+        presentation.noiseReport
     }
 
     private var comparisonStages: [AnalysisStageMetrics] {
         var stages: [AnalysisStageMetrics] = []
-        if let metrics = job.inputMetrics {
+        if let metrics = presentation.inputMetrics {
             stages.append(AnalysisStageMetrics(id: "input", label: "入力", color: .blue, metrics: metrics))
         }
-        if let metrics = job.outputMetrics {
+        if let metrics = presentation.correctedMetrics {
             stages.append(AnalysisStageMetrics(id: "corrected", label: "補正後", color: .green, metrics: metrics))
         }
-        if let metrics = job.masteredMetrics {
+        if let metrics = presentation.masteredMetrics {
             stages.append(AnalysisStageMetrics(id: "mastered", label: "最終版", color: .orange, metrics: metrics))
         }
         return stages
@@ -940,11 +1011,7 @@ struct DetailedAnalysisWorkspaceView: View {
     }
 
     private func metrics(for target: DisplayAnalysisTarget) -> AudioMetricSnapshot? {
-        switch target {
-        case .input: job.inputMetrics
-        case .corrected: job.outputMetrics
-        case .mastered: job.masteredMetrics
-        }
+        presentation.metrics(for: target)
     }
 
     private func title(for target: DisplayAnalysisTarget) -> String {
@@ -1043,14 +1110,16 @@ struct DetailedAnalysisWorkspaceView: View {
 
     private func spectrumDeltaPoints() -> [SpectrumDeltaPoint] {
         var points: [SpectrumDeltaPoint] = []
-        if let input = job.inputMetrics, let corrected = job.outputMetrics {
+        if let input = presentation.inputMetrics,
+           let corrected = presentation.correctedMetrics {
             let correctedMap = Dictionary(uniqueKeysWithValues: corrected.averageSpectrum.map { ($0.id, $0) })
             points += input.averageSpectrum.compactMap {
                 guard let correctedPoint = correctedMap[$0.id] else { return nil }
                 return SpectrumDeltaPoint(id: "corrected-input-\($0.id)", frequencyHz: $0.frequencyHz, series: "補正後 - 入力", deltaDB: correctedPoint.levelDB - $0.levelDB)
             }
         }
-        if let corrected = job.outputMetrics, let mastered = job.masteredMetrics {
+        if let corrected = presentation.correctedMetrics,
+           let mastered = presentation.masteredMetrics {
             let masteredMap = Dictionary(uniqueKeysWithValues: mastered.averageSpectrum.map { ($0.id, $0) })
             points += corrected.averageSpectrum.compactMap {
                 guard let masteredPoint = masteredMap[$0.id] else { return nil }
@@ -1156,7 +1225,7 @@ struct DetailedAnalysisWorkspaceView: View {
     }
 }
 
-private extension View {
+extension View {
     func analysisCard() -> some View {
         self
             .padding(14)

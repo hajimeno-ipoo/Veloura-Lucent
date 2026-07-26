@@ -158,7 +158,9 @@ struct RealAudioWorkflowTests {
     @Test
     func realAudioExcerptProducesCorrectedAndMasteredComparisonReport() async throws {
         let projectDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let sourceURL = projectDirectory.appending(path: "violin #002 睡眠.wav")
+        let sourceURL = projectDirectory.appending(
+            path: "Tests/Fixtures/Sample_audio/violin #002 睡眠.wav"
+        )
         guard FileManager.default.fileExists(atPath: sourceURL.path(percentEncoded: false)) else {
             Issue.record("Real audio fixture is missing: \(sourceURL.path(percentEncoded: false))")
             return

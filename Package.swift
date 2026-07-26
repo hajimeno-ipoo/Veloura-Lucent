@@ -10,13 +10,25 @@ let package = Package(
     products: [
         .executable(name: "VelouraLucent", targets: ["VelouraLucent"])
     ],
+    dependencies: [
+        .package(path: "Vendor/demucs-mlx-swift"),
+        .package(
+            url: "https://github.com/apple/swift-collections.git",
+            exact: "1.4.0"
+        )
+    ],
     targets: [
         .executableTarget(
             name: "VelouraLucent",
+            dependencies: [
+                .product(name: "DemucsMLX", package: "demucs-mlx-swift")
+            ],
             path: "Sources/VelouraLucent",
             resources: [
                 .process("Resources/AppIcon-1024.png"),
-                .process("Resources/Rotary_Knob")
+                .process("Resources/Rotary_Knob"),
+                .copy("Resources/StemModels"),
+                .copy("Resources/ThirdPartyNotices")
             ]
         ),
         .testTarget(

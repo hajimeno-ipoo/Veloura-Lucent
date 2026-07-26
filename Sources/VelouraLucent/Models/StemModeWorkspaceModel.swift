@@ -1,0 +1,929 @@
+import Foundation
+import Observation
+
+@MainActor
+@Observable
+final class StemModeWorkspaceModel {
+    let session: StemWorkflowSession
+    /// 通常モードとは共有しない、Stem Mode専用の実音声preview stateです。
+    let previewController = AudioPreviewController()
+    /// 選択中Stemのraw／補正後だけを扱う、2mix試聴とは独立したpreview stateです。
+    let stemPreviewController = AudioPreviewController()
+
+    private(set) var selectedInputURL: URL?
+    private(set) var selectedInputFileInfo: AudioFileInfo?
+    private(set) var confirmedMixMatrix: StemUserConfirmedMixMatrix?
+    var pendingMatrixConfirmation: StemModePendingMatrixConfirmation?
+    private(set) var isInspectingInput = false
+    private(set) var isStartingRun = false
+    private(set) var exportingArtifactIDs: Set<String> = []
+    private(set) var previewArtifacts: [StemAudioArtifact] = []
+    private(set) var finalCommitLockState: StemModeFinalCommitLockState = .unlocked
+    private(set) var isModelOperationInProgress = false
+    var presentedError: StemModeWorkspaceErrorPresentation?
+
+    var selectedMasteringProfile: MasteringProfile = .streaming {
+        didSet {
+            guard selectedMasteringProfile != oldValue else { return }
+            isApplyingMasteringProfile = true
+            masteringSettings = selectedMasteringProfile.settings
+            isApplyingMasteringProfile = false
+            isUsingCustomMasteringSettings = false
+        }
+    }
+
+    var masteringSettings: MasteringSettings = MasteringProfile.streaming.settings {
+        didSet {
+            guard !isApplyingMasteringProfile else { return }
+            isUsingCustomMasteringSettings = masteringSettings != selectedMasteringProfile.settings
+        }
+    }
+
+    var selectedAnalysisMode: AudioAnalysisMode = .auto
+
+    private(set) var isUsingCustomMasteringSettings = false
+    private(set) var selectedCorrectionRole: StemRole = .vocals
+    private(set) var correctionSettings = StemRoleCorrectionSettings(
+        all: DenoiseStrength.balanced.settings
+    )
+    private(set) var separationSettings: StemSeparationSettings?
+    private(set) var modelPresentation: StemModeModelPresentation?
+    private(set) var remixAnalysisPresentation: StemModeRemixAnalysisPresentation?
+    private(set) var qualityReports: StemModeQualityReports?
+    private(set) var finalArtifact: StemAudioArtifact?
+    /// 選択した入力ファイルそのものの表示・試聴用評価です。
+    private(set) var inputEvaluation: StemAudioEvaluationSnapshot?
+    private(set) var inputDisplayMetrics: AudioMetricSnapshot?
+    private(set) var inputDisplayNoiseMeasurements: NoiseMeasurementSnapshot?
+    private(set) var inputDisplayAudioAnalysis: AnalysisData?
+    /// 補正workflowが作るcanonical input評価です。入力表示の正本には使用しません。
+    private(set) var workflowInputEvaluation: StemAudioEvaluationSnapshot?
+    private(set) var finalEvaluation: StemAudioEvaluationSnapshot?
+    private(set) var inputSpectrogram: SpectrogramSnapshot?
+    private(set) var correctedRemixSpectrogram: SpectrogramSnapshot?
+    private(set) var finalSpectrogram: SpectrogramSnapshot?
+    private(set) var isAnalyzingDisplayAudio = false
+    private(set) var isAnalyzingInput = false
+    private(set) var inputAnalysisError: String?
+    private(set) var displayAnalysisError: String?
+    private(set) var stemEvaluationsByRole: [StemRole: StemModeStemEvaluationPresentation] = [:]
+
+    @ObservationIgnored private let actions: StemModeWorkspaceActions
+    @ObservationIgnored private var inputInspectionIdentifier: UUID?
+    @ObservationIgnored private var isApplyingMasteringProfile = false
+    @ObservationIgnored private var displayAnalysisGeneration = UUID()
+    @ObservationIgnored private var displayAnalysisTask: Task<Void, Never>?
+    @ObservationIgnored private var inputAnalysisGeneration = UUID()
+    @ObservationIgnored private var inputAnalysisTask: Task<Void, Never>?
+
+    init(
+        session: StemWorkflowSession,
+        actions: StemModeWorkspaceActions
+    ) {
+        self.session = session
+        self.actions = actions
+    }
+
+    var stemEvaluations: [StemModeStemEvaluationPresentation] {
+        StemRole.allCases.compactMap { stemEvaluationsByRole[$0] }
+    }
+
+    var selectedRawStemPreviewURL: URL? {
+        validatedStemArtifact(kind: .rawStem(selectedCorrectionRole))?.fileURL
+    }
+
+    var selectedCorrectedStemPreviewURL: URL? {
+        validatedStemArtifact(kind: .correctedStem(selectedCorrectionRole))?.fileURL
+    }
+
+    var selectedRoleCorrectionSettings: CorrectionSettings {
+        correctionSettings.settings(for: selectedCorrectionRole)
+    }
+
+    var selectedDenoiseStrength: DenoiseStrength {
+        selectedRoleCorrectionSettings.profile
+    }
+
+    var isUsingCustomCorrectionSettings: Bool {
+        selectedRoleCorrectionSettings != selectedDenoiseStrength.settings
+    }
+
+    var exportableArtifacts: [StemAudioArtifact] {
+        var artifactsByID: [String: StemAudioArtifact] = [:]
+        for state in session.artifactStates {
+            guard let artifact = state.artifact,
+                  artifact.kind.isStemModeUserExportable,
+                  state.allowsStemModeExport else {
+                continue
+            }
+            artifactsByID[artifact.id] = artifact
+        }
+        return artifactsByID.values.sorted { lhs, rhs in
+            let leftRank = lhs.kind.stemModeExportSortRank
+            let rightRank = rhs.kind.stemModeExportSortRank
+            if leftRank == rightRank {
+                return lhs.id < rhs.id
+            }
+            return leftRank < rightRank
+        }
+    }
+
+    var isRunActive: Bool {
+        switch session.state {
+        case .running:
+            true
+        case .ready:
+            session.runID != nil
+        case .readyForMastering:
+            false
+        case .idle,
+             .completed,
+             .failed:
+            false
+        }
+    }
+
+    var isExportingAnyArtifact: Bool {
+        !exportingArtifactIDs.isEmpty
+    }
+
+    var canChooseInput: Bool {
+        !isRunActive
+            && !isStartingRun
+            && !isInspectingInput
+    }
+
+    var hasValidatedModelPresentation: Bool {
+        modelPresentation != nil
+    }
+
+    var canRunCorrection: Bool {
+        !isAwaitingMastering
+            && selectedInputURL != nil
+            && separationSettings != nil
+            && modelPresentation != nil
+            && pendingMatrixConfirmation == nil
+            && !isRunActive
+            && !isStartingRun
+            && !isInspectingInput
+            && !isModelOperationInProgress
+    }
+
+    var canRunMastering: Bool {
+        guard case .readyForMastering(let runID) = session.state,
+              session.runID == runID else {
+            return false
+        }
+        return !isStartingRun
+            && !isInspectingInput
+            && !isModelOperationInProgress
+    }
+
+    var canCancelProcessing: Bool {
+        isRunActive
+            && !isStartingRun
+            && finalCommitLockState == .unlocked
+    }
+
+    var isMasteringSettingsDisabled: Bool {
+        isRunActive || isStartingRun
+    }
+
+    var isCorrectionSettingsDisabled: Bool {
+        if case .readyForMastering = session.state {
+            return true
+        }
+        return isRunActive || isStartingRun
+    }
+
+    private var isAwaitingMastering: Bool {
+        if case .readyForMastering = session.state {
+            return true
+        }
+        return false
+    }
+
+    var inputPreviewArtifact: StemAudioArtifact? {
+        previewArtifacts.first(where: { $0.kind == .input44100 })
+    }
+
+    var inputPreviewURL: URL? {
+        selectedInputURL
+    }
+
+    var correctedRemixPreviewArtifact: StemAudioArtifact? {
+        previewArtifacts.first(where: { $0.kind == .correctedRemix48000 })
+    }
+
+    var finalPreviewArtifact: StemAudioArtifact? {
+        previewArtifacts.first(where: { $0.kind == .finalMaster })
+    }
+
+    var correctedRemixEvaluation: StemAudioEvaluationSnapshot? {
+        remixAnalysisPresentation?.correctedRemixEvaluation
+    }
+
+    var inputMetrics: AudioMetricSnapshot? {
+        inputDisplayMetrics
+    }
+
+    var correctedRemixMetrics: AudioMetricSnapshot? {
+        correctedRemixEvaluation?.audioMetrics
+    }
+
+    var finalMetrics: AudioMetricSnapshot? {
+        finalEvaluation?.audioMetrics
+    }
+
+    var inputNoiseMeasurements: NoiseMeasurementSnapshot? {
+        inputDisplayNoiseMeasurements
+    }
+
+    var correctedRemixNoiseMeasurements: NoiseMeasurementSnapshot? {
+        correctedRemixEvaluation?.noiseMeasurements
+    }
+
+    var finalNoiseMeasurements: NoiseMeasurementSnapshot? {
+        finalEvaluation?.noiseMeasurements
+    }
+
+    func inspectInput(_ inputURL: URL) async {
+        guard canChooseInput else {
+            presentError(
+                title: "入力を変更できません",
+                message: "Stem Mode処理の実行中は入力音源を変更できません。"
+            )
+            return
+        }
+
+        let identifier = UUID()
+        inputInspectionIdentifier = identifier
+        isInspectingInput = true
+        presentedError = nil
+        defer {
+            if inputInspectionIdentifier == identifier {
+                isInspectingInput = false
+                inputInspectionIdentifier = nil
+            }
+        }
+
+        do {
+            let outcome = try await actions.inspectInput(inputURL)
+            guard inputInspectionIdentifier == identifier else { return }
+            switch outcome {
+            case .ready:
+                try await actions.resetForInputChange()
+                acceptSelectedInput(inputURL, confirmedMatrix: nil)
+            case .matrixConfirmationRequired(let inputLayout):
+                pendingMatrixConfirmation = StemModePendingMatrixConfirmation(
+                    inputURL: inputURL,
+                    inputLayout: inputLayout
+                )
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard inputInspectionIdentifier == identifier else { return }
+            presentError(
+                title: "入力音源を確認できません",
+                message: error.localizedDescription
+            )
+        }
+
+    }
+
+    func confirmMixMatrix(_ confirmation: StemUserConfirmedMixMatrix) async {
+        guard let pendingMatrixConfirmation else {
+            presentError(
+                title: "変換設定を確定できません",
+                message: "確認待ちの入力レイアウトがありません。"
+            )
+            return
+        }
+        guard confirmation.inputLayout == pendingMatrixConfirmation.inputLayout else {
+            presentError(
+                title: "変換設定を確定できません",
+                message: "入力レイアウトが選択中の音源と一致しません。音源を選び直してください。"
+            )
+            return
+        }
+
+        do {
+            try await actions.resetForInputChange()
+            acceptSelectedInput(
+                pendingMatrixConfirmation.inputURL,
+                confirmedMatrix: confirmation
+            )
+            self.pendingMatrixConfirmation = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            presentError(
+                title: "入力音源を切り替えられません",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    func cancelMixMatrixConfirmation() {
+        let cancelledInputURL = pendingMatrixConfirmation?.inputURL
+        pendingMatrixConfirmation = nil
+        if let cancelledInputURL, selectedInputURL != cancelledInputURL {
+            actions.releaseInspectedInput(cancelledInputURL)
+        }
+    }
+
+    func resetMasteringSettingsToProfile() {
+        isApplyingMasteringProfile = true
+        masteringSettings = selectedMasteringProfile.settings
+        isApplyingMasteringProfile = false
+        isUsingCustomMasteringSettings = false
+    }
+
+    func selectCorrectionRole(_ role: StemRole) {
+        guard selectedCorrectionRole != role else { return }
+        stemPreviewController.stopPlayback()
+        selectedCorrectionRole = role
+        refreshSelectedStemPreviewSources()
+    }
+
+    func applyCorrectionProfile(_ profile: DenoiseStrength) throws {
+        try requireMutableCorrectionSettings()
+        correctionSettings = correctionSettings.replacing(
+            profile.settings,
+            for: selectedCorrectionRole
+        )
+    }
+
+    func updateCorrectionSettings(
+        _ update: (inout CorrectionSettings) -> Void
+    ) throws {
+        try requireMutableCorrectionSettings()
+        var updated = selectedRoleCorrectionSettings
+        update(&updated)
+        updated.profile = selectedDenoiseStrength
+        correctionSettings = correctionSettings.replacing(
+            updated,
+            for: selectedCorrectionRole
+        )
+    }
+
+    func resetCorrectionSettingsToProfile() throws {
+        try applyCorrectionProfile(selectedDenoiseStrength)
+    }
+
+    func setProductionSeparationSettings(
+        _ settings: StemSeparationSettings
+    ) throws {
+        try requireMutableRunSettings()
+        _ = try settings.validatedParameters()
+        guard settings.shifts == 1,
+              settings.overlap == 0.25,
+              settings.split,
+              settings.segmentLength == .modelContract,
+              settings.batchSize == 1,
+              settings.seed != nil else {
+            throw StemModeWorkspaceSettingsError.unapprovedProductionSettings
+        }
+        separationSettings = settings
+    }
+
+    func setModelPresentation(_ presentation: StemModeModelPresentation) {
+        modelPresentation = presentation
+    }
+
+    func beginCorrection() async {
+        guard let selectedInputURL else {
+            presentError(
+                title: "Stem Modeを開始できません",
+                message: "先に入力音源を選択してください。"
+            )
+            return
+        }
+        guard let separationSettings else {
+            presentError(
+                title: "Stem Modeを開始できません",
+                message: "承認済みの本番分離設定とrun seedがまだ準備されていません。"
+            )
+            return
+        }
+        guard modelPresentation != nil else {
+            presentError(
+                title: "Stem Modeを開始できません",
+                message: "検証済みactiveモデルの情報がまだ準備されていません。"
+            )
+            return
+        }
+        guard canRunCorrection else {
+            presentError(
+                title: "Stem Modeを開始できません",
+                message: "入力確認または別のStem Mode処理が進行中です。"
+            )
+            return
+        }
+
+        isStartingRun = true
+        presentedError = nil
+        let previousRemixAnalysisPresentation = remixAnalysisPresentation
+        let previousQualityReports = qualityReports
+        let previousFinalArtifact = finalArtifact
+        let previousInputEvaluation = inputEvaluation
+        let previousFinalEvaluation = finalEvaluation
+        let previousStemEvaluationsByRole = stemEvaluationsByRole
+        let previousPreviewArtifacts = previewArtifacts
+        let request = StemModeStartRequest(
+            inputURL: selectedInputURL,
+            confirmedMixMatrix: confirmedMixMatrix,
+            separationSettings: separationSettings,
+            correctionSettings: correctionSettings,
+            masteringProfile: selectedMasteringProfile,
+            masteringSettings: masteringSettings,
+            analysisMode: StemAudioAnalysisMode(selectedAnalysisMode)
+        )
+
+        do {
+            try await actions.beginCorrection(request)
+        } catch is CancellationError {
+            remixAnalysisPresentation = previousRemixAnalysisPresentation
+            qualityReports = previousQualityReports
+            finalArtifact = previousFinalArtifact
+            inputEvaluation = previousInputEvaluation
+            finalEvaluation = previousFinalEvaluation
+            stemEvaluationsByRole = previousStemEvaluationsByRole
+            replacePreviewSources(previousPreviewArtifacts)
+            isStartingRun = false
+            return
+        } catch {
+            remixAnalysisPresentation = previousRemixAnalysisPresentation
+            qualityReports = previousQualityReports
+            finalArtifact = previousFinalArtifact
+            inputEvaluation = previousInputEvaluation
+            finalEvaluation = previousFinalEvaluation
+            stemEvaluationsByRole = previousStemEvaluationsByRole
+            replacePreviewSources(previousPreviewArtifacts)
+            presentError(
+                title: "Stem Modeを開始できません",
+                message: error.localizedDescription
+            )
+        }
+        isStartingRun = false
+    }
+
+    func beginMastering() async {
+        guard canRunMastering else {
+            presentError(
+                title: "マスタリングを開始できません",
+                message: "補正済み4Stemが確定してからマスタリングを実行してください。"
+            )
+            return
+        }
+        isStartingRun = true
+        presentedError = nil
+        defer { isStartingRun = false }
+        do {
+            try await actions.beginMastering(
+                StemModeMasteringRequest(masteringSettings: masteringSettings)
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            presentError(
+                title: "マスタリングを開始できません",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    func cancelCorrection() async {
+        guard canCancelProcessing else { return }
+        do {
+            try await actions.cancelCorrection()
+        } catch is CancellationError {
+            return
+        } catch {
+            presentError(
+                title: "補正をキャンセルできません",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    func cancelMastering() async {
+        guard canCancelProcessing else { return }
+        do {
+            try await actions.cancelMastering()
+        } catch is CancellationError {
+            return
+        } catch {
+            presentError(
+                title: "マスタリングをキャンセルできません",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    func revealArtifact(_ artifact: StemAudioArtifact) {
+        actions.revealArtifact(artifact.fileURL)
+    }
+
+    func exportArtifact(
+        _ artifact: StemAudioArtifact,
+        as format: AudioExportFormat
+    ) async {
+        guard !exportingArtifactIDs.contains(artifact.id) else { return }
+        exportingArtifactIDs.insert(artifact.id)
+        defer { exportingArtifactIDs.remove(artifact.id) }
+        do {
+            let destinationURL = try await actions.exportArtifact(artifact, format)
+            session.recordExportSuccess(
+                artifact: artifact,
+                destinationURL: destinationURL,
+                fileInfo: try? AudioFileService.fileInfo(for: destinationURL)
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            session.recordExportFailure(artifact: artifact, message: error.localizedDescription)
+            presentError(
+                title: "成果物を書き出せません",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    func isExporting(_ artifact: StemAudioArtifact) -> Bool {
+        exportingArtifactIDs.contains(artifact.id)
+    }
+
+    func setRemixAnalysisPresentation(
+        _ presentation: StemModeRemixAnalysisPresentation?
+    ) {
+        remixAnalysisPresentation = presentation
+    }
+
+    func setWorkflowInputEvaluation(_ evaluation: StemAudioEvaluationSnapshot?) {
+        guard evaluation?.purpose == .canonicalInput || evaluation == nil else {
+            return
+        }
+        workflowInputEvaluation = evaluation
+    }
+
+    func replaceStemEvaluations(
+        _ presentations: [StemModeStemEvaluationPresentation]
+    ) {
+        var values: [StemRole: StemModeStemEvaluationPresentation] = [:]
+        for presentation in presentations {
+            values[presentation.role] = presentation
+        }
+        stemEvaluationsByRole = values
+    }
+
+    func setMasteringResult(_ result: StemMasteringResult) {
+        qualityReports = StemModeQualityReports(masteringResult: result)
+        finalArtifact = result.finalArtifact
+        finalEvaluation = result.finalEvaluation
+    }
+
+    /// Controllerがartifact検証を完了した後に、完全なpreview候補一覧を渡す境界です。
+    /// 未検証のartifactをこのAPIへ渡してはいけません。
+    func updatePreviewSources(
+        from validatedArtifacts: [StemAudioArtifact]
+    ) {
+        var artifactsByID: [String: StemAudioArtifact] = [:]
+        for artifact in validatedArtifacts where artifact.kind.isStemModePreviewable {
+            if let existing = artifactsByID[artifact.id], existing != artifact {
+                presentError(
+                    title: "試聴候補を更新できません",
+                    message: "同じIDで内容が異なる検証済み成果物があります（\(artifact.id)）。"
+                )
+                return
+            }
+            artifactsByID[artifact.id] = artifact
+        }
+
+        let sortedArtifacts = artifactsByID.values.sorted { lhs, rhs in
+            let leftRank = lhs.kind.stemModePreviewSortRank
+            let rightRank = rhs.kind.stemModePreviewSortRank
+            if leftRank == rightRank {
+                return lhs.id < rhs.id
+            }
+            return leftRank < rightRank
+        }
+        replacePreviewSources(sortedArtifacts)
+    }
+
+    func setFinalCommitLockState(_ state: StemModeFinalCommitLockState) {
+        finalCommitLockState = state
+    }
+
+    /// Controllerが現在セッションの補正開始を確定した時に、新しい処理表示へ切り替えます。
+    func acceptSessionStart() {
+        clearRunPresentation()
+    }
+
+    func setModelOperationInProgress(_ isInProgress: Bool) {
+        isModelOperationInProgress = isInProgress
+    }
+
+    func clearModelPresentation() {
+        modelPresentation = nil
+    }
+
+    private func requireMutableRunSettings() throws {
+        guard !isRunActive, !isStartingRun else {
+            throw StemModeWorkspaceSettingsError.settingsCannotChangeDuringRun
+        }
+    }
+
+    private func requireMutableCorrectionSettings() throws {
+        guard !isCorrectionSettingsDisabled else {
+            throw StemModeWorkspaceSettingsError.settingsCannotChangeDuringRun
+        }
+    }
+
+    func presentControllerFailure(title: String, message: String) {
+        presentError(title: title, message: message)
+    }
+
+    func stopPreviewPlayback() {
+        previewController.stopPlayback()
+        stemPreviewController.stopPlayback()
+    }
+
+    func stopTwoMixPreviewPlayback() {
+        previewController.stopPlayback()
+    }
+
+    func stopStemPreviewPlayback() {
+        stemPreviewController.stopPlayback()
+    }
+
+    func refreshSelectedStemPreviewSources() {
+        stemPreviewController.setComparisonPair(.inputVsCorrected)
+        stemPreviewController.preparePreview(
+            for: selectedRawStemPreviewURL,
+            target: .input
+        )
+        stemPreviewController.preparePreview(
+            for: selectedCorrectedStemPreviewURL,
+            target: .corrected
+        )
+        stemPreviewController.preparePreview(for: nil, target: .mastered)
+    }
+
+    func dismissPresentedError() {
+        presentedError = nil
+    }
+
+    func presentFileImporterFailure(_ error: Error) {
+        presentError(
+            title: "入力音源を選択できません",
+            message: error.localizedDescription
+        )
+    }
+
+    private func clearRunPresentation() {
+        remixAnalysisPresentation = nil
+        qualityReports = nil
+        finalArtifact = nil
+        workflowInputEvaluation = nil
+        finalEvaluation = nil
+        stemEvaluationsByRole = [:]
+        replacePreviewSources([])
+        clearStemPreviewSources()
+    }
+
+    func resetRunPresentationAfterCorrectionCancellation() {
+        clearRunPresentation()
+    }
+
+    private func replacePreviewSources(_ artifacts: [StemAudioArtifact]) {
+        let previousCorrected = correctedRemixPreviewArtifact
+        let previousFinal = finalPreviewArtifact
+        previewArtifacts = artifacts
+
+        if previousCorrected != correctedRemixPreviewArtifact
+            || previousFinal != finalPreviewArtifact {
+            preparePreviewSources()
+            refreshDisplayAnalysis()
+        }
+    }
+
+    private func preparePreviewSources() {
+        previewController.stopPlayback()
+        previewController.setComparisonPair(
+            finalPreviewArtifact == nil && correctedRemixPreviewArtifact != nil
+                ? .inputVsCorrected
+                : .inputVsMastered
+        )
+        previewController.preparePreview(
+            for: correctedRemixPreviewArtifact?.fileURL,
+            target: .corrected
+        )
+        previewController.preparePreview(
+            for: finalPreviewArtifact?.fileURL,
+            target: .mastered
+        )
+    }
+
+    private func refreshDisplayAnalysis() {
+        displayAnalysisTask?.cancel()
+        let generation = UUID()
+        displayAnalysisGeneration = generation
+        let correctedURL = correctedRemixPreviewArtifact?.fileURL
+        let finalURL = finalPreviewArtifact?.fileURL
+
+        correctedRemixSpectrogram = nil
+        finalSpectrogram = nil
+        displayAnalysisError = nil
+
+        guard correctedURL != nil || finalURL != nil else {
+            isAnalyzingDisplayAudio = false
+            return
+        }
+
+        isAnalyzingDisplayAudio = true
+        displayAnalysisTask = Task { [weak self] in
+            async let correctedResult = Self.loadSpectrogram(correctedURL)
+            async let finalResult = Self.loadSpectrogram(finalURL)
+            let (corrected, final) = await (
+                correctedResult,
+                finalResult
+            )
+            guard !Task.isCancelled,
+                  let self,
+                  self.displayAnalysisGeneration == generation else {
+                return
+            }
+
+            correctedRemixSpectrogram = corrected.snapshot
+            finalSpectrogram = final.snapshot
+            displayAnalysisError = [corrected.error, final.error]
+                .compactMap { $0 }
+                .first
+            isAnalyzingDisplayAudio = false
+            displayAnalysisTask = nil
+        }
+    }
+
+    private func acceptSelectedInput(
+        _ inputURL: URL,
+        confirmedMatrix: StemUserConfirmedMixMatrix?
+    ) {
+        clearSelectedInputPresentation()
+        selectedInputURL = inputURL
+        selectedInputFileInfo = try? AudioFileService.fileInfo(for: inputURL)
+        session.recordInputSelection(URL: inputURL, fileInfo: selectedInputFileInfo)
+        confirmedMixMatrix = confirmedMatrix
+        pendingMatrixConfirmation = nil
+
+        previewController.stopPlayback()
+        previewController.setComparisonPair(.inputVsCorrected)
+        previewController.preparePreviewPlaceholder(for: inputURL, target: .input)
+        startInputDisplayAnalysis(for: inputURL)
+    }
+
+    private func startInputDisplayAnalysis(for inputURL: URL) {
+        inputAnalysisTask?.cancel()
+        let generation = UUID()
+        inputAnalysisGeneration = generation
+        let analysisMode = StemAudioAnalysisMode(selectedAnalysisMode)
+        inputEvaluation = nil
+        inputDisplayMetrics = nil
+        inputDisplayNoiseMeasurements = nil
+        inputDisplayAudioAnalysis = nil
+        inputSpectrogram = nil
+        inputAnalysisError = nil
+        isAnalyzingInput = true
+
+        inputAnalysisTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let logHandler: @Sendable (String) -> Void = { [weak self] message in
+                    Task { @MainActor [weak self] in
+                        guard let self,
+                              self.inputAnalysisGeneration == generation,
+                              self.selectedInputURL?.standardizedFileURL == inputURL.standardizedFileURL else {
+                            return
+                        }
+                        self.session.recordInputDisplayAnalysisLog(message)
+                    }
+                }
+                let result = try await actions.analyzeInputForDisplay(
+                    inputURL,
+                    analysisMode,
+                    logHandler
+                )
+                guard !Task.isCancelled,
+                      inputAnalysisGeneration == generation,
+                      selectedInputURL?.standardizedFileURL == inputURL.standardizedFileURL else {
+                    return
+                }
+                let hasValidEvaluationPurpose = result.evaluation?.purpose == .canonicalInput
+                    || result.evaluation == nil
+                inputEvaluation = hasValidEvaluationPurpose ? result.evaluation : nil
+                inputDisplayMetrics = result.metrics
+                inputDisplayNoiseMeasurements = result.noiseMeasurements
+                inputDisplayAudioAnalysis = result.audioAnalysis
+                inputSpectrogram = result.spectrogram
+                inputAnalysisError = hasValidEvaluationPurpose
+                    ? result.warning
+                    : "入力表示用ではない解析結果を受け取ったため、測定値を表示しません。"
+                session.recordInputAnalysis(
+                    evaluation: inputEvaluation,
+                    warning: inputAnalysisError
+                )
+                previewController.setPreviewSnapshot(
+                    result.previewSnapshot,
+                    for: .input,
+                    sourceURL: inputURL,
+                    integratedLoudnessLUFS: result.metrics?.integratedLoudnessLUFS
+                )
+                isAnalyzingInput = false
+                inputAnalysisTask = nil
+            } catch is CancellationError {
+                if inputAnalysisGeneration == generation {
+                    isAnalyzingInput = false
+                    inputAnalysisTask = nil
+                }
+                return
+            } catch {
+                guard inputAnalysisGeneration == generation,
+                      selectedInputURL?.standardizedFileURL == inputURL.standardizedFileURL else {
+                    return
+                }
+                inputAnalysisError = error.localizedDescription
+                session.recordInputAnalysisFailure(error.localizedDescription)
+                isAnalyzingInput = false
+                inputAnalysisTask = nil
+            }
+        }
+    }
+
+    private func clearSelectedInputPresentation() {
+        inputAnalysisTask?.cancel()
+        inputAnalysisTask = nil
+        inputAnalysisGeneration = UUID()
+        isAnalyzingInput = false
+        inputAnalysisError = nil
+        inputEvaluation = nil
+        inputDisplayMetrics = nil
+        inputDisplayNoiseMeasurements = nil
+        inputDisplayAudioAnalysis = nil
+        inputSpectrogram = nil
+        previewController.preparePreviewPlaceholder(for: nil, target: .input)
+        clearStemPreviewSources()
+    }
+
+    private func validatedStemArtifact(
+        kind: StemArtifactKind
+    ) -> StemAudioArtifact? {
+        session.artifactStates.first { state in
+            state.kind == kind
+                && state.status == .valid
+                && state.artifact?.kind == kind
+        }?.artifact
+    }
+
+    private func clearStemPreviewSources() {
+        stemPreviewController.stopPlayback()
+        stemPreviewController.preparePreview(for: nil, target: .input)
+        stemPreviewController.preparePreview(for: nil, target: .corrected)
+        stemPreviewController.preparePreview(for: nil, target: .mastered)
+    }
+
+    private static func loadSpectrogram(
+        _ URL: URL?
+    ) async -> (snapshot: SpectrogramSnapshot?, error: String?) {
+        guard let URL else { return (nil, nil) }
+        do {
+            let snapshot = try await Task.detached(priority: .utility) {
+                try Task.checkCancellation()
+                return try AudioFileService.makeSpectrogramSnapshot(for: URL)
+            }.value
+            return (snapshot, nil)
+        } catch is CancellationError {
+            return (nil, nil)
+        } catch {
+            return (nil, error.localizedDescription)
+        }
+    }
+
+    private func presentError(title: String, message: String) {
+        presentedError = StemModeWorkspaceErrorPresentation(
+            title: title,
+            message: message
+        )
+    }
+}
+
+private extension StemWorkflowArtifactDisplayState {
+    var allowsStemModeExport: Bool {
+        switch status {
+        case .valid:
+            true
+        case .preparing, .available, .validating, .invalid:
+            false
+        }
+    }
+}

@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 2,
+  "assetSetIdentifier": "htdemucs-d4519e24ddc2dd4a11d56a193092433d852c3961",
+  "model": {
+    "name": "Demucs v4 htdemucs",
+    "repo": "mlx-community/demucs-mlx",
+    "revision": "d4519e24ddc2dd4a11d56a193092433d852c3961",
+    "licenseMetadata": "mit"
+  },
+  "runtimePins": [
+    {
+      "name": "demucs-mlx-swift",
+      "repo": "https://github.com/kylehowells/demucs-mlx-swift.git",
+      "revision": "c81c47178828db2d8bc66e64f80c745c64abdc94"
+    },
+    {
+      "name": "mlx-swift",
+      "repo": "https://github.com/ml-explore/mlx-swift.git",
+      "version": "0.30.6",
+      "revision": "6ba4827fb82c97d012eec9ab4b2de21f85c3b33d"
+    },
+    {
+      "name": "swift-transformers",
+      "repo": "https://github.com/huggingface/swift-transformers.git",
+      "version": "1.1.6",
+      "revision": "573e5c9036c2f136b3a8a071da8e8907322403d0"
+    },
+    {
+      "name": "swift-jinja",
+      "repo": "https://github.com/huggingface/swift-jinja.git",
+      "version": "2.3.2",
+      "revision": "f731f03bf746481d4fda07f817c3774390c4d5b9"
+    },
+    {
+      "name": "swift-collections",
+      "repo": "https://github.com/apple/swift-collections.git",
+      "version": "1.4.0",
+      "revision": "8d9834a6189db730f6264db7556a7ffb751e99ee"
+    },
+    {
+      "name": "swift-argument-parser",
+      "repo": "https://github.com/apple/swift-argument-parser",
+      "version": "1.8.2",
+      "revision": "6a52f3251125d74daf04fcbd5e6f08a75d074382"
+    },
+    {
+      "name": "swift-numerics",
+      "repo": "https://github.com/apple/swift-numerics",
+      "version": "1.1.1",
+      "revision": "0c0290ff6b24942dadb83a929ffaaa1481df04a2"
+    }
+  ],
+  "audioContract": {
+    "sampleRateHz": 44100,
+    "channelCount": 2,
+    "channelLayout": "stereo",
+    "scalarType": "float32",
+    "inputTensorLayout": "channel-major",
+    "outputTensorLayout": "source-major",
+    "channelLayoutWithinSource": "channel-major",
+    "sourceOrder": [
+      "drums",
+      "bass",
+      "other",
+      "vocals"
+    ]
+  },
+  "downloadPolicy": {
+    "requiresExplicitUserConfirmation": true,
+    "revisionResponseHeader": "X-Repo-Commit",
+    "allowedRedirectHosts": [
+      "huggingface.co",
+      "cas-bridge.xethub.hf.co"
+    ]
+  },
+  "downloadableModelAssets": [
+    {
+      "kind": "modelWeights",
+      "downloadURL": "https://huggingface.co/mlx-community/demucs-mlx/resolve/d4519e24ddc2dd4a11d56a193092433d852c3961/htdemucs.safetensors",
+      "installationRelativePath": "htdemucs/htdemucs.safetensors",
+      "byteCount": 168005865,
+      "sha256": "339d267a7a6983a11eedbdc00413c602a65e9b9103f695fb5c2b2a481cd9d297"
+    },
+    {
+      "kind": "modelConfiguration",
+      "downloadURL": "https://huggingface.co/mlx-community/demucs-mlx/resolve/d4519e24ddc2dd4a11d56a193092433d852c3961/htdemucs_config.json",
+      "installationRelativePath": "htdemucs/htdemucs_config.json",
+      "byteCount": 1892,
+      "sha256": "9258499513944fc062fbca0f11be425a446ec5702869a87e225323d7a57d2a01"
+    }
+  ],
+  "bundledRuntimeAssets": [
+    {
+      "kind": "metalLibrary",
+      "resourceRelativePath": "StemModels/MLX/mlx.metallib",
+      "runtimeRelativePath": "mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib",
+      "byteCount": 106957102,
+      "sha256": "82be53f327e9a39cb19a18272187187b7636f31989c44ad7ff474f7fe8171974"
+    }
+  ],
+  "metalLibraryBuildProvenance": {
+    "sourceRepo": "https://github.com/ml-explore/mlx-swift.git",
+    "sourceVersion": "0.30.6",
+    "sourceRevision": "6ba4827fb82c97d012eec9ab4b2de21f85c3b33d",
+    "sourceDirectory": "Source/Cmlx/mlx/mlx/backend/metal/kernels",
+    "sourceSelection": "all *.metal files except *_nax.metal, sorted with LC_ALL=C",
+    "sourceFileCount": 32,
+    "compilerCommand": "xcrun -sdk macosx metal",
+    "linkerCommand": "xcrun -sdk macosx metallib",
+    "compilerFlags": [
+      "-x",
+      "metal",
+      "-Wall",
+      "-Wextra",
+      "-fno-fast-math",
+      "-Wno-c++17-extensions",
+      "-Wno-c++20-extensions"
+    ],
+    "includeDirectories": [
+      "Source/Cmlx/mlx/mlx/backend/metal/kernels",
+      "Source/Cmlx/mlx"
+    ],
+    "verifiedToolchain": {
+      "xcodeVersion": "26.6",
+      "xcodeBuildVersion": "17F113",
+      "macosSdkVersion": "26.5",
+      "metalVersion": "Apple metal version 32023.883 (metalfe-32023.883)",
+      "metallibVersion": "AIR-LLD 32023.883 (metalfe-32023.883) (compatible with legacy metallib linker)"
+    }
+  }
+}

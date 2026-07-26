@@ -3,6 +3,25 @@ import Testing
 
 struct UIWordingPolicyTests {
     @Test
+    func inspectorQualitySummaryUsesCompactUnavailableStateInBothModes() throws {
+        let standardInspector = try combinedSource([
+            "Sources/VelouraLucent/Views/InspectorAnalysisPanel.swift"
+        ])
+        let stemInspector = try combinedSource([
+            "Sources/VelouraLucent/Views/StemModeInspectorView.swift"
+        ])
+
+        for source in [standardInspector, stemInspector] {
+            #expect(source.contains("Text(\"解析結果と品質確認\")"))
+            #expect(!source.contains("Text(\"音声の確認\")"))
+            #expect(!source.contains("ContentUnavailableView("))
+            #expect(source.contains("Image(systemName: \"waveform.path.ecg\")"))
+            #expect(source.contains(".accessibilityElement(children: .combine)"))
+            #expect(!source.contains("minHeight: 140"))
+        }
+    }
+
+    @Test
     func uiCopyKeepsNumbersAsListeningGuides() throws {
         let source = try combinedSource(
             [
@@ -37,6 +56,7 @@ struct UIWordingPolicyTests {
         let source = try combinedSource(
             [
                 "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
+                "Sources/VelouraLucent/Views/WorkspaceShellView.swift",
                 "Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift",
                 "Sources/VelouraLucent/Views/VectorScopeView.swift",
                 "Sources/VelouraLucent/Views/VectorScopeModePicker.swift"
@@ -77,7 +97,9 @@ struct UIWordingPolicyTests {
         #expect(source.contains("ダイナミクス推移"))
         #expect(source.contains("平均スペクトル比較"))
         #expect(source.contains("周波数帯域詳細"))
-        #expect(source.contains("右側インスペクタと下部ログへ同じ表を重複表示せず"))
+        #expect(!source.contains("private var header: some View"))
+        #expect(!source.contains("title: \"詳細解析\""))
+        #expect(!source.contains("右側インスペクタと下部ログへ同じ表を重複表示せず"))
         #expect(source.contains("仕上がりの方向") == false)
     }
 
@@ -112,17 +134,18 @@ struct UIWordingPolicyTests {
         let source = try combinedSource([
             "Sources/VelouraLucent/App/VelouraLucentApp.swift",
             "Sources/VelouraLucent/Views/ContentView.swift",
+            "Sources/VelouraLucent/Views/VelouraRootView.swift",
             "Sources/VelouraLucent/Views/VelouraAdaptiveGlassEffect.swift",
             "Sources/VelouraLucent/Models/AppAppearanceSettings.swift"
         ])
 
         #expect(source.contains("configureLiquidGlassWindow(window)"))
         #expect(source.contains("WindowChromeConfigurator("))
-        #expect(source.contains("@State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()"))
+        #expect(source.contains("@State private var windowBackgroundMaterialAmount ="))
         #expect(source.contains("@Environment(\\.accessibilityReduceTransparency) private var reduceTransparency"))
-        #expect(source.contains("let windowAppearanceState = AppAppearanceSettings.windowAppearanceState("))
-        #expect(source.contains(".velouraWindowBackground(state: windowAppearanceState)"))
-        #expect(source.contains("appearanceState: windowAppearanceState"))
+        #expect(source.contains("let appearanceState = AppAppearanceSettings.windowAppearanceState("))
+        #expect(source.contains(".velouraWindowBackground(state: appearanceState)"))
+        #expect(source.contains("appearanceState: appearanceState"))
         #expect(source.contains("if state.usesOpaqueBackground"))
         #expect(source.contains("appearanceState?.updatingFullScreen(isFullScreen)"))
         #expect(source.contains("if isFullScreen"))
@@ -157,6 +180,7 @@ struct UIWordingPolicyTests {
     func mainWorkspaceUsesLiquidGlassSurfacesWithoutBlockingBarBackground() throws {
         let source = try combinedSource([
             "Sources/VelouraLucent/Views/ContentView.swift",
+            "Sources/VelouraLucent/Views/WorkspaceShellView.swift",
             "Sources/VelouraLucent/Views/VelouraSidebarView.swift",
             "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
             "Sources/VelouraLucent/Views/VelouraInspectorView.swift",
@@ -248,52 +272,90 @@ struct UIWordingPolicyTests {
 
     @Test
     func contentViewKeepsSidebarAndTogglesRightSettingsPanel() throws {
-        let source = try combinedSource(["Sources/VelouraLucent/Views/ContentView.swift"])
+        let contentViewSource = try combinedSource([
+            "Sources/VelouraLucent/Views/ContentView.swift"
+        ])
+        let combined = try combinedSource([
+            "Sources/VelouraLucent/Views/ContentView.swift",
+            "Sources/VelouraLucent/Views/VelouraRootView.swift",
+            "Sources/VelouraLucent/Views/WorkspaceShellView.swift",
+        ])
+        let sidebarToggleStart = try #require(
+            contentViewSource.range(of: "private struct TitlebarSidebarToggleButton")
+        )
+        let inspectorConfiguratorStart = try #require(
+            contentViewSource.range(
+                of: "struct TitlebarInspectorToggleConfigurator",
+                range: sidebarToggleStart.upperBound..<contentViewSource.endIndex
+            )
+        )
+        let sidebarToggle = String(
+            contentViewSource[
+                sidebarToggleStart.lowerBound..<inspectorConfiguratorStart.lowerBound
+            ]
+        )
 
-        #expect(source.contains("@State private var isInspectorPresented = true"))
-        #expect(source.contains("@State private var sidebarVisibility: NavigationSplitViewVisibility = .all"))
-        #expect(source.contains("NavigationSplitView(columnVisibility: $sidebarVisibility)"))
-        #expect(source.contains("VelouraSidebarView(job: job)"))
-        #expect(source.contains("HStack(spacing: 0)"))
-        #expect(source.contains("VelouraMainWorkspaceView("))
-        #expect(source.contains("if isInspectorPresented"))
-        #expect(source.contains("VelouraInspectorView("))
-        #expect(source.contains("windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount"))
-        #expect(source.contains("TitlebarInspectorToggleConfigurator(isPresented: $isInspectorPresented)"))
-        #expect(source.contains("TitlebarInspectorToggleButton"))
-        #expect(source.contains("Image(systemName: \"sidebar.right\")"))
-        #expect(source.contains(".font(.system(size: 18, weight: .regular))"))
-        #expect(source.contains(".frame(width: 24, height: 24)"))
-        #expect(source.contains("controller.layoutAttribute = .right"))
-        #expect(source.contains(".buttonStyle(.plain)"))
-        #expect(source.contains("設定を隠す"))
-        #expect(source.contains("設定を表示"))
-        #expect(!source.contains("ToolbarItem(placement: .primaryAction)"))
-        #expect(!source.contains(".navigationTitle(\"試聴と解析\")"))
-        #expect(source.contains(".toolbar(removing: .sidebarToggle)"))
-        #expect(source.contains(".toolbar(removing: .title)"))
-        #expect(source.contains("TitlebarSidebarToggleConfigurator(visibility: $sidebarVisibility)"))
-        #expect(source.contains("NSTitlebarAccessoryViewController()"))
-        #expect(source.contains("controller.layoutAttribute = .left"))
-        #expect(source.contains("observeToolbar(in: window)"))
-        #expect(source.contains("NSToolbar.willAddItemNotification"))
-        #expect(source.contains("removeDefaultSidebarToggle(from: window)"))
-        #expect(source.contains("item.itemIdentifier == .toggleSidebar"))
-        #expect(source.contains("com.apple.SwiftUI.navigationSplitView.toggleSidebar"))
-        #expect(source.contains("toolbar.removeItem(at: index)"))
-        #expect(source.contains("Image(systemName: \"sidebar.left\")"))
-        #expect(source.contains("サイドバーを隠す"))
-        #expect(source.contains("サイドバーを表示"))
-        #expect(!source.contains(".inspector(isPresented:"))
-        #expect(!source.contains(".inspectorColumnWidth("))
+        #expect(combined.contains("@State private var isInspectorPresented = true"))
+        #expect(combined.contains(
+            "@State private var sidebarVisibility: NavigationSplitViewVisibility = .all"
+        ))
+        #expect(combined.contains("WorkspaceShellView("))
+        #expect(combined.contains("VelouraSidebarView(job: runtime.standardActions.job)"))
+        #expect(combined.contains("NavigationSplitView(columnVisibility: $sidebarVisibility)"))
+        #expect(combined.contains("HStack(spacing: 0)"))
+        #expect(combined.contains("VelouraMainWorkspaceView("))
+        #expect(combined.contains("if isInspectorPresented"))
+        #expect(combined.contains("VelouraInspectorView("))
+        #expect(combined.contains("windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount"))
+        #expect(combined.contains("TitlebarInspectorToggleConfigurator("))
+        #expect(combined.contains("isPresented: $isInspectorPresented"))
+        #expect(combined.contains("TitlebarInspectorToggleButton"))
+        #expect(combined.contains("Image(systemName: \"sidebar.right\")"))
+        #expect(combined.contains(".font(.system(size: 18, weight: .regular))"))
+        #expect(combined.contains(".frame(width: 24, height: 24)"))
+        #expect(combined.contains("controller.layoutAttribute = .right"))
+        #expect(combined.contains(".buttonStyle(.plain)"))
+        #expect(combined.contains("設定を隠す"))
+        #expect(combined.contains("設定を表示"))
+        #expect(!combined.contains("ToolbarItem(placement: .primaryAction)"))
+        #expect(!combined.contains(".navigationTitle(\"試聴と解析\")"))
+        #expect(combined.contains(".navigationSplitViewColumnWidth("))
+        #expect(combined.contains(".navigationSplitViewStyle(.prominentDetail)"))
+        #expect(combined.contains(".toolbar(removing: .sidebarToggle)"))
+        #expect(combined.contains(".toolbar(removing: .title)"))
+        #expect(combined.contains("TitlebarSidebarToggleConfigurator("))
+        #expect(combined.contains("visibility: $sidebarVisibility"))
+        #expect(combined.contains("NSTitlebarAccessoryViewController()"))
+        #expect(combined.contains("controller.layoutAttribute = .left"))
+        #expect(combined.contains("observeToolbar(in: window)"))
+        #expect(combined.contains("NSToolbar.willAddItemNotification"))
+        #expect(combined.contains("removeDefaultSidebarToggle"))
+        #expect(combined.contains("Image(systemName: \"sidebar.left\")"))
+        #expect(combined.contains("サイドバーを隠す"))
+        #expect(combined.contains("サイドバーを表示"))
+        #expect(sidebarToggle.contains(
+            "@Environment(\\.accessibilityReduceMotion) private var reduceMotion"
+        ))
+        #expect(sidebarToggle.contains("LiquidGlassMotion.perform("))
+        #expect(sidebarToggle.contains("animation: LiquidGlassMotion.panel"))
+        #expect(!combined.contains(".inspector(isPresented:"))
+        #expect(!combined.contains(".inspectorColumnWidth("))
     }
 
     @Test
-    func contentViewPreservesDetailWidthWhenSidebarVisibilityChanges() throws {
-        let source = try combinedSource(["Sources/VelouraLucent/Views/ContentView.swift"])
+    func commonWorkspaceRestoresStandardSidebarWidthRange() throws {
+        let source = try combinedSource([
+            "Sources/VelouraLucent/Views/VelouraRootView.swift",
+            "Sources/VelouraLucent/Views/WorkspaceShellView.swift",
+        ])
 
-        #expect(source.contains(".navigationSplitViewStyle(.prominentDetail)"))
-        #expect(!source.contains(".navigationSplitViewStyle(.balanced)"))
+        #expect(source.contains("static let sidebarMinimumWidth: CGFloat = 220"))
+        #expect(source.contains("static let sidebarIdealWidth: CGFloat = 260"))
+        #expect(source.contains("static let sidebarMaximumWidth: CGFloat = 300"))
+        #expect(source.contains("static let minimumCenterWidth: CGFloat = 620"))
+        #expect(source.contains("static let inspectorWidth: CGFloat = 440"))
+        #expect(source.contains("sidebarVisibility: $sidebarVisibility"))
+        #expect(source.contains("NavigationSplitView(columnVisibility: $sidebarVisibility)"))
     }
 
     @Test
@@ -321,16 +383,29 @@ struct UIWordingPolicyTests {
     @Test
     func menuCommandsExposeProcessingPlaybackAndInspectorShortcuts() throws {
         let commands = try combinedSource(["Sources/VelouraLucent/App/VelouraCommands.swift"])
+        let root = try combinedSource(["Sources/VelouraLucent/Views/VelouraRootView.swift"])
+        let toolbar = try combinedSource(["Sources/VelouraLucent/Views/WorkspaceToolbarView.swift"])
         let preview = try combinedSource(["Sources/VelouraLucent/Models/AudioPreviewController.swift"])
         let waveform = try combinedSource(["Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift"])
 
         #expect(commands.contains("CommandMenu(\"再生\")"))
+        #expect(commands.contains("Menu(\"モード\")"))
+        #expect(commands.contains("title: \"通常補正\""))
+        #expect(commands.contains("title: \"Stem Mode\""))
+        #expect(commands.contains("actions?.selectProcessingMode(mode)"))
+        #expect(commands.contains("ForEach(actions?.exportActions ?? [])"))
         #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: .command)"))
         #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: [.command, .shift])"))
         #expect(commands.contains(".keyboardShortcut(.space, modifiers: [])"))
         #expect(commands.contains(".keyboardShortcut(.cancelAction)"))
         #expect(commands.contains(".keyboardShortcut(\"b\", modifiers: .command)"))
         #expect(commands.contains(".keyboardShortcut(\"i\", modifiers: [.command, .option])"))
+        #expect(root.contains("\\.velouraCommandActions"))
+        #expect(root.contains("selectProcessingMode: selectProcessingMode"))
+        #expect(root.contains("_ = runtime.selectMode(mode)"))
+        #expect(root.contains("model.stopStemPreviewPlayback()"))
+        #expect(root.contains("exportActions: stemExportCommandActions"))
+        #expect(toolbar.contains("ForEach(commandActions.exportActions)"))
         #expect(preview.contains("func toggleComparisonPlayback()"))
         #expect(waveform.contains("preview.toggleComparisonPlayback()"))
         #expect(!waveform.contains("private func togglePlayback()"))
@@ -353,12 +428,16 @@ struct UIWordingPolicyTests {
     @Test
     func contentViewDelegatesProcessingAndAnalysisTaskOwnership() throws {
         let contentView = try combinedSource(["Sources/VelouraLucent/Views/ContentView.swift"])
+        let root = try combinedSource(["Sources/VelouraLucent/Views/VelouraRootView.swift"])
+        let toolbar = try combinedSource(["Sources/VelouraLucent/Views/WorkspaceToolbarView.swift"])
         let processingActions = try combinedSource(["Sources/VelouraLucent/App/ProcessingActions.swift"])
         let analysisCoordinator = try combinedSource(["Sources/VelouraLucent/App/DisplayAnalysisCoordinator.swift"])
 
         #expect(contentView.contains("@State private var processingActions = ProcessingActions("))
-        #expect(contentView.contains("processingActions.performCorrectionAction"))
-        #expect(contentView.contains("processingActions.performMasteringAction"))
+        #expect(root.contains("runCorrection: actions.startCorrectionProcessing"))
+        #expect(root.contains("runMastering: actions.startMasteringProcessing"))
+        #expect(toolbar.contains("commandActions.runCorrection()"))
+        #expect(toolbar.contains("commandActions.runMastering()"))
         #expect(contentView.contains("processingActions.acceptDroppedInputAudio"))
         #expect(contentView.contains("processingActions.shutdown()"))
         #expect(!contentView.contains("private func startCorrectionProcessing()"))
@@ -387,6 +466,7 @@ struct UIWordingPolicyTests {
             "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
             "Sources/VelouraLucent/Views/VelouraInspectorView.swift",
             "Sources/VelouraLucent/Views/FullProcessingLogView.swift",
+            "Sources/VelouraLucent/Views/WorkspaceShellView.swift",
             "Sources/VelouraLucent/Views/CompletionReportPopoverView.swift"
         ])
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
@@ -576,6 +656,7 @@ struct UIWordingPolicyTests {
             [
                 "Sources/VelouraLucent/Views/RecentProcessingLogView.swift",
                 "Sources/VelouraLucent/Views/WorkspaceFooterView.swift",
+                "Sources/VelouraLucent/Views/WorkspaceShellView.swift",
                 "Sources/VelouraLucent/Views/OverallWorkflowView.swift"
             ]
         )
@@ -583,7 +664,9 @@ struct UIWordingPolicyTests {
         #expect(source.contains("events: job.recentActivityEvents"))
         #expect(source.contains("ForEach(events.suffix(4))"))
         #expect(source.contains(".frame(maxWidth: .infinity, minHeight: 139, alignment: .topLeading)"))
-        #expect(source.contains(".frame(minHeight: 206, idealHeight: 214, maxHeight: 224, alignment: .top)"))
+        #expect(source.contains("minHeight: 206"))
+        #expect(source.contains("idealHeight: 214"))
+        #expect(source.contains("maxHeight: 224"))
         #expect(source.contains("event.timestamp"))
         #expect(source.contains("event.fileName"))
         #expect(source.contains("event.audioSummary"))

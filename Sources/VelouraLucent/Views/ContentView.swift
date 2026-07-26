@@ -2,21 +2,18 @@ import AppKit
 import SwiftUI
 
 struct ContentView: View {
-    static let inspectorVisibleMinimumWindowWidth: CGFloat = 1_380
-    static let inspectorHiddenMinimumWindowWidth: CGFloat = 960
-    static let minimumWindowHeight: CGFloat = 720
-
     @State private var processingActions = ProcessingActions(notificationReporter: NotificationService.shared)
-    @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
-    @State private var isInspectorPresented = true
-    @State private var isWindowFullScreen = false
+    private let shutsDownOnDisappear: Bool
     @State private var inputAudioDropVisualState: InputAudioDropVisualState = .inactive
-    @State private var windowBackgroundMaterialAmount = AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
-    @State private var highlightedToolbarTarget: LiquidGlassToolbarTarget?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Namespace private var toolbarGlassNamespace
-    @Namespace private var inspectorGlassNamespace
+
+    @MainActor
+    init(
+        processingActions: ProcessingActions,
+        shutsDownOnDisappear: Bool
+    ) {
+        _processingActions = State(initialValue: processingActions)
+        self.shutsDownOnDisappear = shutsDownOnDisappear
+    }
 
     private var job: ProcessingJob {
         processingActions.job
@@ -28,26 +25,8 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var actions = processingActions
-        let windowAppearanceState = AppAppearanceSettings.windowAppearanceState(
-            materialAmount: windowBackgroundMaterialAmount,
-            isFullScreen: isWindowFullScreen,
-            reduceTransparency: reduceTransparency
-        )
 
         mainContent
-            .environment(\.velouraIsFullScreen, isWindowFullScreen)
-            .frame(minWidth: minimumWindowWidth, minHeight: Self.minimumWindowHeight)
-            .velouraWindowBackground(state: windowAppearanceState)
-            .background(
-                WindowChromeConfigurator(
-                    minSize: NSSize(width: minimumWindowWidth, height: Self.minimumWindowHeight),
-                    appearanceState: windowAppearanceState,
-                    isFullScreen: $isWindowFullScreen
-                )
-            )
-            .background(TitlebarSidebarToggleConfigurator(visibility: $sidebarVisibility))
-            .background(TitlebarInspectorToggleConfigurator(isPresented: $isInspectorPresented))
-            .focusedSceneValue(\.velouraCommandActions, commandActions)
             .alert(item: $actions.presentedError) { error in
                 Alert(
                     title: Text(error.title),
@@ -59,283 +38,45 @@ struct ContentView: View {
                 job.applyMasteringProfile(newValue)
             }
             .onDisappear {
-                processingActions.shutdown()
+                if shutsDownOnDisappear {
+                    processingActions.shutdown()
+                }
             }
     }
 
     private var mainContent: some View {
-        NavigationSplitView(columnVisibility: $sidebarVisibility) {
-            VelouraSidebarView(job: job)
-                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 300)
-        } detail: {
-            HStack(spacing: 0) {
-                ZStack {
-                    VelouraMainWorkspaceView(
-                        job: job,
-                        preview: preview
-                    )
-                    .frame(minWidth: 620, maxWidth: .infinity)
-
-                    InputAudioDropReceiver(
-                        isEnabled: processingActions.canAcceptInputAudioDrop,
-                        visualState: $inputAudioDropVisualState,
-                        onDrop: processingActions.acceptDroppedInputAudio
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .accessibilityHidden(true)
-
-                    switch inputAudioDropVisualState {
-                    case .inactive:
-                        EmptyView()
-                    case .accepted:
-                        InputAudioDropOverlay(kind: .accepted)
-                            .transition(.opacity)
-                            .allowsHitTesting(false)
-                    case .rejected:
-                        InputAudioDropOverlay(kind: .rejected)
-                            .transition(.opacity)
-                            .allowsHitTesting(false)
-                    }
-                }
-                .frame(minWidth: 620, maxWidth: .infinity, maxHeight: .infinity)
-
-                if isInspectorPresented {
-                    Divider()
-                    VelouraInspectorView(
-                        job: job,
-                        completionReport: completionReport,
-                        windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
-                        isWindowFullScreen: isWindowFullScreen
-                    )
-                    .frame(width: 440)
-                    .glassEffectID("right-inspector-panel", in: inspectorGlassNamespace)
-                    .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
-                    .transition(inspectorTransition)
-                }
-            }
-        }
-        .navigationSplitViewStyle(.prominentDetail)
-        .toolbar(removing: .sidebarToggle)
-        .toolbar(removing: .title)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                toolbarActionGroup
-            }
-            .sharedBackgroundVisibility(.hidden)
-
-            ToolbarSpacer(.fixed, placement: .principal)
-
-            ToolbarItem(placement: .principal) {
-                Menu {
-                    ForEach(AudioExportFormat.allCases) { format in
-                        Menu(format.menuTitle) {
-                            Button("補正後を書き出し") {
-                                processingActions.exportCorrectedAudio(as: format)
-                            }
-                            .disabled(!job.hasExistingOutput || job.isProcessing)
-
-                            Button("最終版を書き出し") {
-                                processingActions.exportMasteredAudio(as: format)
-                            }
-                            .disabled(!job.hasExistingMasteredOutput || job.isMastering)
-                        }
-                    }
-                } label: {
-                    toolbarExportLabel("書き出し", systemImage: "square.and.arrow.down")
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .padding(4)
-                .velouraAdaptiveGlass(in: .capsule, interactive: true)
-                .onHover { updateToolbarHighlight(.export, isHovering: $0) }
-                .accessibilityLabel("書き出し")
-                .help("補正後または最終版を書き出します")
-            }
-            .sharedBackgroundVisibility(.hidden)
-        }
-    }
-
-    private var toolbarActionGroup: some View {
-        GlassEffectContainer(spacing: 0) {
-            HStack(spacing: 4) {
-                Button(action: processingActions.chooseInputAudio) {
-                    toolbarActionLabel("音声を選ぶ", systemImage: "waveform.badge.plus", target: .chooseInput)
-                }
-                .buttonStyle(.plain)
-                .onHover { updateToolbarHighlight(.chooseInput, isHovering: $0) }
-                .help("入力音声を選びます")
-                .disabled(job.isProcessing || job.isMastering)
-
-                Button(action: processingActions.performCorrectionAction) {
-                    toolbarActionLabel(
-                        correctionToolbarTitle,
-                        systemImage: job.isProcessing ? "xmark.circle.fill" : "wand.and.sparkles",
-                        target: .runCorrection
-                    )
-                }
-                .buttonStyle(.plain)
-                .onHover { updateToolbarHighlight(.runCorrection, isHovering: $0) }
-                .help(job.isProcessing ? "補正処理をキャンセルします" : "入力音声に補正処理をかけます")
-                .disabled(isCorrectionToolbarActionDisabled)
-
-                Button(action: processingActions.performMasteringAction) {
-                    toolbarActionLabel(
-                        masteringToolbarTitle,
-                        systemImage: job.isMastering ? "xmark.circle.fill" : "slider.horizontal.3",
-                        target: .runMastering
-                    )
-                }
-                .buttonStyle(.plain)
-                .onHover { updateToolbarHighlight(.runMastering, isHovering: $0) }
-                .help(job.isMastering ? "マスタリングをキャンセルします" : "補正後音声を最終版へ仕上げます")
-                .disabled(isMasteringToolbarActionDisabled)
-            }
-            .padding(4)
-            .velouraAdaptiveGlass(in: .capsule, interactive: true)
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    private var inspectorTransition: AnyTransition {
-        if reduceMotion {
-            return .opacity
-        }
-        return .move(edge: .trailing).combined(with: .opacity)
-    }
-
-    private func toolbarActionLabel(
-        _ title: String,
-        systemImage: String,
-        target: LiquidGlassToolbarTarget
-    ) -> some View {
-        toolbarLabel(title, systemImage: systemImage)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .liquidGlassCapsuleMorphSurface(
-                isActive: highlightedToolbarTarget == target,
-                effectID: "toolbar-action-highlight",
-                namespace: toolbarGlassNamespace,
-                reduceMotion: reduceMotion
+        ZStack {
+            VelouraMainWorkspaceView(
+                job: job,
+                preview: preview
             )
-    }
 
-    private func toolbarExportLabel(_ title: String, systemImage: String) -> some View {
-        toolbarLabel(title, systemImage: systemImage)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .liquidGlassCapsuleMorphSurface(
-                isActive: highlightedToolbarTarget == .export,
-                effectID: "toolbar-action-highlight",
-                namespace: toolbarGlassNamespace,
-                reduceMotion: reduceMotion
+            InputAudioDropReceiver(
+                isEnabled: processingActions.canAcceptInputAudioDrop,
+                visualState: $inputAudioDropVisualState,
+                onDrop: processingActions.acceptDroppedInputAudio
             )
-    }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityHidden(true)
 
-    private func toolbarLabel(_ title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-            .labelStyle(.titleAndIcon)
-        .font(.callout)
-        .fixedSize()
-    }
-
-    @MainActor
-    private func updateToolbarHighlight(_ target: LiquidGlassToolbarTarget, isHovering: Bool) {
-        let nextTarget = isHovering ? target : (highlightedToolbarTarget == target ? nil : highlightedToolbarTarget)
-        guard nextTarget != highlightedToolbarTarget else { return }
-        LiquidGlassMotion.perform(
-            reduceMotion: reduceMotion,
-            animation: LiquidGlassMotion.selection
-        ) {
-            highlightedToolbarTarget = nextTarget
+            switch inputAudioDropVisualState {
+            case .inactive:
+                EmptyView()
+            case .accepted:
+                InputAudioDropOverlay(kind: .accepted)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            case .rejected:
+                InputAudioDropOverlay(kind: .rejected)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
         }
     }
 
-    private var completionReport: CompletionReport? {
-        CompletionReportService.makeReport(
-            input: job.inputMetrics,
-            corrected: job.outputMetrics,
-            mastered: job.masteredMetrics,
-            inputNoise: job.inputNoiseMeasurements,
-            correctedNoise: job.outputNoiseMeasurements,
-            masteredNoise: job.masteredNoiseMeasurements,
-            correctionSettings: job.appliedCorrectionSettings ?? job.editableCorrectionSettings,
-            masteringSettings: job.appliedMasteringSettings ?? job.editableMasteringSettings
-        )
-    }
-
-    private var minimumWindowWidth: CGFloat {
-        isInspectorPresented ? Self.inspectorVisibleMinimumWindowWidth : Self.inspectorHiddenMinimumWindowWidth
-    }
-
-    private var commandActions: VelouraCommandActions {
-        VelouraCommandActions(
-            canChooseInput: !job.isProcessing && !job.isMastering,
-            canRunCorrection: job.inputFile != nil && !job.isProcessing && !job.isMastering,
-            canRunMastering: processingActions.canStartMastering,
-            isCorrectionRunning: job.isProcessing,
-            isMasteringRunning: job.isMastering,
-            canCancelCorrection: job.isProcessing && !job.isCancellingProcessing,
-            canCancelMastering: job.isMastering && !job.isCancellingMastering,
-            canExportCorrected: job.hasExistingOutput && !job.isProcessing,
-            canExportMastered: job.hasExistingMasteredOutput && !job.isMastering,
-            canTogglePlayback: preview.canToggleComparisonPlayback,
-            canStopPlayback: preview.activeTarget != nil,
-            canToggleComparisonSide: preview.canToggleComparisonSide,
-            isPlaybackRunning: preview.isComparisonPlaybackRunning,
-            isInspectorPresented: isInspectorPresented,
-            chooseInputAudio: processingActions.chooseInputAudio,
-            runCorrection: processingActions.startCorrectionProcessing,
-            runMastering: processingActions.startMasteringProcessing,
-            cancelCorrection: processingActions.cancelCorrectionProcessing,
-            cancelMastering: processingActions.cancelMasteringProcessing,
-            exportCorrected: processingActions.exportCorrectedAudio,
-            exportMastered: processingActions.exportMasteredAudio,
-            togglePlayback: preview.toggleComparisonPlayback,
-            stopPlayback: { preview.stopPlayback() },
-            toggleComparisonSide: preview.toggleComparisonSide,
-            toggleInspector: toggleInspector
-        )
-    }
-
-    private var correctionToolbarTitle: String {
-        if job.isCancellingProcessing {
-            return "キャンセル中..."
-        }
-        return job.isProcessing ? "補正をキャンセル" : "補正を実行"
-    }
-
-    private var masteringToolbarTitle: String {
-        if job.isCancellingMastering {
-            return "キャンセル中..."
-        }
-        return job.isMastering ? "マスタリングをキャンセル" : "マスタリングを実行"
-    }
-
-    private var isCorrectionToolbarActionDisabled: Bool {
-        if job.isProcessing {
-            return job.isCancellingProcessing
-        }
-        return job.inputFile == nil || job.isMastering
-    }
-
-    private var isMasteringToolbarActionDisabled: Bool {
-        if job.isMastering {
-            return job.isCancellingMastering
-        }
-        return !processingActions.canStartMastering
-    }
-
-    private func toggleInspector() {
-        LiquidGlassMotion.perform(
-            reduceMotion: reduceMotion,
-            animation: LiquidGlassMotion.panel
-        ) {
-            isInspectorPresented.toggle()
-        }
-    }
 }
 
-private extension View {
+extension View {
     @ViewBuilder
     func velouraWindowBackground(state: WindowAppearanceState) -> some View {
         if state.usesOpaqueBackground {
@@ -350,7 +91,7 @@ private extension View {
 
 }
 
-private struct WindowChromeConfigurator: NSViewRepresentable {
+struct WindowChromeConfigurator: NSViewRepresentable {
     let minSize: NSSize
     let appearanceState: WindowAppearanceState
     @Binding var isFullScreen: Bool
@@ -497,8 +238,9 @@ private struct WindowChromeConfigurator: NSViewRepresentable {
     }
 }
 
-private struct TitlebarSidebarToggleConfigurator: NSViewRepresentable {
+struct TitlebarSidebarToggleConfigurator: NSViewRepresentable {
     @Binding var visibility: NavigationSplitViewVisibility
+    let isAvailable: Bool
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -506,13 +248,19 @@ private struct TitlebarSidebarToggleConfigurator: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        context.coordinator.update(visibility: $visibility)
+        context.coordinator.update(
+            visibility: $visibility,
+            isAvailable: isAvailable
+        )
         updateWindow(for: view, context: context)
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.update(visibility: $visibility)
+        context.coordinator.update(
+            visibility: $visibility,
+            isAvailable: isAvailable
+        )
         updateWindow(for: nsView, context: context)
     }
 
@@ -536,7 +284,6 @@ private struct TitlebarSidebarToggleConfigurator: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         private static let accessoryIdentifier = NSUserInterfaceItemIdentifier("VelouraLucentSidebarToggleAccessory")
-        // SwiftUI NavigationSplitView uses this runtime toolbar item for its default sidebar toggle.
         private static let swiftUISidebarToggleIdentifier = NSToolbarItem.Identifier(
             "com.apple.SwiftUI.navigationSplitView.toggleSidebar"
         )
@@ -546,10 +293,18 @@ private struct TitlebarSidebarToggleConfigurator: NSViewRepresentable {
         private var accessoryController: NSTitlebarAccessoryViewController?
         private var hostingView: NSHostingView<TitlebarSidebarToggleButton>?
         private var visibility: Binding<NavigationSplitViewVisibility>?
+        private var isAvailable = true
 
-        func update(visibility: Binding<NavigationSplitViewVisibility>) {
+        func update(
+            visibility: Binding<NavigationSplitViewVisibility>,
+            isAvailable: Bool
+        ) {
             self.visibility = visibility
-            hostingView?.rootView = TitlebarSidebarToggleButton(visibility: visibility)
+            self.isAvailable = isAvailable
+            hostingView?.rootView = TitlebarSidebarToggleButton(
+                visibility: visibility,
+                isAvailable: isAvailable
+            )
         }
 
         func observeToolbar(in window: NSWindow) {
@@ -578,7 +333,10 @@ private struct TitlebarSidebarToggleConfigurator: NSViewRepresentable {
 
             removeStaleAccessory(from: window)
 
-            let button = TitlebarSidebarToggleButton(visibility: visibility)
+            let button = TitlebarSidebarToggleButton(
+                visibility: visibility,
+                isAvailable: isAvailable
+            )
             let hostingView = NSHostingView(rootView: button)
             hostingView.frame = NSRect(x: 0, y: 0, width: 36, height: 30)
             hostingView.identifier = Self.accessoryIdentifier
@@ -632,10 +390,17 @@ private struct TitlebarSidebarToggleConfigurator: NSViewRepresentable {
 
 private struct TitlebarSidebarToggleButton: View {
     @Binding var visibility: NavigationSplitViewVisibility
+    let isAvailable: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button {
-            visibility = isSidebarVisible ? .detailOnly : .all
+            LiquidGlassMotion.perform(
+                reduceMotion: reduceMotion,
+                animation: LiquidGlassMotion.panel
+            ) {
+                visibility = isPresented ? .detailOnly : .all
+            }
         } label: {
             Image(systemName: "sidebar.left")
                 .font(.system(size: 18, weight: .regular))
@@ -646,17 +411,21 @@ private struct TitlebarSidebarToggleButton: View {
         .contentShape(Rectangle())
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
-        .accessibilityLabel(isSidebarVisible ? "サイドバーを隠す" : "サイドバーを表示")
+        .opacity(isAvailable ? 1 : 0)
+        .allowsHitTesting(isAvailable)
+        .accessibilityHidden(!isAvailable)
+        .accessibilityLabel(isPresented ? "サイドバーを隠す" : "サイドバーを表示")
         .help("左側のサイドバーを表示または非表示にします")
     }
 
-    private var isSidebarVisible: Bool {
+    private var isPresented: Bool {
         visibility != .detailOnly
     }
 }
 
-private struct TitlebarInspectorToggleConfigurator: NSViewRepresentable {
+struct TitlebarInspectorToggleConfigurator: NSViewRepresentable {
     @Binding var isPresented: Bool
+    let isAvailable: Bool
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -664,13 +433,19 @@ private struct TitlebarInspectorToggleConfigurator: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        context.coordinator.update(isPresented: $isPresented)
+        context.coordinator.update(
+            isPresented: $isPresented,
+            isAvailable: isAvailable
+        )
         updateWindow(for: view, context: context)
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.update(isPresented: $isPresented)
+        context.coordinator.update(
+            isPresented: $isPresented,
+            isAvailable: isAvailable
+        )
         updateWindow(for: nsView, context: context)
     }
 
@@ -697,10 +472,18 @@ private struct TitlebarInspectorToggleConfigurator: NSViewRepresentable {
         private var accessoryController: NSTitlebarAccessoryViewController?
         private var hostingView: NSHostingView<TitlebarInspectorToggleButton>?
         private var isPresented: Binding<Bool>?
+        private var isAvailable = true
 
-        func update(isPresented: Binding<Bool>) {
+        func update(
+            isPresented: Binding<Bool>,
+            isAvailable: Bool
+        ) {
             self.isPresented = isPresented
-            hostingView?.rootView = TitlebarInspectorToggleButton(isPresented: isPresented)
+            self.isAvailable = isAvailable
+            hostingView?.rootView = TitlebarInspectorToggleButton(
+                isPresented: isPresented,
+                isAvailable: isAvailable
+            )
         }
 
         func observeWindow(in window: NSWindow) {
@@ -749,7 +532,10 @@ private struct TitlebarInspectorToggleConfigurator: NSViewRepresentable {
 
             removeStaleAccessory(from: window)
 
-            let button = TitlebarInspectorToggleButton(isPresented: isPresented)
+            let button = TitlebarInspectorToggleButton(
+                isPresented: isPresented,
+                isAvailable: isAvailable
+            )
             let hostingView = NSHostingView(rootView: button)
             hostingView.frame = NSRect(x: 0, y: 0, width: 36, height: 30)
             hostingView.identifier = Self.accessoryIdentifier
@@ -798,6 +584,7 @@ private struct TitlebarInspectorToggleConfigurator: NSViewRepresentable {
 
 private struct TitlebarInspectorToggleButton: View {
     @Binding var isPresented: Bool
+    let isAvailable: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -817,11 +604,27 @@ private struct TitlebarInspectorToggleButton: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
+        .opacity(isAvailable ? 1 : 0)
+        .allowsHitTesting(isAvailable)
+        .accessibilityHidden(!isAvailable)
         .accessibilityLabel(isPresented ? "設定を隠す" : "設定を表示")
         .help("右側の設定パネルを表示または非表示にします")
     }
 }
 
+private struct ContentViewPreviewHost: View {
+    @State private var processingActions = ProcessingActions(
+        notificationReporter: NotificationService.shared
+    )
+
+    var body: some View {
+        ContentView(
+            processingActions: processingActions,
+            shutsDownOnDisappear: true
+        )
+    }
+}
+
 #Preview {
-    ContentView()
+    ContentViewPreviewHost()
 }

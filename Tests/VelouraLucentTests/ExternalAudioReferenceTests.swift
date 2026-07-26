@@ -43,7 +43,9 @@ struct ExternalAudioReferenceTests {
     @Test
     func realAudioExcerptStaysNearFFmpegEBUR128Reference() throws {
         let projectDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let sourceURL = projectDirectory.appending(path: "violin #002 睡眠.wav")
+        let sourceURL = projectDirectory.appending(
+            path: "Tests/Fixtures/Sample_audio/violin #002 睡眠.wav"
+        )
         let sourceSignal = try AudioFileService.loadAudio(from: sourceURL)
         let excerpt = try audioQualityExcerpt(from: sourceSignal, startSeconds: 60, durationSeconds: 8)
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)

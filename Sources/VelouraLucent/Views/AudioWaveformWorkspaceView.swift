@@ -6,6 +6,21 @@ struct AudioWaveformWorkspaceView: View {
     let inputFileURL: URL?
     let correctedFileURL: URL?
     let masteredFileURL: URL?
+    let onWillStartPlayback: @MainActor () -> Void
+
+    init(
+        preview: AudioPreviewController,
+        inputFileURL: URL?,
+        correctedFileURL: URL?,
+        masteredFileURL: URL?,
+        onWillStartPlayback: @escaping @MainActor () -> Void = {}
+    ) {
+        self.preview = preview
+        self.inputFileURL = inputFileURL
+        self.correctedFileURL = correctedFileURL
+        self.masteredFileURL = masteredFileURL
+        self.onWillStartPlayback = onWillStartPlayback
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -98,6 +113,7 @@ struct AudioWaveformWorkspaceView: View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 8) {
                 Button("Aを再生") {
+                    onWillStartPlayback()
                     preview.playComparisonSide(.a)
                 }
                 .buttonStyle(.plain)
@@ -106,6 +122,7 @@ struct AudioWaveformWorkspaceView: View {
                 .disabled(comparisonFileURL(for: .a) == nil)
 
                 Button(playPauseTitle, systemImage: playPauseSystemImage) {
+                    onWillStartPlayback()
                     preview.toggleComparisonPlayback()
                 }
                 .labelStyle(.iconOnly)
@@ -126,6 +143,7 @@ struct AudioWaveformWorkspaceView: View {
                 .disabled(preview.activeTarget == nil)
 
                 Button("Bを再生") {
+                    onWillStartPlayback()
                     preview.playComparisonSide(.b)
                 }
                 .buttonStyle(.plain)
@@ -134,6 +152,7 @@ struct AudioWaveformWorkspaceView: View {
                 .disabled(comparisonFileURL(for: .b) == nil)
 
                 Button("A/B切替") {
+                    onWillStartPlayback()
                     preview.toggleComparisonSide()
                 }
                 .buttonStyle(.plain)
@@ -342,7 +361,7 @@ private extension View {
     }
 }
 
-private struct SeekableWaveformView: View {
+struct SeekableWaveformView: View {
     let samples: [Float]
     let progress: Double
     let tint: Color

@@ -4,3 +4,5 @@ dist/
 __pycache__/
 *.pyc
 .serena/
+/.stem-model-cache/
+/Sources/VelouraLucent/Resources/StemModels/MLX/mlx.metallib

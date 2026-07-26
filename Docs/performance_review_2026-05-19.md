@@ -21,7 +21,7 @@
 
 対象音源:
 
-`/Users/apple/Desktop/Dev_App/Veloura Lucent/violin #002 睡眠.wav`
+`/Users/apple/Desktop/Dev_App/Veloura Lucent/Tests/Fixtures/Sample_audio/violin #002 睡眠.wav`
 
 | 項目 | CPU | 実験Metal | CPU / 実験Metal |
 |---|---:|---:|---:|

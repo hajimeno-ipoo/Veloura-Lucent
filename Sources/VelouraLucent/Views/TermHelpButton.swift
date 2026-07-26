@@ -4,9 +4,22 @@ struct TermHelpButton: View {
     let title: String
     let reading: String
     let description: String
+    let systemImage: String
     @State private var isPresented = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var glassNamespace
+
+    init(
+        title: String,
+        reading: String,
+        description: String,
+        systemImage: String = "questionmark.circle"
+    ) {
+        self.title = title
+        self.reading = reading
+        self.description = description
+        self.systemImage = systemImage
+    }
 
     var body: some View {
         Button {
@@ -17,7 +30,7 @@ struct TermHelpButton: View {
                 isPresented.toggle()
             }
         } label: {
-            Image(systemName: "questionmark.circle")
+            Image(systemName: systemImage)
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(.secondary)
                 .glassEffect(.clear.interactive(), in: Circle())

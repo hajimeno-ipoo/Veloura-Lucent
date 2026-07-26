@@ -85,7 +85,7 @@ enum DAWKnobMetrics {
     static let rotatingArtworkImage = loadImage(named: "2")
 
     static func resourceURL(named name: String) -> URL? {
-        Bundle.module.url(forResource: name, withExtension: "png")
+        AppResourceBundle.url(forResource: name, withExtension: "png")
     }
 
     private static func loadImage(named name: String) -> NSImage? {

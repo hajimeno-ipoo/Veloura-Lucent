@@ -9,7 +9,7 @@ struct InspectorAnalysisPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("音声の確認")
+                Text("解析結果と品質確認")
                     .font(.title3.bold())
                 Spacer()
                 if job.isAnalyzingDisplayAnalysis {
@@ -29,12 +29,20 @@ struct InspectorAnalysisPanel: View {
             if let metrics = selectedMetrics {
                 metricsGrid(metrics)
             } else {
-                ContentUnavailableView(
-                    unavailableTitle,
-                    systemImage: "waveform.path.ecg",
-                    description: Text(unavailableDescription)
-                )
-                .frame(maxWidth: .infinity, minHeight: 140)
+                Label {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(unavailableTitle)
+                            .font(.headline)
+                        Text(unavailableDescription)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "waveform.path.ecg")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 6)
+                .accessibilityElement(children: .combine)
             }
 
             if let qualityReport {

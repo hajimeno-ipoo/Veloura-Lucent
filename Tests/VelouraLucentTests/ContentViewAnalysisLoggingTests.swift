@@ -6,9 +6,20 @@ struct ContentViewAnalysisLoggingTests {
     @Test
     @MainActor
     func inspectorWindowMinimumWidthsMatchLayoutContract() {
-        #expect(ContentView.inspectorVisibleMinimumWindowWidth == 1_380)
-        #expect(ContentView.inspectorHiddenMinimumWindowWidth == 960)
-        #expect(ContentView.minimumWindowHeight == 720)
+        #expect(WorkspaceLayoutMetrics.sidebarMinimumWidth == 220)
+        #expect(WorkspaceLayoutMetrics.sidebarIdealWidth == 260)
+        #expect(WorkspaceLayoutMetrics.sidebarMaximumWidth == 300)
+        #expect(WorkspaceLayoutMetrics.minimumCenterWidth == 620)
+        #expect(WorkspaceLayoutMetrics.inspectorWidth == 440)
+        #expect(WorkspaceLayoutMetrics.inspectorVisibleMinimumWindowWidth == 1_380)
+        #expect(WorkspaceLayoutMetrics.inspectorHiddenMinimumWindowWidth == 960)
+        #expect(WorkspaceLayoutMetrics.minimumWindowHeight == 720)
+        #expect(
+            WorkspaceLayoutMetrics.sidebarMaximumWidth
+                + WorkspaceLayoutMetrics.minimumCenterWidth
+                + WorkspaceLayoutMetrics.inspectorWidth
+                < WorkspaceLayoutMetrics.inspectorVisibleMinimumWindowWidth
+        )
     }
 
     @Test

@@ -5,23 +5,11 @@ struct WorkspaceFooterView: View {
     @Binding var isFullLogPresented: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 22) {
-            RecentProcessingLogView(
-                events: job.recentActivityEvents,
-                isFullLogPresented: $isFullLogPresented
-            )
-            .padding(12)
-            .velouraAdaptiveGlass(in: .rect(cornerRadius: 14))
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-
-            OverallWorkflowView(stages: workflowStages)
-                .padding(12)
-                .velouraAdaptiveGlass(in: .rect(cornerRadius: 14))
-                .frame(minWidth: 260, idealWidth: 320, maxWidth: 360, alignment: .topLeading)
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .frame(minHeight: 206, idealHeight: 214, maxHeight: 224, alignment: .top)
+        WorkspaceFooterLayout(
+            events: job.recentActivityEvents,
+            stages: workflowStages,
+            isFullLogPresented: $isFullLogPresented
+        )
     }
 
     private var workflowStages: [WorkspaceFooterStage] {
