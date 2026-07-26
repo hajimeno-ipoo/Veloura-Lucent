@@ -437,7 +437,7 @@ final class AudioPreviewController {
 
     func snapshot(for target: AudioPreviewTarget) -> AudioPreviewSnapshot {
         cardState(for: target).snapshot ?? AudioPreviewSnapshot(
-            waveform: Array(repeating: 0, count: AudioFileService.previewBucketCount),
+            waveform: Array(repeating: .zero, count: AudioFileService.waveformPreviewBucketCount),
             duration: 0,
             bandLevels: Dictionary(uniqueKeysWithValues: AudioBandCatalog.previewBands.map { ($0.id, Array(repeating: 0, count: AudioFileService.previewBucketCount)) }),
             bandLevelDBs: Dictionary(uniqueKeysWithValues: AudioBandCatalog.previewBands.map { ($0.id, Array(repeating: Float(-120), count: AudioFileService.previewBucketCount)) })
@@ -476,9 +476,9 @@ final class AudioPreviewController {
         }
 
         let snapshot = snapshot(for: target)
-        let bucketIndex = min(
-            max(Int(round(cardState(for: target).playbackProgress * Double(max(snapshot.waveform.count - 1, 0)))), 0),
-            max(snapshot.waveform.count - 1, 0)
+        let bucketIndex = bandBucketIndex(
+            for: cardState(for: target).playbackProgress,
+            snapshot: snapshot
         )
 
         if let sharedLevels = sharedComparisonLevels(for: target, bucketIndex: bucketIndex) {
@@ -571,10 +571,7 @@ final class AudioPreviewController {
         let bucketIndex: Int
         if snapshot.duration > 0 {
             let progress = min(max(cardState(for: target).playbackPosition / snapshot.duration, 0), 1)
-            bucketIndex = min(
-                max(Int(round(progress * Double(max(snapshot.waveform.count - 1, 0)))), 0),
-                max(snapshot.waveform.count - 1, 0)
-            )
+            bucketIndex = bandBucketIndex(for: progress, snapshot: snapshot)
         } else {
             bucketIndex = 0
         }
@@ -583,6 +580,20 @@ final class AudioPreviewController {
             let level = Double(snapshot.bandLevels[band.id]?[bucketIndex] ?? 0)
             return LiveBandSample(id: band.id, label: band.label, level: level)
         }
+    }
+
+    private func bandBucketIndex(
+        for progress: Double,
+        snapshot: AudioPreviewSnapshot
+    ) -> Int {
+        let bucketCount = snapshot.bandLevels.values.first?.count
+            ?? snapshot.bandLevelDBs.values.first?.count
+            ?? 0
+        guard bucketCount > 0 else { return 0 }
+        return min(
+            max(Int(round(min(max(progress, 0), 1) * Double(bucketCount - 1))), 0),
+            bucketCount - 1
+        )
     }
 
     private func synchronizePlaybackPositions(to requestedTime: TimeInterval, updatesLiveBandLevels: Bool) {

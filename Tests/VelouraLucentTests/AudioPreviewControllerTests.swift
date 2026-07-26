@@ -261,7 +261,7 @@ struct AudioPreviewControllerTests {
     func setPreviewSnapshotStoresMeasuredLoudness() {
         let controller = AudioPreviewController()
         let snapshot = AudioPreviewSnapshot(
-            waveform: [0, 0.5, 0],
+            waveform: [.zero, .symmetric(0.5), .zero],
             duration: 1,
             bandLevels: [:],
             bandLevelDBs: [:]
@@ -283,13 +283,13 @@ struct AudioPreviewControllerTests {
     func previewCardStatesAreStoredPerTarget() {
         let controller = AudioPreviewController()
         let inputSnapshot = AudioPreviewSnapshot(
-            waveform: [0, 0.25, 0],
+            waveform: [.zero, .symmetric(0.25), .zero],
             duration: 1,
             bandLevels: [:],
             bandLevelDBs: [:]
         )
         let correctedSnapshot = AudioPreviewSnapshot(
-            waveform: [0, 0.75, 0],
+            waveform: [.zero, .symmetric(0.75), .zero],
             duration: 2,
             bandLevels: [:],
             bandLevelDBs: [:]
@@ -307,7 +307,7 @@ struct AudioPreviewControllerTests {
     func preparePreviewPlaceholderClearsSnapshotWithoutLoadingAudio() {
         let controller = AudioPreviewController()
         let oldSnapshot = AudioPreviewSnapshot(
-            waveform: [0, 0.25, 0],
+            waveform: [.zero, .symmetric(0.25), .zero],
             duration: 1,
             bandLevels: [:],
             bandLevelDBs: [:]
@@ -344,7 +344,7 @@ struct AudioPreviewControllerTests {
     func stoppingOnePreviewCardDoesNotResetOtherCardState() {
         let controller = AudioPreviewController()
         let snapshot = AudioPreviewSnapshot(
-            waveform: [0, 0.5, 0],
+            waveform: [.zero, .symmetric(0.5), .zero],
             duration: 1,
             bandLevels: [:],
             bandLevelDBs: [:]
@@ -369,7 +369,7 @@ struct AudioPreviewControllerTests {
     func finishingActivePlaybackResetsAllSynchronizedCardState() {
         let controller = AudioPreviewController()
         let snapshot = AudioPreviewSnapshot(
-            waveform: [0, 0.5, 0],
+            waveform: [.zero, .symmetric(0.5), .zero],
             duration: 10,
             bandLevels: [:],
             bandLevelDBs: [:]
@@ -797,7 +797,7 @@ struct AudioPreviewControllerTests {
         spectrumLevels: [Double] = []
     ) -> AudioPreviewSnapshot {
         AudioPreviewSnapshot(
-            waveform: [0, 0.5, 0],
+            waveform: [.zero, .symmetric(0.5), .zero],
             duration: duration,
             bandLevels: [:],
             bandLevelDBs: [:],

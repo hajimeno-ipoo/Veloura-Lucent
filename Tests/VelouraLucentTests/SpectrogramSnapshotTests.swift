@@ -5,6 +5,40 @@ import Testing
 
 struct SpectrogramSnapshotTests {
     @Test
+    func waveformEnvelopePreservesSignedPeaksAndRMS() throws {
+        let envelope = AudioFileService.makeWaveformEnvelope(
+            from: [-1, -0.5, 0.25, 0.75],
+            bucketCount: 2
+        )
+
+        #expect(envelope.count == 2)
+        #expect(envelope[0].minimum == -1)
+        #expect(envelope[0].maximum == -0.5)
+        #expect(abs(envelope[0].rms - Float(sqrt(0.625))) < 0.0001)
+        #expect(envelope[1].minimum == 0.25)
+        #expect(envelope[1].maximum == 0.75)
+        #expect(abs(envelope[1].rms - Float(sqrt(0.3125))) < 0.0001)
+    }
+
+    @Test
+    func previewUsesHigherWaveformResolutionWithoutChangingSpectrumBuckets() throws {
+        let snapshot = AudioFileService.makePreviewSnapshot(from: makeSignal())
+
+        #expect(snapshot.waveform.count == AudioFileService.waveformPreviewBucketCount)
+        for band in AudioBandCatalog.previewBands {
+            #expect(snapshot.bandLevels[band.id]?.count == AudioFileService.previewBucketCount)
+            #expect(snapshot.bandLevelDBs[band.id]?.count == AudioFileService.previewBucketCount)
+        }
+    }
+
+    @Test
+    func waveformTimeTextUsesMinuteAndHourFormats() {
+        #expect(waveformTimeText(0) == "0:00")
+        #expect(waveformTimeText(65.9) == "1:05")
+        #expect(waveformTimeText(3_661) == "1:01:01")
+    }
+
+    @Test
     func spectrogramSnapshotContainsCells() throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
@@ -151,7 +185,16 @@ struct SpectrogramSnapshotTests {
     }
 
     private func maxPreviewDifference(_ lhs: AudioPreviewSnapshot, _ rhs: AudioPreviewSnapshot) -> Double {
-        var maxDiff = maxArrayDifference(lhs.waveform.map(Double.init), rhs.waveform.map(Double.init))
+        guard lhs.waveform.count == rhs.waveform.count else {
+            return .infinity
+        }
+
+        var maxDiff = 0.0
+        for (left, right) in zip(lhs.waveform, rhs.waveform) {
+            maxDiff = max(maxDiff, abs(Double(left.minimum - right.minimum)))
+            maxDiff = max(maxDiff, abs(Double(left.maximum - right.maximum)))
+            maxDiff = max(maxDiff, abs(Double(left.rms - right.rms)))
+        }
         maxDiff = max(maxDiff, abs(lhs.duration - rhs.duration))
         for band in AudioBandCatalog.previewBands {
             maxDiff = max(maxDiff, maxArrayDifference((lhs.bandLevels[band.id] ?? []).map(Double.init), (rhs.bandLevels[band.id] ?? []).map(Double.init)))
@@ -200,7 +243,7 @@ struct SpectrogramSnapshotTests {
         guard !mono.isEmpty else {
             return AudioFileService.AudioDisplaySnapshots(
                 previewSnapshot: AudioPreviewSnapshot(
-                    waveform: Array(repeating: 0, count: AudioFileService.previewBucketCount),
+                    waveform: Array(repeating: .zero, count: AudioFileService.waveformPreviewBucketCount),
                     duration: 0,
                     bandLevels: emptyBandLevels(bucketCount: AudioFileService.previewBucketCount),
                     bandLevelDBs: emptyBandLevels(bucketCount: AudioFileService.previewBucketCount, fill: -120)
@@ -218,12 +261,10 @@ struct SpectrogramSnapshotTests {
 
     private func referencePreviewSnapshot(signal: AudioSignal, mono: [Float], spectrogram: Spectrogram) -> AudioPreviewSnapshot {
         let bucketCount = AudioFileService.previewBucketCount
-        let chunkSize = max(1, mono.count / bucketCount)
-        let waveform = stride(from: 0, to: mono.count, by: chunkSize).prefix(bucketCount).map { index in
-            let end = min(index + chunkSize, mono.count)
-            let peak = mono[index..<end].map { abs($0) }.max() ?? 0
-            return min(1, peak)
-        }
+        let waveform = AudioFileService.makeWaveformEnvelope(
+            from: mono,
+            bucketCount: AudioFileService.waveformPreviewBucketCount
+        )
         let (bandLevels, bandLevelDBs) = referenceBandLevels(from: spectrogram, sampleRate: signal.sampleRate, bucketCount: bucketCount)
 
         return AudioPreviewSnapshot(

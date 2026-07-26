@@ -7,6 +7,11 @@ struct AudioWaveformWorkspaceView: View {
     let correctedFileURL: URL?
     let masteredFileURL: URL?
     let onWillStartPlayback: @MainActor () -> Void
+    @State private var hoveredWaveformProgress: Double?
+    @State private var hoveredWaveformTarget: AudioPreviewTarget?
+
+    private let waveformLabelColumnWidth: CGFloat = 112
+    private let waveformTrailingColumnWidth: CGFloat = 140
 
     init(
         preview: AudioPreviewController,
@@ -35,6 +40,8 @@ struct AudioWaveformWorkspaceView: View {
                     waveformRow(target: .corrected, tint: .green)
                     Divider()
                     waveformRow(target: .mastered, tint: .orange)
+                    Divider()
+                    waveformTimeRuler
                 }
                 .padding(8)
                 .glassCard(cornerRadius: 16)
@@ -258,16 +265,28 @@ struct AudioWaveformWorkspaceView: View {
                         .glassEffect(.regular.tint(tint.opacity(0.16)), in: .capsule)
                 }
             }
-            .frame(width: 112, alignment: .leading)
+            .frame(width: waveformLabelColumnWidth, alignment: .leading)
 
             SeekableWaveformView(
                 samples: snapshot?.waveform ?? [],
                 progress: state.playbackProgress,
+                hoverProgress: hoveredWaveformProgress,
+                duration: snapshot?.duration ?? 0,
                 tint: tint,
                 isActive: preview.activeTarget == target,
                 isAvailable: snapshot != nil,
+                showsHoverTime: hoveredWaveformTarget == target,
                 onSeek: { progress in
                     preview.seek(to: progress, target: target)
+                },
+                onHover: { progress in
+                    if let progress {
+                        hoveredWaveformProgress = progress
+                        hoveredWaveformTarget = target
+                    } else if hoveredWaveformTarget == target {
+                        hoveredWaveformProgress = nil
+                        hoveredWaveformTarget = nil
+                    }
                 }
             )
             .frame(minWidth: 240, maxWidth: .infinity)
@@ -301,6 +320,27 @@ struct AudioWaveformWorkspaceView: View {
         .padding(.vertical, 9)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(target.rawValue)の波形")
+    }
+
+    private var waveformTimeRuler: some View {
+        HStack(spacing: 12) {
+            Color.clear
+                .frame(width: waveformLabelColumnWidth)
+
+            WaveformTimeRulerView(duration: waveformDuration)
+                .frame(minWidth: 240, maxWidth: .infinity)
+
+            Color.clear
+                .frame(width: waveformTrailingColumnWidth)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+    }
+
+    private var waveformDuration: TimeInterval {
+        AudioPreviewTarget.allCases
+            .compactMap { preview.cardState(for: $0).snapshot?.duration }
+            .max() ?? 0
     }
 
     private var playPauseTitle: String {
@@ -362,12 +402,16 @@ private extension View {
 }
 
 struct SeekableWaveformView: View {
-    let samples: [Float]
+    let samples: [WaveformEnvelopeSample]
     let progress: Double
+    let hoverProgress: Double?
+    let duration: TimeInterval
     let tint: Color
     let isActive: Bool
     let isAvailable: Bool
+    let showsHoverTime: Bool
     let onSeek: (Double) -> Void
+    let onHover: (Double?) -> Void
 
     var body: some View {
         GeometryReader { proxy in
@@ -375,12 +419,30 @@ struct SeekableWaveformView: View {
 
             ZStack(alignment: .leading) {
                 if isAvailable, !samples.isEmpty {
-                    waveform(color: tint.opacity(0.28))
-                    waveform(color: tint.opacity(isActive ? 0.9 : 0.65))
-                        .mask(alignment: .leading) {
-                            Rectangle()
-                                .frame(width: proxy.size.width * clampedProgress)
+                    waveform(playedWidth: proxy.size.width * clampedProgress)
+
+                    if let hoverProgress {
+                        let hoverX = min(
+                            proxy.size.width * min(max(hoverProgress, 0), 1),
+                            max(proxy.size.width - 1, 0)
+                        )
+                        Rectangle()
+                            .fill(.secondary.opacity(0.65))
+                            .frame(width: 1)
+                            .offset(x: hoverX)
+
+                        if showsHoverTime {
+                            Text(waveformTimeText(duration * hoverProgress))
+                                .font(.callout.monospacedDigit())
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .velouraAdaptiveGlass(in: .capsule)
+                                .position(
+                                    x: min(max(hoverX, 38), max(proxy.size.width - 38, 38)),
+                                    y: 13
+                                )
                         }
+                    }
 
                     Rectangle()
                         .fill(tint)
@@ -394,6 +456,15 @@ struct SeekableWaveformView: View {
                 }
             }
             .contentShape(Rectangle())
+            .onContinuousHover { phase in
+                switch phase {
+                case let .active(location):
+                    guard isAvailable, proxy.size.width > 0 else { return }
+                    onHover(min(max(location.x / proxy.size.width, 0), 1))
+                case .ended:
+                    onHover(nil)
+                }
+            }
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
@@ -402,9 +473,11 @@ struct SeekableWaveformView: View {
                     }
             )
         }
-        .frame(height: 58)
+        .frame(height: 68)
         .accessibilityLabel("再生位置")
-        .accessibilityValue("\(Int((min(max(progress, 0), 1) * 100).rounded()))%")
+        .accessibilityValue(
+            "\(waveformTimeText(duration * min(max(progress, 0), 1))) / \(waveformTimeText(duration))"
+        )
         .accessibilityAdjustableAction { direction in
             let increment = 0.02
             switch direction {
@@ -418,39 +491,133 @@ struct SeekableWaveformView: View {
         }
     }
 
-    private func waveform(color: Color) -> some View {
+    private func waveform(playedWidth: CGFloat) -> some View {
         Canvas { context, size in
             guard !samples.isEmpty else { return }
-            context.fill(envelopePath(in: size), with: .color(color))
+
+            let renderedSamples = renderedSamples(for: size.width)
+            let peakPath = envelopePath(samples: renderedSamples, in: size)
+            let rmsPath = rmsEnvelopePath(samples: renderedSamples, in: size)
+
+            var centerLine = Path()
+            centerLine.move(to: CGPoint(x: 0, y: size.height / 2))
+            centerLine.addLine(to: CGPoint(x: size.width, y: size.height / 2))
+            context.stroke(
+                centerLine,
+                with: .color(.secondary.opacity(0.18)),
+                lineWidth: 1
+            )
+
+            context.fill(peakPath, with: .color(tint.opacity(0.20)))
+            context.fill(rmsPath, with: .color(tint.opacity(isActive ? 0.48 : 0.36)))
+
+            var playedContext = context
+            playedContext.clip(
+                to: Path(
+                    CGRect(
+                        x: 0,
+                        y: 0,
+                        width: min(max(playedWidth, 0), size.width),
+                        height: size.height
+                    )
+                )
+            )
+            playedContext.fill(peakPath, with: .color(tint.opacity(0.62)))
+            playedContext.fill(rmsPath, with: .color(tint.opacity(isActive ? 0.95 : 0.78)))
         }
     }
 
-    private func envelopePath(in size: CGSize) -> Path {
-        let upperPoints = waveformPoints(in: size, isUpperSide: true)
-        let lowerPoints = waveformPoints(in: size, isUpperSide: false).reversed()
+    private func envelopePath(
+        samples: [WaveformEnvelopeSample],
+        in size: CGSize
+    ) -> Path {
+        let upperPoints = waveformPoints(
+            values: samples.map(\.maximum),
+            in: size
+        )
+        let lowerPoints = waveformPoints(
+            values: samples.map(\.minimum),
+            in: size
+        ).reversed()
         var path = Path()
 
-        addSmoothCurve(points: upperPoints, to: &path, startsNewSubpath: true)
-        addSmoothCurve(points: Array(lowerPoints), to: &path, startsNewSubpath: false)
+        addLinearCurve(points: upperPoints, to: &path, startsNewSubpath: true)
+        addLinearCurve(points: Array(lowerPoints), to: &path, startsNewSubpath: false)
         path.closeSubpath()
 
         return path
     }
 
-    private func waveformPoints(in size: CGSize, isUpperSide: Bool) -> [CGPoint] {
-        let step = size.width / CGFloat(max(samples.count - 1, 1))
-        let centerY = size.height / 2
-        let direction: CGFloat = isUpperSide ? -1 : 1
+    private func rmsEnvelopePath(
+        samples: [WaveformEnvelopeSample],
+        in size: CGSize
+    ) -> Path {
+        let upperRMSValues = samples.map { sample in
+            min(sample.rms, max(sample.maximum, 0))
+        }
+        let lowerRMSValues = samples.map { sample in
+            max(-sample.rms, min(sample.minimum, 0))
+        }
+        let upperPoints = waveformPoints(values: upperRMSValues, in: size)
+        let lowerPoints = waveformPoints(
+            values: lowerRMSValues,
+            in: size
+        ).reversed()
+        var path = Path()
 
-        return samples.enumerated().map { index, sample in
+        addLinearCurve(points: upperPoints, to: &path, startsNewSubpath: true)
+        addLinearCurve(points: Array(lowerPoints), to: &path, startsNewSubpath: false)
+        path.closeSubpath()
+
+        return path
+    }
+
+    private func waveformPoints(
+        values: [Float],
+        in size: CGSize
+    ) -> [CGPoint] {
+        let step = size.width / CGFloat(max(values.count - 1, 1))
+        let centerY = size.height / 2
+
+        return values.enumerated().map { index, sample in
             let x = CGFloat(index) * step
-            let normalizedAmplitude = min(max(CGFloat(abs(sample)), 0), 1)
-            let amplitude = normalizedAmplitude * size.height * 0.42
-            return CGPoint(x: x, y: centerY + direction * amplitude)
+            let normalizedAmplitude = min(max(CGFloat(sample), -1), 1)
+            return CGPoint(
+                x: x,
+                y: centerY - normalizedAmplitude * size.height * 0.42
+            )
         }
     }
 
-    private func addSmoothCurve(points: [CGPoint], to path: inout Path, startsNewSubpath: Bool) {
+    private func renderedSamples(for width: CGFloat) -> [WaveformEnvelopeSample] {
+        let targetCount = min(max(Int(width.rounded(.up)), 1), samples.count)
+        guard targetCount < samples.count else { return samples }
+
+        let samplesPerGroup = Double(samples.count) / Double(targetCount)
+        return (0..<targetCount).map { groupIndex in
+            let startIndex = Int(floor(Double(groupIndex) * samplesPerGroup))
+            let endIndex = min(
+                max(Int(ceil(Double(groupIndex + 1) * samplesPerGroup)), startIndex + 1),
+                samples.count
+            )
+            let group = samples[startIndex..<endIndex]
+            var minimum = Float.greatestFiniteMagnitude
+            var maximum = -Float.greatestFiniteMagnitude
+            var rmsEnergy = 0.0
+            for sample in group {
+                minimum = min(minimum, sample.minimum)
+                maximum = max(maximum, sample.maximum)
+                rmsEnergy += Double(sample.rms) * Double(sample.rms)
+            }
+            return WaveformEnvelopeSample(
+                minimum: minimum,
+                maximum: maximum,
+                rms: Float(sqrt(rmsEnergy / Double(group.count)))
+            )
+        }
+    }
+
+    private func addLinearCurve(points: [CGPoint], to path: inout Path, startsNewSubpath: Bool) {
         guard let firstPoint = points.first else { return }
 
         if startsNewSubpath {
@@ -460,20 +627,6 @@ struct SeekableWaveformView: View {
         }
 
         guard points.count > 1 else { return }
-
-        for index in 1..<points.count {
-            let previousPoint = points[index - 1]
-            let currentPoint = points[index]
-            let midpoint = CGPoint(
-                x: (previousPoint.x + currentPoint.x) / 2,
-                y: (previousPoint.y + currentPoint.y) / 2
-            )
-
-            path.addQuadCurve(to: midpoint, control: previousPoint)
-
-            if index == points.count - 1 {
-                path.addQuadCurve(to: currentPoint, control: currentPoint)
-            }
-        }
+        path.addLines(Array(points.dropFirst()))
     }
 }

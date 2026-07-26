@@ -457,15 +457,32 @@ struct SpectrumMetric: Sendable, Identifiable {
     let levelDB: Double
 }
 
+struct WaveformEnvelopeSample: Sendable, Equatable {
+    let minimum: Float
+    let maximum: Float
+    let rms: Float
+
+    static let zero = WaveformEnvelopeSample(minimum: 0, maximum: 0, rms: 0)
+
+    static func symmetric(_ amplitude: Float) -> WaveformEnvelopeSample {
+        let clampedAmplitude = min(max(abs(amplitude), 0), 1)
+        return WaveformEnvelopeSample(
+            minimum: -clampedAmplitude,
+            maximum: clampedAmplitude,
+            rms: clampedAmplitude
+        )
+    }
+}
+
 struct AudioPreviewSnapshot: Sendable {
-    let waveform: [Float]
+    let waveform: [WaveformEnvelopeSample]
     let duration: TimeInterval
     let bandLevels: [String: [Float]]
     let bandLevelDBs: [String: [Float]]
     let realtimeSpectrumTimeline: [[RealtimeSpectrumPoint]]
 
     init(
-        waveform: [Float],
+        waveform: [WaveformEnvelopeSample],
         duration: TimeInterval,
         bandLevels: [String: [Float]],
         bandLevelDBs: [String: [Float]],

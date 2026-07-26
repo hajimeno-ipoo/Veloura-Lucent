@@ -68,6 +68,7 @@ enum AudioFileService {
 
     static let targetSampleRate = 48_000.0
     static let previewBucketCount = 384
+    static let waveformPreviewBucketCount = 2_048
     static let outputFileExtension = "wav"
     private static let previewFFTSize = 1024
     private static let previewHopSize = 1024
@@ -318,13 +319,10 @@ enum AudioFileService {
     }
 
     private static func makePreviewSnapshot(from signal: AudioSignal, mono: [Float], spectralAnalysis: PreviewSpectralAnalysis, bucketCount: Int) -> AudioPreviewSnapshot {
-        let chunkSize = max(1, mono.count / bucketCount)
-        let waveform = stride(from: 0, to: mono.count, by: chunkSize).prefix(bucketCount).map { index in
-            let end = min(index + chunkSize, mono.count)
-            let slice = mono[index..<end]
-            let peak = slice.map { abs($0) }.max() ?? 0
-            return min(1, peak)
-        }
+        let waveform = makeWaveformEnvelope(
+            from: mono,
+            bucketCount: waveformPreviewBucketCount
+        )
 
         let (bandLevels, bandLevelDBs) = makeBandLevels(from: spectralAnalysis, bucketCount: bucketCount)
 
@@ -338,6 +336,44 @@ enum AudioFileService {
                 sampleRate: signal.sampleRate
             )
         )
+    }
+
+    static func makeWaveformEnvelope(
+        from mono: [Float],
+        bucketCount: Int
+    ) -> [WaveformEnvelopeSample] {
+        guard !mono.isEmpty, bucketCount > 0 else { return [] }
+
+        return (0..<bucketCount)
+            .map { bucketIndex in
+                let startIndex = min(
+                    Int(Double(bucketIndex) * Double(mono.count) / Double(bucketCount)),
+                    mono.count - 1
+                )
+                let endIndex = min(
+                    max(
+                        Int(Double(bucketIndex + 1) * Double(mono.count) / Double(bucketCount)),
+                        startIndex + 1
+                    ),
+                    mono.count
+                )
+                var minimum = Float.greatestFiniteMagnitude
+                var maximum = -Float.greatestFiniteMagnitude
+                var energy: Double = 0
+
+                for sample in mono[startIndex..<endIndex] {
+                    minimum = min(minimum, sample)
+                    maximum = max(maximum, sample)
+                    energy += Double(sample) * Double(sample)
+                }
+
+                let sampleCount = max(endIndex - startIndex, 1)
+                return WaveformEnvelopeSample(
+                    minimum: max(-1, min(1, minimum)),
+                    maximum: max(-1, min(1, maximum)),
+                    rms: min(1, Float(sqrt(energy / Double(sampleCount))))
+                )
+            }
     }
 
     static func makeSpectrogramSnapshot(for url: URL) throws -> SpectrogramSnapshot {
@@ -591,7 +627,7 @@ enum AudioFileService {
 
     private static func emptyPreviewSnapshot(bucketCount: Int) -> AudioPreviewSnapshot {
         AudioPreviewSnapshot(
-            waveform: Array(repeating: 0, count: bucketCount),
+            waveform: Array(repeating: .zero, count: waveformPreviewBucketCount),
             duration: 0,
             bandLevels: emptyBandLevels(bucketCount: bucketCount),
             bandLevelDBs: emptyBandLevels(bucketCount: bucketCount, fill: -120)

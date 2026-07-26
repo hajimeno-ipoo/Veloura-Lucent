@@ -7,6 +7,11 @@ import SwiftUI
 @MainActor
 struct StemWaveformComparisonView: View {
     @Bindable var model: StemModeWorkspaceModel
+    @State private var hoveredWaveformProgress: Double?
+    @State private var hoveredWaveformTarget: AudioPreviewTarget?
+
+    private let waveformLabelColumnWidth: CGFloat = 170
+    private let waveformTrailingColumnWidth: CGFloat = 140
 
     private var preview: AudioPreviewController {
         model.stemPreviewController
@@ -35,6 +40,8 @@ struct StemWaveformComparisonView: View {
                         fileURL: model.selectedCorrectedStemPreviewURL,
                         tint: .green
                     )
+                    Divider()
+                    waveformTimeRuler
                 }
                 .padding(8)
                 .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
@@ -249,16 +256,28 @@ struct StemWaveformComparisonView: View {
                     .padding(.vertical, 3)
                     .glassEffect(.regular.tint(tint.opacity(0.16)), in: .capsule)
             }
-            .frame(width: 170, alignment: .leading)
+            .frame(width: waveformLabelColumnWidth, alignment: .leading)
 
             SeekableWaveformView(
                 samples: state.snapshot?.waveform ?? [],
                 progress: state.playbackProgress,
+                hoverProgress: hoveredWaveformProgress,
+                duration: state.snapshot?.duration ?? 0,
                 tint: tint,
                 isActive: preview.activeTarget == target,
                 isAvailable: state.snapshot != nil,
+                showsHoverTime: hoveredWaveformTarget == target,
                 onSeek: { progress in
                     preview.seek(to: progress, target: target)
+                },
+                onHover: { progress in
+                    if let progress {
+                        hoveredWaveformProgress = progress
+                        hoveredWaveformTarget = target
+                    } else if hoveredWaveformTarget == target {
+                        hoveredWaveformProgress = nil
+                        hoveredWaveformTarget = nil
+                    }
                 }
             )
             .frame(minWidth: 240, maxWidth: .infinity)
@@ -292,6 +311,27 @@ struct StemWaveformComparisonView: View {
         .padding(.vertical, 9)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(model.selectedCorrectionRole.stemModeDisplayTitle)の\(title)波形")
+    }
+
+    private var waveformTimeRuler: some View {
+        HStack(spacing: 12) {
+            Color.clear
+                .frame(width: waveformLabelColumnWidth)
+
+            WaveformTimeRulerView(duration: waveformDuration)
+                .frame(minWidth: 240, maxWidth: .infinity)
+
+            Color.clear
+                .frame(width: waveformTrailingColumnWidth)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+    }
+
+    private var waveformDuration: TimeInterval {
+        [AudioPreviewTarget.input, .corrected]
+            .compactMap { preview.cardState(for: $0).snapshot?.duration }
+            .max() ?? 0
     }
 
     private var playPauseTitle: String {

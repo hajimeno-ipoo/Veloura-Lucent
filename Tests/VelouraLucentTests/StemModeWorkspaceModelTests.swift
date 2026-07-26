@@ -985,7 +985,7 @@ private func makeInputDisplayAnalysisResult(
     return StemModeInputDisplayAnalysisResult(
         evaluation: evaluation,
         previewSnapshot: AudioPreviewSnapshot(
-            waveform: [0, 0.5, 0],
+            waveform: [.zero, .symmetric(0.5), .zero],
             duration: duration,
             bandLevels: [:],
             bandLevelDBs: [:],

@@ -130,6 +130,29 @@ struct UIWordingPolicyTests {
     }
 
     @Test
+    func waveformComparisonUsesSignedPeakRMSAndSharedTimeReadout() throws {
+        let waveform = try combinedSource([
+            "Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift"
+        ])
+        let timeRuler = try combinedSource([
+            "Sources/VelouraLucent/Views/WaveformTimeRulerView.swift"
+        ])
+
+        #expect(waveform.components(separatedBy: "Canvas {").count - 1 == 1)
+        #expect(waveform.contains("envelopePath(samples: renderedSamples"))
+        #expect(waveform.contains("rmsEnvelopePath(samples: renderedSamples"))
+        #expect(waveform.contains("renderedSamples(for: size.width)"))
+        #expect(waveform.contains("sample.minimum"))
+        #expect(waveform.contains("sample.maximum"))
+        #expect(waveform.contains("sample.rms"))
+        #expect(waveform.contains(".onContinuousHover"))
+        #expect(waveform.contains("hoveredWaveformProgress"))
+        #expect(waveform.contains("WaveformTimeRulerView(duration: waveformDuration)"))
+        #expect(timeRuler.contains("ForEach(0..<5"))
+        #expect(timeRuler.contains("waveformTimeText(duration * progress)"))
+    }
+
+    @Test
     func contentViewConfiguresAccessibleTransparentWindow() throws {
         let source = try combinedSource([
             "Sources/VelouraLucent/App/VelouraLucentApp.swift",

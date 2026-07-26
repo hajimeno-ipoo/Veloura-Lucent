@@ -39,7 +39,7 @@ private struct EmptyStemDisplayAnalyzer: StemInputDisplayAnalyzing {
         StemModeInputDisplayAnalysisResult(
             evaluation: nil,
             previewSnapshot: AudioPreviewSnapshot(
-                waveform: [0, 0],
+                waveform: [.zero, .zero],
                 duration: 1,
                 bandLevels: [:],
                 bandLevelDBs: [:]

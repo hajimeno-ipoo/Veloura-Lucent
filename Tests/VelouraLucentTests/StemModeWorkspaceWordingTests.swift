@@ -246,6 +246,19 @@ struct StemModeWorkspaceWordingTests {
     }
 
     @Test
+    func stemWaveformComparisonUsesTheSharedTimeRulerAndHoverPosition() throws {
+        let source = try source(
+            "Sources/VelouraLucent/Views/StemWaveformComparisonView.swift"
+        )
+
+        #expect(source.contains("hoveredWaveformProgress"))
+        #expect(source.contains("hoveredWaveformTarget"))
+        #expect(source.contains("WaveformTimeRulerView(duration: waveformDuration)"))
+        #expect(source.contains("hoverProgress: hoveredWaveformProgress"))
+        #expect(source.contains("onHover: { progress in"))
+    }
+
+    @Test
     func stemDetailedAnalysisReusesTheStandardDisplayAndAddsStemEvidence() throws {
         let standard = try source(
             "Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"
