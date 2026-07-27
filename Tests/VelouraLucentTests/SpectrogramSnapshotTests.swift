@@ -24,6 +24,7 @@ struct SpectrogramSnapshotTests {
     func previewUsesHigherWaveformResolutionWithoutChangingSpectrumBuckets() throws {
         let snapshot = AudioFileService.makePreviewSnapshot(from: makeSignal())
 
+        #expect(AudioFileService.waveformPreviewBucketCount == 16_384)
         #expect(snapshot.waveform.count == AudioFileService.waveformPreviewBucketCount)
         for band in AudioBandCatalog.previewBands {
             #expect(snapshot.bandLevels[band.id]?.count == AudioFileService.previewBucketCount)

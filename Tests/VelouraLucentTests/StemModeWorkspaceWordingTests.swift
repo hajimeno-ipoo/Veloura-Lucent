@@ -253,9 +253,14 @@ struct StemModeWorkspaceWordingTests {
 
         #expect(source.contains("hoveredWaveformProgress"))
         #expect(source.contains("hoveredWaveformTarget"))
-        #expect(source.contains("WaveformTimeRulerView(duration: waveformDuration)"))
+        #expect(source.contains("viewport: waveformViewport"))
+        #expect(source.contains("WaveformZoomControls("))
         #expect(source.contains("hoverProgress: hoveredWaveformProgress"))
         #expect(source.contains("onHover: { progress in"))
+        #expect(source.contains("waveformViewport.reset()"))
+        #expect(source.contains(".onChange(of: model.selectedInputURL)"))
+        #expect(source.contains(".onChange(of: model.selectedCorrectionRole)"))
+        #expect(source.contains("preview.playbackState(for: activeTarget) == .playing"))
     }
 
     @Test

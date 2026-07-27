@@ -68,7 +68,7 @@ enum AudioFileService {
 
     static let targetSampleRate = 48_000.0
     static let previewBucketCount = 384
-    static let waveformPreviewBucketCount = 2_048
+    static let waveformPreviewBucketCount = 16_384
     static let outputFileExtension = "wav"
     private static let previewFFTSize = 1024
     private static let previewHopSize = 1024

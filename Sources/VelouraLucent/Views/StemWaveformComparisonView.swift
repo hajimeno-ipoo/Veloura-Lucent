@@ -9,6 +9,11 @@ struct StemWaveformComparisonView: View {
     @Bindable var model: StemModeWorkspaceModel
     @State private var hoveredWaveformProgress: Double?
     @State private var hoveredWaveformTarget: AudioPreviewTarget?
+    @State private var waveformViewport = WaveformViewport()
+    @State private var waveformPanStartProgress: Double?
+    @State private var isWaveformPanning = false
+    @State private var rawWaveformHeight = WaveformTrackResizeHandle.defaultHeight
+    @State private var correctedWaveformHeight = WaveformTrackResizeHandle.defaultHeight
 
     private let waveformLabelColumnWidth: CGFloat = 170
     private let waveformTrailingColumnWidth: CGFloat = 140
@@ -30,7 +35,8 @@ struct StemWaveformComparisonView: View {
                         title: "分離直後（raw）",
                         sideTitle: "A",
                         fileURL: model.selectedRawStemPreviewURL,
-                        tint: .blue
+                        tint: .blue,
+                        height: $rawWaveformHeight
                     )
                     Divider()
                     waveformRow(
@@ -38,7 +44,8 @@ struct StemWaveformComparisonView: View {
                         title: "補正後Stem",
                         sideTitle: "B",
                         fileURL: model.selectedCorrectedStemPreviewURL,
-                        tint: .green
+                        tint: .green,
+                        height: $correctedWaveformHeight
                     )
                     Divider()
                     waveformTimeRuler
@@ -54,6 +61,21 @@ struct StemWaveformComparisonView: View {
         }
         .onChange(of: model.selectedCorrectedStemPreviewURL) {
             model.refreshSelectedStemPreviewSources()
+        }
+        .onChange(of: model.selectedInputURL) {
+            resetWaveformViewport()
+        }
+        .onChange(of: model.selectedCorrectionRole) {
+            resetWaveformViewport()
+        }
+        .onChange(of: playingWaveformProgress) {
+            guard
+                !isWaveformPanning,
+                let playingWaveformProgress
+            else {
+                return
+            }
+            waveformViewport.followPlayback(playingWaveformProgress)
         }
     }
 
@@ -236,7 +258,8 @@ struct StemWaveformComparisonView: View {
         title: String,
         sideTitle: String,
         fileURL: URL?,
-        tint: Color
+        tint: Color,
+        height: Binding<CGFloat>
     ) -> some View {
         let state = preview.cardState(for: target)
 
@@ -263,12 +286,19 @@ struct StemWaveformComparisonView: View {
                 progress: state.playbackProgress,
                 hoverProgress: hoveredWaveformProgress,
                 duration: state.snapshot?.duration ?? 0,
+                viewport: waveformViewport,
                 tint: tint,
                 isActive: preview.activeTarget == target,
                 isAvailable: state.snapshot != nil,
                 showsHoverTime: hoveredWaveformTarget == target,
                 onSeek: { progress in
                     preview.seek(to: progress, target: target)
+                },
+                onPanChanged: { translationFraction in
+                    panWaveform(by: translationFraction)
+                },
+                onPanEnded: { translationFraction in
+                    finishWaveformPan(by: translationFraction)
                 },
                 onHover: { progress in
                     if let progress {
@@ -281,6 +311,7 @@ struct StemWaveformComparisonView: View {
                 }
             )
             .frame(minWidth: 240, maxWidth: .infinity)
+            .frame(height: height.wrappedValue)
 
             Text(preview.playbackTimeText(for: target))
                 .font(.callout.monospacedDigit())
@@ -309,6 +340,12 @@ struct StemWaveformComparisonView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
+        .overlay(alignment: .bottom) {
+            WaveformTrackResizeHandle(
+                title: title,
+                height: height
+            )
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(model.selectedCorrectionRole.stemModeDisplayTitle)の\(title)波形")
     }
@@ -318,8 +355,27 @@ struct StemWaveformComparisonView: View {
             Color.clear
                 .frame(width: waveformLabelColumnWidth)
 
-            WaveformTimeRulerView(duration: waveformDuration)
-                .frame(minWidth: 240, maxWidth: .infinity)
+            GeometryReader { proxy in
+                let maximumZoomScale = WaveformViewport.maximumZoomScale(
+                    sampleCount: waveformSampleCount,
+                    displayWidth: Double(proxy.size.width)
+                )
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    WaveformTimeRulerView(
+                        duration: waveformDuration,
+                        viewport: waveformViewport
+                    )
+
+                    WaveformZoomControls(
+                        viewport: $waveformViewport,
+                        centerProgress: waveformZoomCenterProgress,
+                        maximumZoomScale: maximumZoomScale
+                    )
+                }
+            }
+            .frame(minWidth: 240, maxWidth: .infinity)
+            .frame(height: 78)
 
             Color.clear
                 .frame(width: waveformTrailingColumnWidth)
@@ -332,6 +388,67 @@ struct StemWaveformComparisonView: View {
         [AudioPreviewTarget.input, .corrected]
             .compactMap { preview.cardState(for: $0).snapshot?.duration }
             .max() ?? 0
+    }
+
+    private var waveformSampleCount: Int {
+        [AudioPreviewTarget.input, .corrected]
+            .compactMap { preview.cardState(for: $0).snapshot?.waveform.count }
+            .max() ?? 0
+    }
+
+    private var waveformZoomCenterProgress: Double {
+        if let activeTarget = preview.activeTarget {
+            return preview.cardState(for: activeTarget).playbackProgress
+        }
+        return preview.cardState(
+            for: preview.comparisonTarget(for: preview.activeComparisonSide)
+        ).playbackProgress
+    }
+
+    private var playingWaveformProgress: Double? {
+        guard
+            let activeTarget = preview.activeTarget,
+            preview.playbackState(for: activeTarget) == .playing
+        else {
+            return nil
+        }
+        return preview.cardState(for: activeTarget).playbackProgress
+    }
+
+    private func panWaveform(by horizontalTranslationFraction: Double) {
+        guard waveformViewport.canZoomOut else { return }
+
+        if waveformPanStartProgress == nil {
+            waveformPanStartProgress = waveformViewport.startProgress
+            isWaveformPanning = true
+        }
+        guard let waveformPanStartProgress else { return }
+        waveformViewport.pan(
+            from: waveformPanStartProgress,
+            horizontalTranslationFraction: horizontalTranslationFraction
+        )
+    }
+
+    private func finishWaveformPan(by horizontalTranslationFraction: Double) {
+        guard let waveformPanStartProgress else { return }
+        waveformViewport.pan(
+            from: waveformPanStartProgress,
+            horizontalTranslationFraction: horizontalTranslationFraction
+        )
+        self.waveformPanStartProgress = nil
+        isWaveformPanning = false
+
+        if let playingWaveformProgress {
+            waveformViewport.followPlayback(playingWaveformProgress)
+        }
+    }
+
+    private func resetWaveformViewport() {
+        waveformViewport.reset()
+        hoveredWaveformProgress = nil
+        hoveredWaveformTarget = nil
+        waveformPanStartProgress = nil
+        isWaveformPanning = false
     }
 
     private var playPauseTitle: String {
