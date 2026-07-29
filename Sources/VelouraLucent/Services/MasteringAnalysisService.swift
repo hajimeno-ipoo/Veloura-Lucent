@@ -88,7 +88,9 @@ enum MasteringAnalysisService {
                 midBandLevelDB: -120,
                 highBandLevelDB: -120,
                 harshnessScore: 0,
-                stereoWidth: 0
+                stereoWidth: 0,
+                crestFactorDB: 0,
+                loudnessRangeLU: nil
             )
             return Benchmark(analysis: analysis, stages: [])
         }
@@ -97,10 +99,13 @@ enum MasteringAnalysisService {
             spectralFrameSummary(for: mono, sampleRate: signal.sampleRate)
         }
         let loudnessMeasurement = recorder.measure("loudness") {
-            LoudnessMeasurementService.measure(signal: signal, includeLoudnessRange: false)
+            LoudnessMeasurementService.measure(signal: signal, includeLoudnessRange: true)
         }
         let peak = recorder.measure("truePeak") {
             loudnessMeasurement.truePeakDBFS
+        }
+        let crestFactor = recorder.measure("crestFactor") {
+            crestFactorDB(signal: signal, truePeakDBFS: loudnessMeasurement.truePeakDBFS)
         }
         let spectralSummaryResult = recorder.measureSpectralSummary {
             spectralSummary(from: frameSummary)
@@ -116,7 +121,9 @@ enum MasteringAnalysisService {
             midBandLevelDB: spectralSummaryResult.summary.midBandLevelDB,
             highBandLevelDB: spectralSummaryResult.summary.highBandLevelDB,
             harshnessScore: spectralSummaryResult.summary.harshnessScore,
-            stereoWidth: width
+            stereoWidth: width,
+            crestFactorDB: crestFactor,
+            loudnessRangeLU: loudnessMeasurement.loudnessRangeLU
         )
         return Benchmark(analysis: analysis, stages: recorder.stages)
     }
@@ -127,6 +134,30 @@ enum MasteringAnalysisService {
 
     static func approximateTruePeak(_ channels: [[Float]]) -> Float {
         LoudnessMeasurementService.truePeakLinear(channels)
+    }
+
+    static func dynamicMetrics(signal: AudioSignal) -> (crestFactorDB: Double, loudnessRangeLU: Double?) {
+        let measurement = LoudnessMeasurementService.measure(signal: signal, includeLoudnessRange: true)
+        return (
+            crestFactorDB(signal: signal, truePeakDBFS: measurement.truePeakDBFS),
+            measurement.loudnessRangeLU
+        )
+    }
+
+    private static func crestFactorDB(signal: AudioSignal, truePeakDBFS: Double) -> Double {
+        let channels = signal.channels.filter { !$0.isEmpty }
+        guard !channels.isEmpty else { return 0 }
+        let sampleCount = channels.map(\.count).min() ?? 0
+        guard sampleCount > 0 else { return 0 }
+
+        let sumSquares = channels.reduce(0.0) { channelSum, channel in
+            channelSum + channel.prefix(sampleCount).reduce(0.0) { sampleSum, sample in
+                sampleSum + Double(sample * sample)
+            }
+        }
+        let rms = sqrt(sumSquares / Double(sampleCount * channels.count))
+        let rmsDBFS = 20 * log10(max(rms, 1e-12))
+        return max(0, truePeakDBFS - rmsDBFS)
     }
 
     private struct BinRange {

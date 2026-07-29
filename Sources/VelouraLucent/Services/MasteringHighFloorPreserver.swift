@@ -101,7 +101,14 @@ enum MasteringHighFloorPreserver {
             }
             current = AudioSignal(channels: channels, sampleRate: sampleRate)
             didApply = true
-            logger?.log("高域保持: \(rule.label) +\(String(format: "%.1f", boostDB)) dB")
+            let afterDB = MasteringSignalMath.bandRMSDB(
+                signal: current,
+                lower: rule.lower,
+                upper: rule.upper
+            )
+            logger?.log(
+                "高域保持/\(rule.label): 処理前 \(formatDB(currentDB)) dB / 適用 +\(String(format: "%.1f", boostDB)) dB / 処理後 \(formatDB(afterDB)) dB / 理由 基準下限 \(formatDB(targetDB)) dBを下回ったため"
+            )
         }
 
         if let originalReferenceDB = referenceLevels.originalReferenceDB {
@@ -128,11 +135,21 @@ enum MasteringHighFloorPreserver {
                 }
                 current = AudioSignal(channels: channels, sampleRate: sampleRate)
                 didApply = true
-                logger?.log("高域保持: \(rule.label) +\(String(format: "%.1f", boostDB)) dB")
+                let afterDB = MasteringSignalMath.bandBalanceDB(
+                    signal: current,
+                    lower: rule.lower,
+                    upper: rule.upper
+                )
+                logger?.log(
+                    "高域保持/\(rule.label): 処理前 \(formatDB(currentDB)) dB / 適用 +\(String(format: "%.1f", boostDB)) dB / 処理後 \(formatDB(afterDB)) dB / 理由 原音基準下限 \(formatDB(targetDB)) dBを下回ったため"
+                )
             }
         }
 
-        guard didApply else { return signal }
+        guard didApply else {
+            logger?.log("高域保持: 適用 0.0 dB / 理由 基準下限を下回る帯域なし")
+            return signal
+        }
         let peakLimited = MasteringSignalMath.enforcePeakCeiling(signal: current, peakCeilingDB: peakCeilingDB)
         return constrainNoiseReturn(
             signal: peakLimited,
@@ -154,7 +171,11 @@ enum MasteringHighFloorPreserver {
         peakCeilingDB: Float,
         logger: AudioProcessingLogger?
     ) -> AudioSignal {
-        let requiredIDs = [NoiseMeasurementID.hiss, NoiseMeasurementID.sibilance]
+        let requiredIDs = [
+            NoiseMeasurementID.hiss,
+            NoiseMeasurementID.sibilance,
+            NoiseMeasurementID.shimmer
+        ]
         let referenceNoise = requiredIDs.allSatisfy { referenceNoiseMeasurements?.comparableLevel(for: $0) != nil }
             ? referenceNoiseMeasurements!
             : NoiseMeasurementService.analyze(signal: reference, ids: requiredIDs)
@@ -166,6 +187,9 @@ enum MasteringHighFloorPreserver {
         let fallbackOriginalSibilanceReturn = originalNoise.map {
             fallbackNoise.noiseReturnDB(from: $0, id: NoiseMeasurementID.sibilance)
         } ?? 0
+        let fallbackOriginalShimmerReturn = originalNoise.map {
+            fallbackNoise.noiseReturnDB(from: $0, id: NoiseMeasurementID.shimmer)
+        } ?? 0
         let candidates: [(mix: Float, signal: AudioSignal)] = [
             (1.0, signal),
             (0.75, blend(base: fallback, boosted: signal, mix: 0.75)),
@@ -174,29 +198,41 @@ enum MasteringHighFloorPreserver {
             (0.10, blend(base: fallback, boosted: signal, mix: 0.10)),
             (0.05, blend(base: fallback, boosted: signal, mix: 0.05))
         ]
+        var lastRejectedReturns: (hiss: Double, sibilance: Double, shimmer: Double)?
 
         for candidate in candidates {
             let candidateNoise = NoiseMeasurementService.analyze(signal: candidate.signal, ids: requiredIDs)
             let hissReturn = candidateNoise.noiseReturnDB(from: referenceNoise, id: NoiseMeasurementID.hiss)
             let sibilanceReturn = candidateNoise.noiseReturnDB(from: referenceNoise, id: NoiseMeasurementID.sibilance)
+            let shimmerReturn = candidateNoise.noiseReturnDB(from: referenceNoise, id: NoiseMeasurementID.shimmer)
             let originalHissReturn = originalNoise.map { candidateNoise.noiseReturnDB(from: $0, id: NoiseMeasurementID.hiss) } ?? 0
             let originalSibilanceReturn = originalNoise.map { candidateNoise.noiseReturnDB(from: $0, id: NoiseMeasurementID.sibilance) } ?? 0
+            let originalShimmerReturn = originalNoise.map { candidateNoise.noiseReturnDB(from: $0, id: NoiseMeasurementID.shimmer) } ?? 0
             let originalHissCeiling = max(0.5, fallbackOriginalHissReturn + 0.25)
             let originalSibilanceCeiling = min(3.0, max(0.5, fallbackOriginalSibilanceReturn + 0.25))
+            let originalShimmerCeiling = min(2.8, max(0.5, fallbackOriginalShimmerReturn + 0.25))
+            lastRejectedReturns = (hissReturn, sibilanceReturn, shimmerReturn)
             guard hissReturn <= 2.0,
                   sibilanceReturn <= 1.5,
+                  shimmerReturn <= 1.4,
                   originalHissReturn <= originalHissCeiling,
-                  originalSibilanceReturn <= originalSibilanceCeiling
+                  originalSibilanceReturn <= originalSibilanceCeiling,
+                  originalShimmerReturn <= originalShimmerCeiling
             else { continue }
-            if candidate.mix < 1 {
-                logger?.log("高域保持: ノイズ戻り抑制 mix \(String(format: "%.2f", candidate.mix))")
-            }
+            logger?.log(
+                "高域保持/安全確認: mix \(String(format: "%.2f", candidate.mix)) / hiss \(formatDB(hissReturn)) dB / sibilance \(formatDB(sibilanceReturn)) dB / shimmer \(formatDB(shimmerReturn)) dB / 理由 ノイズ戻り上限内"
+            )
             return MasteringSignalMath.enforcePeakCeiling(signal: candidate.signal, peakCeilingDB: peakCeilingDB)
         }
 
-        let minimumPreserved = blend(base: fallback, boosted: signal, mix: 0.05)
-        logger?.log("高域保持: 最低保持 mix 0.05")
-        return MasteringSignalMath.enforcePeakCeiling(signal: minimumPreserved, peakCeilingDB: peakCeilingDB)
+        if let lastRejectedReturns {
+            logger?.log(
+                "高域保持/安全確認: 最小候補 hiss \(formatDB(lastRejectedReturns.hiss)) dB / sibilance \(formatDB(lastRejectedReturns.sibilance)) dB / shimmer \(formatDB(lastRejectedReturns.shimmer)) dB / 適用なし / 結果 工程入力維持 / 理由 安全な補強量なし"
+            )
+        } else {
+            logger?.log("高域保持/安全確認: 適用なし / 結果 工程入力維持 / 理由 安全な補強量なし")
+        }
+        return fallback
     }
 
     private static func blend(base: AudioSignal, boosted: AudioSignal, mix: Float) -> AudioSignal {
@@ -211,5 +247,9 @@ enum MasteringHighFloorPreserver {
             }
         }
         return AudioSignal(channels: channels, sampleRate: base.sampleRate)
+    }
+
+    private static func formatDB(_ value: Double) -> String {
+        value.isFinite ? String(format: "%+.2f", value) : "測定不能"
     }
 }

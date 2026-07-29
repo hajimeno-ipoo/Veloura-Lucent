@@ -50,7 +50,6 @@ enum InternalAudioJudgementPolicy {
     static let masteringSibilanceLowDB = 7.0
     static let masteringSaturationOffAmount: Float = 0.015
     static let masteringAirEnoughHighToMidGapDB = -2.5
-    static let masteringAirLowShelfGain: Float = 0.18
     static let masteringStereoCloseTolerance: Float = 0.035
     static let masteringHighReturnHarshnessLow: Float = 0.30
     static let masteringHighReturnShelfLow: Float = 0.34

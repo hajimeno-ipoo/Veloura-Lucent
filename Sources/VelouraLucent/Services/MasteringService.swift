@@ -59,6 +59,12 @@ struct MasteringService {
                     }
                     logger.complete(MasteringStep.analyze)
                 }
+                let loudnessRangeText = analysis.loudnessRangeLU.map {
+                    "\(String(format: "%.2f", $0)) LU"
+                } ?? "測定対象外"
+                logger.log(
+                    "解析/強弱: Crest \(String(format: "%.2f", analysis.crestFactorDB)) dB / LRA \(loudnessRangeText)"
+                )
 
                 try Task.checkCancellation()
                 let routeNoiseMeasurements: NoiseMeasurementSnapshot
@@ -147,6 +153,8 @@ private func masteringAnalysisStageDisplayName(_ name: String) -> String {
         "ラウドネス"
     case "truePeak":
         "トゥルーピーク"
+    case "crestFactor":
+        "クレストファクター"
     case "spectralSummaryCPU":
         "帯域集計(CPU)"
     case "spectralSummaryMetal":

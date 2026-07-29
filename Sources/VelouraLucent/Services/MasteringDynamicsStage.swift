@@ -6,8 +6,14 @@ extension MasteringProcessor {
         analysis: MasteringAnalysis,
         settings: MultibandCompressionSettings,
         dynamicsRetention: Float,
-        finishingIntensity: Float
+        finishingIntensity: Float,
+        logger: AudioProcessingLogger?
     ) -> AudioSignal {
+        let inputMetrics = MasteringAnalysisService.dynamicMetrics(signal: signal)
+        logger?.log(
+            "密度調整/入力: Crest \(formatDynamicValue(inputMetrics.crestFactorDB, unit: "dB")) / "
+                + "LRA \(formatOptionalDynamicValue(inputMetrics.loudnessRangeLU, unit: "LU"))"
+        )
         let adjustedSettings = tunedCompressionSettings(
             base: settings,
             analysis: analysis,
@@ -36,7 +42,20 @@ extension MasteringProcessor {
             }
         }
 
-        return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+        let compressed = AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+        let constrained = constrainDynamicsChange(
+            input: signal,
+            compressed: compressed,
+            inputMetrics: inputMetrics,
+            logger: logger
+        )
+        logger?.log(
+            "密度調整/結果: Crest \(formatDynamicValue(constrained.metrics.crestFactorDB, unit: "dB")) "
+                + "(\(formatDynamicDelta(constrained.metrics.crestFactorDB - inputMetrics.crestFactorDB, unit: "dB"))) / "
+                + "LRA \(formatOptionalDynamicValue(constrained.metrics.loudnessRangeLU, unit: "LU"))"
+                + formatOptionalDynamicDelta(constrained.metrics.loudnessRangeLU, reference: inputMetrics.loudnessRangeLU, unit: "LU")
+        )
+        return constrained.signal
     }
 
     private func tunedCompressionSettings(
@@ -140,5 +159,86 @@ extension MasteringProcessor {
         let over = envelopeDB - lowerKnee
         let gainReductionDB = (1 / safeRatio - 1) * over * over / (2 * kneeWidthDB)
         return gainReductionDB
+    }
+
+    private func constrainDynamicsChange(
+        input: AudioSignal,
+        compressed: AudioSignal,
+        inputMetrics: (crestFactorDB: Double, loudnessRangeLU: Double?),
+        logger: AudioProcessingLogger?
+    ) -> (signal: AudioSignal, metrics: (crestFactorDB: Double, loudnessRangeLU: Double?)) {
+        let compressedMetrics = MasteringAnalysisService.dynamicMetrics(signal: compressed)
+        let crestReductionDB = inputMetrics.crestFactorDB - compressedMetrics.crestFactorDB
+        let maximumCrestReductionDB = 3.0
+        let minimumLRARetention = 0.60
+        var wetMix = 1.0
+
+        if crestReductionDB > maximumCrestReductionDB {
+            wetMix = min(wetMix, maximumCrestReductionDB / crestReductionDB)
+        }
+        if let inputLRA = inputMetrics.loudnessRangeLU,
+           let compressedLRA = compressedMetrics.loudnessRangeLU,
+           inputLRA > 0.1,
+           compressedLRA < inputLRA * minimumLRARetention
+        {
+            wetMix = min(wetMix, compressedLRA / (inputLRA * minimumLRARetention))
+        }
+
+        guard wetMix < 0.999 else {
+            logger?.log("密度調整/制限: 入力の強弱範囲内")
+            return (compressed, compressedMetrics)
+        }
+
+        let mixed = blendDynamics(input: input, compressed: compressed, wetMix: Float(max(0, wetMix)))
+        let mixedMetrics = MasteringAnalysisService.dynamicMetrics(signal: mixed)
+        let mixedCrestReductionDB = inputMetrics.crestFactorDB - mixedMetrics.crestFactorDB
+        let mixedLRARetention = lraRetention(output: mixedMetrics.loudnessRangeLU, input: inputMetrics.loudnessRangeLU)
+        guard mixedCrestReductionDB <= maximumCrestReductionDB + 0.05,
+              mixedLRARetention.map({ $0 >= minimumLRARetention - 0.02 }) ?? true
+        else {
+            logger?.log("密度調整/制限: 強弱の減少が大きいため工程入力を維持")
+            return (input, inputMetrics)
+        }
+
+        logger?.log("密度調整/制限: 強弱を守るため圧縮mix \(String(format: "%.2f", wetMix))")
+        return (mixed, mixedMetrics)
+    }
+
+    private func blendDynamics(input: AudioSignal, compressed: AudioSignal, wetMix: Float) -> AudioSignal {
+        let channelCount = min(input.channels.count, compressed.channels.count)
+        guard channelCount > 0 else { return input }
+        let mix = MasteringSignalMath.clamped(wetMix, min: 0, max: 1)
+        var channels = input.channels
+        for channelIndex in 0..<channelCount {
+            let frameCount = min(input.channels[channelIndex].count, compressed.channels[channelIndex].count)
+            channels[channelIndex] = (0..<frameCount).map { frameIndex in
+                input.channels[channelIndex][frameIndex] * (1 - mix)
+                    + compressed.channels[channelIndex][frameIndex] * mix
+            }
+        }
+        return AudioSignal(channels: channels, sampleRate: input.sampleRate)
+    }
+
+    private func lraRetention(output: Double?, input: Double?) -> Double? {
+        guard let output, let input, input > 0.1 else { return nil }
+        return output / input
+    }
+
+    private func formatDynamicValue(_ value: Double, unit: String) -> String {
+        String(format: "%.2f %@", value, unit)
+    }
+
+    private func formatOptionalDynamicValue(_ value: Double?, unit: String) -> String {
+        guard let value else { return "測定対象外" }
+        return formatDynamicValue(value, unit: unit)
+    }
+
+    private func formatDynamicDelta(_ value: Double, unit: String) -> String {
+        String(format: "%+.2f %@", value, unit)
+    }
+
+    private func formatOptionalDynamicDelta(_ value: Double?, reference: Double?, unit: String) -> String {
+        guard let value, let reference else { return "" }
+        return " (\(formatDynamicDelta(value - reference, unit: unit)))"
     }
 }

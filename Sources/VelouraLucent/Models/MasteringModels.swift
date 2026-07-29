@@ -299,6 +299,30 @@ struct MasteringAnalysis: Sendable {
     let highBandLevelDB: Double
     let harshnessScore: Float
     let stereoWidth: Float
+    let crestFactorDB: Double
+    let loudnessRangeLU: Double?
+
+    init(
+        integratedLoudness: Float,
+        truePeakDBFS: Double,
+        lowBandLevelDB: Double,
+        midBandLevelDB: Double,
+        highBandLevelDB: Double,
+        harshnessScore: Float,
+        stereoWidth: Float,
+        crestFactorDB: Double = 0,
+        loudnessRangeLU: Double? = nil
+    ) {
+        self.integratedLoudness = integratedLoudness
+        self.truePeakDBFS = truePeakDBFS
+        self.lowBandLevelDB = lowBandLevelDB
+        self.midBandLevelDB = midBandLevelDB
+        self.highBandLevelDB = highBandLevelDB
+        self.harshnessScore = harshnessScore
+        self.stereoWidth = stereoWidth
+        self.crestFactorDB = crestFactorDB
+        self.loudnessRangeLU = loudnessRangeLU
+    }
 }
 
 enum AudioComparisonPair: String, CaseIterable, Identifiable {

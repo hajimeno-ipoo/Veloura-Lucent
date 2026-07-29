@@ -47,9 +47,8 @@ extension MasteringProcessor {
         return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
     }
 
-    func effectiveTargetLoudness(_ target: Float, dynamicsRetention: Float, finishingIntensity: Float) -> Float {
-        target + (finishingIntensity - 0.5) * 0.9 - dynamicsRetention * 0.45
+    func effectiveTargetLoudness(_ target: Float) -> Float {
+        target
     }
 
 }
-

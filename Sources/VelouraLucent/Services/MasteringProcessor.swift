@@ -26,7 +26,14 @@ struct MasteringProcessor {
         logger?.start(.tone)
         logger?.log(MasteringStep.tone.rawValue)
         var current = measure(label: "音色", logger: logger, progressStep: .tone) {
-            applyTone(signal: signal, analysis: analysis, settings: settings, finishingIntensity: finishingIntensity)
+            applyTone(
+                signal: signal,
+                analysis: analysis,
+                settings: settings,
+                finishingIntensity: finishingIntensity,
+                noiseMeasurements: referenceNoiseMeasurements,
+                logger: logger
+            )
         }
         try Task.checkCancellation()
         saveDiagnostic(current, to: diagnosticOutputDirectory, order: 1, id: "tone", label: "音色調整後", logger: logger)
@@ -53,7 +60,8 @@ struct MasteringProcessor {
                 analysis: analysis,
                 settings: settings.multibandCompression,
                 dynamicsRetention: dynamicsRetention,
-                finishingIntensity: finishingIntensity
+                finishingIntensity: finishingIntensity,
+                logger: logger
             )
         }
         saveDiagnostic(current, to: diagnosticOutputDirectory, order: 3, id: "dynamics", label: "ダイナミクス後", logger: logger)
@@ -85,7 +93,8 @@ struct MasteringProcessor {
                     signal: current,
                     analysis: analysis,
                     settings: settings,
-                    finishingIntensity: finishingIntensity
+                    finishingIntensity: finishingIntensity,
+                    logger: logger
                 )
             }
         }
@@ -108,11 +117,8 @@ struct MasteringProcessor {
 
         logger?.start(.loudness)
         logger?.log(MasteringStep.loudness.rawValue)
-        let effectiveLoudnessTarget = effectiveTargetLoudness(
-            settings.targetLoudness,
-            dynamicsRetention: dynamicsRetention,
-            finishingIntensity: finishingIntensity
-        )
+        let effectiveLoudnessTarget = effectiveTargetLoudness(settings.targetLoudness)
+        logger?.log("ラウドネス目標: 設定値 \(String(format: "%.1f", effectiveLoudnessTarget)) LUFS")
         let loudnessBaseline = MasteringAnalysisService.integratedLoudness(signal: current)
         let guidedLoudnessTarget = guidedLoudnessTarget(
             currentLoudness: loudnessBaseline,
@@ -187,34 +193,23 @@ struct MasteringProcessor {
         saveDiagnostic(noiseGuarded, to: diagnosticOutputDirectory, order: 9, id: "noiseReturnGuard", label: "ノイズ戻りガード後", logger: logger)
         logger?.start(.highPreserve)
         logger?.log(MasteringStep.highPreserve.rawValue)
-        let (mastered, highFloorReferenceLevels) = measure(label: "マスタリング/計測: 高域保持", logger: logger, progressStep: .highPreserve) {
-            let referenceLevels = MasteringHighFloorPreserver.makeReferenceLevels(
+        let highFloorReferenceLevels = measure(label: "マスタリング/計測: 高域保持基準", logger: logger, progressStep: .highPreserve) {
+            let levels = MasteringHighFloorPreserver.makeReferenceLevels(
                 reference: signal,
                 originalReference: originalReferenceSignal
             )
-            logger?.log("高域保持/基準測定: 2工程で再利用")
-            return (
-                MasteringHighFloorPreserver.preserve(
-                    signal: noiseGuarded,
-                    reference: signal,
-                    referenceLevels: referenceLevels,
-                    referenceNoiseMeasurements: referenceNoiseMeasurements,
-                    originalReferenceNoiseMeasurements: originalReferenceNoiseMeasurements,
-                    peakCeilingDB: settings.peakCeilingDB,
-                    logger: logger
-                ),
-                referenceLevels
-            )
+            logger?.log("高域保持/基準測定: 音声変更なし / 理由 最終ノイズ上限後の1回だけ補強するため")
+            return levels
         }
         try Task.checkCancellation()
-        saveDiagnostic(mastered, to: diagnosticOutputDirectory, order: 10, id: "highPreserve", label: "高域保持後", logger: logger)
+        saveDiagnostic(noiseGuarded, to: diagnosticOutputDirectory, order: 10, id: "highPreserve", label: "高域保持基準測定後（音声変更なし）", logger: logger)
         var finalNoiseReturnReferenceLevels: [NoiseReturnHighBandReferenceLevel]?
         let allowsOriginalReferenceHighRecovery = MasteringHighFloorPreserver.originalReferenceNeedsHighRecovery(highFloorReferenceLevels)
         logger?.start(.finalNoiseCeiling)
         logger?.log(MasteringStep.finalNoiseCeiling.rawValue)
         let finalGuarded = measure(label: "マスタリング/計測: 最終ノイズ上限", logger: logger, progressStep: .finalNoiseCeiling) {
             applyFinalNoiseReturnCeiling(
-                signal: mastered,
+                signal: noiseGuarded,
                 reference: signal,
                 referenceHighBandLevels: &finalNoiseReturnReferenceLevels,
                 referenceNoiseMeasurements: referenceNoiseMeasurements,
@@ -228,7 +223,7 @@ struct MasteringProcessor {
         saveDiagnostic(finalGuarded, to: diagnosticOutputDirectory, order: 11, id: "finalNoiseCeiling", label: "最終ノイズ上限後", logger: logger)
         logger?.start(.finalHighPreserve)
         logger?.log(MasteringStep.finalHighPreserve.rawValue)
-        let finalHighPreserved = measure(label: "マスタリング/計測: 最終高域保持", logger: logger, progressStep: .finalHighPreserve) {
+        let finalHighPreserved = measure(label: "マスタリング/計測: 高域保持（音声処理1回）", logger: logger, progressStep: .finalHighPreserve) {
             MasteringHighFloorPreserver.preserve(
                 signal: finalGuarded,
                 reference: signal,

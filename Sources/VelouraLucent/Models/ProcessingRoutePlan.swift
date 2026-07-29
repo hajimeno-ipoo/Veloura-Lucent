@@ -202,7 +202,6 @@ struct MasteringRoutePlan: Sendable, Equatable {
             && sibilance.map { $0 < InternalAudioJudgementPolicy.masteringSibilanceLowDB } == true
         let saturationIsOff = settings.saturationAmount < InternalAudioJudgementPolicy.masteringSaturationOffAmount
         let airIsEnough = analysis.highBandLevelDB >= analysis.midBandLevelDB + InternalAudioJudgementPolicy.masteringAirEnoughHighToMidGapDB
-            && settings.highShelfGain < InternalAudioJudgementPolicy.masteringAirLowShelfGain
         let stereoIsClose = abs(settings.stereoWidth - analysis.stereoWidth) < InternalAudioJudgementPolicy.masteringStereoCloseTolerance
         let highReturnNeedsGuard = analysis.harshnessScore >= 0.62
             && (
@@ -223,7 +222,7 @@ struct MasteringRoutePlan: Sendable, Equatable {
                 ? ProcessingRouteDecision(action: .skip, reason: "倍音設定がほぼゼロ", riskLevel: .low)
                 : ProcessingRouteDecision(action: .run, reason: "倍音設定が有効", riskLevel: .medium),
             .air: airIsEnough
-                ? ProcessingRouteDecision(action: .skip, reason: "高域が十分あり、持ち上げ設定も弱い", riskLevel: .low)
+                ? ProcessingRouteDecision(action: .skip, reason: "高域が十分あるためAir追加なし", riskLevel: .low)
                 : ProcessingRouteDecision(action: .run, reason: "空気感の補正が必要", riskLevel: .medium),
             .stereo: stereoIsClose
                 ? ProcessingRouteDecision(action: .skip, reason: "現在の広がりが目標に近い", riskLevel: .low)

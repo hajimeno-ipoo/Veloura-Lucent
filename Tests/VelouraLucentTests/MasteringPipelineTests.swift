@@ -80,6 +80,8 @@ struct MasteringPipelineTests {
         #expect(logs.values.contains { $0.hasPrefix("解析/STFT+帯域集計") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("解析/ラウドネス: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("解析/トゥルーピーク: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains { $0.hasPrefix("解析/クレストファクター: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains { $0.hasPrefix("解析/強弱: Crest ") && $0.contains(" / LRA ") })
         #expect(logs.values.contains { $0.hasPrefix("解析/帯域集計") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("解析/ステレオ幅: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("解析: ") && $0.hasSuffix("秒") })
@@ -91,15 +93,15 @@ struct MasteringPipelineTests {
         #expect(logs.values.contains("ノイズ戻り: 一括判定を開始"))
         #expect(logs.values.contains { $0.hasPrefix("ノイズ戻り/軽量判定: ") })
         #expect(logs.values.contains("ノイズ戻り: 完了") || logs.values.contains("ノイズ戻り: 安全上限に到達"))
-        #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 高域保持: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 高域保持基準: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 最終ノイズ上限: ") && $0.hasSuffix("秒") })
-        #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 最終高域保持: ") && $0.hasSuffix("秒") })
-        #expect(logs.values.contains("高域保持/基準測定: 2工程で再利用"))
+        #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 高域保持（音声処理1回）: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains("高域保持/基準測定: 音声変更なし / 理由 最終ノイズ上限後の1回だけ補強するため"))
         #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 最終音量復帰: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 最終ノイズ確認: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("マスタリング/計測: 最終音量上限: ") && $0.hasSuffix("秒") })
         let total = try #require(parsedDuration(prefix: "合計: ", from: logs.values))
-        let stagePrefixes = ["解析: ", "音色: ", "ディエッサー: ", "ダイナミクス: ", "倍音: ", "空気感: ", "広がり: ", "ラウドネス: ", "ノイズ戻りガード: ", "マスタリング/計測: 高域保持: ", "マスタリング/計測: 最終ノイズ上限: ", "マスタリング/計測: 最終高域保持: ", "マスタリング/計測: 最終音量復帰: ", "マスタリング/計測: 最終ノイズ確認: ", "マスタリング/計測: 最終音量上限: ", "保存: "]
+        let stagePrefixes = ["解析: ", "音色: ", "ディエッサー: ", "ダイナミクス: ", "倍音: ", "空気感: ", "広がり: ", "ラウドネス: ", "ノイズ戻りガード: ", "マスタリング/計測: 高域保持基準: ", "マスタリング/計測: 最終ノイズ上限: ", "マスタリング/計測: 高域保持（音声処理1回）: ", "マスタリング/計測: 最終音量復帰: ", "マスタリング/計測: 最終ノイズ確認: ", "マスタリング/計測: 最終音量上限: ", "保存: "]
         var summedStages = 0.0
         for prefix in stagePrefixes {
             summedStages += try #require(parsedDuration(prefix: prefix, from: logs.values))
@@ -447,8 +449,9 @@ struct MasteringPipelineTests {
     }
 
     @Test
-    func masteringUsesOriginalReferenceWhenCorrectedInputLostAir() async throws {
+    func masteringKeepsHighFloorStageInputWhenRecoveryIsNotApplied() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let diagnostics = tempDirectory.appending(path: "mastering-stages")
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
         let originalURL = tempDirectory.appending(path: "original-air-reference.wav")
         let correctedURL = tempDirectory.appending(path: "corrected-air-loss.wav")
@@ -467,24 +470,26 @@ struct MasteringPipelineTests {
             settings: MasteringProfile.streaming.settings,
             referenceNoiseMeasurements: correctedNoise,
             originalReferenceFile: originalURL,
-            originalReferenceNoiseMeasurements: originalNoise
+            originalReferenceNoiseMeasurements: originalNoise,
+            diagnosticOutputDirectory: diagnostics
         ) { message in
             logs.append(message)
         }
 
-        let masteredWithOriginal = try AudioFileService.loadAudio(from: outputWithOriginal)
-        let correctedBrilliance = bandBalanceDB(signal: corrected, lower: 8_000, upper: 12_000)
-        let correctedAir = bandBalanceDB(signal: corrected, lower: 12_000, upper: 16_000)
-        let originalBrilliance = bandBalanceDB(signal: original, lower: 8_000, upper: 12_000)
-        let withOriginalBrilliance = bandBalanceDB(signal: masteredWithOriginal, lower: 8_000, upper: 12_000)
-        let originalAir = bandBalanceDB(signal: original, lower: 12_000, upper: 16_000)
-        let withOriginalAir = bandBalanceDB(signal: masteredWithOriginal, lower: 12_000, upper: 16_000)
+        let beforeHighPreserve = try AudioFileService.loadAudio(
+            from: diagnosticFile(in: diagnostics, containing: "11_mastering_finalNoiseCeiling")
+        )
+        let afterHighPreserve = try AudioFileService.loadAudio(
+            from: diagnosticFile(in: diagnostics, containing: "12_mastering_finalHighPreserve")
+        )
 
-        #expect(withOriginalBrilliance >= correctedBrilliance + 0.65)
-        #expect(withOriginalAir >= correctedAir + 0.75)
-        #expect(withOriginalBrilliance >= originalBrilliance - 4.0)
-        #expect(withOriginalAir >= originalAir - 4.0)
+        #expect(FileManager.default.fileExists(atPath: outputWithOriginal.path()))
+        #expect(afterHighPreserve.channels == beforeHighPreserve.channels)
         #expect(logs.values.contains { $0.hasPrefix("原音参照読み込み: ") })
+        #expect(logs.values.contains {
+            $0 == "高域保持: 適用 0.0 dB / 理由 基準下限を下回る帯域なし"
+                || ($0.contains("安全な補強量なし") && $0.contains("工程入力維持"))
+        })
     }
 
     @Test
@@ -578,6 +583,195 @@ struct MasteringPipelineTests {
     }
 
     @Test
+    func effectiveLoudnessTargetUsesRequestedSettingWithoutHiddenOffset() {
+        let processor = MasteringProcessor()
+
+        #expect(processor.effectiveTargetLoudness(-13.2) == -13.2)
+        #expect(processor.effectiveTargetLoudness(-18.0) == -18.0)
+    }
+
+    @Test
+    func cleanMudDoesNotTriggerLinkedRoomLowMidCut() {
+        let signal = makeInMemoryTone(frequency: 700, amplitude: 0.10)
+        var settings = MasteringProfile.streaming.settings
+        settings.lowShelfGain = 0
+        settings.lowMidGain = -1
+        settings.presenceGain = 0
+        settings.highShelfGain = 0
+        let logs = MasteringLogCollector()
+
+        _ = MasteringProcessor().applyTone(
+            signal: signal,
+            analysis: neutralAnalysis,
+            settings: settings,
+            finishingIntensity: 0.5,
+            noiseMeasurements: noiseSnapshot(id: NoiseMeasurementID.mud, value: -10),
+            logger: logs
+        )
+
+        #expect(logs.values.contains {
+            $0.hasPrefix("中低域調整/420〜1200Hz:")
+                && $0.contains("mud -10.0 dB / 過剰なし")
+        })
+    }
+
+    @Test
+    func measuredMudCanTriggerBoundedRoomLowMidCut() {
+        let signal = makeInMemoryTone(frequency: 700, amplitude: 0.10)
+        var settings = MasteringProfile.streaming.settings
+        settings.lowShelfGain = 0
+        settings.lowMidGain = -1
+        settings.presenceGain = 0
+        settings.highShelfGain = 0
+        let logs = MasteringLogCollector()
+
+        _ = MasteringProcessor().applyTone(
+            signal: signal,
+            analysis: neutralAnalysis,
+            settings: settings,
+            finishingIntensity: 0.5,
+            noiseMeasurements: noiseSnapshot(id: NoiseMeasurementID.mud, value: -3),
+            logger: logs
+        )
+
+        #expect(logs.values.contains {
+            $0.hasPrefix("中低域調整/420〜1200Hz:")
+                && $0.contains("mud -3.0 dB / 実測過剰に応じて -0.45 dB")
+        })
+    }
+
+    @Test
+    func highShelfDoesNotDuplicateAdaptiveBrillianceOrAir() {
+        let signal = makeInMemoryTone(frequency: 11_000, amplitude: 0.04)
+        var neutralSettings = MasteringProfile.streaming.settings
+        neutralSettings.lowShelfGain = 0
+        neutralSettings.lowMidGain = 0
+        neutralSettings.presenceGain = 0
+        neutralSettings.highShelfGain = 0
+        var raisedShelfSettings = neutralSettings
+        raisedShelfSettings.highShelfGain = 1.2
+        let neutralLogs = MasteringLogCollector()
+        let raisedLogs = MasteringLogCollector()
+
+        _ = MasteringProcessor().applyTone(
+            signal: signal,
+            analysis: highDeficitAnalysis,
+            settings: neutralSettings,
+            finishingIntensity: 0.5,
+            noiseMeasurements: nil,
+            logger: neutralLogs
+        )
+        _ = MasteringProcessor().applyTone(
+            signal: signal,
+            analysis: highDeficitAnalysis,
+            settings: raisedShelfSettings,
+            finishingIntensity: 0.5,
+            noiseMeasurements: nil,
+            logger: raisedLogs
+        )
+
+        let neutralShelf = neutralLogs.values.first { $0.hasPrefix("高域調整/10kHz以上（Shelf）:") }
+        let raisedShelf = raisedLogs.values.first { $0.hasPrefix("高域調整/10kHz以上（Shelf）:") }
+        #expect(neutralShelf?.contains("設定gain +0.00 dB") == true)
+        #expect(raisedShelf?.contains("設定gain +1.20 dB") == true)
+        #expect(neutralShelf?.contains("実測変化") == true)
+        #expect(raisedShelf?.contains("実測変化") == true)
+        #expect(neutralShelf != raisedShelf)
+
+        let neutralBrilliance = neutralLogs.values.first { $0.hasPrefix("高域調整/9〜12kHz（Brilliance）:") }
+        let raisedBrilliance = raisedLogs.values.first { $0.hasPrefix("高域調整/9〜12kHz（Brilliance）:") }
+        #expect(neutralBrilliance?.contains("設定gain +0.36 dB") == true)
+        #expect(raisedBrilliance?.contains("設定gain +0.36 dB") == true)
+        #expect(neutralBrilliance?.contains("実測変化") == true)
+        #expect(raisedBrilliance?.contains("実測変化") == true)
+
+        let neutralAir = MasteringAirEnhancer().process(
+            signal: signal,
+            analysis: highDeficitAnalysis,
+            settings: neutralSettings,
+            finishingIntensity: 0.5,
+            logger: nil
+        )
+        let raisedAir = MasteringAirEnhancer().process(
+            signal: signal,
+            analysis: highDeficitAnalysis,
+            settings: raisedShelfSettings,
+            finishingIntensity: 0.5,
+            logger: nil
+        )
+        #expect(neutralAir.channels == raisedAir.channels)
+    }
+
+    @Test
+    func unsafeHighFloorRecoveryKeepsStageInputExactly() {
+        let reference = makeInMemoryTone(frequency: 10_000, amplitude: 0.18)
+        let fallback = makeInMemoryTone(frequency: 10_000, amplitude: 0.003)
+        let referenceLevels = MasteringHighFloorPreserver.makeReferenceLevels(
+            reference: reference,
+            originalReference: nil
+        )
+        let logs = MasteringLogCollector()
+        let veryLowNoiseReference = NoiseMeasurementSnapshot(values: [
+            noiseValue(id: NoiseMeasurementID.hiss, value: -120),
+            noiseValue(id: NoiseMeasurementID.sibilance, value: -120),
+            noiseValue(id: NoiseMeasurementID.shimmer, value: -120)
+        ])
+
+        let output = MasteringHighFloorPreserver.preserve(
+            signal: fallback,
+            reference: reference,
+            referenceLevels: referenceLevels,
+            referenceNoiseMeasurements: veryLowNoiseReference,
+            originalReferenceNoiseMeasurements: nil,
+            peakCeilingDB: -60,
+            logger: logs
+        )
+
+        #expect(output.channels == fallback.channels)
+        #expect(logs.values.contains { $0.contains("安全な補強量なし") && $0.contains("工程入力維持") })
+        #expect(logs.values.contains {
+            $0.hasPrefix("高域保持/")
+                && $0.contains("処理前")
+                && $0.contains("適用")
+                && $0.contains("処理後")
+                && $0.contains("理由")
+        })
+    }
+
+    @Test
+    func dynamicsStageLimitsCrestReductionLocally() {
+        let signal = makeTransientInMemoryTone()
+        let inputMetrics = MasteringAnalysisService.dynamicMetrics(signal: signal)
+        let aggressiveBand = BandCompressorSettings(
+            thresholdDB: -45,
+            ratio: 12,
+            attackMs: 0.1,
+            releaseMs: 120,
+            makeupGainDB: 0
+        )
+        let logs = MasteringLogCollector()
+
+        let output = MasteringProcessor().applyMultibandCompression(
+            signal: signal,
+            analysis: neutralAnalysis,
+            settings: MultibandCompressionSettings(
+                low: aggressiveBand,
+                mid: aggressiveBand,
+                high: aggressiveBand
+            ),
+            dynamicsRetention: 0,
+            finishingIntensity: 1,
+            logger: logs
+        )
+        let outputMetrics = MasteringAnalysisService.dynamicMetrics(signal: output)
+
+        #expect(inputMetrics.crestFactorDB - outputMetrics.crestFactorDB <= 3.05)
+        #expect(logs.values.contains { $0.hasPrefix("密度調整/入力: Crest ") })
+        #expect(logs.values.contains { $0.hasPrefix("密度調整/結果: Crest ") })
+        #expect(logs.values.contains { $0.hasPrefix("密度調整/制限: ") })
+    }
+
+    @Test
     func masteredOutputURLsStayWav() {
         let inputURL = URL(fileURLWithPath: "/tmp/song_lifter.mp3")
 
@@ -619,6 +813,69 @@ struct MasteringPipelineTests {
                 measuredLevelDB: hiss
             )
         ])
+    }
+
+    private func noiseSnapshot(id: String, value: Double) -> NoiseMeasurementSnapshot {
+        NoiseMeasurementSnapshot(values: [noiseValue(id: id, value: value)])
+    }
+
+    private func noiseValue(id: String, value: Double) -> NoiseMeasurementValue {
+        NoiseMeasurementValue(
+            id: id,
+            label: id,
+            comparableLevelDB: value,
+            measuredLevelDB: value
+        )
+    }
+
+    private var neutralAnalysis: MasteringAnalysis {
+        MasteringAnalysis(
+            integratedLoudness: -18,
+            truePeakDBFS: -6,
+            lowBandLevelDB: -20,
+            midBandLevelDB: -20,
+            highBandLevelDB: -20,
+            harshnessScore: 0,
+            stereoWidth: 0.2
+        )
+    }
+
+    private var highDeficitAnalysis: MasteringAnalysis {
+        MasteringAnalysis(
+            integratedLoudness: -18,
+            truePeakDBFS: -6,
+            lowBandLevelDB: -18,
+            midBandLevelDB: -12,
+            highBandLevelDB: -30,
+            harshnessScore: 0,
+            stereoWidth: 0.2
+        )
+    }
+
+    private func makeInMemoryTone(
+        frequency: Double,
+        amplitude: Float,
+        durationSeconds: Double = 1
+    ) -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * durationSeconds)
+        let channel = (0..<frameCount).map { index in
+            let time = Double(index) / sampleRate
+            return Float(sin(2 * Double.pi * frequency * time)) * amplitude
+        }
+        return AudioSignal(channels: [channel, channel], sampleRate: sampleRate)
+    }
+
+    private func makeTransientInMemoryTone() -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 2)
+        let channel = (0..<frameCount).map { index -> Float in
+            let time = Double(index) / sampleRate
+            let tone = Float(sin(2 * Double.pi * 220 * time)) * 0.08
+            let transient: Float = index % 12_000 < 24 ? 0.75 : 0
+            return tone + transient
+        }
+        return AudioSignal(channels: [channel, channel], sampleRate: sampleRate)
     }
 
     private func makeCleanHeadroomTone(at url: URL) throws {
@@ -773,7 +1030,7 @@ struct MasteringPipelineTests {
     }
 }
 
-private final class MasteringLogCollector: @unchecked Sendable {
+private final class MasteringLogCollector: AudioProcessingLogger, @unchecked Sendable {
     private let lock = NSLock()
     private var storage: [String] = []
 
@@ -787,6 +1044,10 @@ private final class MasteringLogCollector: @unchecked Sendable {
         lock.lock()
         storage.append(message)
         lock.unlock()
+    }
+
+    func log(_ message: String) {
+        append(message)
     }
 }
 

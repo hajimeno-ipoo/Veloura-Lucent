@@ -754,6 +754,41 @@ struct ProcessingJobTests {
     }
 
     @Test
+    func masteringSkipsAirWhenMeasuredHighBandIsAlreadyEnough() {
+        var settings = MasteringProfile.streaming.settings
+        settings.highShelfGain = 1.2
+        let plan = MasteringRoutePlan.make(
+            analysis: makeMasteringAnalysis(),
+            settings: settings,
+            noiseMeasurements: nil
+        )
+
+        #expect(plan.decision(for: .air).action == .skip)
+        #expect(plan.decision(for: .air).reason == "高域が十分あるためAir追加なし")
+    }
+
+    @Test
+    func masteringRunsAirWhenMeasuredHighBandIsLow() {
+        let analysis = MasteringAnalysis(
+            integratedLoudness: -16,
+            truePeakDBFS: -1,
+            lowBandLevelDB: -24,
+            midBandLevelDB: -18,
+            highBandLevelDB: -22,
+            harshnessScore: 0.25,
+            stereoWidth: 0.8
+        )
+        let plan = MasteringRoutePlan.make(
+            analysis: analysis,
+            settings: MasteringProfile.streaming.settings,
+            noiseMeasurements: nil
+        )
+
+        #expect(plan.decision(for: .air).action == .run)
+        #expect(plan.decision(for: .air).reason == "空気感の補正が必要")
+    }
+
+    @Test
     func successMarksAllStepsComplete() {
         let job = ProcessingJob()
         let output = URL(fileURLWithPath: "/tmp/output.wav")

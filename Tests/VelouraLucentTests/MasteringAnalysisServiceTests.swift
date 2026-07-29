@@ -20,6 +20,8 @@ struct MasteringAnalysisServiceTests {
         #expect(analysis.midBandLevelDB.isFinite)
         #expect(analysis.highBandLevelDB.isFinite)
         #expect(analysis.stereoWidth >= 0)
+        #expect(analysis.crestFactorDB.isFinite)
+        #expect(analysis.crestFactorDB >= 0)
     }
 
     @Test
@@ -34,7 +36,7 @@ struct MasteringAnalysisServiceTests {
         let benchmark = try MasteringAnalysisService.analyzeWithBenchmark(fileURL: fileURL)
         let expectedSpectralStage = MetalAudioAnalysisProcessor().isAvailable ? "spectralSummaryMetal" : "spectralSummaryCPU"
         let expectedStreamingStage = MetalAudioAnalysisProcessor().isAvailable ? "streamingSTFTAndSpectralSummaryMetal" : "streamingSTFTAndSpectralSummaryCPU"
-        let expectedStages = [expectedStreamingStage, "loudness", "truePeak", expectedSpectralStage, "stereoWidth"]
+        let expectedStages = [expectedStreamingStage, "loudness", "truePeak", "crestFactor", expectedSpectralStage, "stereoWidth"]
 
         #expect(benchmark.analysis.integratedLoudness == plainAnalysis.integratedLoudness)
         #expect(benchmark.analysis.truePeakDBFS == plainAnalysis.truePeakDBFS)
@@ -43,6 +45,8 @@ struct MasteringAnalysisServiceTests {
         #expect(benchmark.analysis.highBandLevelDB == plainAnalysis.highBandLevelDB)
         #expect(benchmark.analysis.harshnessScore == plainAnalysis.harshnessScore)
         #expect(benchmark.analysis.stereoWidth == plainAnalysis.stereoWidth)
+        #expect(benchmark.analysis.crestFactorDB == plainAnalysis.crestFactorDB)
+        #expect(benchmark.analysis.loudnessRangeLU == plainAnalysis.loudnessRangeLU)
         #expect(benchmark.stages.map(\.name) == expectedStages)
         #expect(benchmark.stages.allSatisfy { $0.durationSeconds >= 0 })
 
@@ -64,7 +68,7 @@ struct MasteringAnalysisServiceTests {
         let reference = referenceAnalysis(signal: signal)
         let loudnessMeasurement = LoudnessMeasurementService.measure(
             signal: signal,
-            includeLoudnessRange: false
+            includeLoudnessRange: true
         )
 
         expectClose(analysis.integratedLoudness, reference.integratedLoudness, tolerance: 0.0001)
@@ -74,6 +78,8 @@ struct MasteringAnalysisServiceTests {
         expectClose(analysis.highBandLevelDB, reference.highBandLevelDB, tolerance: 0.001)
         expectClose(analysis.harshnessScore, reference.harshnessScore, tolerance: 0.0001)
         expectClose(analysis.stereoWidth, reference.stereoWidth, tolerance: 0.00001)
+        #expect(analysis.crestFactorDB.isFinite)
+        #expect(analysis.loudnessRangeLU == loudnessMeasurement.loudnessRangeLU)
     }
 
     @Test
@@ -98,7 +104,7 @@ struct MasteringAnalysisServiceTests {
         let metalSpectralSummary = measureMetalSpectralSummary(spectrogram: spectrogram, sampleRate: signal.sampleRate)
         let expectedSpectralStage = MetalAudioAnalysisProcessor().isAvailable ? "spectralSummaryMetal" : "spectralSummaryCPU"
         let expectedStreamingStage = MetalAudioAnalysisProcessor().isAvailable ? "streamingSTFTAndSpectralSummaryMetal" : "streamingSTFTAndSpectralSummaryCPU"
-        #expect(benchmark.stages.map(\.name) == [expectedStreamingStage, "loudness", "truePeak", expectedSpectralStage, "stereoWidth"])
+        #expect(benchmark.stages.map(\.name) == [expectedStreamingStage, "loudness", "truePeak", "crestFactor", expectedSpectralStage, "stereoWidth"])
         #expect(benchmark.stages.allSatisfy { $0.durationSeconds >= 0 })
         #expect(benchmark.analysis.integratedLoudness.isFinite)
         #expect(benchmark.analysis.truePeakDBFS.isFinite)
