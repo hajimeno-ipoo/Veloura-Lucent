@@ -32,7 +32,8 @@ enum StemAudioEvaluationPurpose: Equatable, Sendable {
     case rawStem(role: StemRole)
     case correctedStem(role: StemRole)
     case rawRemix
-    case correctedRemix
+    case correctedPureSum
+    case remix
     case finalMaster
 }
 

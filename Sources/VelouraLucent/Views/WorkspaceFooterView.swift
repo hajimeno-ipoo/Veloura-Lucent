@@ -8,6 +8,7 @@ struct WorkspaceFooterView: View {
         WorkspaceFooterLayout(
             events: job.recentActivityEvents,
             stages: workflowStages,
+            fullLogHelp: "補正とマスタリングの完全なログを開きます",
             isFullLogPresented: $isFullLogPresented
         )
     }

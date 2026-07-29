@@ -12,12 +12,16 @@ struct VelouraCommandActions {
     let canSwitchProcessingMode: Bool
     let canChooseInput: Bool
     let canRunCorrection: Bool
+    var canRunRemix = false
     let canRunMastering: Bool
     let isCorrectionRunning: Bool
+    var isRemixRunning = false
     let isMasteringRunning: Bool
     let isCorrectionCancelling: Bool
+    var isRemixCancelling = false
     let isMasteringCancelling: Bool
     let canCancelCorrection: Bool
+    var canCancelRemix = false
     let canCancelMastering: Bool
     let exportActions: [VelouraExportCommandAction]
     let canTogglePlayback: Bool
@@ -27,8 +31,10 @@ struct VelouraCommandActions {
     let selectProcessingMode: @MainActor (ProcessingMode) -> Void
     let chooseInputAudio: @MainActor () -> Void
     let runCorrection: @MainActor () -> Void
+    var runRemix: @MainActor () -> Void = {}
     let runMastering: @MainActor () -> Void
     let cancelCorrection: @MainActor () -> Void
+    var cancelRemix: @MainActor () -> Void = {}
     let cancelMastering: @MainActor () -> Void
     let togglePlayback: @MainActor () -> Void
     let stopPlayback: @MainActor () -> Void
@@ -46,6 +52,13 @@ struct VelouraCommandActions {
             return "キャンセル中..."
         }
         return isMasteringRunning ? "マスタリングをキャンセル" : "マスタリングを実行"
+    }
+
+    var remixCommandTitle: String {
+        if isRemixCancelling {
+            return "キャンセル中..."
+        }
+        return isRemixRunning ? "再ミックスをキャンセル" : "再ミックスを実行"
     }
 
     var playbackCommandTitle: String {
@@ -111,6 +124,22 @@ struct VelouraCommands: Commands {
             }
             .keyboardShortcut("r", modifiers: .command)
             .disabled(actions.map { $0.isCorrectionRunning ? !$0.canCancelCorrection : !$0.canRunCorrection } ?? true)
+
+            if actions?.processingMode == .stem {
+                Button(actions?.remixCommandTitle ?? "再ミックスを実行") {
+                    if actions?.isRemixRunning == true {
+                        actions?.cancelRemix()
+                    } else {
+                        actions?.runRemix()
+                    }
+                }
+                .keyboardShortcut("r", modifiers: [.command, .option])
+                .disabled(
+                    actions.map {
+                        $0.isRemixRunning ? !$0.canCancelRemix : !$0.canRunRemix
+                    } ?? true
+                )
+            }
 
             Button(actions?.masteringCommandTitle ?? "マスタリングを実行") {
                 if actions?.isMasteringRunning == true {

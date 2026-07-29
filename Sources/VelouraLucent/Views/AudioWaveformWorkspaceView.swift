@@ -1,12 +1,43 @@
 import AppKit
 import SwiftUI
 
+struct AudioWaveformTrackPresentation: Identifiable {
+    let target: AudioPreviewTarget
+    let title: String
+    let tint: Color
+    let fileURL: URL?
+    let accessibilityLabel: String
+
+    var id: String { target.rawValue }
+}
+
+enum AudioWaveformComparisonPresentation {
+    case selectable
+    case fixed(summary: String)
+}
+
 struct AudioWaveformWorkspaceView: View {
     let preview: AudioPreviewController
     let inputFileURL: URL?
     let correctedFileURL: URL?
     let masteredFileURL: URL?
     let onWillStartPlayback: @MainActor () -> Void
+    let workspaceTitle: String
+    let playbackStatusText: String?
+    let tracks: [AudioWaveformTrackPresentation]
+    let comparisonPresentation: AudioWaveformComparisonPresentation
+    let comparisonPairLabel: (AudioComparisonPair) -> String
+    let comparisonPairSummary: (AudioComparisonPair) -> String
+    let sideAButtonTitle: String
+    let sideBButtonTitle: String
+    let switchButtonTitle: String
+    let activeSideATitle: String
+    let activeSideBTitle: String
+    let volumeAccessibilityLabel: String
+    let loudnessHelp: String
+    let waveformLabelColumnWidth: CGFloat
+    let topAccessory: AnyView?
+    let resetToken: String
     @State private var hoveredWaveformProgress: Double?
     @State private var hoveredWaveformTarget: AudioPreviewTarget?
     @State private var waveformViewport = WaveformViewport()
@@ -16,7 +47,6 @@ struct AudioWaveformWorkspaceView: View {
     @State private var correctedWaveformHeight = WaveformTrackResizeHandle.defaultHeight
     @State private var masteredWaveformHeight = WaveformTrackResizeHandle.defaultHeight
 
-    private let waveformLabelColumnWidth: CGFloat = 112
     private let waveformTrailingColumnWidth: CGFloat = 140
 
     init(
@@ -24,6 +54,11 @@ struct AudioWaveformWorkspaceView: View {
         inputFileURL: URL?,
         correctedFileURL: URL?,
         masteredFileURL: URL?,
+        correctedTitle: String = AudioPreviewTarget.corrected.rawValue,
+        correctedAccessibilityLabel: String = "補正後の波形",
+        playbackStatusText: String? = nil,
+        comparisonPairLabel: @escaping (AudioComparisonPair) -> String = \.title,
+        comparisonPairSummary: @escaping (AudioComparisonPair) -> String = \.summary,
         onWillStartPlayback: @escaping @MainActor () -> Void = {}
     ) {
         self.preview = preview
@@ -31,41 +66,112 @@ struct AudioWaveformWorkspaceView: View {
         self.correctedFileURL = correctedFileURL
         self.masteredFileURL = masteredFileURL
         self.onWillStartPlayback = onWillStartPlayback
+        self.workspaceTitle = "波形と試聴比較"
+        self.playbackStatusText = playbackStatusText
+        self.tracks = [
+            AudioWaveformTrackPresentation(
+                target: .input,
+                title: AudioPreviewTarget.input.rawValue,
+                tint: .blue,
+                fileURL: inputFileURL,
+                accessibilityLabel: "入力の波形"
+            ),
+            AudioWaveformTrackPresentation(
+                target: .corrected,
+                title: correctedTitle,
+                tint: .green,
+                fileURL: correctedFileURL,
+                accessibilityLabel: correctedAccessibilityLabel
+            ),
+            AudioWaveformTrackPresentation(
+                target: .mastered,
+                title: AudioPreviewTarget.mastered.rawValue,
+                tint: .orange,
+                fileURL: masteredFileURL,
+                accessibilityLabel: "最終版の波形"
+            ),
+        ]
+        self.comparisonPresentation = .selectable
+        self.comparisonPairLabel = comparisonPairLabel
+        self.comparisonPairSummary = comparisonPairSummary
+        self.sideAButtonTitle = "Aを再生"
+        self.sideBButtonTitle = "Bを再生"
+        self.switchButtonTitle = "A/B切替"
+        self.activeSideATitle = "A"
+        self.activeSideBTitle = "B"
+        self.volumeAccessibilityLabel = "試聴音量"
+        self.loudnessHelp = "音量差を揃えて音質の違いを比較します"
+        self.waveformLabelColumnWidth = 112
+        self.topAccessory = nil
+        self.resetToken = inputFileURL?.path ?? ""
+    }
+
+    init(
+        preview: AudioPreviewController,
+        workspaceTitle: String,
+        playbackStatusText: String? = nil,
+        tracks: [AudioWaveformTrackPresentation],
+        comparisonSummary: String,
+        sideAButtonTitle: String,
+        sideBButtonTitle: String,
+        switchButtonTitle: String,
+        activeSideATitle: String,
+        activeSideBTitle: String,
+        volumeAccessibilityLabel: String,
+        loudnessHelp: String,
+        waveformLabelColumnWidth: CGFloat = 170,
+        resetToken: String,
+        topAccessory: AnyView? = nil,
+        onWillStartPlayback: @escaping @MainActor () -> Void = {}
+    ) {
+        self.preview = preview
+        self.inputFileURL = tracks.first(where: { $0.target == .input })?.fileURL
+        self.correctedFileURL = tracks.first(where: { $0.target == .corrected })?.fileURL
+        self.masteredFileURL = tracks.first(where: { $0.target == .mastered })?.fileURL
+        self.onWillStartPlayback = onWillStartPlayback
+        self.workspaceTitle = workspaceTitle
+        self.playbackStatusText = playbackStatusText
+        self.tracks = tracks
+        self.comparisonPresentation = .fixed(summary: comparisonSummary)
+        self.comparisonPairLabel = \.title
+        self.comparisonPairSummary = \.summary
+        self.sideAButtonTitle = sideAButtonTitle
+        self.sideBButtonTitle = sideBButtonTitle
+        self.switchButtonTitle = switchButtonTitle
+        self.activeSideATitle = activeSideATitle
+        self.activeSideBTitle = activeSideBTitle
+        self.volumeAccessibilityLabel = volumeAccessibilityLabel
+        self.loudnessHelp = loudnessHelp
+        self.waveformLabelColumnWidth = waveformLabelColumnWidth
+        self.topAccessory = topAccessory
+        self.resetToken = resetToken
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
+            if let topAccessory {
+                topAccessory
+            }
             comparisonPicker
             playbackControls
 
             GlassEffectContainer(spacing: 12) {
                 VStack(spacing: 0) {
-                    waveformRow(
-                        target: .input,
-                        tint: .blue,
-                        height: $inputWaveformHeight
-                    )
-                    Divider()
-                    waveformRow(
-                        target: .corrected,
-                        tint: .green,
-                        height: $correctedWaveformHeight
-                    )
-                    Divider()
-                    waveformRow(
-                        target: .mastered,
-                        tint: .orange,
-                        height: $masteredWaveformHeight
-                    )
-                    Divider()
+                    ForEach(tracks.indices, id: \.self) { index in
+                        waveformRow(
+                            track: tracks[index],
+                            height: waveformHeight(for: tracks[index].target)
+                        )
+                        Divider()
+                    }
                     waveformTimeRuler
                 }
                 .padding(8)
                 .glassCard(cornerRadius: 16)
             }
         }
-        .onChange(of: inputFileURL) {
+        .onChange(of: resetToken) {
             waveformViewport.reset()
             hoveredWaveformProgress = nil
             hoveredWaveformTarget = nil
@@ -85,9 +191,9 @@ struct AudioWaveformWorkspaceView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text("波形と試聴比較")
+            Text(workspaceTitle)
                 .font(.headline)
-            Text(preview.playbackLabel)
+            Text(playbackStatusText ?? preview.playbackLabel)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -113,19 +219,26 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private var comparisonPairPicker: some View {
-        LiquidGlassSegmentedPicker(
-            title: "比較対象",
-            options: AudioComparisonPair.allCases,
-            selection: binding(
-                get: { preview.comparisonPair },
-                set: { preview.setComparisonPair($0) }
-            ),
-            label: \.title
-        )
+        Group {
+            switch comparisonPresentation {
+            case .selectable:
+                LiquidGlassSegmentedPicker(
+                    title: "比較対象",
+                    options: AudioComparisonPair.allCases,
+                    selection: binding(
+                        get: { preview.comparisonPair },
+                        set: { preview.setComparisonPair($0) }
+                    ),
+                    label: comparisonPairLabel
+                )
+            case .fixed:
+                EmptyView()
+            }
+        }
     }
 
     private var comparisonSummary: some View {
-        Text(preview.comparisonPair.summary)
+        Text(comparisonSummaryText)
             .font(.callout)
             .foregroundStyle(.secondary)
             .lineLimit(1)
@@ -153,7 +266,7 @@ struct AudioWaveformWorkspaceView: View {
     private var transportControls: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 8) {
-                Button("Aを再生") {
+                Button(sideAButtonTitle) {
                     onWillStartPlayback()
                     preview.playComparisonSide(.a)
                 }
@@ -183,7 +296,7 @@ struct AudioWaveformWorkspaceView: View {
                 .help("停止")
                 .disabled(preview.activeTarget == nil)
 
-                Button("Bを再生") {
+                Button(sideBButtonTitle) {
                     onWillStartPlayback()
                     preview.playComparisonSide(.b)
                 }
@@ -192,7 +305,7 @@ struct AudioWaveformWorkspaceView: View {
                 .padding(.vertical, 7)
                 .disabled(comparisonFileURL(for: .b) == nil)
 
-                Button("A/B切替") {
+                Button(switchButtonTitle) {
                     onWillStartPlayback()
                     preview.toggleComparisonSide()
                 }
@@ -224,7 +337,7 @@ struct AudioWaveformWorkspaceView: View {
             )
             .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
             .frame(minWidth: 110, idealWidth: 150, maxWidth: 180)
-            .accessibilityLabel("試聴音量")
+            .accessibilityLabel(volumeAccessibilityLabel)
             Text("\(Int((preview.playbackVolume * 100).rounded()))%")
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
@@ -244,7 +357,7 @@ struct AudioWaveformWorkspaceView: View {
         .tint(LiquidGlassSegmentedPickerStyle.switchTint)
         .controlSize(.small)
         .fixedSize()
-        .help("音量差を揃えて音質の違いを比較します")
+        .help(loudnessHelp)
     }
 
     private var activeComparisonLabel: some View {
@@ -253,7 +366,7 @@ struct AudioWaveformWorkspaceView: View {
                 .fill(activeComparisonTint)
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
-            Text("現在 \(preview.comparisonPair.title(for: preview.activeComparisonSide))")
+            Text("現在 \(activeSideTitle)")
                 .font(.callout.weight(.bold))
                 .foregroundStyle(activeComparisonTint)
         }
@@ -262,40 +375,35 @@ struct AudioWaveformWorkspaceView: View {
             .fixedSize()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("現在再生中")
-            .accessibilityValue(preview.comparisonPair.title(for: preview.activeComparisonSide))
+            .accessibilityValue(activeSideTitle)
     }
 
     private var activeComparisonTint: Color {
-        switch preview.comparisonTarget(for: preview.activeComparisonSide) {
-        case .input:
-            return .blue
-        case .corrected:
-            return .green
-        case .mastered:
-            return .orange
-        }
+        track(for: preview.comparisonTarget(for: preview.activeComparisonSide))?.tint
+            ?? .secondary
     }
 
     private func waveformRow(
-        target: AudioPreviewTarget,
-        tint: Color,
+        track: AudioWaveformTrackPresentation,
         height: Binding<CGFloat>
     ) -> some View {
+        let target = track.target
+        let tint = track.tint
         let state = preview.cardState(for: target)
         let snapshot = state.snapshot
         let comparisonSide = preview.comparisonSide(for: target)
-        let fileURL = fileURL(for: target)
+        let fileURL = track.fileURL
 
         return HStack(spacing: 12) {
             HStack(spacing: 7) {
                 Circle()
                     .fill(tint)
                     .frame(width: 8, height: 8)
-                Text(target.rawValue)
+                Text(track.title)
                     .font(.callout.weight(.semibold))
                     .lineLimit(1)
                 if let comparisonSide {
-                    Text(preview.comparisonPair.title(for: comparisonSide))
+                    Text(sideTitle(for: comparisonSide))
                         .font(.callout.bold())
                         .foregroundStyle(tint)
                         .padding(.horizontal, 7)
@@ -366,12 +474,12 @@ struct AudioWaveformWorkspaceView: View {
         .padding(.vertical, 9)
         .overlay(alignment: .bottom) {
             WaveformTrackResizeHandle(
-                title: target.rawValue,
+                title: track.title,
                 height: height
             )
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(target.rawValue)の波形")
+        .accessibilityLabel(track.accessibilityLabel)
     }
 
     private var waveformTimeRuler: some View {
@@ -409,13 +517,13 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private var waveformDuration: TimeInterval {
-        AudioPreviewTarget.allCases
+        tracks.map(\.target)
             .compactMap { preview.cardState(for: $0).snapshot?.duration }
             .max() ?? 0
     }
 
     private var waveformSampleCount: Int {
-        AudioPreviewTarget.allCases
+        tracks.map(\.target)
             .compactMap { preview.cardState(for: $0).snapshot?.waveform.count }
             .max() ?? 0
     }
@@ -486,13 +594,38 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private func fileURL(for target: AudioPreviewTarget) -> URL? {
+        track(for: target)?.fileURL
+    }
+
+    private var comparisonSummaryText: String {
+        switch comparisonPresentation {
+        case .selectable:
+            comparisonPairSummary(preview.comparisonPair)
+        case .fixed(let summary):
+            summary
+        }
+    }
+
+    private var activeSideTitle: String {
+        sideTitle(for: preview.activeComparisonSide)
+    }
+
+    private func sideTitle(for side: AudioComparisonSide) -> String {
+        switch side {
+        case .a: activeSideATitle
+        case .b: activeSideBTitle
+        }
+    }
+
+    private func track(for target: AudioPreviewTarget) -> AudioWaveformTrackPresentation? {
+        tracks.first(where: { $0.target == target })
+    }
+
+    private func waveformHeight(for target: AudioPreviewTarget) -> Binding<CGFloat> {
         switch target {
-        case .input:
-            return inputFileURL
-        case .corrected:
-            return correctedFileURL
-        case .mastered:
-            return masteredFileURL
+        case .input: $inputWaveformHeight
+        case .corrected: $correctedWaveformHeight
+        case .mastered: $masteredWaveformHeight
         }
     }
 

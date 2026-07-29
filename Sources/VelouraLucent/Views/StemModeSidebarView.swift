@@ -18,11 +18,19 @@ struct StemModeSidebarView: View {
                         tint: .blue
                     )
                     SidebarFileRow(
-                        title: "補正後再ミックス",
+                        title: "補正済み純粋加算",
                         systemImage: "waveform.badge.checkmark",
-                        fileURL: model.correctedRemixPreviewArtifact?.fileURL,
-                        fileInfo: fileInfo(for: model.correctedRemixPreviewArtifact),
+                        fileURL: model.correctedPureSumPreviewArtifact?.fileURL,
+                        fileInfo: fileInfo(for: model.correctedPureSumPreviewArtifact),
                         placeholder: "補正完了後に表示されます",
+                        tint: .blue
+                    )
+                    SidebarFileRow(
+                        title: "Stem再ミックス",
+                        systemImage: "slider.horizontal.3",
+                        fileURL: model.remixedPreviewArtifact?.fileURL,
+                        fileInfo: fileInfo(for: model.remixedPreviewArtifact),
+                        placeholder: "再ミックス後に表示されます",
                         tint: .green
                     )
                     SidebarFileRow(
@@ -148,47 +156,46 @@ private struct StemModeSidebarProcessingStatusView: View {
     let session: StemWorkflowSession
 
     var body: some View {
-        Group {
-            if isAnyProcessRunning {
-                TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                    rows(now: timeline.date)
-                }
-            } else {
-                rows(now: .now)
-            }
-        }
+        SidebarProcessingStatusListView(sections: sections)
     }
 
-    private func rows(now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            statusRow(
+    private var sections: [SidebarProcessStatusSection] {
+        [
+            statusSection(
+                id: "correction",
                 title: "補正",
                 progresses: session.correctionDisplayProgress,
                 startedAt: session.correctionStartedAt,
                 finishedAt: session.correctionFinishedAt,
-                isProcessing: session.isCorrectionProcessing,
-                now: now
-            )
-            Divider()
-            statusRow(
+                isProcessing: session.isCorrectionProcessing
+            ),
+            statusSection(
+                id: "remix",
+                title: "再ミックス",
+                progresses: session.remixDisplayProgress,
+                startedAt: session.remixStartedAt,
+                finishedAt: session.remixFinishedAt,
+                isProcessing: session.isRemixProcessing
+            ),
+            statusSection(
+                id: "mastering",
                 title: "マスタリング",
                 progresses: session.masteringDisplayProgress,
                 startedAt: session.masteringStartedAt,
                 finishedAt: session.masteringFinishedAt,
-                isProcessing: session.isMasteringProcessing,
-                now: now
-            )
-        }
+                isProcessing: session.isMasteringProcessing
+            ),
+        ]
     }
 
-    private func statusRow(
+    private func statusSection(
+        id: String,
         title: String,
         progresses: [StemModeProcessStepProgress],
         startedAt: Date?,
         finishedAt: Date?,
-        isProcessing: Bool,
-        now: Date
-    ) -> some View {
+        isProcessing: Bool
+    ) -> SidebarProcessStatusSection {
         let active = progresses.first(where: { $0.status == .running })
         let failed = progresses.contains(where: { $0.status == .failed })
         let complete = !isProcessing
@@ -206,7 +213,8 @@ private struct StemModeSidebarProcessingStatusView: View {
             ? 0
             : progresses.map(\.fraction).reduce(0, +) / Double(progresses.count)
 
-        return SidebarProcessStatusRow(
+        return SidebarProcessStatusSection(
+            id: id,
             title: title,
             status: failed ? "失敗" : (isProcessing ? "処理中" : (complete ? "完了" : "待機")),
             activeStepTitle: isProcessing ? active?.step.title : nil,
@@ -218,8 +226,7 @@ private struct StemModeSidebarProcessingStatusView: View {
             hasFailed: failed,
             progress: progress,
             steps: progresses.map(stepDisplay),
-            tint: tint,
-            now: now
+            tint: tint
         )
     }
 
@@ -236,11 +243,8 @@ private struct StemModeSidebarProcessingStatusView: View {
             id: progress.step.id,
             title: progress.step.title,
             detail: progress.detail,
-            state: state
+            state: state,
+            showsTransientStatus: false
         )
-    }
-
-    private var isAnyProcessRunning: Bool {
-        session.isCorrectionProcessing || session.isMasteringProcessing
     }
 }

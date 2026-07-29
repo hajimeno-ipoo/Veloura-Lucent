@@ -23,8 +23,10 @@ enum StemWorkflowStep: String, CaseIterable, Identifiable, Sendable {
     case evaluateStems
     case correctStems
     case validateCorrectedStems
-    case correctedRemix
-    case validateCorrectedRemix
+    case correctedPureSum
+    case validateCorrectedPureSum
+    case remix
+    case validateRemix
     case mastering
     case finalizeMaster
 
@@ -38,8 +40,10 @@ enum StemWorkflowStep: String, CaseIterable, Identifiable, Sendable {
         case .evaluateStems: "Stem別解析"
         case .correctStems: "Stem別補正"
         case .validateCorrectedStems: "補正後Stem検証"
-        case .correctedRemix: "補正後再ミックス"
-        case .validateCorrectedRemix: "補正後再ミックス検証"
+        case .correctedPureSum: "補正済み純粋加算"
+        case .validateCorrectedPureSum: "補正済み純粋加算検証"
+        case .remix: "Stem再ミックス"
+        case .validateRemix: "Stem再ミックス検証"
         case .mastering: "マスタリング"
         case .finalizeMaster: "最終版解析・保存"
         }
@@ -48,6 +52,7 @@ enum StemWorkflowStep: String, CaseIterable, Identifiable, Sendable {
 
 enum StemModeProcessDomain: String, Sendable {
     case correction
+    case remix
     case mastering
 }
 
@@ -59,8 +64,17 @@ struct StemModeProcessStep: Hashable, Identifiable, Sendable {
     static let inputPreparation = correction(id: "inputPreparation", title: "処理用入力準備")
     static let separation = correction(id: "separation", title: "4ステム分離")
     static let separatedValidation = correction(id: "separatedValidation", title: "分離結果検証")
-    static let correctedRemix = correction(id: "correctedRemix", title: "補正後再ミックス")
-    static let correctedRemixValidation = correction(id: "correctedRemixValidation", title: "再ミックス検証")
+    static let correctedPureSum = correction(id: "correctedPureSum", title: "補正済み純粋加算")
+    static let correctedPureSumValidation = correction(id: "correctedPureSumValidation", title: "純粋加算検証")
+    static let automaticRemixPlan = remix(id: "automaticPlan", title: "自動再ミックス設定")
+    static let remixGain = remix(id: "gain", title: "Stem別gain")
+    static let remixMasking = remix(id: "masking", title: "条件付き帯域制御")
+    static let remixPan = remix(id: "pan", title: "Stem別pan")
+    static let remixReverbSend = remix(id: "reverbSend", title: "Stem別reverb send")
+    static let remixSharedReverb = remix(id: "sharedReverb", title: "共通reverb return")
+    static let remixDryReturnMix = remix(id: "dryReturnMix", title: "dry／reverb加算")
+    static let remixSave = remix(id: "save", title: "再ミックス保存")
+    static let remixValidation = remix(id: "validation", title: "再ミックス検証")
     static let finalization = mastering(id: "finalization", title: "最終版解析・保存")
 
     static func roleAnalysis(_ role: StemRole) -> StemModeProcessStep {
@@ -84,6 +98,13 @@ struct StemModeProcessStep: Hashable, Identifiable, Sendable {
         )
     }
 
+    static func roleTransientRecovery(_ role: StemRole) -> StemModeProcessStep {
+        correction(
+            id: "role.\(role.rawValue).transientRecovery",
+            title: "\(role.stemModeDisplayTitle)：raw基準アタック保護"
+        )
+    }
+
     static func mastering(_ step: MasteringStep) -> StemModeProcessStep {
         mastering(id: "existing.\(step.eventID)", title: step.title)
     }
@@ -99,11 +120,28 @@ struct StemModeProcessStep: Hashable, Identifiable, Sendable {
             steps.append(contentsOf: StemCorrectionStage.allCases.map {
                 .roleCorrection(role, stage: $0)
             })
+            if role == .drums {
+                steps.append(.roleTransientRecovery(role))
+            }
             steps.append(.roleSave(role))
         }
-        steps.append(.correctedRemix)
-        steps.append(.correctedRemixValidation)
+        steps.append(.correctedPureSum)
+        steps.append(.correctedPureSumValidation)
         return steps
+    }
+
+    static var remixSteps: [StemModeProcessStep] {
+        [
+            .automaticRemixPlan,
+            .remixGain,
+            .remixMasking,
+            .remixPan,
+            .remixReverbSend,
+            .remixSharedReverb,
+            .remixDryReturnMix,
+            .remixSave,
+            .remixValidation,
+        ]
     }
 
     static var masteringSteps: [StemModeProcessStep] {
@@ -112,6 +150,10 @@ struct StemModeProcessStep: Hashable, Identifiable, Sendable {
 
     private static func correction(id: String, title: String) -> StemModeProcessStep {
         StemModeProcessStep(id: "correction.\(id)", title: title, domain: .correction)
+    }
+
+    private static func remix(id: String, title: String) -> StemModeProcessStep {
+        StemModeProcessStep(id: "remix.\(id)", title: title, domain: .remix)
     }
 
     private static func mastering(id: String, title: String) -> StemModeProcessStep {
@@ -201,6 +243,7 @@ struct StemWorkflowStepProgress: Equatable, Sendable, Identifiable {
 enum StemWorkflowState: Equatable, Sendable {
     case idle
     case ready
+    case readyForRemix(runID: UUID)
     case readyForMastering(runID: UUID)
     case running(step: StemWorkflowStep)
     case completed(runID: UUID)
@@ -211,7 +254,8 @@ enum StemArtifactKind: Equatable, Hashable, Sendable {
     case input44100
     case rawStem(StemRole)
     case correctedStem(StemRole)
-    case correctedRemix48000
+    case correctedPureSum48000
+    case remixed48000
     case finalMaster
 }
 

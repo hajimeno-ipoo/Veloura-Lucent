@@ -224,13 +224,13 @@ struct StemWorkflowServiceTests {
             "raw再ミックスを解析・ノイズ測定します",
             "raw再ミックスを入力2mixと検証します",
             "raw再ミックスの検証が完了しました",
-            "補正後再ミックスの安全確認を行います",
-            "再ミックス安全確認: raw Stemへの差し替えなし",
-            "補正済み4Stemを再ミックスします",
-            "補正後再ミックスを保存します",
-            "補正後再ミックスを解析・ノイズ測定します",
-            "補正後再ミックスを検証します",
-            "補正後再ミックスの検証が完了しました",
+            "補正済み純粋加算の安全確認を行います",
+            "純粋加算安全確認: raw Stemへの差し替えなし",
+            "補正済み4Stemをgain・pan・reverbなしで純粋加算します",
+            "補正済み純粋加算を保存します",
+            "補正済み純粋加算を解析・ノイズ測定します",
+            "補正済み純粋加算を検証します",
+            "補正済み純粋加算の検証が完了しました",
             "補正処理が完了しました",
         ])
 
@@ -255,7 +255,7 @@ struct StemWorkflowServiceTests {
         }
 
         #expect(recorder.values().contains(
-            "再ミックス安全確認: ベースをraw Stemへ戻しました"
+            "純粋加算安全確認: ベースをraw Stemへ戻しました"
         ))
         #expect(recorder.values().contains("理由: テスト用の安全確認理由"))
     }
@@ -295,15 +295,15 @@ struct StemWorkflowServiceTests {
             guard let artifact = evaluation.correctedArtifact else { return false }
             return FileManager.default.fileExists(atPath: artifact.fileURL.path)
         })
-        #expect(result.correctedRemixEvaluation.purpose == .correctedRemix)
+        #expect(result.correctedRemixEvaluation.purpose == .correctedPureSum)
         #expect(result.correctedRemixValidation.canContinue)
         #expect(FileManager.default.fileExists(
-            atPath: result.remixArtifacts.correctedRemix.fileURL.path
+            atPath: result.remixArtifacts.correctedPureSum.fileURL.path
         ))
     }
 
     @Test
-    func masteringUsesCorrectedRemixDirectlyAndFailureKeepsFourCorrectedStems() async throws {
+    func masteringUsesStemRemixDirectlyAndFailureKeepsCorrectionAndRemixArtifacts() async throws {
         let fixture = try await makeCorrectionFixture(failingRole: nil)
         defer { try? StemWorkflowService().discardTemporarySession(runID: fixture.request.runID) }
         let correction = try await fixture.service.processCorrection(fixture.request)
@@ -314,26 +314,61 @@ struct StemWorkflowServiceTests {
             corrector: PassThroughStemCorrector(failingRole: nil),
             masteringService: recorder
         )
+        let remix = try await masteringWorkflow.processRemix(
+            correction: correction,
+            settings: correction.automaticRemixPlan.settings
+        )
 
         await #expect(throws: WorkflowServiceTestError.masteringFailed) {
             _ = try await masteringWorkflow.processMastering(.init(
-                correction: correction,
+                remix: remix,
                 masteringSettings: MasteringProfile.streaming.settings
             ))
         }
 
         let inputURL = await recorder.receivedInputURL
-        #expect(inputURL?.lastPathComponent == "corrected-remix-48000.wav")
+        #expect(inputURL?.lastPathComponent == "stem-remix-48000.wav")
         #expect(!FileManager.default.fileExists(
             atPath: correction.sessionDirectory.appending(path: "mastering-input-48000.wav").path
         ))
         #expect(FileManager.default.fileExists(
-            atPath: correction.sessionDirectory.appending(path: "corrected-remix-48000.wav").path
+            atPath: correction.sessionDirectory.appending(path: "corrected-pure-sum-48000.wav").path
         ))
+        #expect(FileManager.default.fileExists(atPath: remix.artifact.fileURL.path))
         #expect(correction.stemEvaluations.allSatisfy { evaluation in
             guard let artifact = evaluation.correctedArtifact else { return false }
             return FileManager.default.fileExists(atPath: artifact.fileURL.path)
         })
+    }
+
+    @Test
+    func remixDisplayProgressAndDetailedLogsFollowTheAudioRenderOrder() async throws {
+        let fixture = try await makeCorrectionFixture(failingRole: nil)
+        defer { try? StemWorkflowService().discardTemporarySession(runID: fixture.request.runID) }
+        let correction = try await fixture.service.processCorrection(fixture.request)
+        let completedSteps = WorkflowStringRecorder()
+        let logLines = WorkflowStringRecorder()
+
+        _ = try await fixture.service.processRemix(
+            correction: correction,
+            settings: correction.automaticRemixPlan.settings
+        ) { event in
+            switch event {
+            case .displayProgress(let progress) where progress.status == .completed:
+                completedSteps.append(progress.step.id)
+            case .log(_, _, let message):
+                logLines.append(message)
+            default:
+                break
+            }
+        }
+
+        #expect(completedSteps.values() == StemModeProcessStep.remixSteps.map(\.id))
+        let expectedStageLogs = StemRemixRenderStage.allCases.map(\.stemModeCompletedDetail)
+        #expect(expectedStageLogs.allSatisfy { logLines.values().contains($0) })
+        #expect(logLines.values().contains(
+            "再ミックスの構造・有限値・ピーク検証を完了しました"
+        ))
     }
 
     private func makeCorrectionFixture(

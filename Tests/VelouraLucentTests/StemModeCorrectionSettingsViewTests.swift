@@ -37,6 +37,10 @@ struct StemModeCorrectionSettingsViewTests {
 
         #expect(correctionView.contains("Stem別の独立設定"))
         #expect(correctionView.contains("設定するStem"))
+        #expect(correctionView.contains("Text(\"補正プリセット\")"))
+        #expect(correctionView.contains(
+            "TermHelpButton(\n                    title: \"補正プリセット\""
+        ))
         #expect(correctionView.contains("選択中Stemの処理量上限"))
         #expect(correctionView.contains("設定値より強くしません"))
         #expect(correctionView.contains("選択中Stemの補正上限を決める出発点です"))
@@ -52,6 +56,10 @@ struct StemModeCorrectionSettingsViewTests {
         #expect(controlList.contains("DAWKnobMetrics.twoColumnWidth"))
         #expect(controlList.contains("DAWKnobMetrics.controlWidth"))
         #expect(!controlList.contains("StemModeSettingSlider("))
+        #expect(correctionView.contains("LiquidGlassActionButton("))
+        #expect(correctionView.contains("title: \"プリセットへ戻す\""))
+        #expect(correctionView.contains(".font(.body)"))
+        #expect(!correctionView.contains("Button(\"プリセットへ戻す\""))
         #expect(inspector.contains("StemModeCorrectionSettingsView(model: model)"))
 
         #expect(mastering.contains("SettingsDisclosureCard("))

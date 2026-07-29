@@ -525,7 +525,7 @@ struct DiagnosticStageExportTests {
         let beforeLimit = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "06_correction_lowMidResidueGuard"))
         let afterLimit = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "07_correction_shimmerPeakLimit"))
         let highPreserved = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "08_correction_correctionHighPreserve"))
-        let correctionFinal = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "10_correction_peakSafety"))
+        let correctionFinal = try AudioFileService.loadAudio(from: diagnosticFile(in: diagnostics, containing: "11_correction_peakSafety"))
         let shimmerBurstBefore = maxWindowBandRMSDB(signal: beforeLimit, lower: 10_000, upper: 14_000)
         let shimmerBurstAfter = maxWindowBandRMSDB(signal: afterLimit, lower: 10_000, upper: 14_000)
         let steadySparkleBefore = try bandLevelDB(signal: excerpt(from: beforeLimit, startSeconds: 0.25, durationSeconds: 0.12), lower: 8_000, upper: 12_000)

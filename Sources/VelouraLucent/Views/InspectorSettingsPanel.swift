@@ -1,5 +1,46 @@
 import SwiftUI
 
+struct InspectorSettingsSectionLayout<Selection: Hashable, Content: View>: View {
+    let options: [Selection]
+    @Binding var selection: Selection
+    let label: (Selection) -> String
+    let isDisabled: Bool
+    @ViewBuilder let content: Content
+
+    init(
+        options: [Selection],
+        selection: Binding<Selection>,
+        label: @escaping (Selection) -> String,
+        isDisabled: Bool,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.options = options
+        self._selection = selection
+        self.label = label
+        self.isDisabled = isDisabled
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("詳細設定")
+                    .font(.headline)
+
+                LiquidGlassSegmentedPicker(
+                    title: "詳細設定",
+                    options: options,
+                    selection: $selection,
+                    label: label,
+                    isDisabled: isDisabled
+                )
+            }
+
+            content
+        }
+    }
+}
+
 private enum InspectorSettingsSection: String, CaseIterable, Identifiable {
     case correction
     case mastering
@@ -26,20 +67,12 @@ struct InspectorSettingsPanel: View {
     private var selectedSectionRawValue = InspectorSettingsSection.correction.rawValue
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("詳細設定")
-                    .font(.headline)
-
-                LiquidGlassSegmentedPicker(
-                    title: "詳細設定",
-                    options: InspectorSettingsSection.allCases,
-                    selection: selectedSectionBinding,
-                    label: \.title,
-                    isDisabled: job.isProcessing || job.isMastering
-                )
-            }
-
+        InspectorSettingsSectionLayout(
+            options: InspectorSettingsSection.allCases,
+            selection: selectedSectionBinding,
+            label: \.title,
+            isDisabled: job.isProcessing || job.isMastering
+        ) {
             selectedContent
         }
     }

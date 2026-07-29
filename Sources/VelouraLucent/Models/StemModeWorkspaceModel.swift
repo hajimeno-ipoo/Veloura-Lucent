@@ -9,6 +9,8 @@ final class StemModeWorkspaceModel {
     let previewController = AudioPreviewController()
     /// 選択中Stemのraw／補正後だけを扱う、2mix試聴とは独立したpreview stateです。
     let stemPreviewController = AudioPreviewController()
+    /// 補正済み純粋加算とStem再ミックスのA/Bだけを扱う専用preview stateです。
+    let remixPreviewController = AudioPreviewController()
 
     private(set) var selectedInputURL: URL?
     private(set) var selectedInputFileInfo: AudioFileInfo?
@@ -20,6 +22,7 @@ final class StemModeWorkspaceModel {
     private(set) var previewArtifacts: [StemAudioArtifact] = []
     private(set) var finalCommitLockState: StemModeFinalCommitLockState = .unlocked
     private(set) var isModelOperationInProgress = false
+    private(set) var cancellingProcessDomain: StemModeProcessDomain?
     var presentedError: StemModeWorkspaceErrorPresentation?
 
     var selectedMasteringProfile: MasteringProfile = .streaming {
@@ -43,12 +46,16 @@ final class StemModeWorkspaceModel {
 
     private(set) var isUsingCustomMasteringSettings = false
     private(set) var selectedCorrectionRole: StemRole = .vocals
+    private(set) var selectedStemPreviewRole: StemRole = .vocals
     private(set) var correctionSettings = StemRoleCorrectionSettings(
         all: DenoiseStrength.balanced.settings
     )
     private(set) var separationSettings: StemSeparationSettings?
     private(set) var modelPresentation: StemModeModelPresentation?
     private(set) var remixAnalysisPresentation: StemModeRemixAnalysisPresentation?
+    private(set) var automaticRemixPlan: StemRemixAutomaticPlan?
+    private(set) var manualRemixOverrides = StemRemixManualOverrides()
+    private(set) var isRemixManualEditingEnabled = false
     private(set) var qualityReports: StemModeQualityReports?
     private(set) var finalArtifact: StemAudioArtifact?
     /// 選択した入力ファイルそのものの表示・試聴用評価です。
@@ -89,11 +96,11 @@ final class StemModeWorkspaceModel {
     }
 
     var selectedRawStemPreviewURL: URL? {
-        validatedStemArtifact(kind: .rawStem(selectedCorrectionRole))?.fileURL
+        validatedStemArtifact(kind: .rawStem(selectedStemPreviewRole))?.fileURL
     }
 
     var selectedCorrectedStemPreviewURL: URL? {
-        validatedStemArtifact(kind: .correctedStem(selectedCorrectionRole))?.fileURL
+        validatedStemArtifact(kind: .correctedStem(selectedStemPreviewRole))?.fileURL
     }
 
     var selectedRoleCorrectionSettings: CorrectionSettings {
@@ -134,7 +141,7 @@ final class StemModeWorkspaceModel {
             true
         case .ready:
             session.runID != nil
-        case .readyForMastering:
+        case .readyForRemix, .readyForMastering:
             false
         case .idle,
              .completed,
@@ -158,8 +165,7 @@ final class StemModeWorkspaceModel {
     }
 
     var canRunCorrection: Bool {
-        !isAwaitingMastering
-            && selectedInputURL != nil
+        selectedInputURL != nil
             && separationSettings != nil
             && modelPresentation != nil
             && pendingMatrixConfirmation == nil
@@ -170,8 +176,31 @@ final class StemModeWorkspaceModel {
     }
 
     var canRunMastering: Bool {
-        guard case .readyForMastering(let runID) = session.state,
-              session.runID == runID else {
+        guard let runID = session.runID else {
+            return false
+        }
+        switch session.state {
+        case .readyForMastering(let readyRunID), .completed(let readyRunID):
+            guard readyRunID == runID else { return false }
+        default:
+            return false
+        }
+        return !isStartingRun
+            && !isInspectingInput
+            && !isModelOperationInProgress
+    }
+
+    var canRunRemix: Bool {
+        guard automaticRemixPlan != nil,
+              let runID = session.runID else {
+            return false
+        }
+        switch session.state {
+        case .readyForRemix(let readyRunID),
+             .readyForMastering(let readyRunID),
+             .completed(let readyRunID):
+            guard readyRunID == runID else { return false }
+        default:
             return false
         }
         return !isStartingRun
@@ -182,7 +211,20 @@ final class StemModeWorkspaceModel {
     var canCancelProcessing: Bool {
         isRunActive
             && !isStartingRun
+            && cancellingProcessDomain == nil
             && finalCommitLockState == .unlocked
+    }
+
+    var isCorrectionCancelling: Bool {
+        cancellingProcessDomain == .correction
+    }
+
+    var isRemixCancelling: Bool {
+        cancellingProcessDomain == .remix
+    }
+
+    var isMasteringCancelling: Bool {
+        cancellingProcessDomain == .mastering
     }
 
     var isMasteringSettingsDisabled: Bool {
@@ -190,17 +232,11 @@ final class StemModeWorkspaceModel {
     }
 
     var isCorrectionSettingsDisabled: Bool {
-        if case .readyForMastering = session.state {
-            return true
-        }
         return isRunActive || isStartingRun
     }
 
-    private var isAwaitingMastering: Bool {
-        if case .readyForMastering = session.state {
-            return true
-        }
-        return false
+    var isRemixSettingsDisabled: Bool {
+        isRunActive || isStartingRun || automaticRemixPlan == nil
     }
 
     var inputPreviewArtifact: StemAudioArtifact? {
@@ -211,8 +247,17 @@ final class StemModeWorkspaceModel {
         selectedInputURL
     }
 
+    var correctedPureSumPreviewArtifact: StemAudioArtifact? {
+        previewArtifacts.first(where: { $0.kind == .correctedPureSum48000 })
+    }
+
+    var remixedPreviewArtifact: StemAudioArtifact? {
+        previewArtifacts.first(where: { $0.kind == .remixed48000 })
+    }
+
+    /// 既存の入力／処理後／最終版previewでは、再ミックスがあればそれを優先します。
     var correctedRemixPreviewArtifact: StemAudioArtifact? {
-        previewArtifacts.first(where: { $0.kind == .correctedRemix48000 })
+        remixedPreviewArtifact ?? correctedPureSumPreviewArtifact
     }
 
     var finalPreviewArtifact: StemAudioArtifact? {
@@ -220,7 +265,16 @@ final class StemModeWorkspaceModel {
     }
 
     var correctedRemixEvaluation: StemAudioEvaluationSnapshot? {
-        remixAnalysisPresentation?.correctedRemixEvaluation
+        remixAnalysisPresentation?.processedRemixEvaluation
+            ?? remixAnalysisPresentation?.correctedRemixEvaluation
+    }
+
+    var effectiveRemixSettings: StemRemixSettings? {
+        automaticRemixPlan.map { plan in
+            isRemixManualEditingEnabled
+                ? manualRemixOverrides.applying(to: plan.settings)
+                : plan.settings
+        }
     }
 
     var inputMetrics: AudioMetricSnapshot? {
@@ -342,8 +396,13 @@ final class StemModeWorkspaceModel {
 
     func selectCorrectionRole(_ role: StemRole) {
         guard selectedCorrectionRole != role else { return }
-        stemPreviewController.stopPlayback()
         selectedCorrectionRole = role
+    }
+
+    func selectStemPreviewRole(_ role: StemRole) {
+        guard selectedStemPreviewRole != role else { return }
+        stemPreviewController.stopPlayback()
+        selectedStemPreviewRole = role
         refreshSelectedStemPreviewSources()
     }
 
@@ -473,7 +532,7 @@ final class StemModeWorkspaceModel {
         guard canRunMastering else {
             presentError(
                 title: "マスタリングを開始できません",
-                message: "補正済み4Stemが確定してからマスタリングを実行してください。"
+                message: "Stem再ミックスの検証が完了してからマスタリングを実行してください。"
             )
             return
         }
@@ -494,29 +553,78 @@ final class StemModeWorkspaceModel {
         }
     }
 
-    func cancelCorrection() async {
-        guard canCancelProcessing else { return }
+    func beginRemix() async {
+        guard canRunRemix, let effectiveRemixSettings else {
+            presentError(
+                title: "再ミックスを開始できません",
+                message: "補正済み4Stemと純粋加算の検証が完了してから再ミックスを実行してください。"
+            )
+            return
+        }
+        isStartingRun = true
+        presentedError = nil
+        defer { isStartingRun = false }
         do {
-            try await actions.cancelCorrection()
+            switch session.state {
+            case .readyForMastering, .completed:
+                try actions.invalidateRemix()
+            default:
+                break
+            }
+            try await actions.beginRemix(
+                StemModeRemixRequest(settings: effectiveRemixSettings)
+            )
         } catch is CancellationError {
             return
         } catch {
             presentError(
-                title: "補正をキャンセルできません",
+                title: "再ミックスを開始できません",
                 message: error.localizedDescription
             )
         }
     }
 
+    func cancelCorrection() async {
+        await performCancellation(
+            domain: .correction,
+            errorTitle: "補正をキャンセルできません",
+            action: actions.cancelCorrection
+        )
+    }
+
     func cancelMastering() async {
+        await performCancellation(
+            domain: .mastering,
+            errorTitle: "マスタリングをキャンセルできません",
+            action: actions.cancelMastering
+        )
+    }
+
+    func cancelRemix() async {
+        await performCancellation(
+            domain: .remix,
+            errorTitle: "再ミックスをキャンセルできません",
+            action: actions.cancelRemix
+        )
+    }
+
+    private func performCancellation(
+        domain: StemModeProcessDomain,
+        errorTitle: String,
+        action: @MainActor () async throws -> Void
+    ) async {
         guard canCancelProcessing else { return }
+        cancellingProcessDomain = domain
+        defer {
+            cancellingProcessDomain = nil
+        }
         do {
-            try await actions.cancelMastering()
+            try await action()
         } catch is CancellationError {
             return
         } catch {
             presentError(
-                title: "マスタリングをキャンセルできません",
+                title: errorTitle,
                 message: error.localizedDescription
             )
         }
@@ -559,6 +667,131 @@ final class StemModeWorkspaceModel {
         _ presentation: StemModeRemixAnalysisPresentation?
     ) {
         remixAnalysisPresentation = presentation
+    }
+
+    func setAutomaticRemixPlan(_ plan: StemRemixAutomaticPlan) {
+        automaticRemixPlan = plan
+    }
+
+    func setRemixManualEditingEnabled(_ isEnabled: Bool) throws {
+        guard isEnabled != isRemixManualEditingEnabled else { return }
+        try requireMutableRemixSettings()
+        if !manualRemixOverrides.isEmpty {
+            try invalidateRemixIfNeeded()
+        }
+        isRemixManualEditingEnabled = isEnabled
+    }
+
+    func setDrumsToBassMaskingEnabled(_ value: Bool?) throws {
+        try prepareForManualRemixValueChange()
+        manualRemixOverrides.drumsToBassEnabled = value
+    }
+
+    func setRemixResult(_ result: StemWorkflowRemixResult) {
+        do {
+            remixAnalysisPresentation = try StemModeRemixAnalysisPresentation(
+                remixResult: result
+            )
+        } catch {
+            presentError(
+                title: "再ミックス解析を表示できません",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    func clearRemixResult() {
+        guard let correctionResultPresentation = remixAnalysisPresentation else {
+            return
+        }
+        remixAnalysisPresentation = correctionResultPresentation.removingProcessedRemix()
+        qualityReports = nil
+        finalArtifact = nil
+        finalEvaluation = nil
+    }
+
+    func setRemixGainDB(_ value: Float?, for role: StemRole) throws {
+        try updateRemixRoleOverrides(for: role) { $0.gainDB = value }
+    }
+
+    func setRemixPan(_ value: Float?, for role: StemRole) throws {
+        try updateRemixRoleOverrides(for: role) { $0.pan = value }
+    }
+
+    func setRemixReverbSend(_ value: Float?, for role: StemRole) throws {
+        try updateRemixRoleOverrides(for: role) { $0.reverbSend = value }
+    }
+
+    func setDrumsToBassMasking(_ value: Float?) throws {
+        try prepareForManualRemixValueChange()
+        manualRemixOverrides.drumsToBassAmount = value
+    }
+
+    func setVocalsToOtherMaskingEnabled(_ value: Bool?) throws {
+        try prepareForManualRemixValueChange()
+        manualRemixOverrides.vocalsToOtherEnabled = value
+    }
+
+    func setVocalsToOtherMasking(_ value: Float?) throws {
+        try prepareForManualRemixValueChange()
+        manualRemixOverrides.vocalsToOtherAmount = value
+    }
+
+    func setRemixReturnLevel(_ value: Float?) throws {
+        try prepareForManualRemixValueChange()
+        manualRemixOverrides.reverbReturnLevel = value
+    }
+
+    func setRemixDecaySeconds(_ value: Float?) throws {
+        try prepareForManualRemixValueChange()
+        manualRemixOverrides.reverbDecaySeconds = value
+    }
+
+    func resetManualRemixOverrides() throws {
+        guard !manualRemixOverrides.isEmpty else { return }
+        try prepareForManualRemixValueChange()
+        manualRemixOverrides.reset()
+    }
+
+    private func updateRemixRoleOverrides(
+        for role: StemRole,
+        update: (inout StemRemixRoleOverrides) -> Void
+    ) throws {
+        try prepareForManualRemixValueChange()
+        var overrides = manualRemixOverrides.overrides(for: role)
+        update(&overrides)
+        manualRemixOverrides.setOverrides(overrides, for: role)
+    }
+
+    private func prepareForManualRemixValueChange() throws {
+        guard isRemixManualEditingEnabled else {
+            throw StemModeWorkspaceSettingsError.remixManualModeRequired
+        }
+        try requireMutableRemixSettings()
+        try invalidateRemixIfNeeded()
+    }
+
+    private func requireMutableRemixSettings() throws {
+        guard !isRemixSettingsDisabled else {
+            throw StemModeWorkspaceSettingsError.settingsCannotChangeDuringRun
+        }
+        switch session.state {
+        case .readyForRemix, .readyForMastering, .completed:
+            break
+        default:
+            throw StemWorkflowSessionError.remixRequiresCorrectionCompletion
+        }
+    }
+
+    private func invalidateRemixIfNeeded() throws {
+        switch session.state {
+        case .readyForMastering, .completed:
+            try actions.invalidateRemix()
+        case .readyForRemix:
+            break
+        default:
+            throw StemWorkflowSessionError.remixRequiresCorrectionCompletion
+        }
     }
 
     func setWorkflowInputEvaluation(_ evaluation: StemAudioEvaluationSnapshot?) {
@@ -648,6 +881,7 @@ final class StemModeWorkspaceModel {
     func stopPreviewPlayback() {
         previewController.stopPlayback()
         stemPreviewController.stopPlayback()
+        remixPreviewController.stopPlayback()
     }
 
     func stopTwoMixPreviewPlayback() {
@@ -656,6 +890,15 @@ final class StemModeWorkspaceModel {
 
     func stopStemPreviewPlayback() {
         stemPreviewController.stopPlayback()
+    }
+
+    func stopRemixPreviewPlayback() {
+        remixPreviewController.stopPlayback()
+    }
+
+    func stopAuxiliaryPreviewPlayback() {
+        stemPreviewController.stopPlayback()
+        remixPreviewController.stopPlayback()
     }
 
     func refreshSelectedStemPreviewSources() {
@@ -675,15 +918,11 @@ final class StemModeWorkspaceModel {
         presentedError = nil
     }
 
-    func presentFileImporterFailure(_ error: Error) {
-        presentError(
-            title: "入力音源を選択できません",
-            message: error.localizedDescription
-        )
-    }
-
     private func clearRunPresentation() {
         remixAnalysisPresentation = nil
+        automaticRemixPlan = nil
+        manualRemixOverrides.reset()
+        isRemixManualEditingEnabled = false
         qualityReports = nil
         finalArtifact = nil
         workflowInputEvaluation = nil
@@ -691,6 +930,7 @@ final class StemModeWorkspaceModel {
         stemEvaluationsByRole = [:]
         replacePreviewSources([])
         clearStemPreviewSources()
+        clearRemixPreviewSources()
     }
 
     func resetRunPresentationAfterCorrectionCancellation() {
@@ -698,13 +938,18 @@ final class StemModeWorkspaceModel {
     }
 
     private func replacePreviewSources(_ artifacts: [StemAudioArtifact]) {
+        let previousPureSum = correctedPureSumPreviewArtifact
+        let previousRemix = remixedPreviewArtifact
         let previousCorrected = correctedRemixPreviewArtifact
         let previousFinal = finalPreviewArtifact
         previewArtifacts = artifacts
 
-        if previousCorrected != correctedRemixPreviewArtifact
+        if previousPureSum != correctedPureSumPreviewArtifact
+            || previousRemix != remixedPreviewArtifact
+            || previousCorrected != correctedRemixPreviewArtifact
             || previousFinal != finalPreviewArtifact {
             preparePreviewSources()
+            prepareRemixPreviewSources()
             refreshDisplayAnalysis()
         }
     }
@@ -724,6 +969,20 @@ final class StemModeWorkspaceModel {
             for: finalPreviewArtifact?.fileURL,
             target: .mastered
         )
+    }
+
+    private func prepareRemixPreviewSources() {
+        remixPreviewController.stopPlayback()
+        remixPreviewController.setComparisonPair(.inputVsCorrected)
+        remixPreviewController.preparePreview(
+            for: correctedPureSumPreviewArtifact?.fileURL,
+            target: .input
+        )
+        remixPreviewController.preparePreview(
+            for: remixedPreviewArtifact?.fileURL,
+            target: .corrected
+        )
+        remixPreviewController.preparePreview(for: nil, target: .mastered)
     }
 
     private func refreshDisplayAnalysis() {
@@ -890,6 +1149,13 @@ final class StemModeWorkspaceModel {
         stemPreviewController.preparePreview(for: nil, target: .input)
         stemPreviewController.preparePreview(for: nil, target: .corrected)
         stemPreviewController.preparePreview(for: nil, target: .mastered)
+    }
+
+    private func clearRemixPreviewSources() {
+        remixPreviewController.stopPlayback()
+        remixPreviewController.preparePreview(for: nil, target: .input)
+        remixPreviewController.preparePreview(for: nil, target: .corrected)
+        remixPreviewController.preparePreview(for: nil, target: .mastered)
     }
 
     private static func loadSpectrogram(

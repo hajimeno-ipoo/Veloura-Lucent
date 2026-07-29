@@ -3,6 +3,7 @@ import Foundation
 enum RecentActivityDomain: String, Sendable {
     case input
     case correction
+    case remix
     case mastering
     case export
 }

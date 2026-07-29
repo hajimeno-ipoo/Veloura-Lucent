@@ -39,9 +39,34 @@ struct StemWorkflowModelsTests {
             .input44100,
             .rawStem(.vocals),
             .correctedStem(.vocals),
-            .correctedRemix48000,
+            .correctedPureSum48000,
             .finalMaster,
         ]
         #expect(Set(kinds).count == 5)
+    }
+
+    @Test
+    func displayStepsExposeTransientProtectionAndActualRemixOrder() {
+        #expect(
+            StemModeProcessStep.correctionSteps.contains(
+                .roleTransientRecovery(.drums)
+            )
+        )
+        #expect(
+            !StemModeProcessStep.correctionSteps.contains(
+                .roleTransientRecovery(.vocals)
+            )
+        )
+        #expect(StemModeProcessStep.remixSteps == [
+            .automaticRemixPlan,
+            .remixGain,
+            .remixMasking,
+            .remixPan,
+            .remixReverbSend,
+            .remixSharedReverb,
+            .remixDryReturnMix,
+            .remixSave,
+            .remixValidation,
+        ])
     }
 }

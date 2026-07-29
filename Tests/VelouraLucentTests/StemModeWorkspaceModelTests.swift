@@ -248,8 +248,8 @@ struct StemModeWorkspaceModelTests {
         #expect(!model.isUsingCustomMasteringSettings)
     }
 
-    @Test("補正段完了後だけマスタリングを実行でき、実行時点の最新設定を渡す")
-    func masteringActionRequiresCorrectionCompletionAndForwardsLatestSettings() async throws {
+    @Test("再ミックス完了後だけマスタリングを実行でき、実行時点の最新設定を渡す")
+    func masteringActionRequiresRemixCompletionAndForwardsLatestSettings() async throws {
         let recorder = WorkspaceActionRecorder()
         let session = StemWorkflowSession()
         let model = makeModel(session: session, recorder: recorder)
@@ -265,8 +265,8 @@ struct StemModeWorkspaceModelTests {
             .evaluateStems,
             .correctStems,
             .validateCorrectedStems,
-            .correctedRemix,
-            .validateCorrectedRemix,
+            .correctedPureSum,
+            .validateCorrectedPureSum,
         ] {
             try session.beginStep(runID: runID, step: step)
             try session.completeStep(runID: runID, step: step)
@@ -286,7 +286,7 @@ struct StemModeWorkspaceModelTests {
         }
         let correctedRemix = makeArtifact(
             id: "corrected-remix",
-            kind: .correctedRemix48000
+            kind: .correctedPureSum48000
         )
         try session.updateArtifactState(.init(
             id: correctedRemix.id,
@@ -296,11 +296,22 @@ struct StemModeWorkspaceModelTests {
             status: .valid
         ))
         try session.completeCorrection(runID: runID)
+        #expect(!model.canRunMastering)
+        try session.startRemix(runID: runID)
+        let remix = makeArtifact(id: "stem-remix", kind: .remixed48000)
+        try session.updateArtifactState(.init(
+            id: remix.id,
+            runID: runID,
+            kind: remix.kind,
+            artifact: remix,
+            status: .valid
+        ))
+        try session.completeRemix(runID: runID)
 
         #expect(model.canRunMastering)
         #expect(!model.canRunCorrection)
         #expect(model.canChooseInput)
-        #expect(model.isCorrectionSettingsDisabled)
+        #expect(!model.isCorrectionSettingsDisabled)
         #expect(!model.isMasteringSettingsDisabled)
 
         model.masteringSettings.targetLoudness = -15.25
@@ -309,6 +320,202 @@ struct StemModeWorkspaceModelTests {
 
         #expect(recorder.masteringRequests.count == 1)
         #expect(recorder.masteringRequests.first?.masteringSettings == expectedSettings)
+    }
+
+    @Test("再ミックスは自動値を保ち、変更した項目だけ手動値で上書きする")
+    func remixManualOverridesPreserveUneditedAutomaticValues() throws {
+        let recorder = WorkspaceActionRecorder()
+        let session = StemWorkflowSession()
+        let model = makeModel(session: session, recorder: recorder)
+        let runID = UUID()
+        try session.startRun(runID: runID)
+        for role in StemRole.allCases {
+            let artifact = makeArtifact(
+                id: "corrected-\(role.rawValue)",
+                kind: .correctedStem(role)
+            )
+            try session.updateArtifactState(.init(
+                id: artifact.id,
+                runID: runID,
+                kind: artifact.kind,
+                artifact: artifact,
+                status: .valid
+            ))
+        }
+        let pureSum = makeArtifact(id: "pure-sum", kind: .correctedPureSum48000)
+        try session.updateArtifactState(.init(
+            id: pureSum.id,
+            runID: runID,
+            kind: pureSum.kind,
+            artifact: pureSum,
+            status: .valid
+        ))
+        try session.completeCorrection(runID: runID)
+
+        var automatic = StemRemixSettings(reverbReturnLevel: 0.18)
+        automatic.setSettings(
+            StemRemixRoleSettings(gainDB: 1.5, pan: -0.1, reverbSend: 0.2),
+            for: .vocals
+        )
+        model.setAutomaticRemixPlan(StemRemixAutomaticPlan(
+            settings: automatic,
+            gainEvidenceDB: [.vocals: 1.5],
+            panEvidence: [.vocals: -0.1],
+            reverbLossEvidence: [.vocals: 0.4],
+            drumsBassCollision: 0.2,
+            vocalsOtherCollision: 0.3
+        ))
+
+        #expect(!model.isRemixManualEditingEnabled)
+        #expect(throws: StemModeWorkspaceSettingsError.remixManualModeRequired) {
+            try model.setRemixPan(0.35, for: .vocals)
+        }
+        try model.setRemixManualEditingEnabled(true)
+        try model.setRemixPan(0.35, for: .vocals)
+        let effective = try #require(model.effectiveRemixSettings)
+        #expect(effective.settings(for: .vocals).gainDB == 1.5)
+        #expect(effective.settings(for: .vocals).pan == 0.35)
+        #expect(effective.settings(for: .vocals).reverbSend == 0.2)
+        #expect(effective.reverbReturnLevel == 0.18)
+
+        var updatedAutomatic = StemRemixSettings(
+            masking: StemRemixMaskingSettings(
+                drumsToBassEnabled: true,
+                drumsToBassAmount: 0.25
+            ),
+            reverbReturnLevel: 0.22
+        )
+        updatedAutomatic.setSettings(
+            StemRemixRoleSettings(gainDB: 2.5, pan: -0.2, reverbSend: 0.3),
+            for: .vocals
+        )
+        try model.setDrumsToBassMaskingEnabled(false)
+        model.setAutomaticRemixPlan(StemRemixAutomaticPlan(
+            settings: updatedAutomatic,
+            gainEvidenceDB: [.vocals: 2.5],
+            panEvidence: [.vocals: -0.2],
+            reverbLossEvidence: [.vocals: 0.5],
+            drumsBassCollision: 0.4,
+            vocalsOtherCollision: 0.1
+        ))
+
+        let updatedEffective = try #require(model.effectiveRemixSettings)
+        #expect(updatedEffective.settings(for: .vocals).gainDB == 2.5)
+        #expect(updatedEffective.settings(for: .vocals).pan == 0.35)
+        #expect(updatedEffective.settings(for: .vocals).reverbSend == 0.3)
+        #expect(!updatedEffective.masking.drumsToBassEnabled)
+        #expect(updatedEffective.masking.drumsToBassAmount == 0.25)
+        #expect(updatedEffective.reverbReturnLevel == 0.22)
+
+        try model.setRemixManualEditingEnabled(false)
+        let automaticEffective = try #require(model.effectiveRemixSettings)
+        #expect(automaticEffective.settings(for: .vocals).pan == -0.2)
+        #expect(automaticEffective.masking.drumsToBassEnabled)
+
+        try model.setRemixManualEditingEnabled(true)
+        let restoredManual = try #require(model.effectiveRemixSettings)
+        #expect(restoredManual.settings(for: .vocals).pan == 0.35)
+        #expect(!restoredManual.masking.drumsToBassEnabled)
+
+        model.acceptSessionStart()
+        #expect(model.automaticRemixPlan == nil)
+        #expect(model.manualRemixOverrides == StemRemixManualOverrides())
+        #expect(!model.isRemixManualEditingEnabled)
+    }
+
+    @Test("完了後も3工程を再実行でき、設定は処理中だけ無効になる")
+    func completedStagesRemainRerunnableAndSettingsLockOnlyDuringProcessing() async throws {
+        let recorder = WorkspaceActionRecorder()
+        let session = StemWorkflowSession()
+        let model = makeModel(session: session, recorder: recorder)
+
+        await model.inspectInput(URL(fileURLWithPath: "/tmp/rerun-input.wav"))
+        try model.setProductionSeparationSettings(.metaHTDemucsProduction(seed: 42))
+        model.setModelPresentation(try makeModelPresentationFixture().presentation)
+
+        let runID = UUID()
+        try session.startRun(runID: runID)
+        for role in StemRole.allCases {
+            let artifact = makeArtifact(
+                id: "rerun-corrected-\(role.rawValue)",
+                kind: .correctedStem(role)
+            )
+            try session.updateArtifactState(.init(
+                id: artifact.id,
+                runID: runID,
+                kind: artifact.kind,
+                artifact: artifact,
+                status: .valid
+            ))
+        }
+        let pureSum = makeArtifact(id: "rerun-pure-sum", kind: .correctedPureSum48000)
+        try session.updateArtifactState(.init(
+            id: pureSum.id,
+            runID: runID,
+            kind: pureSum.kind,
+            artifact: pureSum,
+            status: .valid
+        ))
+        try session.completeCorrection(runID: runID)
+        model.setAutomaticRemixPlan(StemRemixAutomaticPlan(
+            settings: StemRemixSettings(),
+            gainEvidenceDB: [:],
+            panEvidence: [:],
+            reverbLossEvidence: [:],
+            drumsBassCollision: 0,
+            vocalsOtherCollision: 0
+        ))
+
+        #expect(model.canRunCorrection)
+        #expect(model.canRunRemix)
+        #expect(!model.canRunMastering)
+        #expect(!model.isCorrectionSettingsDisabled)
+        #expect(!model.isRemixSettingsDisabled)
+        #expect(!model.isMasteringSettingsDisabled)
+
+        try session.startRemix(runID: runID)
+        #expect(model.isCorrectionSettingsDisabled)
+        #expect(model.isRemixSettingsDisabled)
+        #expect(model.isMasteringSettingsDisabled)
+
+        let remix = makeArtifact(id: "rerun-remix", kind: .remixed48000)
+        try session.updateArtifactState(.init(
+            id: remix.id,
+            runID: runID,
+            kind: remix.kind,
+            artifact: remix,
+            status: .valid
+        ))
+        try session.completeRemix(runID: runID)
+
+        #expect(model.canRunCorrection)
+        #expect(model.canRunRemix)
+        #expect(model.canRunMastering)
+        #expect(!model.isCorrectionSettingsDisabled)
+        #expect(!model.isRemixSettingsDisabled)
+        #expect(!model.isMasteringSettingsDisabled)
+
+        try session.startMastering(runID: runID)
+        let final = makeArtifact(id: "rerun-final", kind: .finalMaster)
+        try session.updateArtifactState(.init(
+            id: final.id,
+            runID: runID,
+            kind: final.kind,
+            artifact: final,
+            status: .valid
+        ))
+        try session.completeRun(runID: runID)
+
+        #expect(model.canRunCorrection)
+        #expect(model.canRunRemix)
+        #expect(model.canRunMastering)
+        #expect(!model.isCorrectionSettingsDisabled)
+        #expect(!model.isRemixSettingsDisabled)
+        #expect(!model.isMasteringSettingsDisabled)
+
+        await model.beginRemix()
+        #expect(recorder.invalidateRemixCount == 1)
+        #expect(recorder.remixRequests.count == 1)
     }
 
     @Test
@@ -360,7 +567,7 @@ struct StemModeWorkspaceModelTests {
         #expect(model.selectedRoleCorrectionSettings == DenoiseStrength.gentle.settings)
     }
 
-    @Test("Stem試聴は選択中役割の検証済みrawと補正後だけを使用する")
+    @Test("Stem試聴対象と補正設定対象は独立し、選択中役割の検証済み音源だけを使用する")
     func stemPreviewUsesOnlyValidatedArtifactsForSelectedRole() throws {
         let session = StemWorkflowSession()
         let recorder = WorkspaceActionRecorder()
@@ -397,6 +604,7 @@ struct StemModeWorkspaceModelTests {
         ))
 
         #expect(model.selectedCorrectionRole == .vocals)
+        #expect(model.selectedStemPreviewRole == .vocals)
         #expect(model.selectedRawStemPreviewURL == rawVocals.fileURL)
         #expect(model.selectedCorrectedStemPreviewURL == correctedVocals.fileURL)
 
@@ -407,11 +615,22 @@ struct StemModeWorkspaceModelTests {
                 == correctedVocals.fileURL
         )
 
-        model.selectCorrectionRole(.drums)
+        model.stemPreviewController.activeTarget = .input
+        model.selectCorrectionRole(.bass)
+        #expect(model.selectedCorrectionRole == .bass)
+        #expect(model.selectedStemPreviewRole == .vocals)
+        #expect(model.selectedRawStemPreviewURL == rawVocals.fileURL)
+        #expect(model.selectedCorrectedStemPreviewURL == correctedVocals.fileURL)
+        #expect(model.stemPreviewController.activeTarget == .input)
+
+        model.selectStemPreviewRole(.drums)
+        #expect(model.selectedCorrectionRole == .bass)
+        #expect(model.selectedStemPreviewRole == .drums)
         #expect(model.selectedRawStemPreviewURL == rawDrums.fileURL)
         #expect(model.selectedCorrectedStemPreviewURL == nil)
         #expect(model.stemPreviewController.cardState(for: .input).sourceURL == rawDrums.fileURL)
         #expect(model.stemPreviewController.cardState(for: .corrected).sourceURL == nil)
+        #expect(model.stemPreviewController.activeTarget == nil)
 
         model.stopPreviewPlayback()
     }
@@ -487,7 +706,7 @@ struct StemModeWorkspaceModelTests {
         #expect(model.stemPreviewController.activeTarget == nil)
     }
 
-    @Test("補正とマスタリングのキャンセルは確認選択を介さず専用actionへ直接渡す")
+    @Test("3工程のキャンセルは確認選択を介さず専用actionへ直接渡す")
     func cancellationActionsUseDirectControllerBoundaries() async throws {
         let recorder = WorkspaceActionRecorder()
         let session = StemWorkflowSession()
@@ -498,10 +717,57 @@ struct StemModeWorkspaceModelTests {
 
         #expect(model.canCancelProcessing)
         await model.cancelCorrection()
+        await model.cancelRemix()
         await model.cancelMastering()
 
         #expect(recorder.correctionCancellationCount == 1)
+        #expect(recorder.remixCancellationCount == 1)
         #expect(recorder.masteringCancellationCount == 1)
+    }
+
+    @Test("Stemの3工程はキャンセル受付中に同じ状態表示となり、二重操作を防ぐ")
+    func cancellationStateMatchesStandardModeAndPreventsRepeatedRequests() async throws {
+        for domain in [
+            StemModeProcessDomain.correction,
+            .remix,
+            .mastering,
+        ] {
+            let gate = WorkspaceCancellationGate()
+            let recorder = WorkspaceActionRecorder()
+            recorder.cancellationHandler = { requestedDomain in
+                #expect(requestedDomain == domain)
+                await gate.wait()
+            }
+            let session = StemWorkflowSession()
+            let model = makeModel(session: session, recorder: recorder)
+            let runID = UUID()
+            try session.startRun(runID: runID)
+            try session.beginStep(runID: runID, step: .separate)
+
+            let cancellationTask = Task { @MainActor in
+                await cancel(domain, on: model)
+            }
+            try await waitForWorkspaceCondition {
+                model.cancellingProcessDomain == domain
+            }
+
+            #expect(!model.canCancelProcessing)
+            #expect(model.isCorrectionCancelling == (domain == .correction))
+            #expect(model.isRemixCancelling == (domain == .remix))
+            #expect(model.isMasteringCancelling == (domain == .mastering))
+
+            await cancel(domain, on: model)
+            #expect(recorder.cancellationCount(for: domain) == 1)
+
+            await gate.finish()
+            await cancellationTask.value
+
+            #expect(model.cancellingProcessDomain == nil)
+            #expect(model.canCancelProcessing)
+            #expect(!model.isCorrectionCancelling)
+            #expect(!model.isRemixCancelling)
+            #expect(!model.isMasteringCancelling)
+        }
     }
 
     @Test
@@ -521,7 +787,7 @@ struct StemModeWorkspaceModelTests {
     }
 
     @Test
-    func exportableArtifactsPutCorrectedRemixFirstAndExcludeInternalOrInvalidFiles() throws {
+    func exportableArtifactsPutPureSumThenRemixAndExcludeInternalOrInvalidFiles() throws {
         let session = StemWorkflowSession()
         let recorder = WorkspaceActionRecorder()
         let model = makeModel(session: session, recorder: recorder)
@@ -532,11 +798,12 @@ struct StemModeWorkspaceModelTests {
         let selectedStem = makeArtifact(id: "drums", kind: .correctedStem(.drums))
         let final = makeArtifact(id: "final", kind: .finalMaster)
         let internalInput = makeArtifact(id: "input", kind: .input44100)
-        let correctedRemix = makeArtifact(id: "remix", kind: .correctedRemix48000)
-        let invalidRemix = makeArtifact(id: "invalid-remix", kind: .correctedRemix48000)
+        let correctedRemix = makeArtifact(id: "remix", kind: .correctedPureSum48000)
+        let processedRemix = makeArtifact(id: "processed-remix", kind: .remixed48000)
+        let invalidRemix = makeArtifact(id: "invalid-remix", kind: .correctedPureSum48000)
         let unvalidatedRaw = makeArtifact(id: "raw-other", kind: .rawStem(.other))
 
-        for artifact in [rawStem, selectedStem, final, internalInput, correctedRemix] {
+        for artifact in [rawStem, selectedStem, final, internalInput, correctedRemix, processedRemix] {
             try session.updateArtifactState(
                 StemWorkflowArtifactDisplayState(
                     id: artifact.id,
@@ -566,7 +833,9 @@ struct StemModeWorkspaceModelTests {
             )
         )
 
-        #expect(model.exportableArtifacts.map(\.id) == ["remix", "drums", "final"])
+        #expect(model.exportableArtifacts.map(\.id) == [
+            "remix", "processed-remix", "drums", "final",
+        ])
     }
 
     @Test
@@ -624,7 +893,7 @@ struct StemModeWorkspaceModelTests {
         let second = makeModel(recorder: secondRecorder)
         #expect(first.previewController !== second.previewController)
 
-        let correctedRemix = makeArtifact(id: "corrected-remix", kind: .correctedRemix48000)
+        let correctedRemix = makeArtifact(id: "corrected-remix", kind: .correctedPureSum48000)
         let final = makeArtifact(id: "final", kind: .finalMaster)
         let vocals = makeArtifact(id: "vocals", kind: .rawStem(.vocals))
         let input = makeArtifact(id: "input", kind: .input44100)
@@ -655,7 +924,7 @@ struct StemModeWorkspaceModelTests {
         let recorder = WorkspaceActionRecorder()
         let model = makeModel(recorder: recorder)
         let input = makeArtifact(id: "input", kind: .input44100)
-        let correctedRemix = makeArtifact(id: "corrected-remix", kind: .correctedRemix48000)
+        let correctedRemix = makeArtifact(id: "corrected-remix", kind: .correctedPureSum48000)
         await model.inspectInput(input.fileURL)
 
         model.updatePreviewSources(from: [input, correctedRemix])
@@ -672,7 +941,7 @@ struct StemModeWorkspaceModelTests {
         let recorder = WorkspaceActionRecorder()
         let model = makeModel(recorder: recorder)
         let input = makeArtifact(id: "input", kind: .input44100)
-        let correctedRemix = makeArtifact(id: "corrected-remix", kind: .correctedRemix48000)
+        let correctedRemix = makeArtifact(id: "corrected-remix", kind: .correctedPureSum48000)
         let final = makeArtifact(id: "final", kind: .finalMaster)
         await model.inspectInput(input.fileURL)
         model.updatePreviewSources(from: [input, correctedRemix, final])
@@ -714,6 +983,20 @@ struct StemModeWorkspaceModelTests {
             session: session,
             actions: recorder.actions
         )
+    }
+
+    private func cancel(
+        _ domain: StemModeProcessDomain,
+        on model: StemModeWorkspaceModel
+    ) async {
+        switch domain {
+        case .correction:
+            await model.cancelCorrection()
+        case .remix:
+            await model.cancelRemix()
+        case .mastering:
+            await model.cancelMastering()
+        }
     }
 
     private func makeLayout(channelCount: Int) -> StemInputLayoutIdentity {
@@ -856,12 +1139,27 @@ private final class WorkspaceActionRecorder {
     var inputDisplayLogMessages: [String] = []
     var beginError: BeginError?
     var beginRequests: [StemModeStartRequest] = []
+    var remixRequests: [StemModeRemixRequest] = []
     var masteringRequests: [StemModeMasteringRequest] = []
     var resetForInputChangeCount = 0
+    var invalidateRemixCount = 0
     var correctionCancellationCount = 0
+    var remixCancellationCount = 0
     var masteringCancellationCount = 0
+    var cancellationHandler: (@MainActor (StemModeProcessDomain) async throws -> Void)?
     var exportCalls: [ExportCall] = []
     var revealedURLs: [URL] = []
+
+    func cancellationCount(for domain: StemModeProcessDomain) -> Int {
+        switch domain {
+        case .correction:
+            correctionCancellationCount
+        case .remix:
+            remixCancellationCount
+        case .mastering:
+            masteringCancellationCount
+        }
+    }
 
     var actions: StemModeWorkspaceActions {
         StemModeWorkspaceActions(
@@ -886,14 +1184,29 @@ private final class WorkspaceActionRecorder {
                 }
                 self?.beginRequests.append(request)
             },
+            beginRemix: { [weak self] request in
+                self?.remixRequests.append(request)
+            },
+            invalidateRemix: { [weak self] in
+                self?.invalidateRemixCount += 1
+            },
             beginMastering: { [weak self] request in
                 self?.masteringRequests.append(request)
             },
             cancelCorrection: { [weak self] in
-                self?.correctionCancellationCount += 1
+                guard let self else { return }
+                self.correctionCancellationCount += 1
+                try await self.cancellationHandler?(.correction)
+            },
+            cancelRemix: { [weak self] in
+                guard let self else { return }
+                self.remixCancellationCount += 1
+                try await self.cancellationHandler?(.remix)
             },
             cancelMastering: { [weak self] in
-                self?.masteringCancellationCount += 1
+                guard let self else { return }
+                self.masteringCancellationCount += 1
+                try await self.cancellationHandler?(.mastering)
             },
             exportArtifact: { [weak self] artifact, format in
                 self?.exportCalls.append(
@@ -905,6 +1218,24 @@ private final class WorkspaceActionRecorder {
                 self?.revealedURLs.append(URL)
             }
         )
+    }
+}
+
+private actor WorkspaceCancellationGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isOpen = false
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func finish() {
+        isOpen = true
+        continuation?.resume()
+        continuation = nil
     }
 }
 

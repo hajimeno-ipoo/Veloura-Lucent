@@ -189,6 +189,10 @@ struct StemModeMasteringRequest: Sendable {
     let masteringSettings: MasteringSettings
 }
 
+struct StemModeRemixRequest: Sendable {
+    let settings: StemRemixSettings
+}
+
 /// 入力選択直後に作る、Stem Mode専用の表示・試聴用解析結果です。
 ///
 /// 補正workflowが保存するcanonical input評価とは分離し、選択した入力ファイルそのものの
@@ -223,12 +227,15 @@ struct StemModeInputDisplayAnalysisResult: Sendable {
 
 enum StemModeWorkspaceSettingsError: LocalizedError, Equatable, Sendable {
     case settingsCannotChangeDuringRun
+    case remixManualModeRequired
     case unapprovedProductionSettings
 
     var errorDescription: String? {
         switch self {
         case .settingsCannotChangeDuringRun:
             "Stem Mode処理の実行中は設定を変更できません。"
+        case .remixManualModeRequired:
+            "再ミックスを手動へ切り替えてから設定を変更してください。"
         case .unapprovedProductionSettings:
             "Stem分離設定が承認済みのMeta HTDemucs本番設定と一致しません。"
         }
@@ -237,7 +244,7 @@ enum StemModeWorkspaceSettingsError: LocalizedError, Equatable, Sendable {
 
 /// Stem専用Viewと実処理をつなぐ境界です。
 ///
-/// 補正段・マスタリング段の開始要求は処理Taskを開始した時点で戻し、長時間の処理状態は
+/// 補正段・再ミックス段・マスタリング段の開始要求は処理Taskを開始した時点で戻し、長時間の処理状態は
 /// `StemWorkflowSession` へ通知してください。View側は実処理の具象型を所有しません。
 struct StemModeWorkspaceActions {
     let inspectInput: @MainActor (URL) async throws -> StemModeInputSelectionOutcome
@@ -249,8 +256,11 @@ struct StemModeWorkspaceActions {
     let releaseInspectedInput: @MainActor (URL) -> Void
     let resetForInputChange: @MainActor () async throws -> Void
     let beginCorrection: @MainActor (StemModeStartRequest) async throws -> Void
+    let beginRemix: @MainActor (StemModeRemixRequest) async throws -> Void
+    let invalidateRemix: @MainActor () throws -> Void
     let beginMastering: @MainActor (StemModeMasteringRequest) async throws -> Void
     let cancelCorrection: @MainActor () async throws -> Void
+    let cancelRemix: @MainActor () async throws -> Void
     let cancelMastering: @MainActor () async throws -> Void
     let exportArtifact: @MainActor (StemAudioArtifact, AudioExportFormat) async throws -> URL
     let revealArtifact: @MainActor (URL) -> Void
@@ -265,8 +275,11 @@ struct StemModeWorkspaceActions {
         releaseInspectedInput: @escaping @MainActor (URL) -> Void,
         resetForInputChange: @escaping @MainActor () async throws -> Void,
         beginCorrection: @escaping @MainActor (StemModeStartRequest) async throws -> Void,
+        beginRemix: @escaping @MainActor (StemModeRemixRequest) async throws -> Void,
+        invalidateRemix: @escaping @MainActor () throws -> Void,
         beginMastering: @escaping @MainActor (StemModeMasteringRequest) async throws -> Void,
         cancelCorrection: @escaping @MainActor () async throws -> Void,
+        cancelRemix: @escaping @MainActor () async throws -> Void,
         cancelMastering: @escaping @MainActor () async throws -> Void,
         exportArtifact: @escaping @MainActor (StemAudioArtifact, AudioExportFormat) async throws -> URL,
         revealArtifact: @escaping @MainActor (URL) -> Void
@@ -276,8 +289,11 @@ struct StemModeWorkspaceActions {
         self.releaseInspectedInput = releaseInspectedInput
         self.resetForInputChange = resetForInputChange
         self.beginCorrection = beginCorrection
+        self.beginRemix = beginRemix
+        self.invalidateRemix = invalidateRemix
         self.beginMastering = beginMastering
         self.cancelCorrection = cancelCorrection
+        self.cancelRemix = cancelRemix
         self.cancelMastering = cancelMastering
         self.exportArtifact = exportArtifact
         self.revealArtifact = revealArtifact
@@ -293,7 +309,7 @@ enum StemModeRemixAnalysisPresentationError: LocalizedError, Equatable, Sendable
         case .evaluationPurposeMismatch:
             "再ミックス採用表示へ渡されたrawまたは補正後の解析目的が一致しません。"
         case .validationMismatch:
-            "補正後再ミックスの構造検証結果が一致しません。"
+            "補正済み純粋加算またはStem再ミックスの構造検証結果が一致しません。"
         }
     }
 }
@@ -303,34 +319,90 @@ struct StemModeRemixAnalysisPresentation: Sendable {
     let validation: StemValidationResult
     let rawRemixEvaluation: StemAudioEvaluationSnapshot
     let correctedRemixEvaluation: StemAudioEvaluationSnapshot
+    let processedRemixEvaluation: StemAudioEvaluationSnapshot?
+    let processedRemixValidation: StemValidationResult?
     let correctionSettings: StemRoleCorrectionSettings
+
+    private init(
+        masteringSource: StemMasteringSource,
+        validation: StemValidationResult,
+        rawRemixEvaluation: StemAudioEvaluationSnapshot,
+        correctedRemixEvaluation: StemAudioEvaluationSnapshot,
+        processedRemixEvaluation: StemAudioEvaluationSnapshot?,
+        processedRemixValidation: StemValidationResult?,
+        correctionSettings: StemRoleCorrectionSettings
+    ) {
+        self.masteringSource = masteringSource
+        self.validation = validation
+        self.rawRemixEvaluation = rawRemixEvaluation
+        self.correctedRemixEvaluation = correctedRemixEvaluation
+        self.processedRemixEvaluation = processedRemixEvaluation
+        self.processedRemixValidation = processedRemixValidation
+        self.correctionSettings = correctionSettings
+    }
+
+    func removingProcessedRemix() -> Self {
+        Self(
+            masteringSource: masteringSource,
+            validation: validation,
+            rawRemixEvaluation: rawRemixEvaluation,
+            correctedRemixEvaluation: correctedRemixEvaluation,
+            processedRemixEvaluation: nil,
+            processedRemixValidation: nil,
+            correctionSettings: correctionSettings
+        )
+    }
 
     init(correctionResult: StemWorkflowCorrectionResult) throws {
         guard correctionResult.rawRemixEvaluation.purpose == .rawRemix,
-              correctionResult.correctedRemixEvaluation.purpose == .correctedRemix else {
+              correctionResult.correctedRemixEvaluation.purpose == .correctedPureSum else {
             throw StemModeRemixAnalysisPresentationError.evaluationPurposeMismatch
         }
 
-        guard correctionResult.correctedRemixValidation.phase == .correctedRemix,
+        guard correctionResult.correctedRemixValidation.phase == .correctedPureSum,
               correctionResult.correctedRemixValidation.canContinue else {
             throw StemModeRemixAnalysisPresentationError.validationMismatch
         }
 
-        masteringSource = .correctedRemix
+        masteringSource = .remix
         validation = correctionResult.correctedRemixValidation
         rawRemixEvaluation = correctionResult.rawRemixEvaluation
         correctedRemixEvaluation = correctionResult.correctedRemixEvaluation
+        processedRemixEvaluation = nil
+        processedRemixValidation = nil
         correctionSettings = correctionResult.correctionSettings
+    }
+
+    init(remixResult: StemWorkflowRemixResult) throws {
+        let correction = remixResult.correction
+        guard correction.rawRemixEvaluation.purpose == .rawRemix,
+              correction.correctedRemixEvaluation.purpose == .correctedPureSum,
+              remixResult.evaluation.purpose == .remix else {
+            throw StemModeRemixAnalysisPresentationError.evaluationPurposeMismatch
+        }
+        guard correction.correctedRemixValidation.phase == .correctedPureSum,
+              correction.correctedRemixValidation.canContinue,
+              remixResult.validation.phase == .processedRemix,
+              remixResult.validation.canContinue else {
+            throw StemModeRemixAnalysisPresentationError.validationMismatch
+        }
+        masteringSource = .remix
+        validation = correction.correctedRemixValidation
+        rawRemixEvaluation = correction.rawRemixEvaluation
+        correctedRemixEvaluation = correction.correctedRemixEvaluation
+        processedRemixEvaluation = remixResult.evaluation
+        processedRemixValidation = remixResult.validation
+        correctionSettings = correction.correctionSettings
     }
 
     init(result: StemWorkflowResult) throws {
         guard result.rawRemixEvaluation.purpose == .rawRemix,
-              result.correctedRemixEvaluation.purpose == .correctedRemix else {
+              result.correctedRemixEvaluation.purpose == .correctedPureSum else {
             throw StemModeRemixAnalysisPresentationError.evaluationPurposeMismatch
         }
 
-        guard result.masteringSource == .correctedRemix,
-              result.correctedRemixValidation.phase == .correctedRemix,
+        guard result.masteringSource == .remix,
+              result.correctedRemixValidation.phase == .correctedPureSum,
               result.correctedRemixValidation.canContinue else {
             throw StemModeRemixAnalysisPresentationError.validationMismatch
         }
@@ -339,6 +411,8 @@ struct StemModeRemixAnalysisPresentation: Sendable {
         validation = result.correctedRemixValidation
         rawRemixEvaluation = result.rawRemixEvaluation
         correctedRemixEvaluation = result.correctedRemixEvaluation
+        processedRemixEvaluation = result.remixEvaluation
+        processedRemixValidation = result.processedRemixValidation
         correctionSettings = result.correctionSettings
     }
 }

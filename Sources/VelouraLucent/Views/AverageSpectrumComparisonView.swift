@@ -2,6 +2,15 @@ import SwiftUI
 
 struct AverageSpectrumComparisonView: View {
     let preview: AudioPreviewController
+    let targetTitle: (AudioPreviewTarget) -> String
+
+    init(
+        preview: AudioPreviewController,
+        targetTitle: @escaping (AudioPreviewTarget) -> String = \.rawValue
+    ) {
+        self.preview = preview
+        self.targetTitle = targetTitle
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -75,7 +84,12 @@ struct AverageSpectrumComparisonView: View {
             )
         }
         guard !points.isEmpty else { return nil }
-        return SpectrumSeries(id: target.rawValue, name: target.rawValue, color: color(for: target), points: points)
+        return SpectrumSeries(
+            id: target.rawValue,
+            name: targetTitle(target),
+            color: color(for: target),
+            points: points
+        )
     }
 
     private func color(for target: AudioPreviewTarget) -> Color {

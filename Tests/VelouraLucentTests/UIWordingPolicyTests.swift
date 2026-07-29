@@ -11,14 +11,19 @@ struct UIWordingPolicyTests {
             "Sources/VelouraLucent/Views/StemModeInspectorView.swift"
         ])
 
-        for source in [standardInspector, stemInspector] {
-            #expect(source.contains("Text(\"解析結果と品質確認\")"))
-            #expect(!source.contains("Text(\"音声の確認\")"))
-            #expect(!source.contains("ContentUnavailableView("))
-            #expect(source.contains("Image(systemName: \"waveform.path.ecg\")"))
-            #expect(source.contains(".accessibilityElement(children: .combine)"))
-            #expect(!source.contains("minHeight: 140"))
-        }
+        #expect(standardInspector.contains(
+            "struct InspectorAnalysisPanelContent<AdditionalContent: View>: View"
+        ))
+        #expect(standardInspector.contains("Text(\"解析結果と品質確認\")"))
+        #expect(standardInspector.contains("Image(systemName: \"waveform.path.ecg\")"))
+        #expect(standardInspector.contains(".accessibilityElement(children: .combine)"))
+        #expect(standardInspector.contains("InspectorAnalysisPanelContent("))
+        #expect(stemInspector.contains("InspectorAnalysisPanelContent("))
+
+        let sharedSource = standardInspector + stemInspector
+        #expect(!sharedSource.contains("Text(\"音声の確認\")"))
+        #expect(!sharedSource.contains("ContentUnavailableView("))
+        #expect(!sharedSource.contains("minHeight: 140"))
     }
 
     @Test
@@ -114,9 +119,9 @@ struct UIWordingPolicyTests {
         #expect(source.contains("comparisonLabel\n                comparisonSummary\n                Spacer(minLength: 0)\n            }\n            comparisonPairPicker"))
         #expect(source.contains("comparisonPairPicker"))
         #expect(!source.contains("comparisonLabel\n                comparisonPairPicker\n                comparisonSummary"))
-        #expect(source.contains("Button(\"A/B切替\")"))
+        #expect(source.contains("Button(switchButtonTitle)"))
         #expect(source.contains(".disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)\n\n                activeComparisonLabel"))
-        #expect(source.contains("Text(\"現在 \\(preview.comparisonPair.title(for: preview.activeComparisonSide))\")"))
+        #expect(source.contains("Text(\"現在 \\(activeSideTitle)\")"))
         #expect(source.contains(".velouraAdaptiveGlass(in: .capsule, interactive: true)"))
         #expect(source.contains("private var activeComparisonTint: Color"))
         #expect(!source.contains("loudnessComparisonToggle\n                activeComparisonLabel"))
@@ -457,6 +462,8 @@ struct UIWordingPolicyTests {
         #expect(commands.contains("actions?.selectProcessingMode(mode)"))
         #expect(commands.contains("ForEach(actions?.exportActions ?? [])"))
         #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: .command)"))
+        #expect(commands.contains("if actions?.processingMode == .stem"))
+        #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: [.command, .option])"))
         #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: [.command, .shift])"))
         #expect(commands.contains(".keyboardShortcut(.space, modifiers: [])"))
         #expect(commands.contains(".keyboardShortcut(.cancelAction)"))
@@ -465,13 +472,32 @@ struct UIWordingPolicyTests {
         #expect(root.contains("\\.velouraCommandActions"))
         #expect(root.contains("selectProcessingMode: selectProcessingMode"))
         #expect(root.contains("_ = runtime.selectMode(mode)"))
-        #expect(root.contains("model.stopStemPreviewPlayback()"))
+        #expect(root.contains("model.stopAuxiliaryPreviewPlayback()"))
         #expect(root.contains("exportActions: stemExportCommandActions"))
         #expect(toolbar.contains("ForEach(commandActions.exportActions)"))
         #expect(preview.contains("func toggleComparisonPlayback()"))
         #expect(waveform.contains("preview.toggleComparisonPlayback()"))
         #expect(!waveform.contains("private func togglePlayback()"))
         #expect(!waveform.contains(".keyboardShortcut(\"b\", modifiers: [.command])"))
+    }
+
+    @Test
+    func toolbarUsesDistinctStageIconsAndRedCancellationTitles() throws {
+        let toolbar = try combinedSource([
+            "Sources/VelouraLucent/Views/WorkspaceToolbarView.swift",
+        ])
+        let label = try combinedSource([
+            "Sources/VelouraLucent/Views/LiquidGlassToolbarLabel.swift",
+        ])
+
+        #expect(toolbar.components(separatedBy: "\"slider.horizontal.3\"").count - 1 == 1)
+        #expect(toolbar.components(separatedBy: "\"waveform.badge.checkmark\"").count - 1 == 1)
+        #expect(toolbar.contains("isCancellation: isCorrectionRunning"))
+        #expect(toolbar.contains("isCancellation: commandActions.isRemixRunning"))
+        #expect(toolbar.contains("isCancellation: isMasteringRunning"))
+        #expect(label.contains("if isCancellation"))
+        #expect(label.contains("toolbarLabel\n                .foregroundStyle(.red)"))
+        #expect(label.contains("Label(title, systemImage: systemImage)"))
     }
 
     @Test

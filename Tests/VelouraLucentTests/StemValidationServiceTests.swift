@@ -136,7 +136,7 @@ struct StemValidationServiceTests {
             expectedChannelCount: 2
         )
 
-        #expect(result.phase == .correctedRemix)
+        #expect(result.phase == .correctedPureSum)
         #expect(result.passed)
         #expect((result.measurement(id: "corrected-remix.sample-peak")?.value ?? 0) > 0)
         #expect(result.measurement(
@@ -188,7 +188,7 @@ struct StemValidationServiceTests {
             expectedChannelCount: 2
         )
 
-        #expect(result.phase == .correctedRemix)
+        #expect(result.phase == .correctedPureSum)
         #expect(!result.passed)
         #expect(!result.canContinue)
         #expect(result.failedCheckKinds.contains(.sampleRate))
@@ -566,7 +566,7 @@ struct StemValidationServiceTests {
         StemCorrectedRemixNoiseValidationContext(
             canonicalInput: noiseSnapshot(value: canonicalBase),
             rawRemix: noiseSnapshot(value: rawBase),
-            correctedRemix: noiseSnapshot(value: correctedBase)
+            correctedPureSum: noiseSnapshot(value: correctedBase)
         )
     }
 

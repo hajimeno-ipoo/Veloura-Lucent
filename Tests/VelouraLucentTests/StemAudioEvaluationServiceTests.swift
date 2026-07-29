@@ -121,7 +121,7 @@ struct StemAudioEvaluationServiceTests {
     @Test
     func invalidSignalThrowsInsteadOfReturningFabricatedMeasurements() async {
         let request = StemAudioEvaluationRequest(
-            purpose: .correctedRemix,
+            purpose: .correctedPureSum,
             includeAudioAnalyzerSnapshot: false,
             includeMasteringAnalysisSnapshot: true
         )
@@ -168,10 +168,10 @@ struct StemAudioEvaluationServiceTests {
         let purposes = [
             StemAudioEvaluationPurpose.rawStem(role: .drums),
             .correctedStem(role: .vocals),
-            .correctedRemix,
+            .correctedPureSum,
         ]
 
-        #expect(purposes == [.rawStem(role: .drums), .correctedStem(role: .vocals), .correctedRemix])
+        #expect(purposes == [.rawStem(role: .drums), .correctedStem(role: .vocals), .correctedPureSum])
     }
 
     @Test

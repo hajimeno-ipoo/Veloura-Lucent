@@ -6,7 +6,7 @@ struct StemProductionInferenceTests {
     /// 固定モデルと同梱MLX runtimeを使う明示実行専用のproduction smoke testです。
     /// `VELOURA_RUN_STEM_MODEL_INTEGRATION=1 swift test --filter StemProductionInferenceTests`
     @Test
-    func currentTwoStageWorkflowCompletesWithInstalledProductionModelWhenEnabled() async throws {
+    func currentThreeStageWorkflowCompletesWithInstalledProductionModelWhenEnabled() async throws {
         guard ProcessInfo.processInfo.environment["VELOURA_RUN_STEM_MODEL_INTEGRATION"] == "1" else {
             return
         }
@@ -49,8 +49,12 @@ struct StemProductionInferenceTests {
         #expect(correction.stemEvaluations.count == 4)
         #expect(correction.stemEvaluations.allSatisfy { $0.correctedArtifact != nil })
 
-        let result = try await workflow.processMastering(.init(
+        let remix = try await workflow.processRemix(
             correction: correction,
+            settings: correction.automaticRemixPlan.settings
+        )
+        let result = try await workflow.processMastering(.init(
+            remix: remix,
             masteringSettings: MasteringProfile.natural.settings
         ))
         #expect(result.mastering.finalArtifact.kind == .finalMaster)

@@ -3,6 +3,55 @@ import SwiftUI
 struct InspectorAnalysisPanel: View {
     @Bindable var job: ProcessingJob
     let completionReport: CompletionReport?
+
+    var body: some View {
+        InspectorAnalysisPanelContent(
+            isAnalyzing: job.isAnalyzingDisplayAnalysis,
+            inputMetrics: job.inputMetrics,
+            processedMetrics: job.outputMetrics,
+            masteredMetrics: job.masteredMetrics,
+            processedTitle: "補正後",
+            qualityReport: qualityReport,
+            completionReport: completionReport,
+            selectionTitle: \.title,
+            unavailableDescription: unavailableDescription
+        ) {
+            EmptyView()
+        }
+    }
+
+    private var qualityReport: AudioQualityReport? {
+        AudioQualityReportService.makeReport(
+            input: job.inputMetrics,
+            corrected: job.outputMetrics,
+            mastered: job.masteredMetrics
+        )
+    }
+
+    private func unavailableDescription(_ selection: InspectorAudioSelection) -> String {
+        switch selection {
+        case .input:
+            "音声を選ぶと解析結果を表示します。"
+        case .corrected:
+            "補正が完了すると解析結果を表示します。"
+        case .mastered:
+            "マスタリングが完了すると解析結果を表示します。"
+        }
+    }
+}
+
+struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
+    let isAnalyzing: Bool
+    let inputMetrics: AudioMetricSnapshot?
+    let processedMetrics: AudioMetricSnapshot?
+    let masteredMetrics: AudioMetricSnapshot?
+    let processedTitle: String
+    let qualityReport: AudioQualityReport?
+    let completionReport: CompletionReport?
+    let selectionTitle: (InspectorAudioSelection) -> String
+    let unavailableDescription: (InspectorAudioSelection) -> String
+    @ViewBuilder let additionalContent: AdditionalContent
+
     @State private var selectedAudio: InspectorAudioSelection = .input
     @State private var isCompletionReportPresented = false
 
@@ -12,7 +61,7 @@ struct InspectorAnalysisPanel: View {
                 Text("解析結果と品質確認")
                     .font(.title3.bold())
                 Spacer()
-                if job.isAnalyzingDisplayAnalysis {
+                if isAnalyzing {
                     ProgressView()
                         .controlSize(.small)
                         .accessibilityLabel("解析中")
@@ -23,7 +72,7 @@ struct InspectorAnalysisPanel: View {
                 title: "確認する音源",
                 options: InspectorAudioSelection.allCases,
                 selection: $selectedAudio,
-                label: \.title
+                label: selectionTitle
             )
 
             if let metrics = selectedMetrics {
@@ -31,9 +80,9 @@ struct InspectorAnalysisPanel: View {
             } else {
                 Label {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(unavailableTitle)
+                        Text("\(selectionTitle(selectedAudio))は未解析です")
                             .font(.headline)
-                        Text(unavailableDescription)
+                        Text(unavailableDescription(selectedAudio))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -49,6 +98,7 @@ struct InspectorAnalysisPanel: View {
                 qualityWarnings(qualityReport)
             }
 
+            additionalContent
             completionReportControl
         }
     }
@@ -77,12 +127,17 @@ struct InspectorAnalysisPanel: View {
                 title: "ステレオ幅",
                 value: String(format: "%.2f", metrics.stereoWidth),
                 color: .primary,
-                help: "左右への広がり具合です。入力、補正後、最終版を切り替えて変化を確認します。"
+                help: "左右への広がり具合です。入力、\(processedTitle)、最終版を切り替えて変化を確認します。"
             )
         }
     }
 
-    private func metricCell(title: String, value: String, color: Color, help: String) -> some View {
+    private func metricCell(
+        title: String,
+        value: String,
+        color: Color,
+        help: String
+    ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 5) {
                 Text(title)
@@ -110,7 +165,7 @@ struct InspectorAnalysisPanel: View {
                 TermHelpButton(
                     title: "品質警告",
                     reading: "ひんしつけいこく",
-                    description: "入力、補正後、最終版の実測値を比較し、ピーク、高域、音量、ステレオ幅、音の起伏の大きな変化を表示します。"
+                    description: "入力、\(processedTitle)、最終版の実測値を比較し、ピーク、高域、音量、ステレオ幅、音の起伏の大きな変化を表示します。"
                 )
                 Spacer()
                 Text(qualitySeverityText(report.severity))
@@ -119,9 +174,12 @@ struct InspectorAnalysisPanel: View {
             }
 
             if report.items.isEmpty {
-                Label("数値上の追加候補はありません。最終版を聴いて違和感がないか確認してください。", systemImage: "checkmark.circle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.green)
+                Label(
+                    "数値上の追加候補はありません。最終版を聴いて違和感がないか確認してください。",
+                    systemImage: "checkmark.circle.fill"
+                )
+                .font(.callout)
+                .foregroundStyle(.green)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("聴いて気になる場合の調整候補")
@@ -154,7 +212,11 @@ struct InspectorAnalysisPanel: View {
         ) {
             isCompletionReportPresented = true
         }
-        .help(completionReport == nil ? "最終版と必要な解析が揃うと開けます" : "音量、ノイズ、高域保持の完了後レポートを開きます")
+        .help(
+            completionReport == nil
+                ? "最終版と必要な解析が揃うと開けます"
+                : "音量、ノイズ、高域保持の完了後レポートを開きます"
+        )
         .popover(isPresented: $isCompletionReportPresented, arrowEdge: .leading) {
             if let completionReport {
                 CompletionReportPopoverView(report: completionReport)
@@ -165,34 +227,11 @@ struct InspectorAnalysisPanel: View {
     private var selectedMetrics: AudioMetricSnapshot? {
         switch selectedAudio {
         case .input:
-            return job.inputMetrics
+            inputMetrics
         case .corrected:
-            return job.outputMetrics
+            processedMetrics
         case .mastered:
-            return job.masteredMetrics
-        }
-    }
-
-    private var qualityReport: AudioQualityReport? {
-        AudioQualityReportService.makeReport(
-            input: job.inputMetrics,
-            corrected: job.outputMetrics,
-            mastered: job.masteredMetrics
-        )
-    }
-
-    private var unavailableTitle: String {
-        "\(selectedAudio.title)は未解析です"
-    }
-
-    private var unavailableDescription: String {
-        switch selectedAudio {
-        case .input:
-            return "音声を選ぶと解析結果を表示します。"
-        case .corrected:
-            return "補正が完了すると解析結果を表示します。"
-        case .mastered:
-            return "マスタリングが完了すると解析結果を表示します。"
+            masteredMetrics
         }
     }
 
@@ -203,33 +242,33 @@ struct InspectorAnalysisPanel: View {
     private func qualitySeverityText(_ severity: AudioQualityReportSeverity) -> String {
         switch severity {
         case .info:
-            return "確認"
+            "確認"
         case .caution:
-            return "注意"
+            "注意"
         case .warning:
-            return "警告"
+            "警告"
         }
     }
 
     private func qualitySeverityColor(_ severity: AudioQualityReportSeverity) -> Color {
         switch severity {
         case .info:
-            return .secondary
+            .secondary
         case .caution:
-            return VelouraTextColors.orange
+            VelouraTextColors.orange
         case .warning:
-            return .red
+            .red
         }
     }
 
     private func qualitySeverityIcon(_ severity: AudioQualityReportSeverity) -> String {
         switch severity {
         case .info:
-            return "info.circle.fill"
+            "info.circle.fill"
         case .caution:
-            return "exclamationmark.circle.fill"
+            "exclamationmark.circle.fill"
         case .warning:
-            return "exclamationmark.triangle.fill"
+            "exclamationmark.triangle.fill"
         }
     }
 }

@@ -48,7 +48,7 @@ struct StemWorkflowSessionTests {
     }
 
     @Test
-    func correctionCompletionUsesFourValidatedStemsAndCorrectedRemix() throws {
+    func correctionCompletionUsesFourValidatedStemsAndCorrectedPureSum() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
         try session.startRun(runID: sessionID)
@@ -63,7 +63,7 @@ struct StemWorkflowSessionTests {
                 status: .valid
             ))
         }
-        let remix = artifact(id: "corrected-remix", kind: .correctedRemix48000)
+        let remix = artifact(id: "corrected-remix", kind: .correctedPureSum48000)
         try session.updateArtifactState(.init(
             id: remix.id,
             runID: sessionID,
@@ -74,11 +74,11 @@ struct StemWorkflowSessionTests {
 
         try session.completeCorrection(runID: sessionID)
 
-        #expect(session.state == .readyForMastering(runID: sessionID))
+        #expect(session.state == .readyForRemix(runID: sessionID))
         let correctionSteps: [StemWorkflowStep] = [
             .validateInput, .separate, .validateSeparatedStems,
             .evaluateStems, .correctStems, .validateCorrectedStems,
-            .correctedRemix, .validateCorrectedRemix,
+            .correctedPureSum, .validateCorrectedPureSum,
         ]
         #expect(correctionSteps.allSatisfy {
             session.progress(for: $0).status == .completed
@@ -117,6 +117,7 @@ struct StemWorkflowSessionTests {
         try session.completeCorrection(runID: sessionID)
         #expect(!session.isCorrectionProcessing)
 
+        try completeRemix(in: session, sessionID: sessionID)
         try session.startMastering(runID: sessionID)
         #expect(!session.displayProgress.contains { $0.status == .running })
         #expect(session.isMasteringProcessing)
@@ -142,18 +143,22 @@ struct StemWorkflowSessionTests {
     }
 
     @Test
-    func masteringCannotStartUntilCorrectionArtifactsAreComplete() throws {
+    func masteringCannotStartUntilRemixArtifactIsComplete() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
         try session.startRun(runID: sessionID)
 
-        #expect(throws: StemWorkflowSessionError.masteringRequiresCorrectionCompletion) {
+        #expect(throws: StemWorkflowSessionError.masteringRequiresRemixCompletion) {
             try session.startMastering(runID: sessionID)
         }
 
         try completeCorrection(in: session, sessionID: sessionID)
         try session.completeCorrection(runID: sessionID)
-        #expect(session.state == .readyForMastering(runID: sessionID))
+        #expect(session.state == .readyForRemix(runID: sessionID))
+        #expect(throws: StemWorkflowSessionError.masteringRequiresRemixCompletion) {
+            try session.startMastering(runID: sessionID)
+        }
+        try completeRemix(in: session, sessionID: sessionID)
         try session.startMastering(runID: sessionID)
         #expect(session.state == .ready)
     }
@@ -165,6 +170,7 @@ struct StemWorkflowSessionTests {
         try session.startRun(runID: sessionID)
         try completeCorrection(in: session, sessionID: sessionID)
         try session.completeCorrection(runID: sessionID)
+        try completeRemix(in: session, sessionID: sessionID)
         try session.startMastering(runID: sessionID)
 
         let final = artifact(id: "final", kind: .finalMaster)
@@ -182,8 +188,66 @@ struct StemWorkflowSessionTests {
             if case .correctedStem = state.kind { return true }
             return false
         }.count == 4)
-        #expect(session.artifactStates.contains { $0.kind == .correctedRemix48000 })
+        #expect(session.artifactStates.contains { $0.kind == .correctedPureSum48000 })
         #expect(!session.artifactStates.contains { $0.kind == .finalMaster })
+    }
+
+    @Test
+    func masteringCanRestartAfterCompletionAndKeepsTheValidatedRemix() throws {
+        let session = StemWorkflowSession()
+        let sessionID = UUID()
+        try session.startRun(runID: sessionID)
+        try completeCorrection(in: session, sessionID: sessionID)
+        try session.completeCorrection(runID: sessionID)
+        try completeRemix(in: session, sessionID: sessionID)
+        try session.startMastering(runID: sessionID)
+
+        let final = artifact(id: "rerun-final", kind: .finalMaster)
+        try session.updateArtifactState(.init(
+            id: final.id,
+            runID: sessionID,
+            kind: final.kind,
+            artifact: final,
+            status: .valid
+        ))
+        try session.completeRun(runID: sessionID)
+
+        try session.startMastering(runID: sessionID)
+
+        #expect(session.state == .ready)
+        #expect(session.isMasteringProcessing)
+        #expect(session.artifactStates.contains { $0.kind == .remixed48000 })
+        #expect(!session.artifactStates.contains { $0.kind == .finalMaster })
+        #expect(session.masteringDisplayProgress.allSatisfy { $0.status == .pending })
+    }
+
+    @Test
+    func remixSettingChangeInvalidatesRemixAndFinalButKeepsCorrectionBaseline() throws {
+        let session = StemWorkflowSession()
+        let sessionID = UUID()
+        try session.startRun(runID: sessionID)
+        try completeCorrection(in: session, sessionID: sessionID)
+        try session.completeCorrection(runID: sessionID)
+        try completeRemix(in: session, sessionID: sessionID)
+
+        let final = artifact(id: "final", kind: .finalMaster)
+        try session.updateArtifactState(.init(
+            id: final.id,
+            runID: sessionID,
+            kind: final.kind,
+            artifact: final,
+            status: .valid
+        ))
+        try session.invalidateRemix(runID: sessionID)
+
+        #expect(session.state == .readyForRemix(runID: sessionID))
+        #expect(!session.artifactStates.contains { $0.kind == .remixed48000 })
+        #expect(!session.artifactStates.contains { $0.kind == .finalMaster })
+        #expect(session.artifactStates.contains { $0.kind == .correctedPureSum48000 })
+        #expect(session.artifactStates.filter {
+            if case .correctedStem = $0.kind { return true }
+            return false
+        }.count == 4)
     }
 
     @Test
@@ -263,7 +327,7 @@ struct StemWorkflowSessionTests {
 
         #expect(session.recentActivityEvents.suffix(2).map(\.title) == [
             "補正処理が完了しました",
-            "補正後再ミックスを解析しました",
+            "補正済み純粋加算を解析しました",
         ])
         #expect(session.recentActivityEvents.last?.detail == "ラウドネス: -18.0 LUFS / ピーク: -1.0 dBTP")
     }
@@ -275,6 +339,7 @@ struct StemWorkflowSessionTests {
         try session.startRun(runID: sessionID)
         try completeCorrection(in: session, sessionID: sessionID)
         try session.completeCorrection(runID: sessionID)
+        try completeRemix(in: session, sessionID: sessionID)
         try session.startMastering(runID: sessionID)
 
         let final = artifact(id: "final", kind: .finalMaster)
@@ -356,7 +421,7 @@ struct StemWorkflowSessionTests {
         let correctionSteps: [StemWorkflowStep] = [
             .validateInput, .separate, .validateSeparatedStems,
             .evaluateStems, .correctStems, .validateCorrectedStems,
-            .correctedRemix, .validateCorrectedRemix,
+            .correctedPureSum, .validateCorrectedPureSum,
         ]
         for step in correctionSteps {
             try session.beginStep(runID: sessionID, step: step)
@@ -372,7 +437,7 @@ struct StemWorkflowSessionTests {
                 status: .valid
             ))
         }
-        let remix = artifact(id: "corrected-remix", kind: .correctedRemix48000)
+        let remix = artifact(id: "corrected-remix", kind: .correctedPureSum48000)
         try session.updateArtifactState(.init(
             id: remix.id,
             runID: sessionID,
@@ -380,6 +445,19 @@ struct StemWorkflowSessionTests {
             artifact: remix,
             status: .valid
         ))
+    }
+
+    private func completeRemix(in session: StemWorkflowSession, sessionID: UUID) throws {
+        try session.startRemix(runID: sessionID)
+        let remix = artifact(id: "stem-remix", kind: .remixed48000)
+        try session.updateArtifactState(.init(
+            id: remix.id,
+            runID: sessionID,
+            kind: remix.kind,
+            artifact: remix,
+            status: .valid
+        ))
+        try session.completeRemix(runID: sessionID)
     }
 
     private func artifact(id: String, kind: StemArtifactKind) -> StemAudioArtifact {

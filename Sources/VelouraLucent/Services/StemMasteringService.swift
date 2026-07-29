@@ -84,10 +84,10 @@ struct StemMasteringService: Sendable {
                 actual: canonicalInputEvaluation.purpose
             )
         }
-        guard masteringInputEvaluation.purpose == .correctedRemix else {
+        guard masteringInputEvaluation.purpose == .remix else {
             throw StemMasteringError.unexpectedEvaluationPurpose(
                 label: "mastering input",
-                expected: .correctedRemix,
+                expected: .remix,
                 actual: masteringInputEvaluation.purpose
             )
         }
@@ -148,7 +148,7 @@ struct StemMasteringService: Sendable {
         _ = try await artifactStore.validate(
             artifact: request.masteringInput.artifact,
             expectedURL: request.masteringInput.artifact.fileURL,
-            expectedKind: .correctedRemix48000
+            expectedKind: .remixed48000
         )
         _ = try await artifactStore.validate(
             artifact: request.canonicalReference.artifact,

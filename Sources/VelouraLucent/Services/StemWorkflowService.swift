@@ -35,10 +35,10 @@ struct StemWorkflowRequest: Sendable {
 }
 
 struct StemWorkflowMasteringRequest: Sendable {
-    let correction: StemWorkflowCorrectionResult
+    let remix: StemWorkflowRemixResult
     let masteringSettings: MasteringSettings
 
-    var runID: UUID { correction.runID }
+    var runID: UUID { remix.runID }
 }
 
 struct StemWorkflowExecutionProgress: Sendable, Equatable {
@@ -62,7 +62,7 @@ struct StemWorkflowStemEvaluation: Sendable {
 }
 
 struct StemWorkflowRemixArtifacts: Sendable {
-    let correctedRemix: StemAudioArtifact
+    let correctedPureSum: StemAudioArtifact
 }
 
 enum StemWorkflowEvent: Sendable {
@@ -89,6 +89,17 @@ struct StemWorkflowCorrectionResult: Sendable {
     let correctedRemixValidation: StemValidationResult
     let correctionSettings: StemRoleCorrectionSettings
     let analysisMode: StemAudioAnalysisMode
+    let automaticRemixPlan: StemRemixAutomaticPlan
+}
+
+struct StemWorkflowRemixResult: Sendable {
+    let correction: StemWorkflowCorrectionResult
+    let artifact: StemAudioArtifact
+    let evaluation: StemAudioEvaluationSnapshot
+    let validation: StemValidationResult
+    let appliedSettings: StemRemixSettings
+
+    var runID: UUID { correction.runID }
 }
 
 struct StemWorkflowResult: Sendable {
@@ -104,25 +115,32 @@ struct StemWorkflowResult: Sendable {
     let correctedRemixEvaluation: StemAudioEvaluationSnapshot
     let correctedRemixValidation: StemValidationResult
     let correctionSettings: StemRoleCorrectionSettings
+    let remixedArtifact: StemAudioArtifact
+    let remixEvaluation: StemAudioEvaluationSnapshot
+    let processedRemixValidation: StemValidationResult
+    let appliedRemixSettings: StemRemixSettings
     let masteringSource: StemMasteringSource
     let mastering: StemMasteringResult
 }
 
 enum StemWorkflowExecutionResult: Sendable {
     case correction(StemWorkflowCorrectionResult)
+    case remix(StemWorkflowRemixResult)
     case mastered(StemWorkflowResult)
 }
 
 enum StemWorkflowServiceError: LocalizedError, Equatable, Sendable {
     case missingStem(StemRole)
     case correctionIncomplete
+    case remixIncomplete
     case validationFailed(phase: StemValidationPhase, failures: [StemValidationFailure])
     case cleanupFailed(originalFailure: String, failures: [String])
 
     var errorDescription: String? {
         switch self {
         case .missingStem(let role): "Stem Modeに\(role.rawValue)がありません。"
-        case .correctionIncomplete: "補正済み4Stemが揃っていないため、マスタリングを開始できません。"
+        case .correctionIncomplete: "補正済み4Stemが揃っていないため、次の工程を開始できません。"
+        case .remixIncomplete: "検証済みのStem再ミックスがないため、マスタリングを開始できません。"
         case let .validationFailed(phase, failures):
             "Stem Modeの\(phase.rawValue)構造検証に失敗しました（\(failures.count)件）。"
         case let .cleanupFailed(originalFailure, failures):
@@ -223,7 +241,7 @@ private struct OrderedStemWorkflowEventSink: Sendable {
     }
 }
 
-/// Stem Modeの二段階処理。状態は呼び出し側の現在セッションが保持し、
+/// Stem Modeの補正・再ミックス・マスタリング処理。状態は呼び出し側の現在セッションが保持し、
 /// ディスクには処理に必要なWAVだけを置く。
 struct StemWorkflowService: Sendable {
     static let temporaryRootURL = FileManager.default.temporaryDirectory
@@ -245,6 +263,7 @@ struct StemWorkflowService: Sendable {
     private let mixer: StemMixService
     private let remixSafetyGuard: any StemRemixSafetyGuarding
     private let remixRelativeAnalyzer: StemRemixRelativeAnalysisService
+    private let remixService: StemRemixService
     private let masteringService: any StemWorkflowMastering
 
     init(
@@ -256,6 +275,7 @@ struct StemWorkflowService: Sendable {
         mixer: StemMixService = StemMixService(),
         remixSafetyGuard: any StemRemixSafetyGuarding = StemRemixSafetyGuardService(),
         remixRelativeAnalyzer: StemRemixRelativeAnalysisService = StemRemixRelativeAnalysisService(),
+        remixService: StemRemixService = StemRemixService(),
         masteringService: any StemWorkflowMastering = StemMasteringService()
     ) {
         self.inputPreparer = inputPreparer
@@ -266,6 +286,7 @@ struct StemWorkflowService: Sendable {
         self.mixer = mixer
         self.remixSafetyGuard = remixSafetyGuard
         self.remixRelativeAnalyzer = remixRelativeAnalyzer
+        self.remixService = remixService
         self.masteringService = masteringService
     }
 
@@ -504,6 +525,15 @@ struct StemWorkflowService: Sendable {
                             detail: "当該Stemをrawで維持"
                         )))
                     }
+                    if role == .drums {
+                        await eventHandler(.displayProgress(.init(
+                            runID: request.runID,
+                            step: .roleTransientRecovery(role),
+                            status: .skipped,
+                            fraction: 1,
+                            detail: "当該Stemをrawで維持"
+                        )))
+                    }
                     correctedSignal = rawSignal48
                     roleAnalysisSnapshot = nil
                     plan = nil
@@ -600,12 +630,12 @@ struct StemWorkflowService: Sendable {
 
             await eventHandler(.log(
                 runID: request.runID,
-                step: .correctedRemix,
+                step: .correctedPureSum,
                 message: "分離後4Stemを純粋加算します"
             ))
             await eventHandler(.displayProgress(.init(
                 runID: request.runID,
-                step: .correctedRemix,
+                step: .correctedPureSum,
                 status: .running,
                 fraction: 0,
                 detail: "補正済み4Stemを純粋加算中"
@@ -615,7 +645,7 @@ struct StemWorkflowService: Sendable {
             }).signal
             await eventHandler(.log(
                 runID: request.runID,
-                step: .correctedRemix,
+                step: .correctedPureSum,
                 message: "raw再ミックスを解析・ノイズ測定します"
             ))
             let rawRemixEvaluation = try await evaluate(
@@ -626,7 +656,7 @@ struct StemWorkflowService: Sendable {
             )
             await eventHandler(.log(
                 runID: request.runID,
-                step: .validateCorrectedRemix,
+                step: .validateCorrectedPureSum,
                 message: "raw再ミックスを入力2mixと検証します"
             ))
             let remixValidation = validator.validateRemix(
@@ -648,7 +678,7 @@ struct StemWorkflowService: Sendable {
             }
             await eventHandler(.log(
                 runID: request.runID,
-                step: .validateCorrectedRemix,
+                step: .validateCorrectedPureSum,
                 message: "raw再ミックスの検証が完了しました"
             ))
 
@@ -656,8 +686,8 @@ struct StemWorkflowService: Sendable {
             let corrected48 = try await loadCorrectedStems(evaluations)
             await eventHandler(.log(
                 runID: request.runID,
-                step: .validateCorrectedRemix,
-                message: "補正後再ミックスの安全確認を行います"
+                step: .validateCorrectedPureSum,
+                message: "補正済み純粋加算の安全確認を行います"
             ))
             let guarded = remixSafetyGuard.protect(
                 rawStemsByRole: raw48,
@@ -666,77 +696,77 @@ struct StemWorkflowService: Sendable {
             if guarded.rawFallbackReasons.isEmpty {
                 await eventHandler(.log(
                     runID: request.runID,
-                    step: .validateCorrectedRemix,
-                    message: "再ミックス安全確認: raw Stemへの差し替えなし"
+                    step: .validateCorrectedPureSum,
+                    message: "純粋加算安全確認: raw Stemへの差し替えなし"
                 ))
             } else {
                 for role in Self.roleOrder {
                     guard let reason = guarded.rawFallbackReasons[role] else { continue }
                     await eventHandler(.log(
                         runID: request.runID,
-                        step: .validateCorrectedRemix,
-                        message: "再ミックス安全確認: \(role.stemModeDisplayTitle)をraw Stemへ戻しました"
+                        step: .validateCorrectedPureSum,
+                        message: "純粋加算安全確認: \(role.stemModeDisplayTitle)をraw Stemへ戻しました"
                     ))
                     await eventHandler(.log(
                         runID: request.runID,
-                        step: .validateCorrectedRemix,
+                        step: .validateCorrectedPureSum,
                         message: "理由: \(reason)"
                     ))
                 }
             }
             await eventHandler(.log(
                 runID: request.runID,
-                step: .correctedRemix,
-                message: "補正済み4Stemを再ミックスします"
+                step: .correctedPureSum,
+                message: "補正済み4Stemをgain・pan・reverbなしで純粋加算します"
             ))
-            let correctedRemix = try mixer.pureSum(stems: Self.roleOrder.compactMap { role in
+            let correctedPureSum = try mixer.pureSum(stems: Self.roleOrder.compactMap { role in
                 guarded.stemsByRole[role].map { StemMixInput(role: role, signal: $0) }
             }).signal
-            let correctedRemixURL = directory.appending(path: "corrected-remix-48000.wav")
+            let correctedPureSumURL = directory.appending(path: "corrected-pure-sum-48000.wav")
             await eventHandler(.log(
                 runID: request.runID,
-                step: .correctedRemix,
-                message: "補正後再ミックスを保存します"
+                step: .correctedPureSum,
+                message: "補正済み純粋加算を保存します"
             ))
             let correctedArtifact = try await store.save(
-                signal: correctedRemix,
-                id: "corrected-remix",
-                kind: .correctedRemix48000,
-                to: correctedRemixURL
+                signal: correctedPureSum,
+                id: "corrected-pure-sum",
+                kind: .correctedPureSum48000,
+                to: correctedPureSumURL
             )
             await eventHandler(.log(
                 runID: request.runID,
-                step: .correctedRemix,
-                message: "補正後再ミックスを解析・ノイズ測定します"
+                step: .correctedPureSum,
+                message: "補正済み純粋加算を解析・ノイズ測定します"
             ))
             let correctedEvaluation = try await evaluate(
-                correctedRemix,
-                purpose: .correctedRemix,
+                correctedPureSum,
+                purpose: .correctedPureSum,
                 analysisMode: request.analysisMode,
                 includeMastering: true
             )
             await eventHandler(.log(
                 runID: request.runID,
-                step: .validateCorrectedRemix,
-                message: "補正後再ミックスを検証します"
+                step: .validateCorrectedPureSum,
+                message: "補正済み純粋加算を検証します"
             ))
             await eventHandler(.displayProgress(.init(
                 runID: request.runID,
-                step: .correctedRemixValidation,
+                step: .correctedPureSumValidation,
                 status: .running,
                 fraction: 0,
-                detail: "補正後再ミックスを検証中"
+                detail: "補正済み純粋加算を検証中"
             )))
             let canonical48 = try await convert(canonicalSignal, to: 48_000)
             let rawRemix48 = try await convert(rawRemix, to: 48_000)
             var correctedValidation = validator.validateCorrectedRemix(
                 canonicalReference: canonical48,
                 rawRemix: rawRemix48,
-                correctedRemix: correctedRemix,
+                correctedRemix: correctedPureSum,
                 noiseContext: StemCorrectedRemixNoiseValidationContext(
                     canonicalInput: canonicalEvaluation.noiseMeasurements,
                     rawRemix: rawRemixEvaluation.noiseMeasurements,
-                    correctedRemix: correctedEvaluation.noiseMeasurements
+                    correctedPureSum: correctedEvaluation.noiseMeasurements
                 ),
                 expectedSampleRate: 48_000,
                 expectedChannelCount: 2
@@ -759,31 +789,44 @@ struct StemWorkflowService: Sendable {
             }
             await eventHandler(.log(
                 runID: request.runID,
-                step: .validateCorrectedRemix,
-                message: "補正後再ミックスの検証が完了しました"
+                step: .validateCorrectedPureSum,
+                message: "補正済み純粋加算の検証が完了しました"
             ))
             await eventHandler(.artifactCommitted(correctedArtifact))
             await eventHandler(.displayProgress(.init(
                 runID: request.runID,
-                step: .correctedRemix,
+                step: .correctedPureSum,
                 status: .completed,
                 fraction: 1,
                 detail: "補正済み4Stemの純粋加算完了"
             )))
             await eventHandler(.displayProgress(.init(
                 runID: request.runID,
-                step: .correctedRemixValidation,
+                step: .correctedPureSumValidation,
                 status: .completed,
                 fraction: 1,
-                detail: "再ミックス検証完了"
+                detail: "純粋加算検証完了"
             )))
-            try await progress(request.runID, .correctedRemix, 1, "補正済み4Stemの純粋加算完了", eventHandler)
-            try await progress(request.runID, .validateCorrectedRemix, 1, "再ミックス検証完了", eventHandler)
+            try await progress(request.runID, .correctedPureSum, 1, "補正済み4Stemの純粋加算完了", eventHandler)
+            try await progress(request.runID, .validateCorrectedPureSum, 1, "純粋加算検証完了", eventHandler)
             await eventHandler(.log(
                 runID: request.runID,
-                step: .validateCorrectedRemix,
+                step: .validateCorrectedPureSum,
                 message: "補正処理が完了しました"
             ))
+            let automaticRemixPlan = try remixService.makeAutomaticPlan(
+                stems: try Self.roleOrder.map { role in
+                    guard let raw = raw48[role],
+                          let corrected = guarded.stemsByRole[role] else {
+                        throw StemWorkflowServiceError.missingStem(role)
+                    }
+                    return StemRemixSignal(
+                        role: role,
+                        raw: raw,
+                        corrected: corrected
+                    )
+                }
+            )
 
             return StemWorkflowCorrectionResult(
                 runID: request.runID,
@@ -793,13 +836,14 @@ struct StemWorkflowService: Sendable {
                 separation: separation,
                 separatedStemValidation: separatedValidation,
                 stemEvaluations: evaluations,
-                remixArtifacts: StemWorkflowRemixArtifacts(correctedRemix: correctedArtifact),
+                remixArtifacts: StemWorkflowRemixArtifacts(correctedPureSum: correctedArtifact),
                 rawRemixEvaluation: rawRemixEvaluation,
                 remixValidation: remixValidation,
                 correctedRemixEvaluation: correctedEvaluation,
                 correctedRemixValidation: correctedValidation,
                 correctionSettings: request.correctionSettings,
-                analysisMode: request.analysisMode
+                analysisMode: request.analysisMode,
+                automaticRemixPlan: automaticRemixPlan
             )
         } catch {
             let originalFailure = error.localizedDescription
@@ -814,11 +858,177 @@ struct StemWorkflowService: Sendable {
         }
     }
 
+    func processRemix(
+        correction: StemWorkflowCorrectionResult,
+        settings: StemRemixSettings,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void = { _ in }
+    ) async throws -> StemWorkflowRemixResult {
+        guard correction.stemEvaluations.count == Self.roleOrder.count,
+              correction.stemEvaluations.allSatisfy({ $0.correctedArtifact != nil }) else {
+            throw StemWorkflowServiceError.correctionIncomplete
+        }
+        let remixURL = correction.sessionDirectory.appending(path: "stem-remix-48000.wav")
+        let finalURL = correction.sessionDirectory.appending(
+            path: StemMasteringService.finalMasterFileName
+        )
+        var didComplete = false
+        defer {
+            if !didComplete {
+                try? store.removeIfPresent(remixURL)
+                try? store.removeIfPresent(finalURL)
+            }
+        }
+        try Task.checkCancellation()
+        await eventHandler(.displayProgress(.init(
+            runID: correction.runID,
+            step: .automaticRemixPlan,
+            status: .completed,
+            fraction: 1,
+            detail: "今回のraw／補正済みStemから自動値を算出済み"
+        )))
+        await eventHandler(.log(
+            runID: correction.runID,
+            step: .remix,
+            message: "今回のraw／補正済みStemから自動gain・pan・衝突回避・reverb値を確認しました"
+        ))
+        await eventHandler(.log(
+            runID: correction.runID,
+            step: .remix,
+            message: "自動設定とユーザー上書きを確定してStem再ミックスを開始します"
+        ))
+
+        let raw44 = try await loadRawStems(correction.separation.stems)
+        let raw48 = try await convertSignals(raw44, to: 48_000)
+        let corrected48 = try await loadCorrectedStems(correction.stemEvaluations)
+        let guarded = remixSafetyGuard.protect(
+            rawStemsByRole: raw48,
+            correctedStemsByRole: corrected48
+        )
+        let remixSignals = try Self.roleOrder.map { role in
+            guard let raw = raw48[role],
+                  let corrected = guarded.stemsByRole[role] else {
+                throw StemWorkflowServiceError.missingStem(role)
+            }
+            return StemRemixSignal(role: role, raw: raw, corrected: corrected)
+        }
+        let remixEventSink = OrderedStemWorkflowEventSink(eventHandler: eventHandler)
+        let render: StemRemixRenderResult
+        do {
+            render = try remixService.render(
+                stems: remixSignals,
+                settings: settings
+            ) { stage, state in
+                let status: StemModeProcessStepStatus = state == .running
+                    ? .running
+                    : .completed
+                remixEventSink.send(.displayProgress(.init(
+                    runID: correction.runID,
+                    step: stage.stemModeProcessStep,
+                    status: status,
+                    fraction: state == .running ? 0 : 1,
+                    detail: state == .running
+                        ? stage.stemModeRunningDetail
+                        : stage.stemModeCompletedDetail
+                )))
+                if state == .completed {
+                    remixEventSink.send(.log(
+                        runID: correction.runID,
+                        step: .remix,
+                        message: stage.stemModeCompletedDetail
+                    ))
+                }
+            }
+            await remixEventSink.finish()
+        } catch {
+            await remixEventSink.finish()
+            throw error
+        }
+        await eventHandler(.displayProgress(.init(
+            runID: correction.runID,
+            step: .remixSave,
+            status: .running,
+            fraction: 0,
+            detail: "再ミックス成果物を保存中"
+        )))
+        try store.removeIfPresent(remixURL)
+        try store.removeIfPresent(finalURL)
+        let artifact = try await store.save(
+            signal: render.signal,
+            id: "stem-remix",
+            kind: .remixed48000,
+            to: remixURL
+        )
+        await eventHandler(.displayProgress(.init(
+            runID: correction.runID,
+            step: .remixSave,
+            status: .completed,
+            fraction: 1,
+            detail: "Stem再ミックスを保存"
+        )))
+        let evaluation = try await evaluate(
+            render.signal,
+            purpose: .remix,
+            analysisMode: correction.analysisMode,
+            includeMastering: true
+        )
+        let pureSum = try await store.load(
+            artifact: correction.remixArtifacts.correctedPureSum,
+            expectedURL: correction.remixArtifacts.correctedPureSum.fileURL,
+            expectedKind: .correctedPureSum48000
+        )
+        await eventHandler(.displayProgress(.init(
+            runID: correction.runID,
+            step: .remixValidation,
+            status: .running,
+            fraction: 0,
+            detail: "再ミックスの構造・有限値・ピークを検証中"
+        )))
+        let validation = validator.validateProcessedRemix(
+            correctedPureSum: pureSum,
+            remixed: render.signal,
+            expectedSampleRate: 48_000,
+            expectedChannelCount: 2
+        )
+        await eventHandler(.validationCompleted(validation))
+        guard validation.canContinue else {
+            try store.removeIfPresent(remixURL)
+            throw StemWorkflowServiceError.validationFailed(
+                phase: validation.phase,
+                failures: validation.failedChecks
+            )
+        }
+        await eventHandler(.artifactCommitted(artifact))
+        await eventHandler(.displayProgress(.init(
+            runID: correction.runID,
+            step: .remixValidation,
+            status: .completed,
+            fraction: 1,
+            detail: "再ミックス検証完了"
+        )))
+        await eventHandler(.log(
+            runID: correction.runID,
+            step: .validateRemix,
+            message: "再ミックスの構造・有限値・ピーク検証を完了しました"
+        ))
+        try await progress(correction.runID, .remix, 1, "Stem再ミックス完了", eventHandler)
+        try await progress(correction.runID, .validateRemix, 1, "Stem再ミックス検証完了", eventHandler)
+        let result = StemWorkflowRemixResult(
+            correction: correction,
+            artifact: artifact,
+            evaluation: evaluation,
+            validation: validation,
+            appliedSettings: settings
+        )
+        didComplete = true
+        return result
+    }
+
     func processMastering(
         _ request: StemWorkflowMasteringRequest,
         eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void = { _ in }
     ) async throws -> StemWorkflowResult {
-        let correction = request.correction
+        let remix = request.remix
+        let correction = remix.correction
         guard correction.stemEvaluations.count == Self.roleOrder.count,
               correction.stemEvaluations.allSatisfy({ $0.correctedArtifact != nil }) else {
             throw StemWorkflowServiceError.correctionIncomplete
@@ -828,8 +1038,8 @@ struct StemWorkflowService: Sendable {
             evaluation: correction.canonicalInputEvaluation
         )
         let masteringInput = try StemMasteringInputMaterial(
-            artifact: correction.remixArtifacts.correctedRemix,
-            evaluation: correction.correctedRemixEvaluation
+            artifact: remix.artifact,
+            evaluation: remix.evaluation
         )
         let masteringEventSink = OrderedStemWorkflowEventSink(eventHandler: eventHandler)
         let mastering: StemMasteringResult
@@ -877,7 +1087,11 @@ struct StemWorkflowService: Sendable {
             correctedRemixEvaluation: correction.correctedRemixEvaluation,
             correctedRemixValidation: correction.correctedRemixValidation,
             correctionSettings: correction.correctionSettings,
-            masteringSource: .correctedRemix,
+            remixedArtifact: remix.artifact,
+            remixEvaluation: remix.evaluation,
+            processedRemixValidation: remix.validation,
+            appliedRemixSettings: remix.appliedSettings,
+            masteringSource: .remix,
             mastering: mastering
         )
     }

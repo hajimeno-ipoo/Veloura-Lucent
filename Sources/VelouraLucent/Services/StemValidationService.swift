@@ -3,7 +3,8 @@ import Foundation
 enum StemValidationPhase: String, Equatable, Sendable {
     case separatedStems
     case remix
-    case correctedRemix
+    case correctedPureSum
+    case processedRemix
 }
 
 enum StemValidationCheck: String, CaseIterable, Equatable, Sendable {
@@ -29,12 +30,12 @@ struct StemRemixNoiseValidationContext: Sendable, Equatable {
     let rawRemix: NoiseMeasurementSnapshot
 }
 
-/// canonical入力、raw再ミックス、補正後再ミックスの測定結果を相互比較する値です。
+/// canonical入力、raw純粋加算、補正済み純粋加算の測定結果を相互比較する値です。
 /// 音楽的な採用可否や候補選択は、この解析・構造検証契約に含めません。
 struct StemCorrectedRemixNoiseValidationContext: Sendable, Equatable {
     let canonicalInput: NoiseMeasurementSnapshot
     let rawRemix: NoiseMeasurementSnapshot
-    let correctedRemix: NoiseMeasurementSnapshot
+    let correctedPureSum: NoiseMeasurementSnapshot
 }
 
 struct StemValidationFailure: Equatable, Sendable {
@@ -333,7 +334,7 @@ struct StemValidationService: Sendable {
 
         guard failures.isEmpty else {
             return StemValidationResult(
-                phase: .correctedRemix,
+                phase: .correctedPureSum,
                 failedChecks: failures,
                 measurements: []
             )
@@ -399,7 +400,69 @@ struct StemValidationService: Sendable {
         measurements.append(contentsOf: noiseValidation.measurements)
 
         return finalizedResult(
-            phase: .correctedRemix,
+            phase: .correctedPureSum,
+            failedChecks: failures,
+            measurements: measurements
+        )
+    }
+
+    /// 補正済み純粋加算と、ユーザーが確定した再ミックス設定の描画結果を比較します。
+    ///
+    /// gain・pan・帯域ducking・共通reverbによる音楽的な差は合否に使わず、
+    /// 構造、有限値、ピーク測定、残差、相関だけを記録します。
+    func validateProcessedRemix(
+        correctedPureSum: AudioSignal,
+        remixed: AudioSignal,
+        expectedSampleRate: Double,
+        expectedChannelCount: Int
+    ) -> StemValidationResult {
+        var failures = validateExpectedStereoContract(expectedChannelCount)
+        failures.append(contentsOf: validateExpectedSampleRateContract(expectedSampleRate))
+        failures.append(contentsOf: validateSignal(
+            correctedPureSum,
+            subject: "corrected-pure-sum",
+            expectedSampleRate: expectedSampleRate,
+            expectedChannelCount: expectedChannelCount,
+            expectedFrameCount: nil
+        ))
+        failures.append(contentsOf: validateSignal(
+            remixed,
+            subject: "stem-remix",
+            expectedSampleRate: expectedSampleRate,
+            expectedChannelCount: expectedChannelCount,
+            expectedFrameCount: correctedPureSum.frameCount
+        ))
+        guard failures.isEmpty else {
+            return StemValidationResult(
+                phase: .processedRemix,
+                failedChecks: failures,
+                measurements: []
+            )
+        }
+
+        var measurements = peakMeasurements(signal: remixed, prefix: "stem-remix")
+        measurements.append(contentsOf: residualMeasurements(
+            source: correctedPureSum,
+            sum: remixed,
+            prefix: "stem-remix-difference.pure-sum-to-remix"
+        ))
+        measurements.append(contentsOf: correlationMeasurements(
+            reference: correctedPureSum,
+            candidate: remixed,
+            prefix: "stem-remix-correlation.pure-sum-to-remix"
+        ))
+        if let stereoCorrelation = normalizedCorrelation(
+            remixed.channels[0],
+            remixed.channels[1]
+        ) {
+            measurements.append(StemValidationMeasurement(
+                id: "stem-remix.stereo-correlation",
+                value: stereoCorrelation,
+                unit: "ratio"
+            ))
+        }
+        return finalizedResult(
+            phase: .processedRemix,
             failedChecks: failures,
             measurements: measurements
         )
@@ -710,7 +773,7 @@ struct StemValidationService: Sendable {
             failures: &failures
         )
         let correctedLevels = validatedNoiseLevels(
-            context.correctedRemix,
+            context.correctedPureSum,
             subject: "corrected-remix",
             failures: &failures
         )

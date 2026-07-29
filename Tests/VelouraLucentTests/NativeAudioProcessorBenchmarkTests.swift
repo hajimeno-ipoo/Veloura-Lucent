@@ -36,6 +36,7 @@ struct NativeAudioProcessorBenchmarkTests {
             "shimmerPeakLimit",
             "correctionHighPreserve",
             "correctionMudGuard",
+            "lowBandPhaseSafety",
             "peakSafety",
             "saveAudio"
         ]
@@ -67,9 +68,10 @@ struct NativeAudioProcessorBenchmarkTests {
         #expect(logs.values.contains { $0.hasPrefix("ノイズ除去/16kHz以上: ") && $0.hasSuffix(" dB") })
         #expect(logs.values.contains { $0.hasPrefix("ノイズ除去/18kHz以上: ") && $0.hasSuffix(" dB") })
         #expect(logs.values.contains { $0.hasPrefix("補正/計測: 低中域残り確認: ") && $0.hasSuffix("秒") })
+        #expect(logs.values.contains { $0.hasPrefix("低域位相確認: ") })
         #expect(logs.values.contains { $0.hasPrefix("合計: ") && $0.hasSuffix("秒") })
         let total = try #require(parsedDuration(prefix: "合計: ", from: logs.values))
-        let stagePrefixes = ["読み込み: ", "解析: ", "ルート用ノイズ測定: ", "低域ノイズ: ", "ノイズ除去: ", "サ行保護: ", "再解析: ", "解析補助: ", "高域修復: ", "修復後シマー保護: ", "低中域残り: ", "シマー制限: ", "補正/計測: 低中域残り確認: ", "ピーク保護: ", "書き出し: "]
+        let stagePrefixes = ["読み込み: ", "解析: ", "ルート用ノイズ測定: ", "低域ノイズ: ", "ノイズ除去: ", "サ行保護: ", "再解析: ", "解析補助: ", "高域修復: ", "修復後シマー保護: ", "低中域残り: ", "シマー制限: ", "補正/計測: 低中域残り確認: ", "補正/計測: 低域位相確認: ", "ピーク保護: ", "書き出し: "]
         var summedStages = 0.0
         for prefix in stagePrefixes {
             summedStages += parsedDuration(prefix: prefix, from: logs.values) ?? 0

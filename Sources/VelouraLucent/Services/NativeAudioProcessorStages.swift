@@ -314,13 +314,160 @@ extension NativeAudioProcessor {
         return controlled
     }
 
+    func applyLowBandPhaseSafety(
+        to signal: AudioSignal,
+        reference: AudioSignal,
+        context: CorrectionRunContext
+    ) throws -> AudioSignal {
+        context.logger?.start(.lowBandPhaseSafety)
+        context.logger?.log(ProcessingStep.lowBandPhaseSafety.rawValue)
+        let result = try measure(
+            "lowBandPhaseSafety",
+            label: "補正/計測: 低域位相確認",
+            recorder: context.benchmarkRecorder,
+            logger: context.logger
+        ) {
+            try LowBandPhaseSafetyGuard().process(
+                signal: signal,
+                reference: reference
+            )
+        }
+
+        switch result.outcome {
+        case .skippedMono:
+            context.logger?.skip(.lowBandPhaseSafety, reason: "モノラル入力のため確認不要")
+            context.logger?.log("低域位相確認: モノラル入力のため変更なし")
+        case .skippedUnsupportedLayout:
+            context.logger?.skip(.lowBandPhaseSafety, reason: "2チャンネル音源以外は変更しません")
+            context.logger?.log("低域位相確認: 対応する2チャンネル構造ではないため変更なし")
+        case .skippedNoDestructivePhase:
+            context.logger?.skip(.lowBandPhaseSafety, reason: "低域の破壊的な左右相殺なし")
+            context.logger?.log("低域位相確認: 問題なし")
+        case let .repaired(origin):
+            let originDescription = switch origin {
+            case .input:
+                "入力に存在"
+            case .processing:
+                "補正後に発生"
+            case .inputAndProcessing:
+                "入力にも存在し、補正後に一部増加"
+            }
+            let repairDescription = "\(originDescription)・"
+                + "\(formatLowBandPhaseCellCount(result.affectedTimeFrequencyCells))セルを補正"
+            context.logger?.detail(
+                repairDescription,
+                for: .lowBandPhaseSafety
+            )
+            logLowBandPhaseRepairResult(
+                result,
+                originDescription: originDescription,
+                logger: context.logger
+            )
+            context.logger?.complete(.lowBandPhaseSafety)
+        case .rejectedSafety:
+            context.logger?.skip(.lowBandPhaseSafety, reason: "安全検証を満たさないため修復前を維持")
+            context.logger?.log("低域位相確認: 安全条件により修復を見送り")
+        }
+
+        saveDiagnostic(
+            result.signal,
+            to: context.diagnosticOutputDirectory,
+            order: 10,
+            id: "lowBandPhaseSafety",
+            label: "低域位相確認後",
+            logger: context.logger
+        )
+        return result.signal
+    }
+
+    private func logLowBandPhaseRepairResult(
+        _ result: LowBandPhaseSafetyResult,
+        originDescription: String,
+        logger: AudioProcessingLogger?
+    ) {
+        guard let logger else { return }
+        let before = result.beforeMetrics
+        let after = result.afterMetrics
+        logger.log("低域位相/原因: \(originDescription)")
+        logger.log(
+            "低域位相/対象: "
+                + "\(formatLowBandPhaseFrequencyRange())・"
+                + "\(formatLowBandPhaseCellCount(before.affectedTimeFrequencyCells))セル・"
+                + "対象時間 約\(formatLowBandPhaseDuration(before.affectedDurationSeconds))"
+        )
+
+        let inputRisk = result.inputMetrics
+            .map { formatLowBandPhaseRisk($0.riskScore) }
+            ?? "測定不可"
+        logger.log(
+            "低域位相/内部相殺指標: 入力 \(inputRisk)"
+                + " → 補正後 \(formatLowBandPhaseRisk(before.riskScore))"
+                + " → 修復後 \(formatLowBandPhaseRisk(after.riskScore))"
+        )
+
+        let inputLoss = result.inputMetrics
+            .map { formatLowBandPhaseLoss($0.monoCompatibilityLossDB) }
+            ?? "測定不可"
+        logger.log(
+            "低域位相/モノラル低域損失: 入力 \(inputLoss)"
+                + " → 補正後 \(formatLowBandPhaseLoss(before.monoCompatibilityLossDB))"
+                + " → 修復後 \(formatLowBandPhaseLoss(after.monoCompatibilityLossDB))"
+        )
+
+        let riskPointReduction = max(0, (before.riskScore - after.riskScore) * 100)
+        var resultParts = [
+            "内部相殺指標 \(String(format: "%.1f", riskPointReduction))ポイント減少"
+        ]
+        if let beforeLoss = before.monoCompatibilityLossDB,
+           let afterLoss = after.monoCompatibilityLossDB
+        {
+            let lossImprovement = max(0, afterLoss - beforeLoss)
+            resultParts.append(
+                "モノラル低域損失 \(String(format: "%.1f", lossImprovement)) dB改善"
+            )
+        }
+        resultParts.append("安全検証通過")
+        logger.log("低域位相/結果: \(resultParts.joined(separator: "・"))")
+    }
+
+    private func formatLowBandPhaseFrequencyRange() -> String {
+        String(
+            format: "%.0f〜%.0fHz",
+            LowBandPhaseSafetyGuard.lowerFrequency,
+            LowBandPhaseSafetyGuard.upperFrequency
+        )
+    }
+
+    private func formatLowBandPhaseCellCount(_ count: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: count)) ?? String(count)
+    }
+
+    private func formatLowBandPhaseDuration(_ seconds: Double) -> String {
+        String(format: "%.2f秒", max(0, seconds))
+    }
+
+    private func formatLowBandPhaseRisk(_ risk: Double) -> String {
+        String(format: "%.1f%%", min(max(risk, 0), 1) * 100)
+    }
+
+    private func formatLowBandPhaseLoss(_ lossDB: Double?) -> String {
+        guard let lossDB, lossDB.isFinite else { return "測定不可" }
+        if lossDB <= -119.95 {
+            return "-120.0 dB以下"
+        }
+        return String(format: "%.1f dB", lossDB)
+    }
+
     func applyPeakSafety(to signal: AudioSignal, context: CorrectionRunContext) -> AudioSignal {
         context.logger?.start(.peakSafety)
         context.logger?.log("ピークを保護します")
         let finalized = measure("peakSafety", label: "ピーク保護", recorder: context.benchmarkRecorder, logger: context.logger, progressStep: .peakSafety) {
             PeakSafetyLimiter().process(signal: signal)
         }
-        saveDiagnostic(finalized, to: context.diagnosticOutputDirectory, order: 10, id: "peakSafety", label: "補正最終", logger: context.logger)
+        saveDiagnostic(finalized, to: context.diagnosticOutputDirectory, order: 11, id: "peakSafety", label: "補正最終", logger: context.logger)
         return finalized
     }
 

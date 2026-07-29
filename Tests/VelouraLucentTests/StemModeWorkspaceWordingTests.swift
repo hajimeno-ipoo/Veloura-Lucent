@@ -10,6 +10,8 @@ struct StemModeWorkspaceWordingTests {
             "Sources/VelouraLucent/Views/StemModeWorkspaceView.swift",
             "Sources/VelouraLucent/Views/StemModeSidebarView.swift",
             "Sources/VelouraLucent/Views/StemModePreviewView.swift",
+            "Sources/VelouraLucent/Views/StemRemixComparisonView.swift",
+            "Sources/VelouraLucent/Views/StemModeRemixSettingsView.swift",
             "Sources/VelouraLucent/Views/StemWaveformComparisonView.swift",
             "Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift",
             "Sources/VelouraLucent/Views/StemModeDetailedAnalysisWorkspaceView.swift",
@@ -30,22 +32,87 @@ struct StemModeWorkspaceWordingTests {
         #expect(!source.contains("試聴用共通ゲイン"))
         #expect(!source.contains("Sample Peakから推測して補完していません。"))
         #expect(!source.localizedCaseInsensitiveContains("corpus"))
-        #expect(source.contains("通常モードと同じ二段階操作"))
+        #expect(source.contains("再ミックスと既存マスタリングを独立して実行します"))
         #expect(source.contains("raw使用"))
         #expect(source.contains("DSP最終適用結果"))
         #expect(!source.contains("採用したStem"))
         #expect(source.contains("Button(\"A/B切替\")"))
-        #expect(source.contains("Button(\"rawを再生\")"))
-        #expect(source.contains("Button(\"補正後を再生\")"))
-        #expect(source.contains("Button(\"raw／補正後切替\")"))
+        #expect(source.contains("sideAButtonTitle: \"rawを再生\""))
+        #expect(source.contains("sideBButtonTitle: \"補正後を再生\""))
+        #expect(source.contains("switchButtonTitle: \"raw／補正後切替\""))
         #expect(source.contains("title: \"分離直後（raw）\""))
         #expect(source.contains("title: \"補正後Stem\""))
         #expect(source.contains("stemPreviewController"))
-        #expect(source.contains("onWillStartPlayback: model.stopStemPreviewPlayback"))
+        #expect(source.contains("AudioWaveformWorkspaceView("))
+        #expect(source.contains("sideAButtonTitle: \"純粋加算を再生\""))
+        #expect(source.contains("sideBButtonTitle: \"再ミックスを再生\""))
+        #expect(source.contains("手動"))
+        #expect(source.contains("自動値"))
         #expect(source.contains("補正ログ"))
         #expect(source.contains("マスタリングログ"))
         #expect(source.contains("直近ログ"))
         #expect(source.contains("全体進捗"))
+    }
+
+    @Test
+    func remixSettingsFollowStandardInspectorControlsWithoutDuplicateActions() throws {
+        let remix = try source(
+            "Sources/VelouraLucent/Views/StemModeRemixSettingsView.swift"
+        )
+        let sidebar = try source(
+            "Sources/VelouraLucent/Views/StemModeSidebarView.swift"
+        )
+        let knob = try source(
+            "Sources/VelouraLucent/Views/DAWKnobControl.swift"
+        )
+
+        #expect(remix.components(separatedBy: "\"手動\"").count - 1 == 1)
+        #expect(remix.contains("TermHelpButton(\n                        title: \"再ミックス調整\""))
+        #expect(remix.contains("全Stemの音量が0 dB、パンが0"))
+        #expect(remix.contains("Stem間の衝突回避が無効または0"))
+        #expect(remix.contains("再ミックス版は純粋加算版とほぼ同じ音になります"))
+        #expect(!remix.contains("パンが中央"))
+        #expect(remix.contains("let plan = model.automaticRemixPlan"))
+        #expect(remix.contains(
+            "let effective = model.effectiveRemixSettings ?? StemRemixSettings()"
+        ))
+        #expect(remix.contains(
+            "補正後に自動値を算出します。現在は中立値を表示しています。"
+        ))
+        #expect(!remix.contains("再ミックス設定は補正後に準備されます"))
+        #expect(!remix.contains("if let plan = model.automaticRemixPlan"))
+        #expect(
+            remix.components(
+                separatedBy: ".disabled(model.isRemixSettingsDisabled)"
+            ).count - 1 == 1
+        )
+        #expect(remix.contains(
+            "isInteractionEnabled: !model.isRemixSettingsDisabled"
+        ))
+        #expect(knob.contains("isInteractionEnabled: Bool = true"))
+        #expect(
+            knob.components(
+                separatedBy: ".disabled(!isInteractionEnabled)"
+            ).count - 1 == 2
+        )
+        #expect(remix.contains(".frame(width: DAWKnobMetrics.threeColumnWidth)"))
+        #expect(remix.contains("help: SettingHelp("))
+        #expect(!remix.contains("help: nil"))
+        #expect(!remix.contains("現在値（"))
+        #expect(!remix.contains("つまみを変更するには"))
+        #expect(remix.contains("private var remixResetRow"))
+        #expect(remix.contains("title: \"自動値へ戻す\""))
+        #expect(!remix.contains("Task { await model.beginRemix() }"))
+        #expect(!remix.contains("private func remixToggle("))
+        #expect(remix.contains("private func collisionAvoidanceControl<Content: View>("))
+        #expect(remix.contains("dragValueScale: range.upperBound - range.lowerBound"))
+        #expect(remix.contains("displayValueText: panNumberText"))
+        #expect(remix.contains("summary: \"音量、左右位置、共通リバーブへの送信量を調整します。\""))
+        #expect(!remix.contains("roleSummary(settings:"))
+        #expect(!remix.contains("labels: [\"0.25秒\", \"2.13秒\", \"4秒\"]"))
+        #expect(remix.contains("labels: [\"短い\", \"標準\", \"長い\"]"))
+        #expect(!remix.contains(".velouraAdaptiveGlass(in: .rect(cornerRadius: 10))"))
+        #expect(sidebar.contains("showsTransientStatus: false"))
     }
 
     @Test
@@ -210,7 +277,7 @@ struct StemModeWorkspaceWordingTests {
         #expect(sharedToolbarLabel.contains(".liquidGlassCapsuleMorphSurface("))
         #expect(workspaceToolbar.contains(".accessibilityLabel(\"書き出し\")"))
         #expect(workspaceToolbar.contains("ForEach(commandActions.exportActions)"))
-        #expect(root.contains(".correctedRemix48000"))
+        #expect(root.contains(".correctedPureSum48000"))
         #expect(root.contains(".correctedStem(.drums)"))
         #expect(root.contains(".correctedStem(.bass)"))
         #expect(root.contains(".correctedStem(.other)"))
@@ -247,10 +314,12 @@ struct StemModeWorkspaceWordingTests {
 
     @Test
     func stemWaveformComparisonUsesTheSharedTimeRulerAndHoverPosition() throws {
-        let source = try source(
-            "Sources/VelouraLucent/Views/StemWaveformComparisonView.swift"
-        )
+        let source = try combinedSource([
+            "Sources/VelouraLucent/Views/StemWaveformComparisonView.swift",
+            "Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift",
+        ])
 
+        #expect(source.contains("AudioWaveformWorkspaceView("))
         #expect(source.contains("hoveredWaveformProgress"))
         #expect(source.contains("hoveredWaveformTarget"))
         #expect(source.contains("viewport: waveformViewport"))
@@ -258,8 +327,10 @@ struct StemModeWorkspaceWordingTests {
         #expect(source.contains("hoverProgress: hoveredWaveformProgress"))
         #expect(source.contains("onHover: { progress in"))
         #expect(source.contains("waveformViewport.reset()"))
-        #expect(source.contains(".onChange(of: model.selectedInputURL)"))
-        #expect(source.contains(".onChange(of: model.selectedCorrectionRole)"))
+        #expect(source.contains("resetToken: resetToken"))
+        #expect(source.contains("model.selectedStemPreviewRole.rawValue"))
+        #expect(source.contains("model.selectStemPreviewRole($0)"))
+        #expect(!source.contains("model.selectCorrectionRole($0)"))
         #expect(source.contains("preview.playbackState(for: activeTarget) == .playing"))
     }
 
@@ -283,7 +354,7 @@ struct StemModeWorkspaceWordingTests {
         #expect(stem.contains("rawRemixEvaluation"))
         #expect(stem.contains("validation.measurements"))
         #expect(stem.contains("validation.analysisIssues"))
-        #expect(stem.contains("音声を選ぶと、入力、補正後再ミックス、Stem Mode最終版"))
+        #expect(stem.contains("音声を選ぶと、入力、純粋加算または再ミックス、Stem Mode最終版"))
         #expect(!stem.contains("補正段の入力解析が完了すると"))
         #expect(stem.contains("@State private var showStemSpecificAnalysis = false"))
         #expect(stem.contains("@State private var showRemixSpecificAnalysis = false"))
@@ -339,9 +410,10 @@ struct StemModeWorkspaceWordingTests {
     }
 
     @Test
-    func previewUsesTheSameThreeProcessingStagesAsStandardMode() throws {
+    func previewReusesStandardComparisonAndAddsDedicatedRemixAB() throws {
         let preview = try combinedSource([
             "Sources/VelouraLucent/Views/StemModePreviewView.swift",
+            "Sources/VelouraLucent/Views/StemRemixComparisonView.swift",
             "Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift"
         ])
         let model = try source(
@@ -358,7 +430,15 @@ struct StemModeWorkspaceWordingTests {
         #expect(preview.contains("A/B切替"))
         #expect(preview.contains("波形と試聴比較"))
         #expect(preview.contains("試聴音量"))
+        #expect(preview.contains("correctedTitle: processedTitle"))
+        #expect(preview.contains("comparisonPairLabel: comparisonPairLabel"))
+        #expect(preview.contains("comparisonPairSummary: comparisonPairSummary"))
+        #expect(preview.contains("targetTitle: targetTitle"))
+        #expect(preview.contains("model.remixedPreviewArtifact == nil"))
+        #expect(preview.contains("\"補正済み純粋加算\""))
+        #expect(preview.contains("\"Stem再ミックス\""))
         #expect(model.contains("let previewController = AudioPreviewController()"))
+        #expect(model.contains("let remixPreviewController = AudioPreviewController()"))
         #expect(model.contains("func updatePreviewSources"))
         #expect(model.contains("finalCommitLockState == .unlocked"))
         #expect(model.contains("!isStartingRun"))
@@ -378,14 +458,15 @@ struct StemModeWorkspaceWordingTests {
 
         #expect(rootSource.contains("model.exportableArtifacts"))
         #expect(rootSource.contains("kind.stemModeDisplayTitle"))
-        #expect(rootSource.contains(".correctedRemix48000"))
+        #expect(rootSource.contains(".correctedPureSum48000"))
+        #expect(rootSource.contains(".remixed48000"))
         #expect(rootSource.contains(".correctedStem(.drums)"))
         #expect(rootSource.contains(".correctedStem(.bass)"))
         #expect(rootSource.contains(".correctedStem(.other)"))
         #expect(rootSource.contains(".correctedStem(.vocals)"))
         #expect(rootSource.contains(".finalMaster"))
         #expect(resultsSource.contains("ForEach(commandActions.exportActions)"))
-        #expect(resultsSource.contains("補正後2mix、補正済みStemまたはStem Mode最終版を書き出します"))
+        #expect(resultsSource.contains("純粋加算、再ミックス、補正済みStemまたはStem Mode最終版を書き出します"))
         #expect(!resultsSource.contains("raw Stem"))
         #expect(!resultsSource.contains("No Vocals"))
         #expect(!resultsSource.contains("試聴版"))
@@ -393,15 +474,19 @@ struct StemModeWorkspaceWordingTests {
         #expect(models.contains("exportArtifact: @MainActor (StemAudioArtifact, AudioExportFormat) async throws -> URL"))
 
         let correctedRemix = try #require(
-            rootSource.range(of: ".correctedRemix48000")
+            rootSource.range(of: ".correctedPureSum48000")
         )
         let correctedStems = try #require(
             rootSource.range(of: ".correctedStem(.drums)")
         )
+        let remixed = try #require(
+            rootSource.range(of: ".remixed48000")
+        )
         let finalMaster = try #require(
             rootSource.range(of: ".finalMaster")
         )
-        #expect(correctedRemix.lowerBound < correctedStems.lowerBound)
+        #expect(correctedRemix.lowerBound < remixed.lowerBound)
+        #expect(remixed.lowerBound < correctedStems.lowerBound)
         #expect(correctedStems.lowerBound < finalMaster.lowerBound)
     }
 
@@ -416,6 +501,7 @@ struct StemModeWorkspaceWordingTests {
 
         #expect(!source.contains("switchToStandard"))
         #expect(source.contains("cancelCorrection"))
+        #expect(source.contains("cancelRemix"))
         #expect(source.contains("cancelMastering"))
         #expect(!source.contains("保存して中断"))
         #expect(!source.contains("成果物を破棄"))
@@ -441,12 +527,52 @@ struct StemModeWorkspaceWordingTests {
         )
 
         #expect(inspector.contains("解析モード"))
+        #expect(inspector.contains("TermHelpButton(\n                    title: \"解析モード\""))
         #expect(inspector.contains("$model.selectedAnalysisMode"))
+        #expect(inspector.contains("isDisabled: model.session.isCorrectionProcessing"))
+        #expect(!inspector.contains("補正開始時にrunへ固定"))
+        #expect(!inspector.contains("実際のStem解析とDSP内部解析"))
         #expect(workspaceModel.contains("analysisMode: StemAudioAnalysisMode(selectedAnalysisMode)"))
         #expect(workflow.contains("let analysisMode: StemAudioAnalysisMode"))
         #expect(!workflow.contains("checkpoint"))
         #expect(evaluator.contains("request.analysisMode.resolvedAudioAnalysisMode"))
         #expect(correction.contains("rawEvaluation.request.analysisMode.resolvedAudioAnalysisMode"))
+    }
+
+    @Test
+    func stemModeReusesStandardInspectorAndInputSelectionContracts() throws {
+        let standardInspector = try source(
+            "Sources/VelouraLucent/Views/InspectorAnalysisPanel.swift"
+        )
+        let stemInspector = try source(
+            "Sources/VelouraLucent/Views/StemModeInspectorView.swift"
+        )
+        let root = try source(
+            "Sources/VelouraLucent/Views/VelouraRootView.swift"
+        )
+        let recentLog = try source(
+            "Sources/VelouraLucent/Views/RecentProcessingLogView.swift"
+        )
+
+        #expect(standardInspector.contains(
+            "struct InspectorAnalysisPanelContent<AdditionalContent: View>: View"
+        ))
+        #expect(standardInspector.contains("InspectorAnalysisPanelContent("))
+        #expect(stemInspector.contains("InspectorAnalysisPanelContent("))
+        #expect(!stemInspector.contains("private func metricsGrid("))
+        #expect(!stemInspector.contains("private func qualityWarnings("))
+        #expect(!stemInspector.contains("private var completionReportControl"))
+        #expect(stemInspector.contains("processedTitle: processedTitle"))
+        #expect(stemInspector.contains("model.remixedPreviewArtifact == nil"))
+
+        #expect(root.contains("private func chooseStemInputAudio()"))
+        #expect(root.contains("FilePanelService.chooseAudioFile"))
+        #expect(!root.contains(".fileImporter("))
+        #expect(!root.contains("isStemFileImporterPresented"))
+        #expect(!root.contains("presentStemFileImporter"))
+
+        #expect(recentLog.contains("case .remix: \"slider.horizontal.3\""))
+        #expect(recentLog.contains("case .mastering: \"waveform.badge.checkmark\""))
     }
 
     @Test

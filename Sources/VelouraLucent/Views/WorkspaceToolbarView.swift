@@ -44,6 +44,7 @@ struct WorkspaceToolbarView: View {
                         systemImage: isCorrectionRunning
                             ? "xmark.circle.fill"
                             : "wand.and.sparkles",
+                        isCancellation: isCorrectionRunning,
                         target: .runCorrection
                     )
                 }
@@ -53,12 +54,39 @@ struct WorkspaceToolbarView: View {
                 .disabled(isCorrectionDisabled)
                 .keyboardShortcut("r", modifiers: .command)
 
+                if commandActions.processingMode == .stem {
+                    Button(action: performRemixAction) {
+                        actionLabel(
+                            commandActions.remixCommandTitle,
+                            systemImage: commandActions.isRemixRunning
+                                ? "xmark.circle.fill"
+                                : "slider.horizontal.3",
+                            isCancellation: commandActions.isRemixRunning,
+                            target: .runRemix
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { updateHighlight(.runRemix, isHovering: $0) }
+                    .help(
+                        commandActions.isRemixRunning
+                            ? "Stem再ミックスをキャンセルします"
+                            : "補正済み4Stemを自動値と手動上書きで再ミックスします"
+                    )
+                    .disabled(
+                        commandActions.isRemixRunning
+                            ? !commandActions.canCancelRemix
+                            : !commandActions.canRunRemix
+                    )
+                    .keyboardShortcut("r", modifiers: [.command, .option])
+                }
+
                 Button(action: performMasteringAction) {
                     actionLabel(
                         masteringTitle,
                         systemImage: isMasteringRunning
                             ? "xmark.circle.fill"
-                            : "slider.horizontal.3",
+                            : "waveform.badge.checkmark",
+                        isCancellation: isMasteringRunning,
                         target: .runMastering
                     )
                 }
@@ -117,12 +145,14 @@ struct WorkspaceToolbarView: View {
     private func actionLabel(
         _ title: String,
         systemImage: String,
+        isCancellation: Bool = false,
         target: LiquidGlassToolbarTarget
     ) -> some View {
         LiquidGlassToolbarLabel(
             title: title,
             systemImage: systemImage,
             isActive: highlightedTarget == target,
+            isCancellation: isCancellation,
             effectID: "toolbar-action-highlight",
             namespace: glassNamespace,
             reduceMotion: reduceMotion
@@ -176,7 +206,7 @@ struct WorkspaceToolbarView: View {
     private var exportHelp: String {
         processingMode == .standard
             ? "補正後または最終版を書き出します"
-            : "補正後2mix、補正済みStemまたはStem Mode最終版を書き出します"
+            : "純粋加算、再ミックス、補正済みStemまたはStem Mode最終版を書き出します"
     }
 
     private func performCorrectionAction() {
@@ -192,6 +222,14 @@ struct WorkspaceToolbarView: View {
             commandActions.cancelMastering()
         } else {
             commandActions.runMastering()
+        }
+    }
+
+    private func performRemixAction() {
+        if commandActions.isRemixRunning {
+            commandActions.cancelRemix()
+        } else {
+            commandActions.runRemix()
         }
     }
 

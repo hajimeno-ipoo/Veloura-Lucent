@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RecentProcessingLogView: View {
     let events: [RecentActivityEvent]
+    let fullLogHelp: String
     @Binding var isFullLogPresented: Bool
 
     var body: some View {
@@ -14,7 +15,7 @@ struct RecentProcessingLogView: View {
                     isFullLogPresented = true
                 }
                 .buttonStyle(.borderless)
-                .help("補正とマスタリングの完全なログを開きます")
+                .help(fullLogHelp)
             }
 
             if events.isEmpty {
@@ -94,7 +95,8 @@ private extension RecentActivityDomain {
         switch self {
         case .input: "waveform"
         case .correction: "wand.and.sparkles"
-        case .mastering: "slider.horizontal.3"
+        case .remix: "slider.horizontal.3"
+        case .mastering: "waveform.badge.checkmark"
         case .export: "square.and.arrow.up"
         }
     }
@@ -103,6 +105,7 @@ private extension RecentActivityDomain {
         switch self {
         case .input: .blue
         case .correction: .green
+        case .remix: .cyan
         case .mastering: .orange
         case .export: .purple
         }

@@ -229,7 +229,13 @@ struct NativeAudioProcessor {
             context: context
         )
         try Task.checkCancellation()
-        let finalized = applyPeakSafety(to: mudControlled, context: context)
+        let phaseSafe = try applyLowBandPhaseSafety(
+            to: mudControlled,
+            reference: signal,
+            context: context
+        )
+        try Task.checkCancellation()
+        let finalized = applyPeakSafety(to: phaseSafe, context: context)
         try Task.checkCancellation()
         try saveFinalizedAudio(
             finalized,

@@ -5,6 +5,19 @@ struct SpectrogramComparisonView: View {
     let input: SpectrogramSnapshot?
     let corrected: SpectrogramSnapshot?
     let mastered: SpectrogramSnapshot?
+    let correctedTitle: String
+
+    init(
+        input: SpectrogramSnapshot?,
+        corrected: SpectrogramSnapshot?,
+        mastered: SpectrogramSnapshot?,
+        correctedTitle: String = "補正後"
+    ) {
+        self.input = input
+        self.corrected = corrected
+        self.mastered = mastered
+        self.correctedTitle = correctedTitle
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -14,7 +27,7 @@ struct SpectrogramComparisonView: View {
                 TermHelpButton(
                     title: "スペクトログラム",
                     reading: "すぺくとろぐらむ",
-                    description: "横方向が時間、縦方向が周波数です。色は入力、補正後、最終版で共通の表示dBを示します。赤に近いほど強く、青や黒に近いほど弱い成分です。"
+                    description: "横方向が時間、縦方向が周波数です。色は入力、\(correctedTitle)、最終版で共通の表示dBを示します。赤に近いほど強く、青や黒に近いほど弱い成分です。"
                 )
                 Spacer()
                 Text("時間 →")
@@ -26,7 +39,7 @@ struct SpectrogramComparisonView: View {
                 VStack(spacing: 0) {
                     spectrogramRow(title: "入力", snapshot: input, tint: .blue, sharedDuration: timeAxisDuration)
                     Divider()
-                    spectrogramRow(title: "補正後", snapshot: corrected, tint: .green, sharedDuration: timeAxisDuration)
+                    spectrogramRow(title: correctedTitle, snapshot: corrected, tint: .green, sharedDuration: timeAxisDuration)
                     Divider()
                     spectrogramRow(title: "最終版", snapshot: mastered, tint: .orange, sharedDuration: timeAxisDuration)
                     if let duration = timeAxisDuration {
@@ -212,14 +225,13 @@ struct SpectrogramComparisonView: View {
     }
 
     private func unavailableText(for title: String) -> String {
-        switch title {
-        case "入力":
+        if title == "入力" {
             return "音声を選ぶと表示します"
-        case "補正後":
-            return "補正が完了すると表示します"
-        default:
-            return "マスタリングが完了すると表示します"
         }
+        if title == correctedTitle {
+            return "\(correctedTitle)の準備が完了すると表示します"
+        }
+        return "マスタリングが完了すると表示します"
     }
 }
 

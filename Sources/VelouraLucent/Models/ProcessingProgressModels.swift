@@ -13,6 +13,7 @@ enum ProcessingStep: String, CaseIterable, Hashable {
     case shimmerPeakLimit = "シマーを抑えます"
     case correctionHighPreserve = "高域を保持します"
     case correctionMudGuard = "低中域の残りを確認します"
+    case lowBandPhaseSafety = "低域の位相を確認します"
     case peakSafety = "ピークを保護します"
     case save = "処理済みファイルを書き出します"
 
@@ -32,6 +33,7 @@ enum ProcessingStep: String, CaseIterable, Hashable {
         case .shimmerPeakLimit: "シマー制限"
         case .correctionHighPreserve: "高域保持"
         case .correctionMudGuard: "低中域確認"
+        case .lowBandPhaseSafety: "低域位相確認"
         case .peakSafety: "ピーク保護"
         case .save: "書き出し"
         }
@@ -53,6 +55,7 @@ enum ProcessingStep: String, CaseIterable, Hashable {
         case .shimmerPeakLimit: "shimmerPeakLimit"
         case .correctionHighPreserve: "correctionHighPreserve"
         case .correctionMudGuard: "correctionMudGuard"
+        case .lowBandPhaseSafety: "lowBandPhaseSafety"
         case .peakSafety: "peakSafety"
         case .save: "save"
         }

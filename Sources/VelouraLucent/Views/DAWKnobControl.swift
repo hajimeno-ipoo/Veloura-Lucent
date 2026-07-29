@@ -12,6 +12,7 @@ struct DAWKnobControl: View {
     let range: ClosedRange<Float>
     let step: Float
     let dragValueScale: Float
+    let isInteractionEnabled: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isFocused: Bool
@@ -38,7 +39,8 @@ struct DAWKnobControl: View {
         value: Binding<Float>,
         range: ClosedRange<Float>,
         step: Float,
-        dragValueScale: Float = 1
+        dragValueScale: Float = 1,
+        isInteractionEnabled: Bool = true
     ) {
         self.title = title
         self.help = help
@@ -50,6 +52,7 @@ struct DAWKnobControl: View {
         self.range = range
         self.step = step
         self.dragValueScale = dragValueScale
+        self.isInteractionEnabled = isInteractionEnabled
     }
 
     private var knobSurface: some View {
@@ -93,6 +96,7 @@ struct DAWKnobControl: View {
             }
         }
         .onDisappear(perform: stopKeyRepeat)
+        .disabled(!isInteractionEnabled)
         .accessibilityElement()
         .accessibilityLabel(title)
         .accessibilityValue(valueText)
@@ -177,6 +181,7 @@ struct DAWKnobControl: View {
             )
         }
         .frame(width: DAWKnobMetrics.controlWidth, height: DAWKnobMetrics.controlHeight)
+        .disabled(!isInteractionEnabled)
     }
 
     private var dragGesture: some Gesture {

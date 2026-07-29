@@ -120,6 +120,21 @@ struct SidebarProcessStepDisplay: Identifiable {
     let title: String
     let detail: String?
     let state: SidebarProcessStepState
+    let showsTransientStatus: Bool
+
+    init(
+        id: String,
+        title: String,
+        detail: String?,
+        state: SidebarProcessStepState,
+        showsTransientStatus: Bool = true
+    ) {
+        self.id = id
+        self.title = title
+        self.detail = detail
+        self.state = state
+        self.showsTransientStatus = showsTransientStatus
+    }
 }
 
 enum SidebarProcessStepState {
@@ -193,7 +208,8 @@ private struct SidebarProcessStepRow: View {
                     .truncationMode(.tail)
                     .layoutPriority(1)
 
-                if let shortLabel = step.state.shortLabel {
+                if step.showsTransientStatus,
+                   let shortLabel = step.state.shortLabel {
                     Text(shortLabel)
                         .font(.caption)
                         .foregroundStyle(step.state.color(tint: tint))
@@ -207,7 +223,9 @@ private struct SidebarProcessStepRow: View {
                 }
             }
 
-            if step.state == .active, let detail = step.detail {
+            if step.showsTransientStatus,
+               step.state == .active,
+               let detail = step.detail {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)

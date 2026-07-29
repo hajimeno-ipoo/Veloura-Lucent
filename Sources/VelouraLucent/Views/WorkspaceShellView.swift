@@ -124,12 +124,14 @@ struct WorkspaceFixedHeaderView<DisplayPicker: View>: View {
 struct WorkspaceFooterLayout: View {
     let events: [RecentActivityEvent]
     let stages: [WorkspaceFooterStage]
+    let fullLogHelp: String
     @Binding var isFullLogPresented: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 22) {
             RecentProcessingLogView(
                 events: events,
+                fullLogHelp: fullLogHelp,
                 isFullLogPresented: $isFullLogPresented
             )
             .padding(12)

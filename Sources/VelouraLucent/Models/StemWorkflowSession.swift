@@ -10,7 +10,8 @@ enum StemWorkflowSessionError: LocalizedError, Equatable, Sendable {
     case artifactKindMismatch
     case completionRequiresCompletedExport
     case correctionCompletionRequiresCorrectedStems
-    case masteringRequiresCorrectionCompletion
+    case remixRequiresCorrectionCompletion
+    case masteringRequiresRemixCompletion
 
     var errorDescription: String? {
         switch self {
@@ -29,9 +30,11 @@ enum StemWorkflowSessionError: LocalizedError, Equatable, Sendable {
         case .completionRequiresCompletedExport:
             return "Stem Modeの完了には最終版生成工程の完了が必要です。"
         case .correctionCompletionRequiresCorrectedStems:
-            return "Stem Modeの補正完了には補正済み4Stemと補正後再ミックスの検証・保存完了が必要です。"
-        case .masteringRequiresCorrectionCompletion:
-            return "補正済み4Stemと補正後再ミックスが揃った現在セッションだけマスタリングを開始できます。"
+            return "Stem Modeの補正完了には補正済み4Stemと補正済み純粋加算の検証・保存完了が必要です。"
+        case .remixRequiresCorrectionCompletion:
+            return "補正済み4Stemと純粋加算が揃った現在セッションだけ再ミックスを開始できます。"
+        case .masteringRequiresRemixCompletion:
+            return "検証済みStem再ミックスが揃った現在セッションだけマスタリングを開始できます。"
         }
     }
 }
@@ -74,7 +77,8 @@ enum StemWorkflowValidationSubject: Equatable, Hashable, Sendable {
     case separatedStems
     case stem(String)
     case rawRemix
-    case correctedRemix
+    case correctedPureSum
+    case remix
     case finalMaster
 }
 
@@ -126,8 +130,12 @@ final class StemWorkflowSession {
         .evaluateStems,
         .correctStems,
         .validateCorrectedStems,
-        .correctedRemix,
-        .validateCorrectedRemix,
+        .correctedPureSum,
+        .validateCorrectedPureSum,
+    ]
+    private static let remixSteps: [StemWorkflowStep] = [
+        .remix,
+        .validateRemix,
     ]
     private static let masteringSteps: [StemWorkflowStep] = [
         .mastering,
@@ -146,6 +154,8 @@ final class StemWorkflowSession {
     private(set) var validationStates: [StemWorkflowValidationDisplayState] = []
     private(set) var correctionStartedAt: Date?
     private(set) var correctionFinishedAt: Date?
+    private(set) var remixStartedAt: Date?
+    private(set) var remixFinishedAt: Date?
     private(set) var masteringStartedAt: Date?
     private(set) var masteringFinishedAt: Date?
     private(set) var lastExportedDestinationURL: URL?
@@ -156,6 +166,10 @@ final class StemWorkflowSession {
 
     var isMasteringProcessing: Bool {
         masteringStartedAt != nil && masteringFinishedAt == nil
+    }
+
+    var isRemixProcessing: Bool {
+        remixStartedAt != nil && remixFinishedAt == nil
     }
 
     var currentStep: StemWorkflowStep? {
@@ -175,6 +189,10 @@ final class StemWorkflowSession {
         logLines(for: Self.masteringLogSteps)
     }
 
+    var remixLogLines: [String] {
+        logLines(for: Self.remixLogSteps)
+    }
+
     func progress(for step: StemWorkflowStep) -> StemWorkflowStepProgress {
         // `pendingSteps` guarantees one entry for every case.
         stepProgress.first(where: { $0.step == step })!
@@ -191,6 +209,10 @@ final class StemWorkflowSession {
 
     var masteringDisplayProgress: [StemModeProcessStepProgress] {
         displayProgress.filter { $0.step.domain == .mastering }
+    }
+
+    var remixDisplayProgress: [StemModeProcessStepProgress] {
+        displayProgress.filter { $0.step.domain == .remix }
     }
 
     func displayProgressValue(for domain: StemModeProcessDomain) -> Double {
@@ -272,7 +294,7 @@ final class StemWorkflowSession {
         appendMetricActivity(
             timestamp: timestamp,
             domain: .correction,
-            title: "補正後再ミックスを解析しました",
+            title: "補正済み純粋加算を解析しました",
             metrics: metrics
         )
     }
@@ -311,6 +333,8 @@ final class StemWorkflowSession {
         validationStates = []
         correctionStartedAt = timestamp
         correctionFinishedAt = nil
+        remixStartedAt = nil
+        remixFinishedAt = nil
         masteringStartedAt = nil
         masteringFinishedAt = nil
         lastExportedDestinationURL = nil
@@ -345,15 +369,20 @@ final class StemWorkflowSession {
             displayProgress.append(progress)
         }
 
-        let activityDomain: RecentActivityDomain = event.step.domain == .correction
-            ? .correction
-            : .mastering
+        let activityDomain: RecentActivityDomain = switch event.step.domain {
+        case .correction: .correction
+        case .remix: .remix
+        case .mastering: .mastering
+        }
+        let activityTitle = switch event.step.domain {
+        case .correction: "補正処理を実行中"
+        case .remix: "再ミックスを実行中"
+        case .mastering: "マスタリングを実行中"
+        }
         updateRunningActivity(
             timestamp: timestamp,
             domain: activityDomain,
-            title: event.step.domain == .correction
-                ? "補正処理を実行中"
-                : "マスタリングを実行中",
+            title: activityTitle,
             detail: [event.step.title, event.detail].compactMap { $0 }.joined(separator: ": "),
             progress: displayProgressValue(for: event.step.domain)
         )
@@ -546,11 +575,11 @@ final class StemWorkflowSession {
                         case .correctedStem(let role) = state.kind else { return nil }
                   return role
               }).count == StemRole.allCases.count
-        let hasCorrectedRemix = artifactStates.contains { state in
+        let hasCorrectedPureSum = artifactStates.contains { state in
             guard case .valid = state.status else { return false }
-            return state.kind == .correctedRemix48000
+            return state.kind == .correctedPureSum48000
         }
-        guard hasAllCorrectedStems, hasCorrectedRemix else {
+        guard hasAllCorrectedStems, hasCorrectedPureSum else {
             throw StemWorkflowSessionError.correctionCompletionRequiresCorrectedStems
         }
         for step in Self.correctionSteps {
@@ -563,41 +592,230 @@ final class StemWorkflowSession {
             ))
         }
         correctionFinishedAt = timestamp
-        state = .readyForMastering(runID: runID)
+        state = .readyForRemix(runID: runID)
         completeRunningActivity(
             timestamp: timestamp,
             domain: .correction,
             title: "補正処理が完了しました",
-            detail: "補正済み4Stemと補正後再ミックスを保存しました",
+            detail: "補正済み4Stemと純粋加算を保存しました",
             progress: 1
         )
         appendLogUnchecked(
             runID: runID,
             timestamp: timestamp,
             level: .info,
-            step: .validateCorrectedRemix,
-            message: "補正済み4Stemと補正後再ミックスを一時保存しました。マスタリングは別操作で開始します。"
+            step: .validateCorrectedPureSum,
+            message: "補正済み4Stemと純粋加算を一時保存しました。再ミックスは別操作で開始します。"
         )
+    }
+
+    func startRemix(runID: UUID, at timestamp: Date = Date()) throws {
+        try requireRun(runID)
+        let hasAllCorrectedStems = Set(artifactStates.compactMap { state -> StemRole? in
+            guard case .valid = state.status,
+                  case .correctedStem(let role) = state.kind else { return nil }
+            return role
+        }).count == StemRole.allCases.count
+        let hasCorrectedPureSum = artifactStates.contains { state in
+            guard case .valid = state.status else { return false }
+            return state.kind == .correctedPureSum48000
+        }
+        guard case .readyForRemix(let readyRunID) = state,
+              readyRunID == runID,
+              hasAllCorrectedStems,
+              hasCorrectedPureSum else {
+            throw StemWorkflowSessionError.remixRequiresCorrectionCompletion
+        }
+        resetDisplayDomain(.remix)
+        for step in Self.remixSteps {
+            replaceProgress(StemWorkflowStepProgress(
+                step: step,
+                status: .pending,
+                fraction: 0
+            ))
+        }
+        artifactStates.removeAll { $0.kind == .remixed48000 || $0.kind == .finalMaster }
+        validationStates.removeAll { $0.subject == .remix || $0.subject == .finalMaster }
+        remixStartedAt = timestamp
+        remixFinishedAt = nil
+        masteringStartedAt = nil
+        masteringFinishedAt = nil
+        state = .ready
+        appendActivity(
+            timestamp: timestamp,
+            domain: .remix,
+            title: "再ミックスを実行中",
+            detail: "自動設定とユーザー上書きを音声へ適用します",
+            progress: 0,
+            isRunning: true
+        )
+        appendLogUnchecked(
+            runID: runID,
+            timestamp: timestamp,
+            level: .info,
+            step: .remix,
+            message: "補正済み4Stemから再ミックス段を開始します。"
+        )
+    }
+
+    func completeRemix(runID: UUID, at timestamp: Date = Date()) throws {
+        try requireMutableRun(runID)
+        let hasRemix = artifactStates.contains { state in
+            guard case .valid = state.status else { return false }
+            return state.kind == .remixed48000
+        }
+        guard hasRemix else {
+            throw StemWorkflowSessionError.masteringRequiresRemixCompletion
+        }
+        for step in Self.remixSteps {
+            let existing = progress(for: step)
+            replaceProgress(StemWorkflowStepProgress(
+                step: step,
+                status: .completed,
+                fraction: 1,
+                detail: existing.detail
+            ))
+        }
+        remixFinishedAt = timestamp
+        state = .readyForMastering(runID: runID)
+        completeRunningActivity(
+            timestamp: timestamp,
+            domain: .remix,
+            title: "再ミックスが完了しました",
+            detail: "純粋加算とのA/B試聴とマスタリングが可能です",
+            progress: 1
+        )
+        appendLogUnchecked(
+            runID: runID,
+            timestamp: timestamp,
+            level: .info,
+            step: .validateRemix,
+            message: "Stem再ミックスを検証・保存しました。"
+        )
+    }
+
+    func restoreRemixReadyAfterFailure(
+        runID: UUID,
+        message: String,
+        at timestamp: Date = Date()
+    ) throws {
+        try requireRun(runID)
+        let failedStep = currentStep
+        let failedProgress = displayProgressValue(for: .remix)
+        for step in Self.remixSteps {
+            replaceProgress(StemWorkflowStepProgress(step: step, status: .pending, fraction: 0))
+        }
+        resetDisplayDomain(.remix)
+        artifactStates.removeAll { $0.kind == .remixed48000 || $0.kind == .finalMaster }
+        validationStates.removeAll { $0.subject == .remix || $0.subject == .finalMaster }
+        remixFinishedAt = timestamp
+        state = .readyForRemix(runID: runID)
+        lastError = StemWorkflowErrorDisplayState(
+            runID: runID,
+            timestamp: timestamp,
+            step: failedStep,
+            message: message,
+            recoverySuggestion: "補正済み4Stemと純粋加算は保持されています。設定を確認して再実行してください。"
+        )
+        completeRunningActivity(
+            timestamp: timestamp,
+            domain: .remix,
+            title: "再ミックスに失敗しました",
+            detail: message,
+            progress: failedProgress,
+            hasFailed: true
+        )
+        appendLogUnchecked(
+            runID: runID,
+            timestamp: timestamp,
+            level: .error,
+            step: .remix,
+            message: "再ミックスを停止しました。補正済み4Stemと純粋加算は保持しています: \(message)"
+        )
+    }
+
+    func restoreRemixReadyAfterCancellation(
+        runID: UUID,
+        at timestamp: Date = Date()
+    ) throws {
+        try requireRun(runID)
+        let cancelledProgress = displayProgressValue(for: .remix)
+        for step in Self.remixSteps {
+            replaceProgress(StemWorkflowStepProgress(step: step, status: .pending, fraction: 0))
+        }
+        resetDisplayDomain(.remix)
+        artifactStates.removeAll { $0.kind == .remixed48000 || $0.kind == .finalMaster }
+        validationStates.removeAll { $0.subject == .remix || $0.subject == .finalMaster }
+        remixFinishedAt = timestamp
+        state = .readyForRemix(runID: runID)
+        lastError = nil
+        completeRunningActivity(
+            timestamp: timestamp,
+            domain: .remix,
+            title: "再ミックスをキャンセルしました",
+            detail: "補正済み4Stemと純粋加算は保持しています",
+            progress: cancelledProgress
+        )
+        appendLogUnchecked(
+            runID: runID,
+            timestamp: timestamp,
+            level: .info,
+            step: .remix,
+            message: "再ミックスをキャンセルしました。補正済み4Stemと純粋加算は保持しています。"
+        )
+    }
+
+    func invalidateRemix(runID: UUID) throws {
+        try requireRun(runID)
+        switch state {
+        case .readyForMastering(let readyRunID) where readyRunID == runID:
+            break
+        case .completed(let completedRunID) where completedRunID == runID:
+            break
+        case .readyForRemix(let readyRunID) where readyRunID == runID:
+            return
+        default:
+            throw StemWorkflowSessionError.remixRequiresCorrectionCompletion
+        }
+        artifactStates.removeAll { $0.kind == .remixed48000 || $0.kind == .finalMaster }
+        validationStates.removeAll { $0.subject == .remix || $0.subject == .finalMaster }
+        for step in Self.remixSteps + Self.masteringSteps {
+            replaceProgress(StemWorkflowStepProgress(step: step, status: .pending, fraction: 0))
+        }
+        resetDisplayDomain(.remix)
+        resetDisplayDomain(.mastering)
+        remixFinishedAt = nil
+        masteringStartedAt = nil
+        masteringFinishedAt = nil
+        state = .readyForRemix(runID: runID)
     }
 
     func startMastering(runID: UUID, at timestamp: Date = Date()) throws {
         try requireRun(runID)
-        let hasAllCorrectedStems = Set(artifactStates.compactMap { state -> StemRole? in
-                  guard case .valid = state.status,
-                        case .correctedStem(let role) = state.kind else { return nil }
-                  return role
-              }).count == StemRole.allCases.count
-        let hasCorrectedRemix = artifactStates.contains { state in
+        let hasRemix = artifactStates.contains { state in
             guard case .valid = state.status else { return false }
-            return state.kind == .correctedRemix48000
+            return state.kind == .remixed48000
         }
-        guard case .readyForMastering(let readyRunID) = state,
-              readyRunID == runID,
-              hasAllCorrectedStems,
-              hasCorrectedRemix else {
-            throw StemWorkflowSessionError.masteringRequiresCorrectionCompletion
+        let isReady: Bool
+        switch state {
+        case .readyForMastering(let readyRunID), .completed(let readyRunID):
+            isReady = readyRunID == runID
+        default:
+            isReady = false
+        }
+        guard isReady, hasRemix else {
+            throw StemWorkflowSessionError.masteringRequiresRemixCompletion
+        }
+        for step in Self.masteringSteps {
+            replaceProgress(StemWorkflowStepProgress(
+                step: step,
+                status: .pending,
+                fraction: 0
+            ))
         }
         resetDisplayDomain(.mastering)
+        artifactStates.removeAll { $0.kind == .finalMaster }
+        validationStates.removeAll { $0.subject == .finalMaster }
         masteringStartedAt = timestamp
         masteringFinishedAt = nil
         state = .ready
@@ -605,7 +823,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             domain: .mastering,
             title: "マスタリングを実行中",
-            detail: "補正後再ミックスを読み込みます",
+            detail: "検証済みStem再ミックスを読み込みます",
             progress: 0,
             isRunning: true
         )
@@ -614,7 +832,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .info,
             step: .mastering,
-            message: "補正後再ミックスからマスタリング段を開始します。"
+            message: "検証済みStem再ミックスからマスタリング段を開始します。"
         )
     }
 
@@ -638,7 +856,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             step: failureStep,
             message: message,
-            recoverySuggestion: "補正後再ミックスは保持されています。設定または警告を確認してマスタリングを再実行してください。"
+            recoverySuggestion: "Stem再ミックスは保持されています。設定または警告を確認してマスタリングを再実行してください。"
         )
         completeRunningActivity(
             timestamp: timestamp,
@@ -653,7 +871,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .error,
             step: failureStep,
-            message: "マスタリング段を停止しました。補正後再ミックスは保持しています: \(message)"
+            message: "マスタリング段を停止しました。Stem再ミックスは保持しています: \(message)"
         )
     }
 
@@ -679,7 +897,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             domain: .mastering,
             title: "マスタリングをキャンセルしました",
-            detail: "補正後再ミックスは保持しています",
+            detail: "Stem再ミックスは保持しています",
             progress: displayProgressValue(for: .mastering)
         )
         appendLogUnchecked(
@@ -687,7 +905,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .info,
             step: .mastering,
-            message: "マスタリングをキャンセルしました。補正後再ミックスは保持しています。"
+            message: "マスタリングをキャンセルしました。Stem再ミックスは保持しています。"
         )
     }
 
@@ -773,7 +991,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             domain: .export,
             title: "成果物を書き出しました",
-            detail: artifact.kind == .finalMaster ? "Stem Mode最終版" : "補正後再ミックス",
+            detail: artifact.kind.stemModeDisplayTitle,
             fileURL: destinationURL,
             fileInfo: fileInfo,
             progress: 1
@@ -811,7 +1029,7 @@ final class StemWorkflowSession {
         switch state {
         case .completed, .failed:
             throw StemWorkflowSessionError.runIsTerminal
-        case .idle, .ready, .readyForMastering,
+        case .idle, .ready, .readyForRemix, .readyForMastering,
              .running:
             return
         }
@@ -874,6 +1092,8 @@ final class StemWorkflowSession {
         validationStates = []
         correctionStartedAt = nil
         correctionFinishedAt = nil
+        remixStartedAt = nil
+        remixFinishedAt = nil
         masteringStartedAt = nil
         masteringFinishedAt = nil
         lastExportedDestinationURL = nil
@@ -889,7 +1109,11 @@ final class StemWorkflowSession {
     }
 
     private static func pendingDisplaySteps() -> [StemModeProcessStepProgress] {
-        (StemModeProcessStep.correctionSteps + StemModeProcessStep.masteringSteps).map {
+        (
+            StemModeProcessStep.correctionSteps
+                + StemModeProcessStep.remixSteps
+                + StemModeProcessStep.masteringSteps
+        ).map {
             StemModeProcessStepProgress(step: $0, status: .pending, fraction: 0)
         }
     }
@@ -1026,7 +1250,11 @@ final class StemWorkflowSession {
     private static let correctionLogSteps: Set<StemWorkflowStep> = [
         .validateInput, .separate, .validateSeparatedStems,
         .evaluateStems, .correctStems, .validateCorrectedStems,
-        .correctedRemix, .validateCorrectedRemix,
+        .correctedPureSum, .validateCorrectedPureSum,
+    ]
+
+    private static let remixLogSteps: Set<StemWorkflowStep> = [
+        .remix, .validateRemix,
     ]
 
     private static let masteringLogSteps: Set<StemWorkflowStep> = [

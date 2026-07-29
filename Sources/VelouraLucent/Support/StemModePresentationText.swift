@@ -27,7 +27,8 @@ extension StemArtifactKind {
         case .input44100: "変換済み入力"
         case .rawStem(let role): "\(role.stemModeDisplayTitle)（raw）"
         case .correctedStem(let role): "\(role.stemModeDisplayTitle)（補正済み）"
-        case .correctedRemix48000: "補正後再ミックス"
+        case .correctedPureSum48000: "補正済み純粋加算"
+        case .remixed48000: "Stem再ミックス"
         case .finalMaster: "最終マスター"
         }
     }
@@ -39,7 +40,8 @@ extension StemArtifactKind {
         case .rawStem(.drums), .correctedStem(.drums): "metronome"
         case .rawStem(.bass), .correctedStem(.bass): "guitars"
         case .rawStem(.other), .correctedStem(.other): "waveform.path"
-        case .correctedRemix48000: "waveform"
+        case .correctedPureSum48000: "waveform"
+        case .remixed48000: "slider.horizontal.3"
         case .finalMaster: "checkmark.seal"
         }
     }
@@ -47,7 +49,8 @@ extension StemArtifactKind {
     var isStemModeUserExportable: Bool {
         switch self {
         case .correctedStem,
-             .correctedRemix48000,
+             .correctedPureSum48000,
+             .remixed48000,
              .finalMaster:
             true
         case .input44100,
@@ -56,12 +59,13 @@ extension StemArtifactKind {
         }
     }
 
-    /// 通常モードと同じA/B試聴の3段階だけを候補にします。
-    /// 個別Stemや内部診断成果物は、品質選択へ転用しません。
+    /// 通常モードの入力・処理後・最終版に、純粋加算／再ミックスA/B用の
+    /// 2つの処理後成果物を追加します。個別Stemは混在させません。
     var isStemModePreviewable: Bool {
         switch self {
         case .input44100,
-             .correctedRemix48000,
+             .correctedPureSum48000,
+             .remixed48000,
              .finalMaster:
             true
         case .rawStem,
@@ -72,7 +76,8 @@ extension StemArtifactKind {
 
     var stemModeExportSortRank: Int {
         switch self {
-        case .correctedRemix48000: 0
+        case .correctedPureSum48000: 0
+        case .remixed48000: 1
         case .correctedStem(.drums): 10
         case .correctedStem(.bass): 11
         case .correctedStem(.other): 12
@@ -83,11 +88,12 @@ extension StemArtifactKind {
         }
     }
 
-    /// 通常モードと同じ「入力・補正後・最終版」の順序です。
+    /// 入力・純粋加算・再ミックス・最終版の順序です。
     var stemModePreviewSortRank: Int {
         switch self {
         case .input44100: 0
-        case .correctedRemix48000: 10
+        case .correctedPureSum48000: 10
+        case .remixed48000: 15
         case .finalMaster: 20
         case .rawStem: 100
         case .correctedStem: 110
@@ -100,7 +106,8 @@ extension StemWorkflowState {
         switch self {
         case .idle: "入力待ち"
         case .ready: "実行準備完了"
-        case .readyForMastering: "補正完了・マスタリング待ち"
+        case .readyForRemix: "補正完了・再ミックス待ち"
+        case .readyForMastering: "再ミックス完了・マスタリング待ち"
         case .running(let step): "\(step.title)を実行中"
         case .completed: "完了"
         case .failed: "停止"
@@ -111,6 +118,7 @@ extension StemWorkflowState {
         switch self {
         case .idle: "circle"
         case .ready: "checkmark.circle"
+        case .readyForRemix: "slider.horizontal.3"
         case .readyForMastering: "waveform.badge.checkmark"
         case .running: "gearshape.2"
         case .completed: "checkmark.seal"
@@ -126,7 +134,8 @@ extension StemWorkflowValidationSubject {
         case .separatedStems: "分離Stem一式"
         case .stem(let name): "Stem: \(name)"
         case .rawRemix: "raw再ミックス"
-        case .correctedRemix: "補正後再ミックス"
+        case .correctedPureSum: "補正済み純粋加算"
+        case .remix: "Stem再ミックス"
         case .finalMaster: "最終マスター"
         }
     }
@@ -172,10 +181,45 @@ extension StemCorrectionStageGuardOutcome {
     }
 }
 
+extension StemRemixRenderStage {
+    var stemModeProcessStep: StemModeProcessStep {
+        switch self {
+        case .gain: .remixGain
+        case .masking: .remixMasking
+        case .pan: .remixPan
+        case .reverbSend: .remixReverbSend
+        case .sharedReverb: .remixSharedReverb
+        case .dryReturnMix: .remixDryReturnMix
+        }
+    }
+
+    var stemModeRunningDetail: String {
+        switch self {
+        case .gain: "補正後の相対変化を基準にStem別gainを適用中"
+        case .masking: "実測衝突区間だけdynamic EQ／duckingを適用中"
+        case .pan: "rawから変化した左右バランスだけを補正中"
+        case .reverbSend: "pan後の各Stemから共通reverbへのsendを生成中"
+        case .sharedReverb: "一つの共通reverb returnを生成中"
+        case .dryReturnMix: "dry Stem合計へ共通reverb returnを加算中"
+        }
+    }
+
+    var stemModeCompletedDetail: String {
+        switch self {
+        case .gain: "Stem別gain適用完了"
+        case .masking: "条件付き帯域制御完了"
+        case .pan: "Stem別pan適用完了"
+        case .reverbSend: "Stem別reverb send生成完了"
+        case .sharedReverb: "共通reverb return生成完了"
+        case .dryReturnMix: "dry／reverb加算完了"
+        }
+    }
+}
+
 extension StemMasteringSource {
     var stemModeDisplayTitle: String {
         switch self {
-        case .correctedRemix: "補正後再ミックス"
+        case .remix: "Stem再ミックス"
         }
     }
 }

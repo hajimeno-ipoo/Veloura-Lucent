@@ -9,6 +9,7 @@ struct StemModeFooterView: View {
         WorkspaceFooterLayout(
             events: model.session.recentActivityEvents,
             stages: workflowStages,
+            fullLogHelp: "補正・再ミックス・マスタリングの完全なログを開きます",
             isFullLogPresented: $isFullLogPresented
         )
     }
@@ -30,12 +31,25 @@ struct StemModeFooterView: View {
                 )
             ),
             WorkspaceFooterStage(
+                id: "remix",
+                title: "再ミックス",
+                state: state(
+                    for: model.session.remixDisplayProgress,
+                    isProcessing: model.session.isRemixProcessing,
+                    pending: correctionComplete ? "実行待ち" : "待機"
+                ),
+                progress: activeProgress(
+                    for: model.session.remixDisplayProgress,
+                    isProcessing: model.session.isRemixProcessing
+                )
+            ),
+            WorkspaceFooterStage(
                 id: "mastering",
                 title: "マスタリング",
                 state: state(
                     for: model.session.masteringDisplayProgress,
                     isProcessing: model.session.isMasteringProcessing,
-                    pending: correctionComplete ? "実行待ち" : "待機"
+                    pending: remixComplete ? "実行待ち" : "待機"
                 ),
                 progress: activeProgress(
                     for: model.session.masteringDisplayProgress,
@@ -72,6 +86,12 @@ struct StemModeFooterView: View {
         }
     }
 
+    private var remixComplete: Bool {
+        model.session.remixDisplayProgress.allSatisfy {
+            $0.status == .completed || $0.status == .skipped
+        }
+    }
+
     private func state(
         for progresses: [StemModeProcessStepProgress],
         isProcessing: Bool,
@@ -104,42 +124,28 @@ struct StemModeFullProcessingLogView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        GlassEffectContainer(spacing: 14) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
-                    Text("処理ログ")
-                        .font(.title2.bold())
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.primary)
-                            .frame(width: 32, height: 32)
-                            .contentShape(Circle())
-                            .velouraAdaptiveGlass(in: Circle(), interactive: true)
-                    }
-                    .keyboardShortcut(.cancelAction)
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("閉じる")
-                    .help("詳細ログを閉じます")
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-
-                ScrollView {
-                    ProcessingLogView(
-                        correctionLines: session.correctionLogLines,
-                        masteringLines: session.masteringLogLines
-                    )
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 20)
-                    .velouraTransientOverlayScrollIndicators()
-                }
-                .scrollContentBackground(.hidden)
-            }
-            .velouraAdaptiveGlass(in: .rect(cornerRadius: 18))
-        }
-        .frame(minWidth: 640, idealWidth: 840, minHeight: 520, idealHeight: 680)
-        .padding(18)
+        FullProcessingLogLayout(
+            sections: [
+                ProcessingLogSection(
+                    id: "correction",
+                    title: "補正ログ",
+                    lines: session.correctionLogLines,
+                    placeholder: "ここに補正ログが表示されます。"
+                ),
+                ProcessingLogSection(
+                    id: "remix",
+                    title: "再ミックスログ",
+                    lines: session.remixLogLines,
+                    placeholder: "ここに再ミックスログが表示されます。"
+                ),
+                ProcessingLogSection(
+                    id: "mastering",
+                    title: "マスタリングログ",
+                    lines: session.masteringLogLines,
+                    placeholder: "ここにマスタリングログが表示されます。"
+                ),
+            ],
+            onDismiss: onDismiss
+        )
     }
 }

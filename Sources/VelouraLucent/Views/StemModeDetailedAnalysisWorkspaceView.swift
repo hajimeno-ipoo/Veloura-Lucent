@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 通常モードの詳細解析と同じ3段階比較を中核にし、Stem固有解析だけを追加します。
+/// 通常モードの詳細解析を中核にし、Stem固有解析と純粋加算／再ミックス比較を追加します。
 @MainActor
 struct StemModeDetailedAnalysisWorkspaceView: View {
     @Bindable var model: StemModeWorkspaceModel
@@ -22,7 +22,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
 
                 stemAnalysisDisclosureSection(
                     title: "再ミックス固有解析",
-                    help: "raw 4Stemと補正後4Stemの純粋加算を比べ、再合成、残差、位相、相関、帯域、ノイズ、分離アーティファクトの測定結果を確認します。数値だけで完成音を自動選択しません。",
+                    help: "raw 4Stem、補正済み純粋加算、実行済み再ミックスを比べ、再合成、残差、位相、相関、帯域、ノイズ、分離アーティファクトの測定結果を確認します。数値だけで完成音を自動選択しません。",
                     isExpanded: $showRemixSpecificAnalysis
                 ) {
                     remixSpecificAnalysisContent
@@ -81,8 +81,15 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             analyzingTargets: analyzingTargets,
             failedTargets: failedTargets,
             emptyTitle: "入力2mixは未解析です",
-            emptyDescription: "音声を選ぶと、入力、補正後再ミックス、Stem Mode最終版の詳細解析を表示します。"
+            emptyDescription: "音声を選ぶと、入力、純粋加算または再ミックス、Stem Mode最終版の詳細解析を表示します。",
+            correctedTitle: processedTitle
         )
+    }
+
+    private var processedTitle: String {
+        model.remixedPreviewArtifact == nil
+            ? "補正済み純粋加算"
+            : "Stem再ミックス"
     }
 
     private var analysisStatusText: String? {
@@ -90,7 +97,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             return "入力2mixを解析しています。"
         }
         if model.isAnalyzingDisplayAudio {
-            return "補正後再ミックスまたはStem Mode最終版を解析しています。"
+            return "純粋加算、再ミックス、またはStem Mode最終版を解析しています。"
         }
         return nil
     }
@@ -324,42 +331,64 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
         _ presentation: StemModeRemixAnalysisPresentation
     ) -> some View {
         let raw = presentation.rawRemixEvaluation
-        let corrected = presentation.correctedRemixEvaluation
+        let pureSum = presentation.correctedRemixEvaluation
+        let remix = presentation.processedRemixEvaluation
         return Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 8) {
             GridRow {
                 headerCell("再ミックス解析")
                 headerCell("raw")
-                headerCell("補正後")
+                headerCell("純粋加算")
+                if remix != nil {
+                    headerCell("再ミックス")
+                }
             }
             GridRow {
                 Text("Integrated Loudness")
                 number(raw.audioMetrics.integratedLoudnessLUFS, unit: "LUFS", color: .blue)
-                number(corrected.audioMetrics.integratedLoudnessLUFS, unit: "LUFS", color: .green)
+                number(pureSum.audioMetrics.integratedLoudnessLUFS, unit: "LUFS", color: .cyan)
+                if let remix {
+                    number(remix.audioMetrics.integratedLoudnessLUFS, unit: "LUFS", color: .green)
+                }
             }
             GridRow {
                 Text("True Peak")
                 number(raw.audioMetrics.truePeakDBFS, unit: "dBTP", color: .blue)
-                number(corrected.audioMetrics.truePeakDBFS, unit: "dBTP", color: .green)
+                number(pureSum.audioMetrics.truePeakDBFS, unit: "dBTP", color: .cyan)
+                if let remix {
+                    number(remix.audioMetrics.truePeakDBFS, unit: "dBTP", color: .green)
+                }
             }
             GridRow {
                 Text("位相・相関")
                 number(raw.audioMetrics.stereoCorrelation, unit: "", color: .blue)
-                number(corrected.audioMetrics.stereoCorrelation, unit: "", color: .green)
+                number(pureSum.audioMetrics.stereoCorrelation, unit: "", color: .cyan)
+                if let remix {
+                    number(remix.audioMetrics.stereoCorrelation, unit: "", color: .green)
+                }
             }
             GridRow {
                 Text("ステレオ幅")
                 number(raw.audioMetrics.stereoWidth, unit: "", color: .blue)
-                number(corrected.audioMetrics.stereoWidth, unit: "", color: .green)
+                number(pureSum.audioMetrics.stereoWidth, unit: "", color: .cyan)
+                if let remix {
+                    number(remix.audioMetrics.stereoWidth, unit: "", color: .green)
+                }
             }
             GridRow {
                 Text("ダイナミクス")
                 number(raw.audioMetrics.crestFactorDB, unit: "dB", color: .blue)
-                number(corrected.audioMetrics.crestFactorDB, unit: "dB", color: .green)
+                number(pureSum.audioMetrics.crestFactorDB, unit: "dB", color: .cyan)
+                if let remix {
+                    number(remix.audioMetrics.crestFactorDB, unit: "dB", color: .green)
+                }
             }
             GridRow {
                 Text("分離アーティファクト")
                 number(raw.audioAnalysis.map { Double($0.artifactBandRatio) }, unit: "", color: .blue)
-                number(corrected.audioAnalysis.map { Double($0.artifactBandRatio) }, unit: "", color: .green)
+                number(pureSum.audioAnalysis.map { Double($0.artifactBandRatio) }, unit: "", color: .cyan)
+                if let remix {
+                    number(remix.audioAnalysis.map { Double($0.artifactBandRatio) }, unit: "", color: .green)
+                }
             }
         }
     }
@@ -439,16 +468,16 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
     private func validationMeasurementTitle(_ id: String) -> String {
         let prefixes: [(String, String)] = [
             ("corrected-remix-difference.canonical-to-raw.", "入力2mix → raw再ミックス 残差"),
-            ("corrected-remix-difference.canonical-to-corrected.", "入力2mix → 補正後再ミックス 残差"),
-            ("corrected-remix-difference.raw-to-corrected.", "raw → 補正後再ミックス 残差"),
+            ("corrected-remix-difference.canonical-to-corrected.", "入力2mix → 補正済み純粋加算 残差"),
+            ("corrected-remix-difference.raw-to-corrected.", "raw → 補正済み純粋加算 残差"),
             ("corrected-remix-correlation.canonical-to-raw.", "入力2mix → raw再ミックス 相関"),
-            ("corrected-remix-correlation.canonical-to-corrected.", "入力2mix → 補正後再ミックス 相関"),
-            ("corrected-remix-correlation.raw-to-corrected.", "raw → 補正後再ミックス 相関"),
+            ("corrected-remix-correlation.canonical-to-corrected.", "入力2mix → 補正済み純粋加算 相関"),
+            ("corrected-remix-correlation.raw-to-corrected.", "raw → 補正済み純粋加算 相関"),
             ("corrected-remix-band-difference.canonical-to-raw.", "入力2mix → raw再ミックス 帯域差"),
-            ("corrected-remix-band-difference.canonical-to-corrected.", "入力2mix → 補正後再ミックス 帯域差"),
-            ("corrected-remix-band-difference.raw-to-corrected.", "raw → 補正後再ミックス 帯域差"),
-            ("corrected-remix-noise.", "再ミックス ノイズ"),
-            ("corrected-remix.", "補正後再ミックス")
+            ("corrected-remix-band-difference.canonical-to-corrected.", "入力2mix → 補正済み純粋加算 帯域差"),
+            ("corrected-remix-band-difference.raw-to-corrected.", "raw → 補正済み純粋加算 帯域差"),
+            ("corrected-remix-noise.", "補正済み純粋加算 ノイズ"),
+            ("corrected-remix.", "補正済み純粋加算")
         ]
         for (prefix, title) in prefixes where id.hasPrefix(prefix) {
             let detail = id.dropFirst(prefix.count)

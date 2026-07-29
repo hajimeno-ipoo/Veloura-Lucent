@@ -3,11 +3,22 @@ import SwiftUI
 struct VectorScopeView: View {
     let preview: AudioPreviewController
     let masteringSettings: MasteringSettings
+    let targetTitle: (AudioPreviewTarget) -> String
     @State private var displayMode: VectorScopeDisplayMode = .polarSample
     @State private var levelDetectionMode: VectorScopeLevelDetectionMode = .rms
     @State private var contentWidth: CGFloat = 0
 
     private let horizontalLayoutMinimumWidth: CGFloat = 1_024
+
+    init(
+        preview: AudioPreviewController,
+        masteringSettings: MasteringSettings,
+        targetTitle: @escaping (AudioPreviewTarget) -> String = \.rawValue
+    ) {
+        self.preview = preview
+        self.masteringSettings = masteringSettings
+        self.targetTitle = targetTitle
+    }
 
     private var activeTarget: AudioPreviewTarget? {
         preview.activeTarget
@@ -119,7 +130,7 @@ struct VectorScopeView: View {
                 )
                 Spacer()
                 if let activeTarget {
-                    Text(activeTarget.rawValue)
+                    Text(targetTitle(activeTarget))
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(targetColor(activeTarget))
                 }
@@ -202,7 +213,7 @@ struct VectorScopeView: View {
         if let statusMessage {
             return "ベクトルスコープ。\(statusMessage)"
         }
-        let targetName = activeTarget?.rawValue ?? "音源"
+        let targetName = activeTarget.map(targetTitle) ?? "音源"
         if displayMode == .polarLevel {
             return "ベクトルスコープ。\(targetName)の\(displayMode.title)、\(levelDetectionMode.title)を表示中です"
         }

@@ -45,6 +45,7 @@ struct StemCorrectionService: StemCorrecting, Sendable {
     private let evaluator: any StemCorrectionAudioEvaluating
     private let roleAnalyzer: any StemRoleAnalyzing
     private let roleProtector: any StemRoleProtectionGuarding
+    private let transientRecoverer: StemTransientRecoveryService
 
     private static let routedStages: [(StemCorrectionStage, CorrectionRouteStep)] = [
         (.lowNoiseCleanup, .lowNoiseCleanup),
@@ -60,12 +61,14 @@ struct StemCorrectionService: StemCorrecting, Sendable {
         processor: NativeAudioProcessor = NativeAudioProcessor(),
         evaluator: any StemCorrectionAudioEvaluating = ProductionStemCorrectionAudioEvaluator(),
         roleAnalyzer: any StemRoleAnalyzing = StemRoleAnalysisService(),
-        roleProtector: any StemRoleProtectionGuarding = StemRoleProtectionGuardService()
+        roleProtector: any StemRoleProtectionGuarding = StemRoleProtectionGuardService(),
+        transientRecoverer: StemTransientRecoveryService = StemTransientRecoveryService()
     ) {
         self.processor = processor
         self.evaluator = evaluator
         self.roleAnalyzer = roleAnalyzer
         self.roleProtector = roleProtector
+        self.transientRecoverer = transientRecoverer
     }
 
     func correct(
@@ -302,6 +305,46 @@ struct StemCorrectionService: StemCorrecting, Sendable {
                     logHandler: logHandler
                 )
                 progressHandler(.init(runID: runID, step: displayStep, status: .completed, fraction: 1, detail: "guard不確実のため処理直前Stemを維持"))
+            }
+        }
+
+        if role == .drums {
+            let transientStep = StemModeProcessStep.roleTransientRecovery(role)
+            progressHandler(.init(
+                runID: runID,
+                step: transientStep,
+                status: .running,
+                fraction: 0,
+                detail: "raw Stemと補正後のアタックを比較中"
+            ))
+            let transientRecovered = try transientRecoverer.recover(
+                role: role,
+                rawSignal: rawSignal,
+                correctedSignal: currentSignal
+            )
+            if transientRecovered.channels != currentSignal.channels {
+                currentSignal = transientRecovered
+                logHandler(
+                    "raw基準トランジェント回復: 補正で失われたドラムアタックだけをraw包絡線内で回復"
+                )
+                progressHandler(.init(
+                    runID: runID,
+                    step: transientStep,
+                    status: .completed,
+                    fraction: 1,
+                    detail: "補正で減ったアタックだけをraw包絡線内で回復"
+                ))
+            } else {
+                logHandler(
+                    "raw基準トランジェント回復: rawに対するアタック損失がないため変更なし"
+                )
+                progressHandler(.init(
+                    runID: runID,
+                    step: transientStep,
+                    status: .completed,
+                    fraction: 1,
+                    detail: "rawに対するアタック損失がないため音声を維持"
+                ))
             }
         }
 

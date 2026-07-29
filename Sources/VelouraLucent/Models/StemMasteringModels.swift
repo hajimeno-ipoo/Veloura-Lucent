@@ -1,7 +1,7 @@
 import Foundation
 
 enum StemMasteringSource: String, Equatable, Sendable {
-    case correctedRemix
+    case remix
 }
 
 enum StemMasteringReportKind: String, Equatable, Sendable {
@@ -91,17 +91,17 @@ struct StemMasteringInputMaterial: Sendable {
         artifact: StemAudioArtifact,
         evaluation: StemAudioEvaluationSnapshot
     ) throws {
-        guard artifact.kind == .correctedRemix48000 else {
+        guard artifact.kind == .remixed48000 else {
             throw StemMasteringError.unexpectedArtifactKind(
                 label: "mastering input",
-                expected: .correctedRemix48000,
+                expected: .remixed48000,
                 actual: artifact.kind
             )
         }
-        guard evaluation.purpose == .correctedRemix else {
+        guard evaluation.purpose == .remix else {
             throw StemMasteringError.unexpectedEvaluationPurpose(
                 label: "mastering input",
-                expected: .correctedRemix,
+                expected: .remix,
                 actual: evaluation.purpose
             )
         }

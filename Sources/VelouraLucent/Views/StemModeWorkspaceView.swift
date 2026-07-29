@@ -107,7 +107,7 @@ struct StemModeMainWorkspaceView: View {
     private var fixedHeader: some View {
         WorkspaceFixedHeaderView(
             title: "Veloura Lucent — Stem Mode",
-            summary: "通常モードと同じ二段階操作に、4Stem分離・Stem別補正・純粋加算を追加します"
+            summary: "4Stem分離・Stem別補正・純粋加算を基準に、再ミックスと既存マスタリングを独立して実行します"
         ) {
             LiquidGlassSegmentedPicker(
                 title: "中央表示",

@@ -42,7 +42,7 @@ private final class StemMasteringStringRecorder: @unchecked Sendable {
 
 struct StemMasteringServiceTests {
     @Test
-    func passesCorrectedRemixDirectlyToExistingMasteringAndPublishesFinalTemporaryWAV() async throws {
+    func passesValidatedRemixDirectlyToExistingMasteringAndPublishesFinalTemporaryWAV() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = StemTemporaryAudioStore()
@@ -56,9 +56,9 @@ struct StemMasteringServiceTests {
         )
         let masteringArtifact = try await store.save(
             signal: masteringSignal,
-            id: "corrected-remix",
-            kind: .correctedRemix48000,
-            to: root.appending(path: "corrected-remix-48000.wav")
+            id: "stem-remix",
+            kind: .remixed48000,
+            to: root.appending(path: "stem-remix-48000.wav")
         )
         let processorOutput = PreviewFileStore.temporaryOutputURL(
             baseName: "stem-mastering-service-test-\(UUID().uuidString)",
@@ -67,7 +67,7 @@ struct StemMasteringServiceTests {
         _ = try await store.save(
             signal: masteringSignal,
             id: "processor-output",
-            kind: .correctedRemix48000,
+            kind: .remixed48000,
             to: processorOutput
         )
         let canonicalEvaluation = try await evaluate(
@@ -76,7 +76,7 @@ struct StemMasteringServiceTests {
         )
         let masteringEvaluation = try await evaluate(
             masteringSignal,
-            purpose: .correctedRemix
+            purpose: .remix
         )
         let processor = RecordingMasteringProcessor(outputURL: processorOutput)
         let request = StemMasteringRequest(
@@ -123,9 +123,9 @@ struct StemMasteringServiceTests {
     }
 
     @Test
-    func typedMasteringInputRejectsAnythingOtherThanCorrectedRemix() async throws {
+    func typedMasteringInputRejectsAnythingOtherThanValidatedRemix() async throws {
         let signal = testSignal(sampleRate: 48_000)
-        let evaluation = try await evaluate(signal, purpose: .correctedRemix)
+        let evaluation = try await evaluate(signal, purpose: .remix)
         let wrong = StemAudioArtifact(
             id: "raw-vocals",
             kind: .rawStem(.vocals),
@@ -137,7 +137,7 @@ struct StemMasteringServiceTests {
 
         #expect(throws: StemMasteringError.unexpectedArtifactKind(
             label: "mastering input",
-            expected: .correctedRemix48000,
+            expected: .remixed48000,
             actual: .rawStem(.vocals)
         )) {
             _ = try StemMasteringInputMaterial(artifact: wrong, evaluation: evaluation)

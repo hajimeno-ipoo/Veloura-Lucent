@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Owns the lifetime shared by Standard Mode and Stem Mode.
 ///
@@ -10,7 +9,6 @@ import UniformTypeIdentifiers
 @MainActor
 struct VelouraRootView: View {
     @State private var runtime: VelouraAppRuntime
-    @State private var isStemFileImporterPresented = false
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
     @State private var isInspectorPresented = true
     @State private var isWindowFullScreen = false
@@ -71,12 +69,6 @@ struct VelouraRootView: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        .fileImporter(
-            isPresented: $isStemFileImporterPresented,
-            allowedContentTypes: [.audio],
-            allowsMultipleSelection: false,
-            onCompletion: receiveStemFileSelection
-        )
         .background(
             TitlebarSidebarToggleConfigurator(
                 visibility: $sidebarVisibility,
@@ -255,12 +247,17 @@ struct VelouraRootView: View {
             canSwitchProcessingMode: !runtime.isModeSwitchDisabled,
             canChooseInput: model.canChooseInput,
             canRunCorrection: model.canRunCorrection,
+            canRunRemix: model.canRunRemix,
             canRunMastering: model.canRunMastering,
             isCorrectionRunning: isCorrectionRunning,
+            isRemixRunning: model.session.isRemixProcessing,
             isMasteringRunning: isMasteringRunning,
-            isCorrectionCancelling: false,
-            isMasteringCancelling: false,
+            isCorrectionCancelling: model.isCorrectionCancelling,
+            isRemixCancelling: model.isRemixCancelling,
+            isMasteringCancelling: model.isMasteringCancelling,
             canCancelCorrection: isCorrectionRunning
+                && model.canCancelProcessing,
+            canCancelRemix: model.session.isRemixProcessing
                 && model.canCancelProcessing,
             canCancelMastering: isMasteringRunning
                 && model.canCancelProcessing,
@@ -270,9 +267,12 @@ struct VelouraRootView: View {
             canToggleComparisonSide: preview.canToggleComparisonSide,
             isPlaybackRunning: preview.isComparisonPlaybackRunning,
             selectProcessingMode: selectProcessingMode,
-            chooseInputAudio: presentStemFileImporter,
+            chooseInputAudio: chooseStemInputAudio,
             runCorrection: {
                 Task { await model.beginCorrection() }
+            },
+            runRemix: {
+                Task { await model.beginRemix() }
             },
             runMastering: {
                 Task { await model.beginMastering() }
@@ -280,18 +280,21 @@ struct VelouraRootView: View {
             cancelCorrection: {
                 Task { await model.cancelCorrection() }
             },
+            cancelRemix: {
+                Task { await model.cancelRemix() }
+            },
             cancelMastering: {
                 Task { await model.cancelMastering() }
             },
             togglePlayback: {
-                model.stopStemPreviewPlayback()
+                model.stopAuxiliaryPreviewPlayback()
                 preview.toggleComparisonPlayback()
             },
             stopPlayback: {
                 preview.stopPlayback()
             },
             toggleComparisonSide: {
-                model.stopStemPreviewPlayback()
+                model.stopAuxiliaryPreviewPlayback()
                 preview.toggleComparisonSide()
             }
         )
@@ -300,7 +303,8 @@ struct VelouraRootView: View {
     private var stemExportCommandActions: [VelouraExportCommandAction] {
         let model = runtime.stemWorkspaceModel
         let kinds: [StemArtifactKind] = [
-            .correctedRemix48000,
+            .correctedPureSum48000,
+            .remixed48000,
             .correctedStem(.drums),
             .correctedStem(.bass),
             .correctedStem(.other),
@@ -326,24 +330,12 @@ struct VelouraRootView: View {
     }
 
     private var stemCorrectionIsRunning: Bool {
-        runtime.stemWorkspaceModel.isRunActive && !stemMasteringHasBegun
+        runtime.stemWorkspaceModel.session.isCorrectionProcessing
     }
 
     private var stemMasteringIsRunning: Bool {
-        runtime.stemWorkspaceModel.isRunActive && stemMasteringHasBegun
+        runtime.stemWorkspaceModel.session.isMasteringProcessing
     }
-
-    private var stemMasteringHasBegun: Bool {
-        let session = runtime.stemWorkspaceModel.session
-        return Self.stemMasteringSteps.contains { step in
-            session.progress(for: step).status != .pending
-        }
-    }
-
-    private static let stemMasteringSteps: Set<StemWorkflowStep> = [
-        .mastering,
-        .finalizeMaster,
-    ]
 
     private func selectProcessingMode(_ mode: ProcessingMode) {
         _ = runtime.selectMode(mode)
@@ -357,21 +349,15 @@ struct VelouraRootView: View {
         sidebarVisibility = isSidebarPresented ? .detailOnly : .all
     }
 
-    private func presentStemFileImporter() {
+    private func chooseStemInputAudio() {
         guard runtime.processingMode == .stem,
               runtime.stemWorkspaceModel.canChooseInput else {
             return
         }
-        isStemFileImporterPresented = true
-    }
-
-    private func receiveStemFileSelection(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let URLs):
-            guard let URL = URLs.first else { return }
-            Task { await runtime.stemWorkspaceModel.inspectInput(URL) }
-        case .failure(let error):
-            runtime.stemWorkspaceModel.presentFileImporterFailure(error)
+        let model = runtime.stemWorkspaceModel
+        FilePanelService.chooseAudioFile { URL in
+            guard let URL else { return }
+            Task { await model.inspectInput(URL) }
         }
     }
 

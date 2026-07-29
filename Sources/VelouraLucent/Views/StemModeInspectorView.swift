@@ -32,6 +32,7 @@ struct StemModeInspectorView: View {
 
 private enum StemModeInspectorSettingsSection: String, CaseIterable, Identifiable {
     case correction
+    case remix
     case mastering
     case app
 
@@ -39,6 +40,7 @@ private enum StemModeInspectorSettingsSection: String, CaseIterable, Identifiabl
     var title: String {
         switch self {
         case .correction: "補正"
+        case .remix: "再ミックス"
         case .mastering: "マスタリング"
         case .app: "アプリ"
         }
@@ -57,23 +59,18 @@ private struct StemModeInspectorSettingsPanel: View {
     private var selectedSectionRawValue = StemModeInspectorSettingsSection.correction.rawValue
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("詳細設定")
-                    .font(.headline)
-                LiquidGlassSegmentedPicker(
-                    title: "詳細設定",
-                    options: StemModeInspectorSettingsSection.allCases,
-                    selection: selectedSectionBinding,
-                    label: \.title,
-                    isDisabled: model.isRunActive || model.isStartingRun
-                )
-            }
-
+        InspectorSettingsSectionLayout(
+            options: StemModeInspectorSettingsSection.allCases,
+            selection: selectedSectionBinding,
+            label: \.title,
+            isDisabled: model.isRunActive || model.isStartingRun
+        ) {
             switch selectedSection {
             case .correction:
                 StemModeCorrectionSettingsView(model: model)
                     .disabled(model.isCorrectionSettingsDisabled)
+            case .remix:
+                StemModeRemixSettingsView(model: model)
             case .mastering:
                 StemModeMasteringSettingsView(model: model)
                     .disabled(model.isMasteringSettingsDisabled)
@@ -115,15 +112,22 @@ private struct StemModeAnalysisModeSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("解析モード")
-                .font(.headline)
+            HStack(spacing: 6) {
+                Text("解析モード")
+                    .font(.headline)
+                TermHelpButton(
+                    title: "解析モード",
+                    reading: "かいせきもーど",
+                    description: "補正前の音声解析に使う方式です。自動はこのMacで使える方式を選び、安定CPUは速度より安定性を優先し、実験Metalは対応MacでGPUを使います。"
+                )
+            }
 
             LiquidGlassSegmentedPicker(
                 title: "解析モード",
                 options: AudioAnalysisMode.allCases,
                 selection: $model.selectedAnalysisMode,
                 label: \.title,
-                isDisabled: model.isRunActive || model.isStartingRun
+                isDisabled: model.session.isCorrectionProcessing
             )
 
             Text(model.selectedAnalysisMode.summary)
@@ -139,9 +143,6 @@ private struct StemModeAnalysisModeSettings: View {
                         ? VelouraTextColors.orange
                         : .secondary
                 )
-            Text("補正開始時にrunへ固定し、Stem解析とDSP内部解析へ同じ方式を使用します。")
-                .font(.callout)
-                .foregroundStyle(.secondary)
         }
     }
 }
@@ -149,131 +150,48 @@ private struct StemModeAnalysisModeSettings: View {
 @MainActor
 private struct StemModeInspectorAudioPanel: View {
     @Bindable var model: StemModeWorkspaceModel
-    @State private var selectedAudio: InspectorAudioSelection = .input
-    @State private var isCompletionReportPresented = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("解析結果と品質確認")
-                    .font(.title3.bold())
-                Spacer()
-                if model.isAnalyzingDisplayAudio {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel("解析中")
-                }
-            }
-
-            LiquidGlassSegmentedPicker(
-                title: "確認する音源",
-                options: InspectorAudioSelection.allCases,
-                selection: $selectedAudio,
-                label: \.title
-            )
-
-            if let metrics = selectedMetrics {
-                metricsGrid(metrics)
-            } else {
-                Label {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("\(selectedAudio.title)は未解析です")
-                            .font(.headline)
-                        Text(unavailableDescription)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: "waveform.path.ecg")
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 6)
-                .accessibilityElement(children: .combine)
-            }
-
-            if let report = model.qualityReports?.audioQuality {
-                qualityWarnings(report)
-            }
-
+        InspectorAnalysisPanelContent(
+            isAnalyzing: model.isAnalyzingInput || model.isAnalyzingDisplayAudio,
+            inputMetrics: model.inputMetrics,
+            processedMetrics: model.correctedRemixMetrics,
+            masteredMetrics: model.finalMetrics,
+            processedTitle: processedTitle,
+            qualityReport: model.qualityReports?.audioQuality,
+            completionReport: model.qualityReports?.completion,
+            selectionTitle: selectionTitle,
+            unavailableDescription: unavailableDescription
+        ) {
             importantWarnings
-            completionReportControl
         }
     }
 
-    private func metricsGrid(_ metrics: AudioMetricSnapshot) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-            metricCell(
-                title: "ラウドネス",
-                value: String(format: "%.1f LUFS", metrics.integratedLoudnessLUFS),
-                color: .primary
-            )
-            metricCell(
-                title: "True Peak",
-                value: String(format: "%.2f dBTP", metrics.truePeakDBFS),
-                color: metrics.truePeakDBFS > -0.3 ? .red : .primary
-            )
-            metricCell(
-                title: "ダイナミクス",
-                value: String(format: "%.1f dB", metrics.crestFactorDB),
-                color: .primary
-            )
-            metricCell(
-                title: "ステレオ幅",
-                value: String(format: "%.2f", metrics.stereoWidth),
-                color: .primary
-            )
+    private var processedTitle: String {
+        model.remixedPreviewArtifact == nil
+            ? "補正済み純粋加算"
+            : "Stem再ミックス"
+    }
+
+    private func selectionTitle(_ selection: InspectorAudioSelection) -> String {
+        switch selection {
+        case .input:
+            "入力"
+        case .corrected:
+            processedTitle
+        case .mastered:
+            "最終版"
         }
     }
 
-    private func metricCell(title: String, value: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.title3.monospacedDigit().bold())
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
-        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
-        .accessibilityElement(children: .combine)
-    }
-
-    private func qualityWarnings(_ report: AudioQualityReport) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack {
-                Text("品質警告")
-                    .font(.headline)
-                Spacer()
-                Text(severityText(report.severity))
-                    .foregroundStyle(severityColor(report.severity))
-            }
-
-            if report.items.isEmpty {
-                Label(
-                    "数値上の追加候補はありません。最終版を聴いて違和感がないか確認してください。",
-                    systemImage: "checkmark.circle.fill"
-                )
-                .font(.callout)
-                .foregroundStyle(.green)
-            } else {
-                ForEach(Array(report.items.enumerated()), id: \.offset) { _, item in
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.title)
-                            Text(item.detail)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(severityColor(item.severity))
-                    }
-                }
-            }
+    private func unavailableDescription(_ selection: InspectorAudioSelection) -> String {
+        switch selection {
+        case .input:
+            "音声を選ぶと解析結果を表示します。"
+        case .corrected:
+            "\(processedTitle)の解析が完了すると表示します。"
+        case .mastered:
+            "マスタリングが完了すると表示します。"
         }
     }
 
@@ -306,50 +224,4 @@ private struct StemModeInspectorAudioPanel: View {
         }
     }
 
-    private var completionReportControl: some View {
-        LiquidGlassActionButton(
-            title: "完了後レポートを開く",
-            systemImage: "doc.text.magnifyingglass",
-            isDisabled: model.qualityReports?.completion == nil
-        ) {
-            isCompletionReportPresented = true
-        }
-        .popover(isPresented: $isCompletionReportPresented, arrowEdge: .leading) {
-            if let report = model.qualityReports?.completion {
-                CompletionReportPopoverView(report: report)
-            }
-        }
-    }
-
-    private var selectedMetrics: AudioMetricSnapshot? {
-        switch selectedAudio {
-        case .input: model.inputMetrics
-        case .corrected: model.correctedRemixMetrics
-        case .mastered: model.finalMetrics
-        }
-    }
-
-    private var unavailableDescription: String {
-        switch selectedAudio {
-        case .input: "補正段で入力解析が完了すると表示します。"
-        case .corrected: "補正段で補正済み4Stemの再ミックス解析が完了すると表示します。"
-        case .mastered: "マスタリングが完了すると表示します。"
-        }
-    }
-
-    private func severityText(_ severity: AudioQualityReportSeverity) -> String {
-        switch severity {
-        case .info: "確認"
-        case .caution: "注意"
-        case .warning: "警告"
-        }
-    }
-
-    private func severityColor(_ severity: AudioQualityReportSeverity) -> Color {
-        switch severity {
-        case .info: .secondary
-        case .caution: .orange
-        case .warning: .red
-        }
-    }
 }

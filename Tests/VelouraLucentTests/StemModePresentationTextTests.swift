@@ -3,14 +3,15 @@ import Testing
 
 struct StemModePresentationTextTests {
     @Test
-    func onlyInputCorrectedRemixAndFinalArePreviewable() {
-        let corrected = StemArtifactKind.correctedRemix48000
+    func inputPureSumRemixAndFinalArePreviewable() {
+        let corrected = StemArtifactKind.correctedPureSum48000
 
-        #expect(corrected.stemModeDisplayTitle == "補正後再ミックス")
+        #expect(corrected.stemModeDisplayTitle == "補正済み純粋加算")
         #expect(corrected.isStemModeUserExportable)
         #expect(corrected.isStemModePreviewable)
         #expect(StemArtifactKind.input44100.isStemModePreviewable)
         #expect(StemArtifactKind.finalMaster.isStemModePreviewable)
+        #expect(StemArtifactKind.remixed48000.isStemModePreviewable)
         #expect(!StemArtifactKind.rawStem(.vocals).isStemModePreviewable)
         #expect(!StemArtifactKind.correctedStem(.vocals).isStemModePreviewable)
         #expect(!StemArtifactKind.input44100.isStemModeUserExportable)
@@ -21,7 +22,8 @@ struct StemModePresentationTextTests {
     @Test
     func exportabilityIncludesCorrectedRemixFourCorrectedStemsAndFinalMaster() {
         let exportable = [
-            StemArtifactKind.correctedRemix48000,
+            StemArtifactKind.correctedPureSum48000,
+            StemArtifactKind.remixed48000,
             StemArtifactKind.correctedStem(.drums),
             .correctedStem(.bass),
             .correctedStem(.other),
@@ -41,13 +43,16 @@ struct StemModePresentationTextTests {
     func correctionAndRemixWorkflowStepsHaveDistinctUserFacingTitles() {
         #expect(StemWorkflowStep.correctStems.title == "Stem別補正")
         #expect(StemWorkflowStep.validateCorrectedStems.title == "補正後Stem検証")
-        #expect(StemWorkflowStep.correctedRemix.title == "補正後再ミックス")
-        #expect(StemWorkflowStep.validateCorrectedRemix.title == "補正後再ミックス検証")
+        #expect(StemWorkflowStep.correctedPureSum.title == "補正済み純粋加算")
+        #expect(StemWorkflowStep.validateCorrectedPureSum.title == "補正済み純粋加算検証")
+        #expect(StemWorkflowStep.remix.title == "Stem再ミックス")
+        #expect(StemWorkflowStep.validateRemix.title == "Stem再ミックス検証")
         #expect(StemWorkflowValidationSubject.rawRemix.stemModeDisplayTitle == "raw再ミックス")
         #expect(
-            StemWorkflowValidationSubject.correctedRemix.stemModeDisplayTitle
-                == "補正後再ミックス"
+            StemWorkflowValidationSubject.correctedPureSum.stemModeDisplayTitle
+                == "補正済み純粋加算"
         )
+        #expect(StemWorkflowValidationSubject.remix.stemModeDisplayTitle == "Stem再ミックス")
     }
 
     @Test

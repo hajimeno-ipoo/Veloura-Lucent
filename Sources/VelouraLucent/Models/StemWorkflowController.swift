@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 enum StemWorkflowControllerError: LocalizedError {
     case workspaceUnavailable
     case workflowAlreadyActive
+    case remixNotReady
     case masteringNotReady
     case modelAcquisitionInProgress
     case validatedResourcesUnavailable
@@ -20,8 +21,10 @@ enum StemWorkflowControllerError: LocalizedError {
             "Stem Mode専用画面の状態を準備できていません。"
         case .workflowAlreadyActive:
             "別のStem Mode処理が進行中です。"
+        case .remixNotReady:
+            "補正済み4Stemと純粋加算が確定していないため、再ミックスを開始できません。"
         case .masteringNotReady:
-            "補正済み4Stemが確定していないため、マスタリングを開始できません。"
+            "検証済みStem再ミックスが確定していないため、マスタリングを開始できません。"
         case .modelAcquisitionInProgress:
             "AIモデルの取得または再検証が進行中のため、Stem Mode処理を開始できません。"
         case .validatedResourcesUnavailable:
@@ -43,6 +46,11 @@ protocol StemWorkflowExecuting: Sendable {
         _ request: StemWorkflowRequest,
         eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
     ) async throws -> StemWorkflowCorrectionResult
+    func processRemix(
+        correction: StemWorkflowCorrectionResult,
+        settings: StemRemixSettings,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowRemixResult
     func processMastering(
         _ request: StemWorkflowMasteringRequest,
         eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
@@ -146,7 +154,7 @@ final class ProductionStemSecurityScopedResourceAccessor: StemSecurityScopedReso
     }
 }
 
-/// Stem専用UI、メモリ上の二段階workflow、確認済みモデル状態、security-scoped入力の寿命を接続します。
+/// Stem専用UI、メモリ上の三段階workflow、確認済みモデル状態、security-scoped入力の寿命を接続します。
 /// 通常モードの`ProcessingJob`や通知domainは所有せず、モード切替後も実行Taskを保持します。
 @MainActor
 @Observable
@@ -159,6 +167,7 @@ final class StemWorkflowController {
 
     private enum ExecutionKind {
         case newRun
+        case remix
         case mastering
     }
 
@@ -191,6 +200,7 @@ final class StemWorkflowController {
     @ObservationIgnored private var isShuttingDown = false
     @ObservationIgnored private var notifiedCompletionStages: Set<StemCompletionNotificationStage> = []
     @ObservationIgnored private var correctionResult: StemWorkflowCorrectionResult?
+    @ObservationIgnored private var remixResult: StemWorkflowRemixResult?
 
     init(
         session: StemWorkflowSession,
@@ -247,6 +257,14 @@ final class StemWorkflowController {
                 guard let self else { throw CancellationError() }
                 try await self.beginCorrection(request)
             },
+            beginRemix: { [weak self] request in
+                guard let self else { throw CancellationError() }
+                try await self.beginRemix(request)
+            },
+            invalidateRemix: { [weak self] in
+                guard let self else { throw CancellationError() }
+                try self.invalidateRemix()
+            },
             beginMastering: { [weak self] request in
                 guard let self else { throw CancellationError() }
                 try await self.beginMastering(request)
@@ -254,6 +272,10 @@ final class StemWorkflowController {
             cancelCorrection: { [weak self] in
                 guard let self else { throw CancellationError() }
                 try await self.cancelCorrection()
+            },
+            cancelRemix: { [weak self] in
+                guard let self else { throw CancellationError() }
+                try await self.cancelRemix()
             },
             cancelMastering: { [weak self] in
                 guard let self else { throw CancellationError() }
@@ -309,6 +331,7 @@ final class StemWorkflowController {
             try? StemWorkflowService().discardTemporarySession(runID: runID)
         }
         correctionResult = nil
+        remixResult = nil
         resetExecutionState()
     }
 
@@ -399,9 +422,16 @@ final class StemWorkflowController {
     private func beginMastering(_ request: StemModeMasteringRequest) async throws {
         try requireNoActiveWorkflow()
         guard let runID = session.runID,
-              case .readyForMastering(runID) = session.state,
-              let correctionResult,
-              correctionResult.runID == runID else {
+              let remixResult,
+              remixResult.runID == runID else {
+            throw StemWorkflowControllerError.masteringNotReady
+        }
+        switch session.state {
+        case .readyForMastering(let readyRunID), .completed(let readyRunID):
+            guard readyRunID == runID else {
+                throw StemWorkflowControllerError.masteringNotReady
+            }
+        default:
             throw StemWorkflowControllerError.masteringNotReady
         }
         isProcessingRun = true
@@ -409,7 +439,7 @@ final class StemWorkflowController {
             prepareExecution(kind: .mastering, runID: runID, usesExistingSession: true)
             try session.startMastering(runID: runID)
             let workflowRequest = StemWorkflowMasteringRequest(
-                correction: correctionResult,
+                remix: remixResult,
                 masteringSettings: request.masteringSettings
             )
             try await startWorkflowTask(runID: runID) { [workflow] handler in
@@ -424,6 +454,45 @@ final class StemWorkflowController {
             }
             throw error
         }
+    }
+
+    private func beginRemix(_ request: StemModeRemixRequest) async throws {
+        try requireNoActiveWorkflow()
+        guard let runID = session.runID,
+              case .readyForRemix(runID) = session.state,
+              let correctionResult,
+              correctionResult.runID == runID else {
+            throw StemWorkflowControllerError.remixNotReady
+        }
+        isProcessingRun = true
+        do {
+            prepareExecution(kind: .remix, runID: runID, usesExistingSession: true)
+            try session.startRemix(runID: runID)
+            try await startWorkflowTask(runID: runID) { [workflow] handler in
+                .remix(try await workflow.processRemix(
+                    correction: correctionResult,
+                    settings: request.settings,
+                    eventHandler: handler
+                ))
+            }
+        } catch {
+            if activeRunID == nil {
+                isProcessingRun = false
+            }
+            throw error
+        }
+    }
+
+    private func invalidateRemix() throws {
+        try requireNoActiveWorkflow()
+        guard let runID = session.runID else {
+            throw StemWorkflowSessionError.noActiveRun
+        }
+        try session.invalidateRemix(runID: runID)
+        remixResult = nil
+        workspaceModel?.clearRemixResult()
+        updatePreviewSourcesFromValidatedArtifacts()
+        workspaceModel?.setFinalCommitLockState(.unlocked)
     }
 
     private func cancelCorrection() async throws {
@@ -443,12 +512,35 @@ final class StemWorkflowController {
             discardFailure = error
         }
         correctionResult = nil
+        remixResult = nil
         session.resetAfterCorrectionCancellation(runID: runID)
         workspaceModel?.resetRunPresentationAfterCorrectionCancellation()
         workspaceModel?.setFinalCommitLockState(.unlocked)
         resetExecutionState()
         if let discardFailure {
             throw discardFailure
+        }
+    }
+
+    private func cancelRemix() async throws {
+        guard executionKind == .remix,
+              let runID = activeRunID,
+              workflowTask != nil else {
+            throw StemWorkflowSessionError.noActiveRun
+        }
+        isExpectedCancellation = true
+        workflowTask?.cancel()
+        await workflowTask?.value
+        remixResult = nil
+        do {
+            try session.restoreRemixReadyAfterCancellation(runID: runID)
+            updatePreviewSourcesFromValidatedArtifacts()
+            workspaceModel?.setFinalCommitLockState(.unlocked)
+            resetExecutionState()
+        } catch {
+            workspaceModel?.setFinalCommitLockState(.unlocked)
+            resetExecutionState()
+            throw error
         }
     }
 
@@ -587,7 +679,8 @@ final class StemWorkflowController {
             let subject: StemWorkflowValidationSubject = switch validation.phase {
             case .separatedStems: .separatedStems
             case .remix: .rawRemix
-            case .correctedRemix: .correctedRemix
+            case .correctedPureSum: .correctedPureSum
+            case .processedRemix: .remix
             }
             let status: StemWorkflowValidationStatus = validation.canContinue
                 ? .passed(
@@ -753,6 +846,8 @@ final class StemWorkflowController {
         switch result {
         case .correction(let correction):
             try finalizeSuccessfulCorrection(correction)
+        case .remix(let remix):
+            try finalizeSuccessfulRemix(remix)
         case .mastered(let mastered):
             try finalizeSuccessfulMastering(mastered)
         }
@@ -782,6 +877,7 @@ final class StemWorkflowController {
             )
         }
         workspaceModel?.setWorkflowInputEvaluation(result.canonicalInputEvaluation)
+        workspaceModel?.setAutomaticRemixPlan(result.automaticRemixPlan)
         do {
             workspaceModel?.setRemixAnalysisPresentation(
                 try StemModeRemixAnalysisPresentation(correctionResult: result)
@@ -790,8 +886,8 @@ final class StemWorkflowController {
             try? session.appendLog(
                 runID: result.runID,
                 level: .warning,
-                step: .validateCorrectedRemix,
-                message: "再ミックス解析の画面表示を省略しました: \(error.localizedDescription)"
+                step: .validateCorrectedPureSum,
+                message: "純粋加算解析の画面表示を省略しました: \(error.localizedDescription)"
             )
         }
         for evaluation in result.stemEvaluations {
@@ -805,7 +901,7 @@ final class StemWorkflowController {
                 ))
             }
         }
-        let correctedRemix = result.remixArtifacts.correctedRemix
+        let correctedRemix = result.remixArtifacts.correctedPureSum
         try session.updateArtifactState(StemWorkflowArtifactDisplayState(
             id: correctedRemix.id,
             runID: result.runID,
@@ -818,6 +914,27 @@ final class StemWorkflowController {
         try session.completeCorrection(runID: result.runID)
         session.recordCorrectedRemixAnalysis(result.correctedRemixEvaluation.audioMetrics)
         notifyCompletionIfNeeded(.correction)
+        finishStoppedRun()
+    }
+
+    private func finalizeSuccessfulRemix(_ result: StemWorkflowRemixResult) throws {
+        guard result.runID == activeRunID else {
+            throw StemWorkflowControllerError.eventRunMismatch(
+                expected: activeRunID ?? result.runID,
+                actual: result.runID
+            )
+        }
+        try session.updateArtifactState(StemWorkflowArtifactDisplayState(
+            id: result.artifact.id,
+            runID: result.runID,
+            kind: result.artifact.kind,
+            artifact: result.artifact,
+            status: .valid
+        ))
+        workspaceModel?.setRemixResult(result)
+        remixResult = result
+        updatePreviewSourcesFromValidatedArtifacts()
+        try session.completeRemix(runID: result.runID)
         finishStoppedRun()
     }
 
@@ -836,7 +953,7 @@ final class StemWorkflowController {
             try? session.appendLog(
                 runID: result.runID,
                 level: .warning,
-                step: .validateCorrectedRemix,
+                step: .validateRemix,
                 message: "再ミックス解析の画面表示を省略しました: \(error.localizedDescription)"
             )
         }
@@ -874,7 +991,29 @@ final class StemWorkflowController {
     }
 
     private func finishFailedRun(_ error: any Error, runID: UUID) {
-        if executionKind == .mastering {
+        if executionKind == .remix {
+            remixResult = nil
+            do {
+                try session.restoreRemixReadyAfterFailure(
+                    runID: runID,
+                    message: error.localizedDescription
+                )
+                updatePreviewSourcesFromValidatedArtifacts()
+            } catch let sessionError {
+                workspaceModel?.presentControllerFailure(
+                    title: "再ミックスを停止しました",
+                    message: "\(error.localizedDescription)\n補正結果保持状態の表示更新にも失敗しました: \(sessionError.localizedDescription)"
+                )
+                finishStoppedRun()
+                return
+            }
+            workspaceModel?.presentControllerFailure(
+                title: "再ミックスを停止しました",
+                message: "補正済み4Stemと純粋加算は保持しています。\n\(error.localizedDescription)"
+            )
+            finishStoppedRun()
+            return
+        } else if executionKind == .mastering {
             do {
                 try session.restoreMasteringReadyAfterFailure(
                     runID: runID,
@@ -937,6 +1076,8 @@ final class StemWorkflowController {
         case .newRun:
             notifiedCompletionStages = []
         case .mastering:
+            notifiedCompletionStages.remove(.mastering)
+        case .remix:
             break
         }
         activeRunID = runID
@@ -967,9 +1108,10 @@ final class StemWorkflowController {
     private func discardInactiveSessionRunIfPresent() async throws {
         guard let runID = session.runID else { return }
         switch session.state {
-        case .readyForMastering, .completed, .failed:
+        case .readyForRemix, .readyForMastering, .completed, .failed:
             try await workflow.discardSession(runID: runID)
             correctionResult = nil
+            remixResult = nil
             session.resetForInputChange()
         case .idle:
             session.resetForInputChange()

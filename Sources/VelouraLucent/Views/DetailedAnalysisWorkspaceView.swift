@@ -24,6 +24,7 @@ struct DetailedAnalysisPresentation {
     let failedTargets: Set<DisplayAnalysisTarget>
     let emptyTitle: String
     let emptyDescription: String
+    let correctedTitle: String
 
     init(job: ProcessingJob) {
         inputMetrics = job.inputMetrics
@@ -51,6 +52,7 @@ struct DetailedAnalysisPresentation {
         )
         emptyTitle = "入力音声は未解析です"
         emptyDescription = "音声を選ぶと、入力、補正後、最終版の詳細解析を表示します。"
+        correctedTitle = "補正後"
     }
 
     init(
@@ -64,7 +66,8 @@ struct DetailedAnalysisPresentation {
         analyzingTargets: Set<DisplayAnalysisTarget>,
         failedTargets: Set<DisplayAnalysisTarget>,
         emptyTitle: String,
-        emptyDescription: String
+        emptyDescription: String,
+        correctedTitle: String = "補正後"
     ) {
         self.inputMetrics = inputMetrics
         self.correctedMetrics = correctedMetrics
@@ -77,6 +80,7 @@ struct DetailedAnalysisPresentation {
         self.failedTargets = failedTargets
         self.emptyTitle = emptyTitle
         self.emptyDescription = emptyDescription
+        self.correctedTitle = correctedTitle
     }
 
     func metrics(for target: DisplayAnalysisTarget) -> AudioMetricSnapshot? {
@@ -120,7 +124,7 @@ struct DetailedAnalysisComparisonView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     analysisDisclosureSection(
                         title: "短時間ラウドネス",
-                        help: "場面ごとの音量感です。入力、補正後、最終版を同じ基準で比べます。",
+                        help: "場面ごとの音量感です。入力、\(presentation.correctedTitle)、最終版を同じ基準で比べます。",
                         isExpanded: $showLoudness
                     ) {
                         shortTermLoudnessChart(stages: comparisonStages)
@@ -147,7 +151,7 @@ struct DetailedAnalysisComparisonView: View {
 
                     analysisDisclosureSection(
                         title: "周波数帯域詳細",
-                        help: "8つの帯域を、入力、補正後、最終版、補正差分、マスタリング差分で確認します。",
+                        help: "8つの帯域を、入力、\(presentation.correctedTitle)、最終版、処理差分、マスタリング差分で確認します。",
                         isExpanded: $showBands
                     ) {
                         bandDetailRows(
@@ -248,7 +252,7 @@ struct DetailedAnalysisComparisonView: View {
         return VStack(alignment: .leading, spacing: 12) {
             sectionLabel(
                 title: "主要数値比較",
-                help: "入力、補正後、最終版、補正差分、マスタリング差分を同じ表で見ます。差分は良し悪しではなく、何が変わったかを見るための値です。"
+                help: "入力、\(presentation.correctedTitle)、最終版、処理差分、マスタリング差分を同じ表で見ます。差分は良し悪しではなく、何が変わったかを見るための値です。"
             )
 
             ViewThatFits(in: .horizontal) {
@@ -265,9 +269,9 @@ struct DetailedAnalysisComparisonView: View {
             GridRow {
                 tableHeader("項目")
                 tableHeader("入力")
-                tableHeader("補正後")
+                tableHeader(presentation.correctedTitle)
                 tableHeader("最終版")
-                tableHeader("補正差分")
+                tableHeader(processingDeltaTitle)
                 tableHeader("マスタリング差分")
             }
             Divider().gridCellColumns(6)
@@ -291,9 +295,19 @@ struct DetailedAnalysisComparisonView: View {
                     termLabel(row.definition)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 8)], alignment: .leading, spacing: 8) {
                         valueChip(title: "入力", value: row.input, format: row.valueFormat, color: .blue)
-                        valueChip(title: "補正後", value: row.corrected, format: row.valueFormat, color: .green)
+                        valueChip(
+                            title: presentation.correctedTitle,
+                            value: row.corrected,
+                            format: row.valueFormat,
+                            color: .green
+                        )
                         valueChip(title: "最終版", value: row.mastered, format: row.valueFormat, color: .orange)
-                        valueChip(title: "補正差分", value: row.correctionDelta, format: row.deltaFormat, color: .primary)
+                        valueChip(
+                            title: processingDeltaTitle,
+                            value: row.correctionDelta,
+                            format: row.deltaFormat,
+                            color: .primary
+                        )
                         valueChip(title: "マスタリング差分", value: row.masteringDelta, format: row.deltaFormat, color: .primary)
                     }
                 }
@@ -332,7 +346,7 @@ struct DetailedAnalysisComparisonView: View {
             HStack {
                 sectionLabel(
                     title: "ノイズ7種類比較",
-                    help: "ヒス、サ行、高域のチラつき、こもり、ハム、低域ゴロゴロ、環境音を、入力、補正後、最終版で比較します。"
+                    help: "ヒス、サ行、高域のチラつき、こもり、ハム、低域ゴロゴロ、環境音を、入力、\(presentation.correctedTitle)、最終版で比較します。"
                 )
                 Spacer()
                 Text(noiseSeverityText(report.severity))
@@ -379,7 +393,13 @@ struct DetailedAnalysisComparisonView: View {
             }
 
             noiseBarLine(title: "入力", value: row.input, row: row, tint: .blue)
-            noiseBarLine(title: "補正後", value: row.corrected, row: row, tint: .green, detail: row.correctionEffectText)
+            noiseBarLine(
+                title: presentation.correctedTitle,
+                value: row.corrected,
+                row: row,
+                tint: .green,
+                detail: row.correctionEffectText
+            )
             noiseBarLine(title: "最終版", value: row.mastered, row: row, tint: .orange, detail: row.masteringEffectText)
         }
         .padding(12)
@@ -710,8 +730,8 @@ struct DetailedAnalysisComparisonView: View {
                     }
                 }
                 .chartForegroundStyleScale([
-                    "補正後 - 入力": Color.green,
-                    "最終版 - 補正後": Color.orange
+                    "\(presentation.correctedTitle) - 入力": Color.green,
+                    "最終版 - \(presentation.correctedTitle)": Color.orange
                 ])
                 .chartXScale(domain: 80 ... 20_000, type: .log)
                 .chartYScale(domain: deltaDomain)
@@ -728,7 +748,7 @@ struct DetailedAnalysisComparisonView: View {
         restrictsToLineSegments: Bool = false,
         valueFormatter: (Double) -> String
     ) -> GraphHoverReadout? {
-        let values = ["入力", "補正後", "最終版"].compactMap { series -> GraphHoverValue? in
+        let values = ["入力", presentation.correctedTitle, "最終版"].compactMap { series -> GraphHoverValue? in
             let seriesPoints = points.filter { $0.series == series }
             let eligiblePoints: [TimelinePoint]
             if restrictsToLineSegments {
@@ -763,7 +783,7 @@ struct DetailedAnalysisComparisonView: View {
         points: [SpectrumPoint],
         frequency: Double
     ) -> GraphHoverReadout? {
-        let values = ["入力", "補正後", "最終版"].compactMap { series -> GraphHoverValue? in
+        let values = ["入力", presentation.correctedTitle, "最終版"].compactMap { series -> GraphHoverValue? in
             guard let point = points.lazy
                 .filter({ $0.series == series })
                 .min(by: { logarithmicDistance($0.frequencyHz, frequency) < logarithmicDistance($1.frequencyHz, frequency) })
@@ -790,12 +810,10 @@ struct DetailedAnalysisComparisonView: View {
     }
 
     private func stageColor(for series: String) -> Color {
-        switch series {
-        case "入力": .blue
-        case "補正後": .green
-        case "最終版": .orange
-        default: .secondary
-        }
+        if series == "入力" { return .blue }
+        if series == presentation.correctedTitle { return .green }
+        if series == "最終版" { return .orange }
+        return .secondary
     }
 
     private func bandDetailRows(
@@ -845,7 +863,13 @@ struct DetailedAnalysisComparisonView: View {
                     .foregroundStyle(.secondary)
             }
             bandBar(title: "入力", value: row.input, minValue: minValue, maxValue: maxValue, tint: .blue)
-            bandBar(title: "補正後", value: row.corrected, minValue: minValue, maxValue: maxValue, tint: .green)
+            bandBar(
+                title: presentation.correctedTitle,
+                value: row.corrected,
+                minValue: minValue,
+                maxValue: maxValue,
+                tint: .green
+            )
             bandBar(title: "最終版", value: row.mastered, minValue: minValue, maxValue: maxValue, tint: .orange)
         }
         .padding(10)
@@ -934,13 +958,24 @@ struct DetailedAnalysisComparisonView: View {
         presentation.noiseReport
     }
 
+    private var processingDeltaTitle: String {
+        presentation.correctedTitle == "補正後" ? "補正差分" : "処理差分"
+    }
+
     private var comparisonStages: [AnalysisStageMetrics] {
         var stages: [AnalysisStageMetrics] = []
         if let metrics = presentation.inputMetrics {
             stages.append(AnalysisStageMetrics(id: "input", label: "入力", color: .blue, metrics: metrics))
         }
         if let metrics = presentation.correctedMetrics {
-            stages.append(AnalysisStageMetrics(id: "corrected", label: "補正後", color: .green, metrics: metrics))
+            stages.append(
+                AnalysisStageMetrics(
+                    id: "corrected",
+                    label: presentation.correctedTitle,
+                    color: .green,
+                    metrics: metrics
+                )
+            )
         }
         if let metrics = presentation.masteredMetrics {
             stages.append(AnalysisStageMetrics(id: "mastered", label: "最終版", color: .orange, metrics: metrics))
@@ -949,7 +984,7 @@ struct DetailedAnalysisComparisonView: View {
     }
 
     private var stageColorScale: KeyValuePairs<String, Color> {
-        ["入力": .blue, "補正後": .green, "最終版": .orange]
+        ["入力": .blue, presentation.correctedTitle: .green, "最終版": .orange]
     }
 
     private func metricRows(
@@ -1017,7 +1052,7 @@ struct DetailedAnalysisComparisonView: View {
     private func title(for target: DisplayAnalysisTarget) -> String {
         switch target {
         case .input: "入力"
-        case .corrected: "補正後"
+        case .corrected: presentation.correctedTitle
         case .mastered: "最終版"
         }
     }
@@ -1115,7 +1150,12 @@ struct DetailedAnalysisComparisonView: View {
             let correctedMap = Dictionary(uniqueKeysWithValues: corrected.averageSpectrum.map { ($0.id, $0) })
             points += input.averageSpectrum.compactMap {
                 guard let correctedPoint = correctedMap[$0.id] else { return nil }
-                return SpectrumDeltaPoint(id: "corrected-input-\($0.id)", frequencyHz: $0.frequencyHz, series: "補正後 - 入力", deltaDB: correctedPoint.levelDB - $0.levelDB)
+                return SpectrumDeltaPoint(
+                    id: "corrected-input-\($0.id)",
+                    frequencyHz: $0.frequencyHz,
+                    series: "\(presentation.correctedTitle) - 入力",
+                    deltaDB: correctedPoint.levelDB - $0.levelDB
+                )
             }
         }
         if let corrected = presentation.correctedMetrics,
@@ -1123,7 +1163,12 @@ struct DetailedAnalysisComparisonView: View {
             let masteredMap = Dictionary(uniqueKeysWithValues: mastered.averageSpectrum.map { ($0.id, $0) })
             points += corrected.averageSpectrum.compactMap {
                 guard let masteredPoint = masteredMap[$0.id] else { return nil }
-                return SpectrumDeltaPoint(id: "mastered-corrected-\($0.id)", frequencyHz: $0.frequencyHz, series: "最終版 - 補正後", deltaDB: masteredPoint.levelDB - $0.levelDB)
+                return SpectrumDeltaPoint(
+                    id: "mastered-corrected-\($0.id)",
+                    frequencyHz: $0.frequencyHz,
+                    series: "最終版 - \(presentation.correctedTitle)",
+                    deltaDB: masteredPoint.levelDB - $0.levelDB
+                )
             }
         }
         return points

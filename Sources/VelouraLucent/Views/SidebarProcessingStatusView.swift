@@ -1,23 +1,75 @@
 import SwiftUI
 
-struct SidebarProcessingStatusView: View {
-    @Bindable var job: ProcessingJob
+struct SidebarProcessStatusSection: Identifiable {
+    let id: String
+    let title: String
+    let status: String
+    let activeStepTitle: String?
+    let activeStepDetail: String?
+    let startedAt: Date?
+    let finishedAt: Date?
+    let isRunning: Bool
+    let isComplete: Bool
+    let hasFailed: Bool
+    let progress: Double
+    let steps: [SidebarProcessStepDisplay]
+    let tint: Color
+}
+
+struct SidebarProcessingStatusListView: View {
+    let sections: [SidebarProcessStatusSection]
 
     var body: some View {
         Group {
-            if job.isProcessing || job.isMastering {
+            if sections.contains(where: \.isRunning) {
                 TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                    statusRows(now: timeline.date)
+                    rows(now: timeline.date)
                 }
             } else {
-                statusRows(now: .now)
+                rows(now: .now)
             }
         }
     }
 
-    private func statusRows(now: Date) -> some View {
+    private func rows(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            SidebarProcessStatusRow(
+            ForEach(sections.indices, id: \.self) { index in
+                let section = sections[index]
+                SidebarProcessStatusRow(
+                    title: section.title,
+                    status: section.status,
+                    activeStepTitle: section.activeStepTitle,
+                    activeStepDetail: section.activeStepDetail,
+                    startedAt: section.startedAt,
+                    finishedAt: section.finishedAt,
+                    isRunning: section.isRunning,
+                    isComplete: section.isComplete,
+                    hasFailed: section.hasFailed,
+                    progress: section.progress,
+                    steps: section.steps,
+                    tint: section.tint,
+                    now: now
+                )
+
+                if index < sections.count - 1 {
+                    Divider()
+                }
+            }
+        }
+    }
+}
+
+struct SidebarProcessingStatusView: View {
+    @Bindable var job: ProcessingJob
+
+    var body: some View {
+        SidebarProcessingStatusListView(sections: sections)
+    }
+
+    private var sections: [SidebarProcessStatusSection] {
+        [
+            SidebarProcessStatusSection(
+                id: "correction",
                 title: "補正",
                 status: job.statusMessage,
                 activeStepTitle: job.activeStep?.title,
@@ -29,13 +81,10 @@ struct SidebarProcessingStatusView: View {
                 hasFailed: !job.failedSteps.isEmpty || job.lastError != nil,
                 progress: job.progressValue,
                 steps: correctionSteps,
-                tint: correctionTint,
-                now: now
-            )
-
-            Divider()
-
-            SidebarProcessStatusRow(
+                tint: correctionTint
+            ),
+            SidebarProcessStatusSection(
+                id: "mastering",
                 title: "マスタリング",
                 status: job.masteringStatusMessage,
                 activeStepTitle: job.masteringActiveStep?.title,
@@ -47,10 +96,9 @@ struct SidebarProcessingStatusView: View {
                 hasFailed: !job.failedMasteringSteps.isEmpty || job.masteringLastError != nil,
                 progress: job.masteringProgressValue,
                 steps: masteringSteps,
-                tint: masteringTint,
-                now: now
-            )
-        }
+                tint: masteringTint
+            ),
+        ]
     }
 
     private var correctionSteps: [SidebarProcessStepDisplay] {

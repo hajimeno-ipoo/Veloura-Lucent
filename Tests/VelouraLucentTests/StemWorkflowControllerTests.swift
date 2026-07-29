@@ -71,6 +71,32 @@ private actor SuspendedCorrectionWorkflow: StemWorkflowExecuting {
         throw CancellationError()
     }
 
+    func processRemix(
+        correction: StemWorkflowCorrectionResult,
+        settings: StemRemixSettings,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowRemixResult {
+        let artifact = makeControllerArtifact(
+            id: "stem-remix",
+            kind: .remixed48000,
+            baseURL: correction.sessionDirectory
+        )
+        let result = StemWorkflowRemixResult(
+            correction: correction,
+            artifact: artifact,
+            evaluation: makeControllerEvaluation(purpose: .remix),
+            validation: StemValidationResult(
+                phase: .processedRemix,
+                failedChecks: [],
+                measurements: []
+            ),
+            appliedSettings: settings
+        )
+        await eventHandler(.artifactCommitted(artifact))
+        await eventHandler(.validationCompleted(result.validation))
+        return result
+    }
+
     func discardSession(runID: UUID) async throws {
         discardedSessionIDs.append(runID)
     }
@@ -107,7 +133,7 @@ private struct ImmediateCorrectionWorkflow: StemWorkflowExecuting {
             )
             await eventHandler(.artifactCommitted(artifact))
         }
-        await eventHandler(.artifactCommitted(result.remixArtifacts.correctedRemix))
+        await eventHandler(.artifactCommitted(result.remixArtifacts.correctedPureSum))
         return result
     }
 
@@ -116,6 +142,32 @@ private struct ImmediateCorrectionWorkflow: StemWorkflowExecuting {
         eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
     ) async throws -> StemWorkflowResult {
         throw CancellationError()
+    }
+
+    func processRemix(
+        correction: StemWorkflowCorrectionResult,
+        settings: StemRemixSettings,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowRemixResult {
+        let artifact = makeControllerArtifact(
+            id: "stem-remix",
+            kind: .remixed48000,
+            baseURL: correction.sessionDirectory
+        )
+        let result = StemWorkflowRemixResult(
+            correction: correction,
+            artifact: artifact,
+            evaluation: makeControllerEvaluation(purpose: .remix),
+            validation: StemValidationResult(
+                phase: .processedRemix,
+                failedChecks: [],
+                measurements: []
+            ),
+            appliedSettings: settings
+        )
+        await eventHandler(.artifactCommitted(artifact))
+        await eventHandler(.validationCompleted(result.validation))
+        return result
     }
 
     func discardSession(runID: UUID) async throws {}
@@ -185,7 +237,7 @@ struct StemWorkflowControllerTests {
     }
 
     @Test
-    func correctionCompletionConnectsCorrectedRemixToPreviewAndAnalysis() async throws {
+    func correctionAndRemixCompletionConnectPureSumAndRemixToABPreview() async throws {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "StemWorkflowControllerTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -218,22 +270,37 @@ struct StemWorkflowControllerTests {
             masteringSettings: MasteringProfile.streaming.settings
         ))
         try await waitUntil {
-            if case .readyForMastering = session.state { return true }
+            if case .readyForRemix = session.state { return true }
             return false
         }
 
-        let correctedRemix = try #require(workspace.correctedRemixPreviewArtifact)
-        #expect(correctedRemix.kind == .correctedRemix48000)
-        #expect(workspace.previewController.cardState(for: .corrected).sourceURL == correctedRemix.fileURL)
+        let pureSum = try #require(workspace.correctedPureSumPreviewArtifact)
+        #expect(pureSum.kind == .correctedPureSum48000)
+        #expect(workspace.previewController.cardState(for: .corrected).sourceURL == pureSum.fileURL)
         #expect(workspace.previewController.comparisonPair == .inputVsCorrected)
         #expect(workspace.remixAnalysisPresentation != nil)
-        #expect(session.progress(for: .correctedRemix).status == .completed)
-        #expect(session.progress(for: .validateCorrectedRemix).status == .completed)
+        #expect(session.progress(for: .correctedPureSum).status == .completed)
+        #expect(session.progress(for: .validateCorrectedPureSum).status == .completed)
         #expect(session.displayProgress(for: .inputPreparation).status == .completed)
         #expect(!session.logs.contains { $0.message.contains("__veloura_progress__") })
+        #expect(workspace.canRunRemix)
+
+        await workspace.beginRemix()
+        try await waitUntil {
+            if case .readyForMastering = session.state { return true }
+            return false
+        }
+        let remixed = try #require(workspace.remixedPreviewArtifact)
+        #expect(remixed.kind == .remixed48000)
+        #expect(workspace.remixPreviewController.cardState(for: .input).sourceURL == pureSum.fileURL)
+        #expect(workspace.remixPreviewController.cardState(for: .corrected).sourceURL == remixed.fileURL)
+        #expect(workspace.remixAnalysisPresentation?.processedRemixEvaluation?.purpose == .remix)
         #expect(session.recentActivityEvents.filter { $0.domain == .correction }.map(\.title) == [
             "補正処理が完了しました",
-            "補正後再ミックスを解析しました",
+            "補正済み純粋加算を解析しました",
+        ])
+        #expect(session.recentActivityEvents.filter { $0.domain == .remix }.map(\.title) == [
+            "再ミックスが完了しました",
         ])
 
         try await controller.actions.beginMastering(StemModeMasteringRequest(
@@ -243,9 +310,9 @@ struct StemWorkflowControllerTests {
 
         let currentRunID = try #require(session.runID)
         #expect(session.state == .readyForMastering(runID: currentRunID))
-        #expect(workspace.correctedRemixPreviewArtifact == correctedRemix)
+        #expect(workspace.correctedRemixPreviewArtifact == remixed)
         #expect(workspace.finalPreviewArtifact == nil)
-        #expect(workspace.previewController.cardState(for: .corrected).sourceURL == correctedRemix.fileURL)
+        #expect(workspace.previewController.cardState(for: .corrected).sourceURL == remixed.fileURL)
     }
 
     @Test
@@ -372,8 +439,8 @@ struct StemWorkflowControllerTests {
             .evaluateStems,
             .correctStems,
             .validateCorrectedStems,
-            .correctedRemix,
-            .validateCorrectedRemix,
+            .correctedPureSum,
+            .validateCorrectedPureSum,
         ] {
             try session.beginStep(runID: sessionID, step: step)
             try session.completeStep(runID: sessionID, step: step)
@@ -397,21 +464,21 @@ struct StemWorkflowControllerTests {
                 status: .valid
             ))
         }
-        let remix = StemAudioArtifact(
-            id: "corrected-remix",
-            kind: .correctedRemix48000,
+        let pureSum = StemAudioArtifact(
+            id: "corrected-pure-sum",
+            kind: .correctedPureSum48000,
             fileURL: FileManager.default.temporaryDirectory.appending(
-                path: "corrected-remix-48000.wav"
+                path: "corrected-pure-sum-48000.wav"
             ),
             sampleRate: 48_000,
             channelCount: 2,
             frameCount: 32
         )
         try session.updateArtifactState(.init(
-            id: remix.id,
+            id: pureSum.id,
             runID: sessionID,
-            kind: remix.kind,
-            artifact: remix,
+            kind: pureSum.kind,
+            artifact: pureSum,
             status: .valid
         ))
     }
@@ -470,7 +537,7 @@ private func makeImmediateCorrectionResult(
     }
     let correctedRemix = makeControllerArtifact(
         id: "corrected-remix",
-        kind: .correctedRemix48000,
+        kind: .correctedPureSum48000,
         baseURL: directory
     )
     return StemWorkflowCorrectionResult(
@@ -498,21 +565,29 @@ private func makeImmediateCorrectionResult(
             measurements: []
         ),
         stemEvaluations: [],
-        remixArtifacts: StemWorkflowRemixArtifacts(correctedRemix: correctedRemix),
+        remixArtifacts: StemWorkflowRemixArtifacts(correctedPureSum: correctedRemix),
         rawRemixEvaluation: makeControllerEvaluation(purpose: .rawRemix),
         remixValidation: StemValidationResult(
             phase: .remix,
             failedChecks: [],
             measurements: []
         ),
-        correctedRemixEvaluation: makeControllerEvaluation(purpose: .correctedRemix),
+        correctedRemixEvaluation: makeControllerEvaluation(purpose: .correctedPureSum),
         correctedRemixValidation: StemValidationResult(
-            phase: .correctedRemix,
+            phase: .correctedPureSum,
             failedChecks: [],
             measurements: []
         ),
         correctionSettings: request.correctionSettings,
-        analysisMode: request.analysisMode
+        analysisMode: request.analysisMode,
+        automaticRemixPlan: StemRemixAutomaticPlan(
+            settings: StemRemixSettings(),
+            gainEvidenceDB: [:],
+            panEvidence: [:],
+            reverbLossEvidence: [:],
+            drumsBassCollision: 0,
+            vocalsOtherCollision: 0
+        )
     )
 }
 

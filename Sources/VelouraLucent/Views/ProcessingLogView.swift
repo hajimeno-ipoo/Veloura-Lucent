@@ -1,20 +1,65 @@
 import SwiftUI
 
+struct ProcessingLogSection: Identifiable {
+    let id: String
+    let title: String
+    let lines: [String]
+    let placeholder: String
+}
+
 struct ProcessingLogView: View {
-    let correctionLines: [String]
-    let masteringLines: [String]
+    let sections: [ProcessingLogSection]
+
+    init(
+        correctionLines: [String],
+        remixLines: [String]? = nil,
+        masteringLines: [String]
+    ) {
+        var sections = [
+            ProcessingLogSection(
+                id: "correction",
+                title: "補正ログ",
+                lines: correctionLines,
+                placeholder: "ここに補正ログが表示されます。"
+            ),
+        ]
+        if let remixLines {
+            sections.append(ProcessingLogSection(
+                id: "remix",
+                title: "再ミックスログ",
+                lines: remixLines,
+                placeholder: "ここに再ミックスログが表示されます。"
+            ))
+        }
+        sections.append(ProcessingLogSection(
+            id: "mastering",
+            title: "マスタリングログ",
+            lines: masteringLines,
+            placeholder: "ここにマスタリングログが表示されます。"
+        ))
+        self.sections = sections
+    }
+
+    init(sections: [ProcessingLogSection]) {
+        self.sections = sections
+    }
 
     var body: some View {
         LazyVGrid(
-            columns: [
-                GridItem(.flexible(minimum: 0), spacing: 14, alignment: .top),
-                GridItem(.flexible(minimum: 0), spacing: 14, alignment: .top)
-            ],
+            columns: Array(
+                repeating: GridItem(.flexible(minimum: 0), spacing: 14, alignment: .top),
+                count: sections.count
+            ),
             alignment: .leading,
             spacing: 14
         ) {
-            logCard(title: "補正ログ", lines: correctionLines, placeholder: "ここに補正ログが表示されます。")
-            logCard(title: "マスタリングログ", lines: masteringLines, placeholder: "ここにマスタリングログが表示されます。")
+            ForEach(sections) { section in
+                logCard(
+                    title: section.title,
+                    lines: section.lines,
+                    placeholder: section.placeholder
+                )
+            }
         }
     }
 
