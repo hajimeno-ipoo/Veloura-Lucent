@@ -12,6 +12,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "Vendor/demucs-mlx-swift"),
+        .package(path: "Vendor/bs-roformer-mlx-swift"),
         .package(
             url: "https://github.com/apple/swift-collections.git",
             exact: "1.4.0"
@@ -21,7 +22,8 @@ let package = Package(
         .executableTarget(
             name: "VelouraLucent",
             dependencies: [
-                .product(name: "DemucsMLX", package: "demucs-mlx-swift")
+                .product(name: "DemucsMLX", package: "demucs-mlx-swift"),
+                .product(name: "BSRoformerMLX", package: "bs-roformer-mlx-swift")
             ],
             path: "Sources/VelouraLucent",
             resources: [
@@ -33,7 +35,10 @@ let package = Package(
         ),
         .testTarget(
             name: "VelouraLucentTests",
-            dependencies: ["VelouraLucent"],
+            dependencies: [
+                "VelouraLucent",
+                .product(name: "BSRoformerMLX", package: "bs-roformer-mlx-swift")
+            ],
             path: "Tests/VelouraLucentTests"
         )
     ]

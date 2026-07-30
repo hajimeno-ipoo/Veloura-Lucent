@@ -1,0 +1,31 @@
+{
+  "sampleRate": 44100,
+  "channels": 2,
+  "stemNames": ["bass", "drums", "other", "vocals", "guitar", "piano"],
+  "dimension": 256,
+  "depth": 12,
+  "timeTransformerDepth": 1,
+  "frequencyTransformerDepth": 1,
+  "linearTransformerDepth": 0,
+  "frequenciesPerBand": [
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    12, 12, 12, 12, 12, 12, 12, 12,
+    24, 24, 24, 24, 24, 24, 24, 24,
+    48, 48, 48, 48, 48, 48, 48, 48,
+    128, 129
+  ],
+  "headDimension": 64,
+  "headCount": 8,
+  "mlpExpansionFactor": 4,
+  "maskEstimatorDepth": 2,
+  "stftFFTSize": 2048,
+  "stftHopLength": 512,
+  "stftWindowLength": 2048,
+  "stftNormalized": false,
+  "inferenceFrameCount": 801,
+  "shortAudioThresholdSeconds": 10,
+  "shortAudioInferenceFrameCount": 256,
+  "overlapSeconds": 8
+}

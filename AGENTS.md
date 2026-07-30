@@ -30,6 +30,16 @@
 - 対象の音、発生条件、対象帯域、変更する処理、期待する聴こえ方、副作用の可能性を具体的に示す。
 - 「寄せる」「見直す」「守る」「強い」「弱い」だけで説明せず、何をどの条件でどう変えるかを記載する。
 
+## Stem分離モデルの精度検証
+
+- 今回の基準結果と再現条件は、`Docs/StemSeparationModelBenchmark_2026-07-30.md`を参照する。
+- Stem分離モデル同士の精度比較には、MUSDB公式7秒サンプルのtest subset 50曲を、正解Stem付きの共通評価音源として使用する。
+- 両モデルへ同一の2mixを入力し、`vocals`、`drums`、`bass`、`other`の各出力を、対応する正解Stemと直接比較する。
+- 評価には`museval 0.4.1`のBSS Eval v4を1.0秒のwindowとhopで使用し、各曲は有限値フレームの中央値としてSDR、SIR、SARをStem別に記録する。モデル間の差は、同じ曲同士の対応差と勝敗数で判断する。
+- 6StemモデルのBS-RoFormer-SWを4Stemモデルと比較する場合は、`vocals`、`drums`、`bass`はそのまま対応させ、`other`、`guitar`、`piano`を無係数のFloat32加算で`other`にまとめる。
+- 再合成誤差、帯域分布、相関、速度、メモリ使用量をStem精度の代用にしない。速度とメモリはユーザー指定の実音源で別に測定し、正解Stemによる精度結果と分けて報告する。
+- 分離精度の一次判定を、ユーザーによるStem個別試聴や後続の補正、再ミックス、マスタリングへ委ねない。
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

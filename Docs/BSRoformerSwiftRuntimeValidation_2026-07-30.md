@@ -1,0 +1,217 @@
+# BS-RoFormer-SW MLX Swift単独ランタイム検証結果
+
+## 結論
+
+`Vendor/bs-roformer-mlx-swift`へ、BS-RoFormer-SW専用の単独MLX Swiftランタイムを追加した。
+Python参照出力との同一入力比較では、6ステムすべてで高い一致を確認した。
+
+- MUSDB公式6.8秒音源：相関`0.9998601〜0.9999999`
+- ユーザー指定曲の全編・同一44.1kHz入力：相関`0.9999804〜0.9999998`
+- ユーザー指定の48kHz原音：31チャンク、`112.31秒`で完走
+- 48kHz原音実行時のpeak memory footprint：`8,096,074,368 bytes`（約8.10GB）
+- スワップ：`0`
+
+この結果は、Swiftランタイム単体が対象モデルを読み込み、6ステムを最後まで出力でき、
+Python参照実装に近い結果を返したことを示す。Veloura Lucent本体にはbackend adapterを
+追加したが、現行Stem Modeの既定分離器からの切り替えは行っていない。
+
+## 実装範囲
+
+対象：
+
+`Vendor/bs-roformer-mlx-swift`
+
+含めたもの：
+
+- BS-RoFormer-SW用JSON設定の読み込みと検証
+- 1,915個のsafetensors重みの読み込みと不足確認
+- Hann窓のSTFT / iSTFT
+- 62帯域のBand Split
+- 時間方向・周波数方向のRoFormer推論
+- 6ステム別の複素マスク生成と適用
+- Python参照と同じ長音源のチャンク分割、Hamming窓、Overlap Add
+- 10秒未満で256フレームへ切り替える確認済みの短音源条件
+- 48kHz入力をモデル条件の44.1kHz / stereo / Float32へ変換するCLI入力
+- 進捗通知とキャンセル確認
+- 6ステムFloat32 WAV出力
+
+含めていないもの：
+
+- Veloura Lucent本体の分離器切り替え
+- モデル選択UI
+- モデル取得・配布・再配布
+- 複数モデル管理
+- 自動フォールバック
+- 通常モードの変更
+- Stem解析、Stem別補正、再ミックス、マスタリングの変更
+
+## 固定したモデル契約
+
+| 項目 | 値 |
+|---|---|
+| sample rate | 44,100Hz |
+| channels | 2 |
+| stems | `bass, drums, other, vocals, guitar, piano` |
+| model dimension | 256 |
+| RoFormer blocks | 12 |
+| attention heads | 8 |
+| head dimension | 64 |
+| bands | 62 |
+| frequency bins | 1,025 |
+| STFT | FFT 2,048 / hop 512 / window 2,048 |
+| long-audio frames | 801 |
+| short-audio frames | 256 |
+| MLX Swift | 0.30.6 |
+
+対象safetensors：
+
+- file：`BS-Roformer-SW.safetensors`
+- size：`698,849,326 bytes`
+- SHA-256：`a5b52f2a2a605be1ee9e827696d6a80a4aaef55c0ceaa6308ef51b48d8ce906e`
+- weight keys：`1,915`
+
+モデルファイル自体はプロジェクトへ同梱していない。
+
+## Python参照との一致
+
+### MUSDB公式6.8秒音源
+
+入力：
+
+`benchmark/musdb_test_mixtures/000.wav`
+
+Python参照：
+
+- `mlx-audio-separator 0.1.5`
+- MLX `0.31.2`
+- `latency_safe_v3`
+- 10秒未満のため256フレーム、3チャンク
+
+Swift：
+
+- MLX Swift `0.30.6`
+- 同じ256フレーム、3チャンク
+- Release build
+
+| Stem | 相関 | RMSE | 最大絶対差 |
+|---|---:|---:|---:|
+| `bass` | 0.9999995266 | 0.0000851976 | 0.0004607569 |
+| `drums` | 0.9999995781 | 0.0000849339 | 0.0004319213 |
+| `other` | 0.9999992886 | 0.0000186982 | 0.0002365829 |
+| `vocals` | 0.9999998960 | 0.0000384261 | 0.0004717028 |
+| `guitar` | 0.9998600738 | 0.0000001031 | 0.0000078458 |
+| `piano` | 0.9999750184 | 0.0000000194 | 0.0000005543 |
+
+`guitar`と`piano`は、この抜粋ではPython参照のRMS自体がそれぞれ約`0.00000541`、
+`0.00000268`と非常に小さい。相関だけでなくRMSEと最大絶対差も併記した。
+
+Release実行：
+
+- 処理時間：`4.21秒`
+- maximum resident set size：`859,586,560 bytes`
+- peak memory footprint：`2,790,737,312 bytes`
+- スワップ：`0`
+
+### ユーザー指定曲・同一44.1kHz入力
+
+入力：
+
+`input/星屑のシンパシー_44100_float32.wav`
+
+PythonとSwiftへ同じ44.1kHz / stereo / Float32音声を入力した。
+
+| Stem | 相関 | RMSE | 最大絶対差 |
+|---|---:|---:|---:|
+| `bass` | 0.9999993214 | 0.0000604928 | 0.0006263852 |
+| `drums` | 0.9999996537 | 0.0000277049 | 0.0008654743 |
+| `other` | 0.9999969574 | 0.0001231227 | 0.0022954121 |
+| `vocals` | 0.9999997700 | 0.0000603032 | 0.0017816275 |
+| `guitar` | 0.9999803870 | 0.0000709837 | 0.0011094771 |
+| `piano` | 0.9999971242 | 0.0001094712 | 0.0021547526 |
+
+Swift Release実行：
+
+- チャンク数：`31`
+- 処理時間：`120.16秒`
+- maximum resident set size：`1,467,498,496 bytes`
+- peak memory footprint：`8,096,647,784 bytes`
+- スワップ：`0`
+
+## ユーザー指定の元ファイルでの負荷
+
+入力：
+
+`Tests/Fixtures/Sample_audio/星屑のシンパシー.wav`
+
+このファイルは48kHzのため、Swift CLIで44.1kHzへ変換してから推論した。
+
+| 項目 | 結果 |
+|---|---:|
+| 出力sample rate | 44,100Hz |
+| 出力frames | 10,857,420 |
+| 出力channels | 2 |
+| 出力stems | 6 |
+| チャンク数 | 31 |
+| 処理時間 | 112.31秒 |
+| maximum resident set size | 1,454,243,840 bytes |
+| peak memory footprint | 8,096,074,368 bytes |
+| スワップ | 0 |
+
+同じ曲のPython単独試験は`65.40秒`、peak memory footprint約`10.42GB`だった。
+今回のSwift ReleaseはPython単独試験より約`1.72倍`遅く、peak memory footprintは
+約`0.78倍`だった。実行系とMLX版が異なるため、これは今回の1回の実測比較として扱う。
+
+48kHz原音を各実行系で変換した結果同士の相関は`0.9983903〜0.9999943`だった。
+同一の44.1kHz入力では`0.9999804〜0.9999998`へ上がったため、入力変換条件と
+Swift推論本体の差を分けて記録した。
+
+## 検証コマンド
+
+```bash
+cd Vendor/bs-roformer-mlx-swift
+swift test
+swift build -c release
+./scripts/prepare_mlx_runtime.sh release
+
+.build/release/bs-roformer-mlx-swift \
+  /path/to/BS-Roformer-SW.safetensors \
+  Config/BS-Roformer-SW.json \
+  /path/to/input.wav \
+  /path/to/output
+```
+
+Python参照との数値比較：
+
+```bash
+python scripts/compare_python_outputs.py \
+  /path/to/swift-output \
+  /path/to/python-output \
+  --python-prefix "000_"
+```
+
+## 未確認事項・制限
+
+- Veloura Lucent本体には、明示したモデルURLで生成できるbackend adapterを追加済み
+- 6ステムから既存4ステムへの`other + guitar + piano`無係数Float32加算を実装済み
+- 現行Stem Modeの既定分離器はHTDemucsのままで、BS-RoFormerへの切り替えは未実装
+- adapterから既存の進捗・キャンセル契約への変換は実装済み
+- BS-RoFormerを使ったアプリ内の進捗、キャンセル、4Stem保存の実動作は未確認
+- 実音源の速度とメモリは各条件1回の実測
+- BS-RoFormer-SWチェックポイントの再配布ライセンスは未確認
+- モデル同梱・再配布は行っていない
+
+## 次の実装境界
+
+アプリ本体にはBS-RoFormer専用backend adapterを追加し、この単独ランタイムの
+6ステムを次の4ステムへ変換して、既存の`StemSeparationBackendOutput`へ渡すところまで
+実装した。
+
+| 既存4Stem | BS-RoFormer-SW |
+|---|---|
+| `vocals` | `vocals` |
+| `drums` | `drums` |
+| `bass` | `bass` |
+| `other` | `other + guitar + piano` |
+
+このadapterは既定分離器へ切り替えていない。次へ進む場合は、個人利用環境での
+モデル保存場所と、HTDemucsから切り替える接続だけを別途決める。
