@@ -436,7 +436,7 @@ final class StemModeWorkspaceModel {
     ) throws {
         try requireMutableRunSettings()
         _ = try settings.validatedParameters()
-        guard settings.shifts == 1,
+        guard settings.shifts == 2,
               settings.overlap == 0.25,
               settings.split,
               settings.segmentLength == .modelContract,

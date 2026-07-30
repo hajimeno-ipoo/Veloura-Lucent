@@ -91,7 +91,7 @@ struct StemModelManagementSection: View {
             ?? modelPresentation?.revision
             ?? "--"
         let displayedSettings = settings ?? StemSeparationSettings(
-            shifts: 1,
+            shifts: 2,
             overlap: 0.25,
             split: true,
             segmentLength: .modelContract,

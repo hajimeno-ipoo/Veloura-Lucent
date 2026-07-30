@@ -649,7 +649,7 @@ raw Stem、raw再ミックス、No vocalsを必須書き出し対象にしない
 
 ```text
 model: htdemucs
-shifts: 1
+shifts: 2
 overlap: 0.25
 split: true
 segment: 7.8秒

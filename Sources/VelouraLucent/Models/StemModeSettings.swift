@@ -42,7 +42,7 @@ struct StemSeparationSettings: Equatable, Sendable {
     /// `seed`は同じ入力と設定で分離結果を再現するため、処理開始時に明示します。
     static func metaHTDemucsProduction(seed: Int) -> Self {
         StemSeparationSettings(
-            shifts: 1,
+            shifts: 2,
             overlap: 0.25,
             split: true,
             segmentLength: .modelContract,

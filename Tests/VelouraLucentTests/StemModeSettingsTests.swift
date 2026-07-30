@@ -7,7 +7,7 @@ struct StemModeSettingsTests {
     func productionFactoryUsesApprovedMetaHTDemucsBaselineAndRequiresSeed() throws {
         let settings = StemSeparationSettings.metaHTDemucsProduction(seed: 1_234_567)
 
-        #expect(settings.shifts == 1)
+        #expect(settings.shifts == 2)
         #expect(settings.overlap == 0.25)
         #expect(settings.split)
         #expect(settings.segmentLength == .modelContract)

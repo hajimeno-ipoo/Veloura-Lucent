@@ -58,7 +58,7 @@
 - [x] 入力変更時だけ旧入力解析をキャンセルし、遅延結果で新入力を上書きしない
 - [x] 入力のchannel layoutを確認し、自動判定できない場合だけユーザーへ確認する
 - [x] Demucs入力を44.1 kHz、stereo、Float32で生成
-- [x] `shifts=1`、`overlap=0.25`、`split=true`、モデル契約segment、`batchSize=1`、seedの明示値を使用
+- [x] `shifts=2`、`overlap=0.25`、`split=true`、モデル契約segment、`batchSize=1`、seedの明示値を使用
 - [x] vocals、drums、bass、otherの4Stemを分離
 - [x] raw 4Stemを44.1 kHzで一時保存
 - [x] 各raw Stemを補正開始境界で1回だけ48 kHzへ変換

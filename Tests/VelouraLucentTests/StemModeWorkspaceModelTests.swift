@@ -191,7 +191,7 @@ struct StemModeWorkspaceModelTests {
         let recorder = WorkspaceActionRecorder()
         let model = makeModel(recorder: recorder)
         let unapproved = StemSeparationSettings(
-            shifts: 2,
+            shifts: 1,
             overlap: 0.25,
             split: true,
             segmentLength: .modelContract,

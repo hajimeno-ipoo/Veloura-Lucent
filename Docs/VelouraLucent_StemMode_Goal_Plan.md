@@ -93,7 +93,7 @@ AIへ次を行わせない。
 - stereoは左右を保持する。
 - multichannelは確認できたchannel layoutとCore Audioの変換情報を使用する。
 - unknown layoutやdiscrete channelsを推測変換しない。自動決定できない場合は停止し、ユーザー判断を求める。
-- 分離設定は`htdemucs`、`shifts=1`、`overlap=0.25`、`split=true`、`segment=7.8秒`、`batchSize=1`とする。
+- 分離設定は`htdemucs`、`shifts=2`、`overlap=0.25`、`split=true`、`segment=7.8秒`、`batchSize=1`とする。
 - seedは補正開始時に現在セッションへ固定し、アプリ起動中のメモリで保持する。
 - Demucs入力は44.1 kHz／stereo／Float32とする。
 - raw 4Stemは44.1 kHzの正本として保持する。
