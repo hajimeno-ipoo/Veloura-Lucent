@@ -32,3 +32,27 @@ func officialConfigurationRequiresExactly1915Weights() throws {
 
     #expect(BSRoformerModel.requiredWeightKeys(configuration: configuration).count == 1_915)
 }
+
+@Test
+func mapsPublishedStemTapWeightNamesToRuntimeNames() {
+    #expect(
+        BSRoformerModel.normalizedPublishedWeightKey("band_split.to_features.0.0.gamma")
+            == "band_split.to_features_0.norm.weight"
+    )
+    #expect(
+        BSRoformerModel.normalizedPublishedWeightKey("layers.0.0.layers.0.0.to_out.0.weight")
+            == "layers_0.time_transformer.layers_0.attn.to_out.layers.0.weight"
+    )
+    #expect(
+        BSRoformerModel.normalizedPublishedWeightKey("layers.11.1.layers.0.1.net.4.bias")
+            == "layers_11.freq_transformer.layers_0.ff.net.layers.4.bias"
+    )
+    #expect(
+        BSRoformerModel.normalizedPublishedWeightKey("mask_estimators.5.to_freqs.61.0.2.weight")
+            == "mask_estimators_5.to_freqs_61.layers.2.weight"
+    )
+    #expect(
+        BSRoformerModel.normalizedPublishedWeightKey("final_norm.gamma")
+            == "final_norm.weight"
+    )
+}

@@ -363,7 +363,7 @@ struct StemWorkflowService: Sendable {
             await eventHandler(.log(
                 runID: request.runID,
                 step: .separate,
-                message: "4Stem分離を開始します"
+                message: "\(request.installation.snapshot.contract.separationModel.displayName)で4Stem分離を開始します"
             ))
             let separationProgress = OrderedStemSeparationProgressSink(eventHandler: eventHandler)
             let separation: StemSeparationResult
@@ -390,7 +390,7 @@ struct StemWorkflowService: Sendable {
             await eventHandler(.log(
                 runID: request.runID,
                 step: .separate,
-                message: "4Stem分離が完了しました"
+                message: "\(request.installation.snapshot.contract.separationModel.displayName)で4Stem分離が完了しました"
             ))
             for artifact in separation.stems { await eventHandler(.artifactCommitted(artifact)) }
             let raw44 = try await loadRawStems(separation.stems)

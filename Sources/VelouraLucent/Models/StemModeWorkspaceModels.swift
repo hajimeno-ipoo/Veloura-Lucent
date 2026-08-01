@@ -237,7 +237,7 @@ enum StemModeWorkspaceSettingsError: LocalizedError, Equatable, Sendable {
         case .remixManualModeRequired:
             "再ミックスを手動へ切り替えてから設定を変更してください。"
         case .unapprovedProductionSettings:
-            "Stem分離設定が承認済みのMeta HTDemucs本番設定と一致しません。"
+            "Stem分離設定が選択モデルの承認済み本番設定と一致しません。"
         }
     }
 }

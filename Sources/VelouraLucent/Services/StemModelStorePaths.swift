@@ -27,6 +27,10 @@ struct StemModelStorePaths: Equatable, Sendable {
         rootURL.appending(path: Self.activePointerFileName, directoryHint: .notDirectory)
     }
 
+    func activePointerURL(for model: StemSeparationModel) -> URL {
+        rootURL.appending(path: model.activePointerFileName, directoryHint: .notDirectory)
+    }
+
     func stagingDirectoryURL(operationIdentifier: UUID) -> URL {
         stagingRootURL.appending(
             path: operationIdentifier.uuidString.lowercased(),

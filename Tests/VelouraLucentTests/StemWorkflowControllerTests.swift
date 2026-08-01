@@ -316,6 +316,57 @@ struct StemWorkflowControllerTests {
     }
 
     @Test
+    func bsRoformerReadyResourcesPrepareModelSpecificSettingsInExistingWorkspace() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "StemWorkflowControllerBSRoformerTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fixture = try makeStemTestInstallation(rootURL: root, model: .bsRoformerSW)
+        let runtime = StemBundledRuntimeValidationReport(
+            contract: fixture.installation.snapshot.contract,
+            assets: fixture.manifest.bundledRuntimeAssets.map { asset in
+                ValidatedStemModelAsset(
+                    kind: asset.kind,
+                    fileURL: root.appending(path: asset.runtimeRelativePath),
+                    byteCount: asset.byteCount,
+                    sha256: asset.sha256
+                )
+            }
+        )
+        let manager = StemModelManager(inspector: ReadyStemModelInspector(inspection: .init(
+            platform: .supportedAppleSilicon,
+            manifest: .valid(fixture.manifest),
+            installedModel: .ready(fixture.installation),
+            bundledRuntime: .ready(runtime)
+        )))
+        await manager.inspectLocalResources()
+
+        let session = StemWorkflowSession()
+        let controller = StemWorkflowController(
+            session: session,
+            modelManager: manager,
+            workflow: ImmediateCorrectionWorkflow(),
+            inputInspector: AutomaticStemInputInspector(),
+            inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
+            notificationReporter: NoOpStemCompletionNotificationReporter.shared,
+            seedProvider: { 77 },
+            revealInFinder: { _ in }
+        )
+        let workspace = StemModeWorkspaceModel(session: session, actions: controller.actions)
+        controller.attachWorkspaceModel(workspace)
+        controller.synchronizeModelReadiness()
+        let inputURL = root.appending(path: "source.wav")
+        await workspace.inspectInput(inputURL)
+        try await waitUntil {
+            workspace.selectedInputURL == inputURL && !workspace.isInspectingInput
+        }
+
+        #expect(workspace.separationSettings == .bsRoformerSWProduction)
+        #expect(workspace.modelPresentation?.modelName == "BS-RoFormer-SW")
+        #expect(workspace.canRunCorrection)
+    }
+
+    @Test
     func correctionCancellationKeepsSelectedInputAndDiscardsOnlyStemSession() async throws {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "StemWorkflowControllerTests-\(UUID().uuidString)", directoryHint: .isDirectory)

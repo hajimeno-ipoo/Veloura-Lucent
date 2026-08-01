@@ -64,6 +64,130 @@ struct StemProductionInferenceTests {
         #endif
     }
 
+    /// 公開BS-RoFormer-SW資産とユーザー指定の実音源を、アプリ本体と同じ
+    /// Stem分離 → Stem補正 → 再ミックス → マスタリング経路へ通す明示実行専用テストです。
+    /// `VELOURA_RUN_BS_ROFORMER_INTEGRATION=1 swift test -c release --filter bsRoformer`
+    @Test
+    func bsRoformerFullWorkflowCompletesWithPinnedPublicModelWhenEnabled() async throws {
+        guard ProcessInfo.processInfo.environment["VELOURA_RUN_BS_ROFORMER_INTEGRATION"] == "1" else {
+            return
+        }
+
+        #if arch(arm64)
+        let temporaryMetalBundle = try Self.installMetalBundleForSwiftPMTest()
+        defer {
+            if let temporaryMetalBundle {
+                try? FileManager.default.removeItem(at: temporaryMetalBundle)
+            }
+        }
+
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let revision = StemProductionModelProfile.profile(for: .bsRoformerSW).revision
+        let cachedAssets = projectRoot
+            .appending(path: ".stem-model-cache/bs-roformer-sw/\(revision)", directoryHint: .isDirectory)
+        let inputURL = projectRoot
+            .appending(path: "Tests/Fixtures/Sample_audio/星屑のシンパシー.wav")
+
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "BSRoformerProductionInferenceTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let validator = StemModelAssetValidator(selectedModel: .bsRoformerSW)
+        let manifest = try validator.loadBundledManifest()
+        for asset in manifest.downloadableModelAssets {
+            let sourceURL = cachedAssets.appending(path: URL(filePath: asset.installationRelativePath).lastPathComponent)
+            let destinationURL = try StemModelAssetValidator.safeDescendantURL(
+                rootURL: root,
+                relativePath: asset.installationRelativePath,
+                field: "integrationAsset"
+            )
+            try FileManager.default.createDirectory(
+                at: destinationURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            do {
+                try FileManager.default.linkItem(at: sourceURL, to: destinationURL)
+            } catch {
+                try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            }
+        }
+
+        let snapshot = try validator.validateStagedModelAssets(
+            manifest: manifest,
+            rootURL: root
+        )
+        let assetDefinitions = Dictionary(
+            uniqueKeysWithValues: manifest.downloadableModelAssets.map { ($0.kind, $0) }
+        )
+        let generationIdentifier = UUID()
+        let receipt = StemModelInstallationReceipt(
+            schemaVersion: StemModelInstallationReceipt.currentSchemaVersion,
+            assetSetIdentifier: manifest.assetSetIdentifier,
+            modelIdentifier: snapshot.contract.identifier,
+            revision: manifest.model.revision,
+            generationIdentifier: generationIdentifier,
+            activatedAt: Date(),
+            assets: try snapshot.assets.map { validatedAsset in
+                StemModelInstallationReceiptAsset(
+                    kind: validatedAsset.kind,
+                    installationRelativePath: try #require(
+                        assetDefinitions[validatedAsset.kind]
+                    ).installationRelativePath,
+                    byteCount: validatedAsset.byteCount,
+                    sha256: validatedAsset.sha256
+                )
+            },
+            sourceEvidence: manifest.downloadableModelAssets.map {
+                StemModelInstallationSourceEvidence(
+                    kind: $0.kind,
+                    stableDownloadURL: $0.downloadURL,
+                    responseHeaderName: manifest.downloadPolicy.revisionResponseHeader,
+                    revision: manifest.model.revision
+                )
+            }
+        )
+        let installation = ValidatedStemModelInstallation(
+            snapshot: snapshot,
+            receipt: receipt,
+            generationDirectoryURL: root
+        )
+        let sessionID = UUID()
+        let workflow = StemWorkflowService()
+        defer { try? workflow.discardTemporarySession(runID: sessionID) }
+
+        let correction = try await workflow.processCorrection(StemWorkflowRequest(
+            runID: sessionID,
+            sourceURL: inputURL,
+            userConfirmedMatrix: nil,
+            installation: installation,
+            manifest: manifest,
+            separationSettings: .bsRoformerSWProduction,
+            correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
+            masteringSettings: MasteringProfile.natural.settings,
+            analysisMode: .cpu
+        ))
+        #expect(correction.stemEvaluations.count == 4)
+        #expect(correction.stemEvaluations.allSatisfy { $0.correctedArtifact != nil })
+
+        let remix = try await workflow.processRemix(
+            correction: correction,
+            settings: correction.automaticRemixPlan.settings
+        )
+        let result = try await workflow.processMastering(.init(
+            remix: remix,
+            masteringSettings: MasteringProfile.natural.settings
+        ))
+        #expect(result.mastering.finalArtifact.kind == .finalMaster)
+        #expect(FileManager.default.fileExists(atPath: result.mastering.finalArtifact.fileURL.path))
+        #else
+        Issue.record("実モデルStem推論はApple Silicon専用です")
+        #endif
+    }
+
     private static func syntheticSignal(durationSeconds: Double) -> AudioSignal {
         let sampleRate = 44_100.0
         let frameCount = Int(sampleRate * durationSeconds)

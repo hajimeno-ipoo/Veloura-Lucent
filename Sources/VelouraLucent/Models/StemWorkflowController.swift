@@ -305,6 +305,7 @@ final class StemWorkflowController {
         guard let resources = readyResourcesFromCurrentInspection() else {
             if !isProcessingRun {
                 workspaceModel.clearModelPresentation()
+                workspaceModel.clearSeparationSettings()
             }
             return
         }
@@ -348,7 +349,10 @@ final class StemWorkflowController {
             if !modelManager.isAcquiringModels,
                let resources = readyResourcesFromCurrentInspection() {
                 let settings = try StemSeparationSettings
-                    .metaHTDemucsProduction(seed: seedProvider())
+                    .production(
+                        for: resources.installation.snapshot.contract.separationModel,
+                        seed: seedProvider()
+                    )
                     .validated(modelContract: resources.installation.snapshot.contract)
                 try workspaceModel.setProductionSeparationSettings(settings)
             }
@@ -1165,12 +1169,19 @@ final class StemWorkflowController {
         guard let workspaceModel else {
             throw StemWorkflowControllerError.workspaceUnavailable
         }
-        guard workspaceModel.selectedInputURL != nil,
-              workspaceModel.separationSettings == nil else {
+        guard workspaceModel.selectedInputURL != nil else {
             return
         }
+        if workspaceModel.separationSettings?.model
+            == resources.installation.snapshot.contract.separationModel {
+            return
+        }
+        workspaceModel.clearSeparationSettings()
         let settings = try StemSeparationSettings
-            .metaHTDemucsProduction(seed: seedProvider())
+            .production(
+                for: resources.installation.snapshot.contract.separationModel,
+                seed: seedProvider()
+            )
             .validated(modelContract: resources.installation.snapshot.contract)
         try workspaceModel.setProductionSeparationSettings(settings)
     }

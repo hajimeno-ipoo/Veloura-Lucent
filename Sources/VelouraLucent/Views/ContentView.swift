@@ -108,7 +108,20 @@ private extension WindowBackgroundBlurLevel {
 struct WindowChromeConfigurator: NSViewRepresentable {
     let minSize: NSSize
     let appearanceState: WindowAppearanceState
+    let hidesTitle: Bool
     @Binding var isFullScreen: Bool
+
+    init(
+        minSize: NSSize,
+        appearanceState: WindowAppearanceState,
+        hidesTitle: Bool = true,
+        isFullScreen: Binding<Bool>
+    ) {
+        self.minSize = minSize
+        self.appearanceState = appearanceState
+        self.hidesTitle = hidesTitle
+        _isFullScreen = isFullScreen
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -146,7 +159,7 @@ struct WindowChromeConfigurator: NSViewRepresentable {
         }
         coordinator.applyChrome(to: window)
         window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
+        window.titleVisibility = hidesTitle ? .hidden : .visible
     }
 
     @MainActor

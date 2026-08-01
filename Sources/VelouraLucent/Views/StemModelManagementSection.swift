@@ -8,8 +8,6 @@ struct StemModelManagementSection: View {
     let isDisabled: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var presentedConfirmation: StemModelDownloadConfirmation?
-    @State private var localErrorMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -25,27 +23,21 @@ struct StemModelManagementSection: View {
                 )
             }
 
+            LiquidGlassSegmentedPicker(
+                title: "分離モデル",
+                options: StemSeparationModel.allCases,
+                selection: selectedModelBinding,
+                label: \.displayName,
+                isDisabled: isDisabled
+                    || modelManager.isAcquiringModels
+            )
+
             RecoveryStatusCard(presentation: currentPresentation)
 
-            if let progressContext {
-                AcquisitionProgressCard(
-                    presentation: progressContext.presentation,
-                    isCancelling: progressContext.isCancelling,
-                    onCancel: modelManager.requestAcquisitionCancellation
-                )
-            }
-
-            if let displayedErrorMessage {
-                RecoveryFailureCard(
-                    message: displayedErrorMessage,
-                    onDismiss: dismissDisplayedError
-                )
-            }
-
-            if !modelManager.isAcquiringModels {
+            if !managementActions.isEmpty {
                 RecoveryActionSection(
                     actions: managementActions,
-                    isDisabled: isDisabled || presentedConfirmation != nil,
+                    isDisabled: isDisabled || modelManager.isAcquiringModels,
                     onAction: performRecoveryAction
                 )
             }
@@ -59,23 +51,20 @@ struct StemModelManagementSection: View {
             guard case .checking = modelManager.inspectionState else { return }
             await modelManager.inspectLocalResources()
         }
-        .onChange(of: modelManager.pendingDownloadConfirmation, initial: true) {
-            _, newConfirmation in
-            synchronizeConfirmation(with: newConfirmation)
-        }
-        .sheet(item: $presentedConfirmation, onDismiss: confirmationDidDismiss) { confirmation in
-            ModelDownloadConfirmationSheet(
-                confirmation: confirmation,
-                errorMessage: localErrorMessage,
-                onConfirm: confirmAcquisition,
-                onCancel: cancelPendingConfirmation
-            )
-        }
         .accessibilityElement(children: .contain)
     }
 
     private var currentPresentation: Presentation {
         Presentation.make(inspectionState: modelManager.inspectionState)
+    }
+
+    private var selectedModelBinding: Binding<StemSeparationModel> {
+        Binding(
+            get: { modelManager.selectedModel },
+            set: { model in
+                Task { await modelManager.selectModel(model) }
+            }
+        )
     }
 
     private var managementActions: [StemModelRecoveryAction] {
@@ -86,10 +75,25 @@ struct StemModelManagementSection: View {
         let manifest = modelManager.localInspection?.validatedManifest
         let modelName = manifest?.model.name
             ?? modelPresentation?.modelName
-            ?? "確認中"
+            ?? modelManager.selectedModel.displayName
         let revision = manifest?.model.revision
             ?? modelPresentation?.revision
             ?? "--"
+        if settings?.model == .bsRoformerSW
+            || modelManager.selectedModel == .bsRoformerSW {
+            return """
+            モデル　\(modelName)
+            revision　\(revision)
+            方式　STFT／62帯域分割／時間・周波数RoFormer
+            出力　6Stem → 既存4Stem
+            設定（固定）　STFT FFT / hop / window　2048 / 512 / 2048
+            　　　　　　帯域 / 周波数ビン　　　 62 / 1025
+            　　　　　　推論チャンク　　　　　 801フレーム
+            　　　　　　短音源 / ステップ　　　 10秒未満: 256フレーム / 8秒
+            　　　　　　dim / depth / heads　　 256 / 12 / 8
+            """
+        }
+
         let displayedSettings = settings ?? StemSeparationSettings(
             shifts: 2,
             overlap: 0.25,
@@ -108,9 +112,11 @@ struct StemModelManagementSection: View {
         return """
         モデル　\(modelName)
         revision　\(revision)
-        shifts / overlap　\(shiftsAndOverlap)
-        split / segment　\(splitAndSegment)
-        batch size / run seed　\(batchSizeAndSeed)
+        方式　Demucs v4
+        出力　4Stem
+        設定　shifts / overlap　\(shiftsAndOverlap)
+        　　　split / segment　\(splitAndSegment)
+        　　　batch size / run seed　\(batchSizeAndSeed)
         """
     }
 
@@ -123,97 +129,15 @@ struct StemModelManagementSection: View {
         }
     }
 
-    private var displayedErrorMessage: String? {
-        if let localErrorMessage {
-            return localErrorMessage
-        }
-        guard case .failed(let message) = modelManager.operationState else {
-            return nil
-        }
-        return message
-    }
-
-    private var progressContext: ProgressContext? {
-        let progress: StemModelAcquisitionProgress
-        let isCancelling: Bool
-        switch modelManager.operationState {
-        case .acquiring(let current):
-            progress = current
-            isCancelling = false
-        case .cancelling(let current):
-            progress = current
-            isCancelling = true
-        case .idle, .awaitingConfirmation, .failed:
-            return nil
-        }
-
-        return ProgressContext(
-            presentation: ProgressPresentation.make(
-                progress: progress,
-                manifest: modelManager.localInspection?.validatedManifest,
-                isCancelling: isCancelling
-            ),
-            isCancelling: isCancelling
-        )
-    }
-
     private func performRecoveryAction(_ action: StemModelRecoveryAction) {
-        localErrorMessage = nil
         switch action {
         case .initialDownload:
-            prepareAcquisition(.initialInstall)
+            modelManager.startAcquisition(purpose: .initialInstall)
         case .repair:
-            prepareAcquisition(.repair)
+            modelManager.startAcquisition(purpose: .repair)
         case .redownload:
-            prepareAcquisition(.redownload)
-        case .revalidate:
-            modelManager.dismissFailure()
-            Task {
-                await modelManager.inspectLocalResources()
-            }
+            modelManager.startAcquisition(purpose: .redownload)
         }
-    }
-
-    private func prepareAcquisition(_ purpose: StemModelAcquisitionPurpose) {
-        do {
-            try modelManager.prepareAcquisitionConfirmation(purpose: purpose)
-        } catch {
-            localErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func confirmAcquisition() {
-        do {
-            // This affirmative sheet action is the only UI path that issues the
-            // one-operation network authorization and starts model acquisition.
-            try modelManager.confirmAcquisition()
-            localErrorMessage = nil
-            presentedConfirmation = nil
-        } catch {
-            localErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func cancelPendingConfirmation() {
-        modelManager.cancelPendingConfirmation()
-        localErrorMessage = nil
-        presentedConfirmation = nil
-    }
-
-    private func confirmationDidDismiss() {
-        modelManager.cancelPendingConfirmation()
-        localErrorMessage = nil
-    }
-
-    private func synchronizeConfirmation(
-        with confirmation: StemModelDownloadConfirmation?
-    ) {
-        presentedConfirmation = confirmation
-    }
-
-    private func dismissDisplayedError() {
-        localErrorMessage = nil
-        modelManager.dismissFailure()
     }
 }
 
@@ -308,7 +232,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "MLX実行資産の状態を確認できません",
                     statusText: "未確認",
-                    message: "AIモデルの取得は開始しません。再検証しても確認できない場合は、アプリを正規配布物から再インストールしてください。通常モードは利用できます。",
+                    message: "AIモデルの取得は開始しません。この状態が続く場合は、アプリを正規配布物から再インストールしてください。通常モードは利用できます。",
                     detail: nil,
                     symbolName: "shippingbox",
                     tone: .warning,
@@ -325,7 +249,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "AIモデルの状態を確認できません",
                     statusText: "未確認",
-                    message: "取得を始めずに再検証してください。通常モードへ切り替えることもできます。",
+                    message: "AIモデルの取得は開始しません。通常モードへ切り替えることもできます。",
                     detail: nil,
                     symbolName: "questionmark.folder",
                     tone: .warning,
@@ -337,7 +261,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "AIモデルが必要です",
                     statusText: "未取得",
-                    message: "Stem Modeを使うには、固定RevisionのAIモデル2資産を取得する必要があります。取得内容を確認し、承認するまでネットワーク通信は開始しません。",
+                    message: "Stem Modeを使うには、固定RevisionのAIモデル2資産が必要です。取得ボタンを押すと通信を開始し、ファイル名、保存先、進捗をモーダルへ表示します。",
                     detail: nil,
                     symbolName: "arrow.down.circle",
                     tone: .warning,
@@ -349,7 +273,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "AIモデルの修復が必要です",
                     statusText: "修復必要",
-                    message: "欠落・破損状態を修復するか、AIモデル2資産を完全再取得できます。どちらも取得する2資産の確認と承認後にのみ通信を開始します。",
+                    message: "AIモデル2資産を取得し直す必要があります。取得ボタンを押すと、進捗画面を表示して完全再取得を開始します。",
                     detail: message,
                     symbolName: "wrench.and.screwdriver",
                     tone: .error,
@@ -361,7 +285,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "Stem Modeのモデルを利用できます",
                     statusText: "利用可能",
-                    message: "AIモデル2資産と同梱MLX実行資産は検証済みです。必要な場合は、確認画面を経てAIモデル2資産を完全再取得できます。",
+                    message: "AIモデル2資産と同梱MLX実行資産は検証済みです。必要な場合は、取得ボタンから選択中モデルのAIモデル2資産を完全再取得できます。",
                     detail: nil,
                     symbolName: "checkmark.seal",
                     tone: .success,
@@ -369,69 +293,6 @@ extension StemModelManagementSection {
                     requiresAppReinstallation: false,
                     actions: inspection.recoveryActions
                 )
-            }
-        }
-    }
-
-    struct DownloadConfirmationPresentation: Equatable, Sendable {
-        struct Asset: Equatable, Sendable, Identifiable {
-            let kind: StemModelAssetKind
-            let fileName: String
-            let byteCount: Int64
-            let sha256: String
-            let stableDownloadURL: String
-
-            var id: StemModelAssetKind { kind }
-        }
-
-        let title: String
-        let affirmativeTitle: String
-        let repository: String
-        let revision: String
-        let license: String
-        let totalByteCount: Int64
-        let sourceHost: String?
-        let assets: [Asset]
-        let networkNotice: String
-
-        init(confirmation: StemModelDownloadConfirmation) {
-            switch confirmation.purpose {
-            case .initialInstall:
-                title = "Stem Mode AIモデルを取得"
-                affirmativeTitle = "取得を開始"
-            case .repair:
-                title = "Stem Mode AIモデルを修復"
-                affirmativeTitle = "修復を開始"
-            case .redownload:
-                title = "Stem Mode AIモデルを完全再取得"
-                affirmativeTitle = "完全再取得を開始"
-            }
-            repository = confirmation.repository
-            revision = confirmation.revision
-            license = confirmation.license
-            totalByteCount = confirmation.totalByteCount
-            sourceHost = confirmation.sourceHost
-            assets = confirmation.assets
-                .sorted {
-                    Self.assetSortOrder($0.kind) < Self.assetSortOrder($1.kind)
-                }
-                .map {
-                    Asset(
-                        kind: $0.kind,
-                        fileName: $0.fileName,
-                        byteCount: $0.byteCount,
-                        sha256: $0.sha256,
-                        stableDownloadURL: $0.stableDownloadURL
-                    )
-                }
-            networkNotice = "肯定ボタンを押すまでネットワーク通信は開始しません。押すと上記2資産の取得を開始します。"
-        }
-
-        private static func assetSortOrder(_ kind: StemModelAssetKind) -> Int {
-            switch kind {
-            case .modelWeights: 0
-            case .modelConfiguration: 1
-            case .metalLibrary: 2
             }
         }
     }
@@ -573,22 +434,17 @@ extension StemModelManagementSection {
             case .initialDownload:
                 title = "AIモデルを取得"
                 systemImage = "arrow.down.circle"
-                help = "取得内容の確認画面を開きます。承認するまで通信しません。"
+                help = "選択中モデルの取得を開始し、進捗画面を開きます。"
                 isPrimary = true
             case .repair:
                 title = "AIモデルを修復"
                 systemImage = "wrench.and.screwdriver"
-                help = "欠落・破損状態を直すため、AIモデル2資産の取得確認を開きます。"
+                help = "欠落・破損したAIモデル2資産を取得し直します。"
                 isPrimary = true
             case .redownload:
-                title = "モデル再取得"
+                title = "AIモデルを取得"
                 systemImage = "arrow.clockwise.circle"
-                help = "AIモデル2資産を完全再取得する確認画面を開きます。"
-                isPrimary = false
-            case .revalidate:
-                title = "モデル検証"
-                systemImage = "checkmark.shield"
-                help = "ネットワークを使わず、ローカル資産をもう一度検証します。"
+                help = "選択中モデルのAIモデル2資産を完全再取得します。"
                 isPrimary = false
             }
         }
@@ -596,11 +452,6 @@ extension StemModelManagementSection {
 }
 
 private extension StemModelManagementSection {
-    struct ProgressContext {
-        let presentation: ProgressPresentation
-        let isCancelling: Bool
-    }
-
     struct RecoveryStatusCard: View {
         let presentation: Presentation
 
@@ -641,7 +492,7 @@ private extension StemModelManagementSection {
 
                 if presentation.requiresAppReinstallation {
                     Label(
-                        "再検証しても解消しない場合は、アプリを正規配布物から再インストールしてください。AIモデルの再取得では直りません。",
+                        "この状態が続く場合は、アプリを正規配布物から再インストールしてください。AIモデルの再取得では直りません。",
                         systemImage: "arrow.down.app"
                     )
                     .font(.callout)
@@ -664,167 +515,18 @@ private extension StemModelManagementSection {
         }
     }
 
-    struct AcquisitionProgressCard: View {
-        let presentation: ProgressPresentation
-        let isCancelling: Bool
-        let onCancel: () -> Void
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 14) {
-                Label(presentation.stageTitle, systemImage: stageSymbol)
-                    .font(.headline)
-                Text(presentation.stageDetail)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-
-                ProgressRow(
-                    title: "全体",
-                    fraction: presentation.overallFraction,
-                    receivedBytes: presentation.receivedBytes,
-                    totalBytes: presentation.totalBytes,
-                    accessibilityLabel: "AIモデル取得の全体進捗"
-                )
-
-                ForEach(presentation.assetProgresses) { asset in
-                    ProgressRow(
-                        title: progressTitle(for: asset),
-                        fraction: asset.fraction,
-                        receivedBytes: asset.receivedBytes,
-                        totalBytes: asset.totalBytes,
-                        accessibilityLabel: "\(asset.fileName)の取得進捗"
-                    )
-                }
-
-                if presentation.isWaitingForConnectivity {
-                    Label("オフラインまたは接続待機中です", systemImage: "wifi.slash")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                if presentation.canRequestCancellation {
-                    HStack {
-                        Spacer()
-                        Button(
-                            "取得を中断",
-                            systemImage: "stop.circle",
-                            role: .cancel,
-                            action: onCancel
-                        )
-                        .keyboardShortcut(.cancelAction)
-                        .help("取得途中のstagingを破棄し、検証済みactive世代は維持します。")
-                    }
-                } else if !isCancelling && presentation.phase == .activating {
-                    Label(
-                        "active世代の有効化中は中断できません",
-                        systemImage: "lock.shield"
-                    )
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                }
-            }
-            .padding(16)
-            .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
-        }
-
-        private var stageSymbol: String {
-            if isCancelling {
-                "stop.circle"
-            } else if presentation.isWaitingForConnectivity {
-                "wifi.slash"
-            } else {
-                switch presentation.phase {
-                case .preparing: "shippingbox"
-                case .downloading: "arrow.down.circle"
-                case .validating: "checkmark.shield"
-                case .activating: "lock.shield"
-                case .completed: "checkmark.seal"
-                }
-            }
-        }
-
-        private func progressTitle(
-            for asset: ProgressPresentation.AssetProgress
-        ) -> String {
-            if asset.isCurrent && presentation.phase == .downloading {
-                "\(asset.fileName)（取得中）"
-            } else {
-                asset.fileName
-            }
-        }
-    }
-
-    struct ProgressRow: View {
-        let title: String
-        let fraction: Double
-        let receivedBytes: Int64
-        let totalBytes: Int64
-        let accessibilityLabel: String
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
-                LabeledContent(title) {
-                    Text(fraction, format: .percent.precision(.fractionLength(0)))
-                        .monospacedDigit()
-                }
-                ProgressView(value: fraction)
-                    .accessibilityLabel(accessibilityLabel)
-                    .accessibilityValue(
-                        Text(fraction, format: .percent.precision(.fractionLength(0)))
-                    )
-                Text("\(receivedBytes) / \(totalBytes) bytes")
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    struct RecoveryFailureCard: View {
-        let message: String
-        let onDismiss: () -> Void
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("モデル操作に失敗しました", systemImage: "exclamationmark.triangle")
-                    .font(.headline)
-                    .foregroundStyle(.red)
-                Text(message)
-                    .font(.body)
-                    .textSelection(.enabled)
-                Text("既存の検証済みactive世代がある場合は維持され、失敗したstagingをactiveへ切り替えません。")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                HStack {
-                    Spacer()
-                    Button("エラーを閉じる", action: onDismiss)
-                }
-            }
-            .padding(16)
-            .background(.red.opacity(0.08), in: .rect(cornerRadius: 16))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(.red.opacity(0.35))
-                    .allowsHitTesting(false)
-            }
-        }
-    }
-
     struct RecoveryActionSection: View {
         let actions: [StemModelRecoveryAction]
         let isDisabled: Bool
         let onAction: (StemModelRecoveryAction) -> Void
 
         var body: some View {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("選択できる操作")
-                    .font(.headline)
-
-                HStack(spacing: 10) {
-                    ForEach(actions) { action in
-                        RecoveryActionButton(
-                            presentation: ActionPresentation(action: action),
-                            action: { onAction(action) }
-                        )
-                    }
+            HStack(spacing: 10) {
+                ForEach(actions) { action in
+                    RecoveryActionButton(
+                        presentation: ActionPresentation(action: action),
+                        action: { onAction(action) }
+                    )
                 }
             }
             .disabled(isDisabled)
@@ -857,148 +559,4 @@ private extension StemModelManagementSection {
         }
     }
 
-    struct ModelDownloadConfirmationSheet: View {
-        let errorMessage: String?
-        let onConfirm: () -> Void
-        let onCancel: () -> Void
-
-        private let presentation: DownloadConfirmationPresentation
-
-        init(
-            confirmation: StemModelDownloadConfirmation,
-            errorMessage: String?,
-            onConfirm: @escaping () -> Void,
-            onCancel: @escaping () -> Void
-        ) {
-            self.errorMessage = errorMessage
-            self.onConfirm = onConfirm
-            self.onCancel = onCancel
-            self.presentation = DownloadConfirmationPresentation(
-                confirmation: confirmation
-            )
-        }
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(presentation.title)
-                        .font(.title2.bold())
-                    Text("固定Revisionから取得する2資産を確認してください。取得後は容量・Revision・SHA-256を検証してから有効化します。")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        DownloadContractCard(presentation: presentation)
-
-                        ForEach(presentation.assets) { asset in
-                            DownloadAssetCard(asset: asset)
-                        }
-
-                        Label(presentation.networkNotice, systemImage: "network")
-                            .font(.callout)
-                            .padding(12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.orange.opacity(0.1), in: .rect(cornerRadius: 12))
-
-                        if let errorMessage {
-                            Label(errorMessage, systemImage: "exclamationmark.triangle")
-                                .font(.callout)
-                                .foregroundStyle(.red)
-                                .textSelection(.enabled)
-                                .padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(.red.opacity(0.08), in: .rect(cornerRadius: 12))
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-                .scrollContentBackground(.hidden)
-
-                Divider()
-
-                HStack {
-                    Button("戻る", role: .cancel, action: onCancel)
-                        .keyboardShortcut(.cancelAction)
-                    Spacer()
-                    Button(
-                        presentation.affirmativeTitle,
-                        systemImage: "arrow.down.circle",
-                        action: onConfirm
-                    )
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .accessibilityHint("表示中の2資産についてネットワーク取得を開始します。")
-                }
-            }
-            .padding(20)
-            .frame(minWidth: 640, idealWidth: 720, minHeight: 540, idealHeight: 680)
-        }
-    }
-
-    struct DownloadContractCard: View {
-        let presentation: DownloadConfirmationPresentation
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("取得契約")
-                    .font(.headline)
-                contractValue(label: "取得元", value: presentation.repository)
-                contractValue(label: "固定Revision", value: presentation.revision)
-                contractValue(label: "License", value: presentation.license)
-                contractValue(
-                    label: "合計容量",
-                    value: "\(presentation.totalByteCount) bytes"
-                )
-                if let sourceHost = presentation.sourceHost {
-                    contractValue(label: "通信先ホスト", value: sourceHost)
-                }
-            }
-            .padding(14)
-            .velouraAdaptiveGlass(in: .rect(cornerRadius: 14))
-        }
-
-        private func contractValue(label: String, value: String) -> some View {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(label)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.body.monospaced())
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .accessibilityElement(children: .combine)
-        }
-    }
-
-    struct DownloadAssetCard: View {
-        let asset: DownloadConfirmationPresentation.Asset
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 9) {
-                Label(asset.fileName, systemImage: "doc")
-                    .font(.headline)
-                assetValue(label: "容量", value: "\(asset.byteCount) bytes")
-                assetValue(label: "SHA-256", value: asset.sha256)
-                assetValue(label: "固定配布URL", value: asset.stableDownloadURL)
-            }
-            .padding(14)
-            .background(.regularMaterial, in: .rect(cornerRadius: 14))
-        }
-
-        private func assetValue(label: String, value: String) -> some View {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(label)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.callout.monospaced())
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .accessibilityElement(children: .combine)
-        }
-    }
 }

@@ -436,15 +436,27 @@ final class StemModeWorkspaceModel {
     ) throws {
         try requireMutableRunSettings()
         _ = try settings.validatedParameters()
-        guard settings.shifts == 2,
-              settings.overlap == 0.25,
-              settings.split,
-              settings.segmentLength == .modelContract,
-              settings.batchSize == 1,
-              settings.seed != nil else {
+        let isApproved: Bool
+        switch settings.model {
+        case .htdemucs:
+            isApproved = settings.shifts == 2
+                && settings.overlap == 0.25
+                && settings.split
+                && settings.segmentLength == .modelContract
+                && settings.batchSize == 1
+                && settings.seed != nil
+        case .bsRoformerSW:
+            isApproved = settings == .bsRoformerSWProduction
+        }
+        guard isApproved else {
             throw StemModeWorkspaceSettingsError.unapprovedProductionSettings
         }
         separationSettings = settings
+    }
+
+    func clearSeparationSettings() {
+        guard !isRunActive, !isStartingRun else { return }
+        separationSettings = nil
     }
 
     func setModelPresentation(_ presentation: StemModeModelPresentation) {
@@ -462,7 +474,7 @@ final class StemModeWorkspaceModel {
         guard let separationSettings else {
             presentError(
                 title: "Stem Modeを開始できません",
-                message: "承認済みの本番分離設定とrun seedがまだ準備されていません。"
+                message: "承認済みの本番分離設定がまだ準備されていません。"
             )
             return
         }

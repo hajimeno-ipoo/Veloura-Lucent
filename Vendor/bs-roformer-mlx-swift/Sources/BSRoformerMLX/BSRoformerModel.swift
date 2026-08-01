@@ -9,8 +9,11 @@ public final class BSRoformerModel {
 
     public init(weightsURL: URL, configuration: BSRoformerConfiguration) throws {
         try configuration.validate()
-        let weights = try MLX.loadArrays(url: weightsURL)
         let required = Self.requiredWeightKeys(configuration: configuration)
+        let weights = try Self.normalizedWeights(
+            try MLX.loadArrays(url: weightsURL),
+            required: required
+        )
         let missing = required.subtracting(weights.keys)
         guard missing.isEmpty else {
             throw BSRoformerError.invalidWeights(
@@ -292,5 +295,94 @@ public final class BSRoformerModel {
             }
         }
         return keys
+    }
+
+    private static func normalizedWeights(
+        _ loaded: [String: MLXArray],
+        required: Set<String>
+    ) throws -> [String: MLXArray] {
+        if Set(loaded.keys) == required {
+            return loaded
+        }
+
+        var normalized: [String: MLXArray] = [:]
+        normalized.reserveCapacity(loaded.count)
+        for (key, value) in loaded {
+            guard let normalizedKey = normalizedPublishedWeightKey(key) else {
+                throw BSRoformerError.invalidWeights("未対応の公開重み名です: \(key)")
+            }
+            guard normalized.updateValue(value, forKey: normalizedKey) == nil else {
+                throw BSRoformerError.invalidWeights("公開重み名の変換先が重複しています: \(normalizedKey)")
+            }
+        }
+        return normalized
+    }
+
+    static func normalizedPublishedWeightKey(_ key: String) -> String? {
+        if key == "final_norm.gamma" {
+            return "final_norm.weight"
+        }
+
+        let parts = key.split(separator: ".").map(String.init)
+        if parts.count == 5,
+           parts[0] == "band_split",
+           parts[1] == "to_features",
+           Int(parts[2]) != nil {
+            let prefix = "band_split.to_features_\(parts[2])"
+            if parts[3] == "0", parts[4] == "gamma" {
+                return "\(prefix).norm.weight"
+            }
+            if parts[3] == "1", parts[4] == "weight" || parts[4] == "bias" {
+                return "\(prefix).linear.\(parts[4])"
+            }
+        }
+
+        if parts.count >= 8,
+           parts[0] == "layers",
+           Int(parts[1]) != nil,
+           parts[2] == "0" || parts[2] == "1",
+           parts[3] == "layers",
+           parts[4] == "0" {
+            let direction = parts[2] == "0" ? "time_transformer" : "freq_transformer"
+            let prefix = "layers_\(parts[1]).\(direction).layers_0"
+            if parts[5] == "0" {
+                if parts.count == 8, parts[6] == "norm", parts[7] == "gamma" {
+                    return "\(prefix).attn.norm.weight"
+                }
+                if parts.count == 8,
+                   ["to_qkv", "to_gates"].contains(parts[6]),
+                   parts[7] == "weight" || parts[7] == "bias" {
+                    return "\(prefix).attn.\(parts[6]).\(parts[7])"
+                }
+                if parts.count == 9,
+                   parts[6] == "to_out",
+                   parts[7] == "0",
+                   parts[8] == "weight" {
+                    return "\(prefix).attn.to_out.layers.0.weight"
+                }
+            }
+            if parts[5] == "1",
+               parts.count == 9,
+               parts[6] == "net",
+               ["0", "1", "4"].contains(parts[7]) {
+                let parameter = parts[8] == "gamma" ? "weight" : parts[8]
+                if parameter == "weight" || parameter == "bias" {
+                    return "\(prefix).ff.net.layers.\(parts[7]).\(parameter)"
+                }
+            }
+        }
+
+        if parts.count == 7,
+           parts[0] == "mask_estimators",
+           Int(parts[1]) != nil,
+           parts[2] == "to_freqs",
+           Int(parts[3]) != nil,
+           parts[4] == "0",
+           ["0", "2"].contains(parts[5]),
+           parts[6] == "weight" || parts[6] == "bias" {
+            return "mask_estimators_\(parts[1]).to_freqs_\(parts[3]).layers.\(parts[5]).\(parts[6])"
+        }
+
+        return nil
     }
 }

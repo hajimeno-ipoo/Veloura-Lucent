@@ -203,9 +203,10 @@ verify_manifest_contract() {
 
   verify_manifest_value "downloadPolicy.requiresExplicitUserConfirmation" "true"
   verify_manifest_value "downloadPolicy.revisionResponseHeader" "X-Repo-Commit"
-  verify_manifest_array_count "downloadPolicy.allowedRedirectHosts" "2"
+  verify_manifest_array_count "downloadPolicy.allowedRedirectHosts" "3"
   verify_manifest_value "downloadPolicy.allowedRedirectHosts.0" "huggingface.co"
   verify_manifest_value "downloadPolicy.allowedRedirectHosts.1" "cas-bridge.xethub.hf.co"
+  verify_manifest_value "downloadPolicy.allowedRedirectHosts.2" "us.aws.cdn.hf.co"
 
   verify_manifest_array_count "downloadableModelAssets" "2" "kind"
   verify_manifest_value "downloadableModelAssets.0.kind" "modelWeights"

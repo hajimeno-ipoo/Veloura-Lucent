@@ -84,7 +84,7 @@ actor StemModelInstallationStore {
 
     init(
         paths: StemModelStorePaths = .production,
-        validator: StemModelAssetValidator = StemModelAssetValidator(),
+        validator: StemModelAssetValidator = StemModelAssetValidator(selectedModel: nil),
         fileManager: FileManager = .default
     ) {
         self.paths = paths
@@ -167,8 +167,6 @@ actor StemModelInstallationStore {
         let stagedReceiptURL = paths.receiptURL(in: stagingURL)
         try writeJSONAtomically(receipt, to: stagedReceiptURL, operation: "receipt write")
 
-        // Recheck the exact installed layout after adding the receipt. Nothing is active yet.
-        _ = try validator.validateInstalledModelAssets(manifest: manifest, rootURL: stagingURL)
         let decodedReceipt: StemModelInstallationReceipt = try readJSONRegularFile(
             StemModelInstallationReceipt.self,
             at: stagedReceiptURL,
@@ -187,6 +185,11 @@ actor StemModelInstallationStore {
         guard !pathExistsIncludingSymbolicLink(generationURL) else {
             throw StemModelInstallationStoreError.generationAlreadyExists(path: generationURL.path)
         }
+        let relocatedSnapshot = try relocatedSnapshot(
+            stagedSnapshot,
+            manifest: manifest,
+            generationURL: generationURL
+        )
         try requireSameVolume(stagingURL, assetSetDirectory)
 
         do {
@@ -205,29 +208,31 @@ actor StemModelInstallationStore {
             assetSetIdentifier: manifest.assetSetIdentifier,
             generationIdentifier: generationIdentifier
         )
-        // Validate the generation in its final location before switching the active pointer.
-        // After the pointer is replaced, activation must not fail while re-reading the new files;
-        // otherwise callers could receive an error even though the active generation changed.
-        let installation = try loadInstallation(
-            pointer: pointer,
-            manifest: manifest,
-            generationURL: generationURL
+        let installation = ValidatedStemModelInstallation(
+            snapshot: relocatedSnapshot,
+            receipt: decodedReceipt,
+            generationDirectoryURL: generationURL
         )
-        try replaceActivePointerAtomically(pointer)
+        try replaceActivePointerAtomically(
+            pointer,
+            at: paths.activePointerURL(for: contract.separationModel)
+        )
         return installation
     }
 
     func loadActive(manifest: StemModelManifest) throws -> ValidatedStemModelInstallation? {
-        _ = try validator.validateManifest(manifest)
-        guard pathExistsIncludingSymbolicLink(paths.activePointerURL) else { return nil }
+        let contract = try validator.validateManifest(manifest)
+        let activePointerURL = paths.activePointerURL(for: contract.separationModel)
+        guard pathExistsIncludingSymbolicLink(activePointerURL) else { return nil }
         try ensureDirectory(paths.rootURL)
-        try requireNoSymbolicLinks(from: paths.rootURL, through: paths.activePointerURL)
+        try requireNoSymbolicLinks(from: paths.rootURL, through: activePointerURL)
 
         let pointer: StemModelActivePointer = try readJSONRegularFile(
             StemModelActivePointer.self,
-            at: paths.activePointerURL,
-            missingError: .activePointerUnreadable(path: paths.activePointerURL.path, reason: "missing"),
-            unreadable: { .activePointerUnreadable(path: paths.activePointerURL.path, reason: $0) }
+            at: activePointerURL,
+            activePointer: true,
+            missingError: .activePointerUnreadable(path: activePointerURL.path, reason: "missing"),
+            unreadable: { .activePointerUnreadable(path: activePointerURL.path, reason: $0) }
         )
         try validatePointer(pointer, manifest: manifest)
         let generationURL = paths.generationDirectoryURL(
@@ -263,6 +268,53 @@ actor StemModelInstallationStore {
             snapshot: snapshot,
             receipt: receipt,
             generationDirectoryURL: generationURL
+        )
+    }
+
+    private func relocatedSnapshot(
+        _ snapshot: ValidatedStemModelSnapshot,
+        manifest: StemModelManifest,
+        generationURL: URL
+    ) throws -> ValidatedStemModelSnapshot {
+        let definitions = Dictionary(
+            uniqueKeysWithValues: manifest.downloadableModelAssets.map { ($0.kind, $0) }
+        )
+        let relocatedAssets = try snapshot.assets.map { asset in
+            guard let definition = definitions[asset.kind] else {
+                throw StemModelInstallationStoreError.fileOperationFailed(
+                    operation: "validated snapshot relocation",
+                    path: generationURL.path,
+                    reason: "validated asset definition is missing: \(asset.kind.rawValue)"
+                )
+            }
+            return ValidatedStemModelAsset(
+                kind: asset.kind,
+                fileURL: try StemModelAssetValidator.safeDescendantURL(
+                    rootURL: generationURL,
+                    relativePath: definition.installationRelativePath,
+                    field: "downloadableModelAssets.installationRelativePath"
+                ),
+                byteCount: asset.byteCount,
+                sha256: asset.sha256
+            )
+        }
+        guard let configuration = definitions[.modelConfiguration] else {
+            throw StemModelInstallationStoreError.fileOperationFailed(
+                operation: "validated snapshot relocation",
+                path: generationURL.path,
+                reason: "model configuration definition is missing"
+            )
+        }
+        let configurationURL = try StemModelAssetValidator.safeDescendantURL(
+            rootURL: generationURL,
+            relativePath: configuration.installationRelativePath,
+            field: "downloadableModelAssets.installationRelativePath"
+        )
+        return ValidatedStemModelSnapshot(
+            contract: snapshot.contract,
+            installationRootURL: generationURL.standardizedFileURL,
+            modelDirectoryURL: configurationURL.deletingLastPathComponent().standardizedFileURL,
+            assets: relocatedAssets
         )
     }
 
@@ -329,9 +381,10 @@ actor StemModelInstallationStore {
             expected: manifest.assetSetIdentifier,
             actual: receipt.assetSetIdentifier
         )
+        let contract = try validator.validateManifest(manifest)
         try requireReceiptEqual(
             field: "modelIdentifier",
-            expected: StemModelAssetValidator.modelIdentifier,
+            expected: contract.identifier,
             actual: receipt.modelIdentifier
         )
         try requireReceiptEqual(
@@ -410,7 +463,10 @@ actor StemModelInstallationStore {
         return sourceEvidence.sorted(by: { $0.kind.rawValue < $1.kind.rawValue })
     }
 
-    private func replaceActivePointerAtomically(_ pointer: StemModelActivePointer) throws {
+    private func replaceActivePointerAtomically(
+        _ pointer: StemModelActivePointer,
+        at activePointerURL: URL
+    ) throws {
         try ensureDirectory(paths.rootURL)
         let temporaryURL = paths.rootURL.appending(
             path: ".active-\(UUID().uuidString.lowercased()).tmp",
@@ -420,14 +476,14 @@ actor StemModelInstallationStore {
         try writeJSONAtomically(pointer, to: temporaryURL, operation: "active pointer staging")
 
         do {
-            if pathExistsIncludingSymbolicLink(paths.activePointerURL) {
-                try requireRegularFileWithoutSymbolicLink(paths.activePointerURL, activePointer: true)
+            if pathExistsIncludingSymbolicLink(activePointerURL) {
+                try requireRegularFileWithoutSymbolicLink(activePointerURL, activePointer: true)
             }
             // POSIX rename is one same-volume operation: on failure an existing pointer is unchanged.
-            guard Darwin.rename(temporaryURL.path, paths.activePointerURL.path) == 0 else {
+            guard Darwin.rename(temporaryURL.path, activePointerURL.path) == 0 else {
                 throw StemModelInstallationStoreError.fileOperationFailed(
                     operation: "active pointer replacement",
-                    path: paths.activePointerURL.path,
+                    path: activePointerURL.path,
                     reason: posixReason()
                 )
             }
@@ -436,7 +492,7 @@ actor StemModelInstallationStore {
         } catch {
             throw StemModelInstallationStoreError.fileOperationFailed(
                 operation: "active pointer replacement",
-                path: paths.activePointerURL.path,
+                path: activePointerURL.path,
                 reason: error.localizedDescription
             )
         }
@@ -468,11 +524,12 @@ actor StemModelInstallationStore {
     private func readJSONRegularFile<Value: Decodable>(
         _ type: Value.Type,
         at url: URL,
+        activePointer: Bool = false,
         missingError: StemModelInstallationStoreError,
         unreadable: (String) -> StemModelInstallationStoreError
     ) throws -> Value {
         guard pathExistsIncludingSymbolicLink(url) else { throw missingError }
-        try requireRegularFileWithoutSymbolicLink(url, activePointer: url == paths.activePointerURL)
+        try requireRegularFileWithoutSymbolicLink(url, activePointer: activePointer)
 
         let descriptor = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
         guard descriptor >= 0 else { throw unreadable(posixReason()) }

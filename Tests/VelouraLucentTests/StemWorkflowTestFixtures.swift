@@ -1,11 +1,14 @@
 import Foundation
 @testable import VelouraLucent
 
-func makeStemTestInstallation(rootURL: URL) throws -> (
+func makeStemTestInstallation(
+    rootURL: URL,
+    model: StemSeparationModel = .htdemucs
+) throws -> (
     manifest: StemModelManifest,
     installation: ValidatedStemModelInstallation
 ) {
-    let validator = StemModelAssetValidator()
+    let validator = StemModelAssetValidator(selectedModel: model)
     let manifest = try validator.loadBundledManifest()
     let contract = try validator.validateManifest(manifest)
     let generationID = UUID()
@@ -52,7 +55,11 @@ func makeStemTestInstallation(rootURL: URL) throws -> (
             snapshot: ValidatedStemModelSnapshot(
                 contract: contract,
                 installationRootURL: generationURL,
-                modelDirectoryURL: generationURL.appending(path: "htdemucs", directoryHint: .isDirectory),
+                modelDirectoryURL: try StemModelAssetValidator.safeDescendantURL(
+                    rootURL: generationURL,
+                    relativePath: model == .htdemucs ? "htdemucs" : "bs-roformer-sw",
+                    field: "testModelDirectory"
+                ),
                 assets: assets
             ),
             receipt: receipt,

@@ -1,3 +1,4 @@
+import BSRoformerMLX
 import CryptoKit
 import CoreFoundation
 import Darwin
@@ -125,76 +126,23 @@ enum StemModelAssetValidationError: LocalizedError, Equatable {
 }
 
 struct StemModelAssetValidator: Sendable {
-    static let manifestResourceRelativePath = "StemModels/stem-model-manifest.json"
-    static let expectedModelRevision = "d4519e24ddc2dd4a11d56a193092433d852c3961"
-    static let expectedAssetSetIdentifier = "htdemucs-\(expectedModelRevision)"
-    static let modelIdentifier = "mlx-community/demucs-mlx:htdemucs"
+    private static let htdemucsProfile = StemProductionModelProfile.profile(for: .htdemucs)
+    static let manifestResourceRelativePath = StemSeparationModel.htdemucs.manifestResourceRelativePath
+    static let expectedModelRevision = htdemucsProfile.revision
+    static let expectedAssetSetIdentifier = htdemucsProfile.assetSetIdentifier
+    static let modelIdentifier = htdemucsProfile.modelIdentifier
 
     private static let expectedSchemaVersion = 2
-    private static let expectedModelName = "Demucs v4 htdemucs"
-    private static let expectedModelRepository = "mlx-community/demucs-mlx"
-    private static let expectedModelLicense = "mit"
     private static let expectedSourceOrder: [StemRole] = [.drums, .bass, .other, .vocals]
-    private static let expectedRedirectHosts = ["huggingface.co", "cas-bridge.xethub.hf.co"]
-    private static let expectedRuntimePins: [String: StemRuntimePin] = [
-        "demucs-mlx-swift": StemRuntimePin(
-            name: "demucs-mlx-swift",
-            repo: "https://github.com/kylehowells/demucs-mlx-swift.git",
-            version: nil,
-            revision: "c81c47178828db2d8bc66e64f80c745c64abdc94"
-        ),
-        "mlx-swift": StemRuntimePin(
-            name: "mlx-swift",
-            repo: "https://github.com/ml-explore/mlx-swift.git",
-            version: "0.30.6",
-            revision: "6ba4827fb82c97d012eec9ab4b2de21f85c3b33d"
-        ),
-        "swift-transformers": StemRuntimePin(
-            name: "swift-transformers",
-            repo: "https://github.com/huggingface/swift-transformers.git",
-            version: "1.1.6",
-            revision: "573e5c9036c2f136b3a8a071da8e8907322403d0"
-        ),
-        "swift-jinja": StemRuntimePin(
-            name: "swift-jinja",
-            repo: "https://github.com/huggingface/swift-jinja.git",
-            version: "2.3.2",
-            revision: "f731f03bf746481d4fda07f817c3774390c4d5b9"
-        ),
-        "swift-collections": StemRuntimePin(
-            name: "swift-collections",
-            repo: "https://github.com/apple/swift-collections.git",
-            version: "1.4.0",
-            revision: "8d9834a6189db730f6264db7556a7ffb751e99ee"
-        ),
-        "swift-argument-parser": StemRuntimePin(
-            name: "swift-argument-parser",
-            repo: "https://github.com/apple/swift-argument-parser",
-            version: "1.8.2",
-            revision: "6a52f3251125d74daf04fcbd5e6f08a75d074382"
-        ),
-        "swift-numerics": StemRuntimePin(
-            name: "swift-numerics",
-            repo: "https://github.com/apple/swift-numerics",
-            version: "1.1.1",
-            revision: "0c0290ff6b24942dadb83a929ffaaa1481df04a2"
-        )
+    private static let htdemucsRedirectHosts = [
+        "huggingface.co",
+        "cas-bridge.xethub.hf.co",
+        "us.aws.cdn.hf.co",
     ]
-    private static let expectedDownloadableAssets: [StemModelAssetKind: StemDownloadableModelAsset] = [
-        .modelWeights: StemDownloadableModelAsset(
-            kind: .modelWeights,
-            downloadURL: "https://huggingface.co/mlx-community/demucs-mlx/resolve/\(expectedModelRevision)/htdemucs.safetensors",
-            installationRelativePath: "htdemucs/htdemucs.safetensors",
-            byteCount: 168_005_865,
-            sha256: "339d267a7a6983a11eedbdc00413c602a65e9b9103f695fb5c2b2a481cd9d297"
-        ),
-        .modelConfiguration: StemDownloadableModelAsset(
-            kind: .modelConfiguration,
-            downloadURL: "https://huggingface.co/mlx-community/demucs-mlx/resolve/\(expectedModelRevision)/htdemucs_config.json",
-            installationRelativePath: "htdemucs/htdemucs_config.json",
-            byteCount: 1_892,
-            sha256: "9258499513944fc062fbca0f11be425a446ec5702869a87e225323d7a57d2a01"
-        )
+    private static let bsRoformerSWRedirectHosts = [
+        "huggingface.co",
+        "cas-bridge.xethub.hf.co",
+        "us.aws.cdn.hf.co",
     ]
     private static let expectedBundledRuntimeAssets: [StemModelAssetKind: StemBundledRuntimeAsset] = [
         .metalLibrary: StemBundledRuntimeAsset(
@@ -206,21 +154,28 @@ struct StemModelAssetValidator: Sendable {
         )
     ]
 
+    private let selectedModel: StemSeparationModel?
     private let validationReference: StemModelManifest?
 
-    init(validationReference: StemModelManifest? = nil) {
+    init(
+        selectedModel: StemSeparationModel? = .htdemucs,
+        validationReference: StemModelManifest? = nil
+    ) {
+        self.selectedModel = selectedModel
         self.validationReference = validationReference
     }
 
     func manifestURL(in resourceRootURL: URL) -> URL {
-        resourceRootURL.appending(path: Self.manifestResourceRelativePath)
+        resourceRootURL.appending(
+            path: (selectedModel ?? .htdemucs).manifestResourceRelativePath
+        )
     }
 
     func loadBundledManifest() throws -> StemModelManifest {
         guard let resourceRootURL = AppResourceBundle.resourceURL else {
             let expectedPath = Bundle.main.resourceURL?
                 .appending(path: AppResourceBundle.bundleName, directoryHint: .isDirectory)
-                .appending(path: Self.manifestResourceRelativePath)
+                .appending(path: (selectedModel ?? .htdemucs).manifestResourceRelativePath)
                 .path ?? AppResourceBundle.bundleName
             throw StemModelAssetValidationError.manifestMissing(path: expectedPath)
         }
@@ -248,10 +203,11 @@ struct StemModelAssetValidator: Sendable {
 
     func validateManifest(_ manifest: StemModelManifest) throws -> StemModelContract {
         try validateManifestSafety(manifest)
+        let profile = try resolvedProfile(for: manifest)
         if let validationReference {
             try requireEqual(field: "manifest", expected: validationReference, actual: manifest)
         } else {
-            try validateProductionManifest(manifest)
+            try validateProductionManifest(manifest, profile: profile)
         }
 
         let outputNames = Dictionary(uniqueKeysWithValues: Self.expectedSourceOrder.map { ($0, $0.rawValue) })
@@ -260,7 +216,8 @@ struct StemModelAssetValidator: Sendable {
         )
 
         return StemModelContract(
-            identifier: Self.modelIdentifier,
+            separationModel: profile.model,
+            identifier: profile.modelIdentifier,
             version: manifest.model.revision,
             assetSetIdentifier: manifest.assetSetIdentifier,
             inputName: "batchData",
@@ -273,7 +230,7 @@ struct StemModelAssetValidator: Sendable {
             scalarType: manifest.audioContract.scalarType,
             normalization: .modelManagedIdentityBoundary,
             runtime: .mlx,
-            defaultSegmentSeconds: 7.8,
+            defaultSegmentSeconds: profile.defaultSegmentSeconds,
             downloadableModelAssets: manifest.downloadableModelAssets,
             bundledRuntimeAssets: manifest.bundledRuntimeAssets
         )
@@ -374,19 +331,45 @@ struct StemModelAssetValidator: Sendable {
         return result
     }
 
-    private func validateProductionManifest(_ manifest: StemModelManifest) throws {
+    private func resolvedProfile(
+        for manifest: StemModelManifest
+    ) throws -> StemProductionModelProfile {
+        if validationReference != nil {
+            return StemProductionModelProfile.profile(for: selectedModel ?? .htdemucs)
+        }
+        guard let identifiedModel = StemProductionModelProfile.identify(manifest) else {
+            throw StemModelAssetValidationError.contractMismatch(
+                field: "model",
+                expected: StemSeparationModel.allCases.map(\.displayName).joined(separator: " / "),
+                actual: "\(manifest.model.repo)@\(manifest.model.revision)"
+            )
+        }
+        if let selectedModel {
+            try requireEqual(
+                field: "selectedModel",
+                expected: selectedModel,
+                actual: identifiedModel
+            )
+        }
+        return StemProductionModelProfile.profile(for: identifiedModel)
+    }
+
+    private func validateProductionManifest(
+        _ manifest: StemModelManifest,
+        profile: StemProductionModelProfile
+    ) throws {
         try requireEqual(field: "schemaVersion", expected: Self.expectedSchemaVersion, actual: manifest.schemaVersion)
         try requireEqual(
             field: "assetSetIdentifier",
-            expected: Self.expectedAssetSetIdentifier,
+            expected: profile.assetSetIdentifier,
             actual: manifest.assetSetIdentifier
         )
-        try requireEqual(field: "model.name", expected: Self.expectedModelName, actual: manifest.model.name)
-        try requireEqual(field: "model.repo", expected: Self.expectedModelRepository, actual: manifest.model.repo)
-        try requireEqual(field: "model.revision", expected: Self.expectedModelRevision, actual: manifest.model.revision)
+        try requireEqual(field: "model.name", expected: profile.modelName, actual: manifest.model.name)
+        try requireEqual(field: "model.repo", expected: profile.repository, actual: manifest.model.repo)
+        try requireEqual(field: "model.revision", expected: profile.revision, actual: manifest.model.revision)
         try requireEqual(
             field: "model.licenseMetadata",
-            expected: Self.expectedModelLicense,
+            expected: profile.license,
             actual: manifest.model.licenseMetadata.lowercased()
         )
         try requireEqual(
@@ -394,16 +377,30 @@ struct StemModelAssetValidator: Sendable {
             expected: StemModelDownloadPolicy(
                 requiresExplicitUserConfirmation: true,
                 revisionResponseHeader: "X-Repo-Commit",
-                allowedRedirectHosts: Self.expectedRedirectHosts
+                allowedRedirectHosts: Self.expectedRedirectHosts(for: profile.model)
             ),
             actual: manifest.downloadPolicy
         )
 
-        try validateRuntimePins(manifest.runtimePins)
+        try validateRuntimePins(manifest.runtimePins, expected: profile.runtimePins)
         try validateAudioContract(manifest.audioContract)
-        try validateDownloadableAssetDefinitions(manifest.downloadableModelAssets)
+        try validateDownloadableAssetDefinitions(
+            manifest.downloadableModelAssets,
+            expected: profile.downloadableAssets
+        )
         try validateBundledRuntimeAssetDefinitions(manifest.bundledRuntimeAssets)
         try validateMetalLibraryProvenance(manifest.metalLibraryBuildProvenance)
+    }
+
+    private static func expectedRedirectHosts(
+        for model: StemSeparationModel
+    ) -> [String] {
+        switch model {
+        case .htdemucs:
+            htdemucsRedirectHosts
+        case .bsRoformerSW:
+            bsRoformerSWRedirectHosts
+        }
     }
 
     private func validateManifestSafety(_ manifest: StemModelManifest) throws {
@@ -547,7 +544,10 @@ struct StemModelAssetValidator: Sendable {
             relativePath: configuration.installationRelativePath,
             field: "downloadableModelAssets.installationRelativePath"
         )
-        try validateModelConfiguration(at: configurationURL)
+        try validateModelConfiguration(
+            at: configurationURL,
+            model: contract.separationModel
+        )
 
         let modelDirectoryURL = configurationURL.deletingLastPathComponent().standardizedFileURL
         return ValidatedStemModelSnapshot(
@@ -612,7 +612,24 @@ struct StemModelAssetValidator: Sendable {
         )
     }
 
-    private func validateModelConfiguration(at fileURL: URL) throws {
+    private func validateModelConfiguration(
+        at fileURL: URL,
+        model: StemSeparationModel
+    ) throws {
+        if model == .bsRoformerSW {
+            do {
+                _ = try BSRoformerConfiguration.load(from: fileURL)
+            } catch {
+                throw StemModelAssetValidationError.modelConfigurationInvalid(
+                    path: fileURL.path,
+                    field: "BS-RoFormer-SW",
+                    expected: "検証済み6Stem公開設定",
+                    actual: error.localizedDescription
+                )
+            }
+            return
+        }
+
         let data: Data
         do {
             data = try readRegularFileData(fileURL)
@@ -758,6 +775,9 @@ struct StemModelAssetValidator: Sendable {
                     expectedDirectories: expectedDirectories
                 )
             } else if values.isRegularFile == true {
+                if entry.lastPathComponent == ".DS_Store" {
+                    continue
+                }
                 guard expectedRelativeFiles.contains(relativePath) else {
                     throw StemModelAssetValidationError.unexpectedInstallationEntry(path: entry.path)
                 }
@@ -857,18 +877,29 @@ struct StemModelAssetValidator: Sendable {
         String(cString: strerror(errno))
     }
 
-    private func validateRuntimePins(_ runtimePins: [StemRuntimePin]) throws {
+    private func validateRuntimePins(
+        _ runtimePins: [StemRuntimePin],
+        expected: [String: StemRuntimePin]
+    ) throws {
         let pinsByName = try uniqueDictionary(runtimePins, key: \StemRuntimePin.name) {
             StemModelAssetValidationError.duplicateRuntimePin(name: $0)
         }
-        try requireEqual(field: "runtimePins.count", expected: Self.expectedRuntimePins.count, actual: pinsByName.count)
-        for (name, expected) in Self.expectedRuntimePins {
+        try requireEqual(
+            field: "runtimePins.count",
+            expected: expected.count,
+            actual: pinsByName.count
+        )
+        for (name, expectedPin) in expected {
             guard let actual = pinsByName[name] else {
                 throw StemModelAssetValidationError.contractMismatch(
                     field: "runtimePins.\(name)", expected: "present", actual: "missing"
                 )
             }
-            try requireEqual(field: "runtimePins.\(name)", expected: expected, actual: actual)
+            try requireEqual(
+                field: "runtimePins.\(name)",
+                expected: expectedPin,
+                actual: actual
+            )
         }
     }
 
@@ -887,7 +918,10 @@ struct StemModelAssetValidator: Sendable {
         try requireEqual(field: "audioContract.sourceOrder", expected: Self.expectedSourceOrder, actual: contract.sourceOrder)
     }
 
-    private func validateDownloadableAssetDefinitions(_ assets: [StemDownloadableModelAsset]) throws {
+    private func validateDownloadableAssetDefinitions(
+        _ assets: [StemDownloadableModelAsset],
+        expected: [StemModelAssetKind: StemDownloadableModelAsset]
+    ) throws {
         let byKind = try uniqueDictionary(assets, key: \StemDownloadableModelAsset.kind) {
             StemModelAssetValidationError.duplicateAsset(kind: $0)
         }
@@ -897,13 +931,17 @@ struct StemModelAssetValidator: Sendable {
             expected: Set([StemModelAssetKind.modelWeights, .modelConfiguration]),
             actual: Set(byKind.keys)
         )
-        for (kind, expected) in Self.expectedDownloadableAssets {
+        for (kind, expectedAsset) in expected {
             guard let actual = byKind[kind] else {
                 throw StemModelAssetValidationError.contractMismatch(
                     field: "downloadableModelAssets.\(kind.rawValue)", expected: "present", actual: "missing"
                 )
             }
-            try requireEqual(field: "downloadableModelAssets.\(kind.rawValue)", expected: expected, actual: actual)
+            try requireEqual(
+                field: "downloadableModelAssets.\(kind.rawValue)",
+                expected: expectedAsset,
+                actual: actual
+            )
         }
     }
 
@@ -1099,7 +1137,9 @@ struct StemModelAssetValidator: Sendable {
         }
         for (index, pin) in pins.enumerated() {
             let expected: Set<String>
-            if pin["name"] as? String == "demucs-mlx-swift" {
+            if ["demucs-mlx-swift", "bs-roformer-mlx-swift"].contains(
+                pin["name"] as? String
+            ) {
                 expected = ["name", "repo", "revision"]
             } else {
                 expected = ["name", "repo", "version", "revision"]

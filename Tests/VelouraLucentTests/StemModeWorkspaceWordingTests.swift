@@ -176,6 +176,12 @@ struct StemModeWorkspaceWordingTests {
         let modelManagement = try source(
             "Sources/VelouraLucent/Views/StemModelManagementSection.swift"
         )
+        let about = try source(
+            "Sources/VelouraLucent/Views/VelouraAboutView.swift"
+        )
+        let modelAcquisitionSheet = try source(
+            "Sources/VelouraLucent/Views/StemModelAcquisitionProgressSheet.swift"
+        )
         let liquidGlassActionButton = try source(
             "Sources/VelouraLucent/Views/LiquidGlassActionButton.swift"
         )
@@ -205,10 +211,17 @@ struct StemModeWorkspaceWordingTests {
         #expect(inspector.contains("StemModelManagementSection("))
         #expect(inspector.contains("case .app:"))
         #expect(modelManagement.contains("Text(\"Stem分離\")"))
+        #expect(modelManagement.contains("LiquidGlassSegmentedPicker("))
+        #expect(modelManagement.contains("title: \"分離モデル\""))
+        #expect(modelManagement.contains("options: StemSeparationModel.allCases"))
         #expect(modelManagement.contains("LabeledContent(\"モデル状態\")"))
         #expect(modelManagement.contains("Text(presentation.title)"))
         #expect(modelManagement.contains("Text(presentation.message)"))
-        #expect(modelManagement.contains("Text(\"選択できる操作\")"))
+        #expect(!modelManagement.contains("Text(\"選択できる操作\")"))
+        #expect(!modelManagement.contains("if !modelManager.isAcquiringModels"))
+        #expect(modelManagement.contains(
+            "isDisabled: isDisabled || modelManager.isAcquiringModels"
+        ))
         #expect(modelManagement.contains("HStack(spacing: 10)"))
         #expect(modelManagement.contains("LiquidGlassActionButton("))
         #expect(modelManagement.contains("layout: .inspectorWide"))
@@ -222,12 +235,41 @@ struct StemModeWorkspaceWordingTests {
         #expect(liquidGlassActionButton.contains(".liquidGlassCapsuleMorphSurface("))
         #expect(liquidGlassActionButton.contains("LiquidGlassMotion.perform("))
         #expect(modelManagement.contains("systemImage: \"exclamationmark.circle\""))
-        #expect(modelManagement.contains("title = \"モデル検証\""))
-        #expect(modelManagement.contains("title = \"モデル再取得\""))
+        #expect(!modelManagement.contains("title = \"モデル検証\""))
+        #expect(modelAcquisitionSheet.contains("canRetryDownload: retryPurpose != nil"))
+        #expect(modelAcquisitionSheet.contains("title: \"再ダウンロード\""))
+        #expect(modelAcquisitionSheet.contains("action: modelManager.retryFailedAcquisition"))
+        #expect(
+            modelManagement.components(
+                separatedBy: "title = \"AIモデルを取得\""
+            ).count - 1 == 2
+        )
         #expect(modelManagement.contains("shifts / overlap"))
         #expect(modelManagement.contains("split / segment"))
         #expect(modelManagement.contains("batch size / run seed"))
         #expect(modelManagement.contains("入力選択後に生成"))
+        #expect(modelManagement.contains("方式　Demucs v4"))
+        #expect(modelManagement.contains("出力　4Stem"))
+        #expect(modelManagement.contains("設定　shifts / overlap"))
+        #expect(modelManagement.contains("方式　STFT／62帯域分割／時間・周波数RoFormer"))
+        #expect(modelManagement.contains("出力　6Stem → 既存4Stem"))
+        #expect(modelManagement.contains("設定（固定）　STFT FFT / hop / window　2048 / 512 / 2048"))
+        #expect(modelManagement.contains("帯域 / 周波数ビン　　　 62 / 1025"))
+        #expect(modelManagement.contains("推論チャンク　　　　　 801フレーム"))
+        #expect(modelManagement.contains("短音源 / ステップ　　　 10秒未満: 256フレーム / 8秒"))
+        #expect(modelManagement.contains("dim / depth / heads　　 256 / 12 / 8"))
+        #expect(!modelManagement.contains("shifts / overlap　0 / 0"))
+        #expect(!about.contains("Text(\"AIモデル情報\")"))
+        #expect(about.contains(
+            "音声を補正し、マスタリングで最終版に仕上げます。"
+        ))
+        #expect(about.contains("CFBundleShortVersionString"))
+        #expect(about.contains(
+            ".containerBackground(.regularMaterial, for: .window)"
+        ))
+        #expect(about.contains("WindowChromeConfigurator("))
+        #expect(about.contains("hidesTitle: false"))
+        #expect(about.components(separatedBy: "glass: .regular").count - 1 == 4)
         #expect(!inspector.contains("onManageModels"))
         #expect(!standardWorkspace.contains(".background(TitlebarSidebarToggleConfigurator"))
         #expect(!standardWorkspace.contains(".background(TitlebarInspectorToggleConfigurator"))

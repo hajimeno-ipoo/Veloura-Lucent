@@ -17,6 +17,39 @@ struct StemModeSettingsTests {
     }
 
     @Test
+    func bsRoformerProductionUsesModelOwnedInferenceSettings() throws {
+        let settings = StemSeparationSettings.bsRoformerSWProduction
+        let profile = StemProductionModelProfile.profile(for: .bsRoformerSW)
+        let contract = StemModelContract(
+            separationModel: .bsRoformerSW,
+            identifier: profile.modelIdentifier,
+            version: profile.revision,
+            assetSetIdentifier: profile.assetSetIdentifier,
+            inputName: "audio",
+            outputNames: Dictionary(
+                uniqueKeysWithValues: StemRole.allCases.map { ($0, $0.rawValue) }
+            ),
+            sourceOrder: [.drums, .bass, .other, .vocals],
+            sampleRate: 44_100,
+            channelCount: 2,
+            inputShape: [-1, 2, -1],
+            outputShapes: Dictionary(
+                uniqueKeysWithValues: StemRole.allCases.map { ($0, [-1, 2, -1]) }
+            ),
+            scalarType: .float32,
+            normalization: .modelManagedIdentityBoundary,
+            runtime: .mlx,
+            defaultSegmentSeconds: nil,
+            downloadableModelAssets: Array(profile.downloadableAssets.values),
+            bundledRuntimeAssets: []
+        )
+
+        #expect(settings.model == .bsRoformerSW)
+        #expect(settings.seed == nil)
+        #expect(try settings.validated(modelContract: contract) == settings)
+    }
+
+    @Test
     func everySeparationFieldMustBeExplicitlyProvided() throws {
         let settings = StemSeparationSettings(
             shifts: 2,
@@ -113,6 +146,7 @@ struct StemModeSettingsTests {
 
     private func makeContract(segmentSeconds: Double = 7.8) -> StemModelContract {
         StemModelContract(
+            separationModel: .htdemucs,
             identifier: "htdemucs",
             version: "d4519e24ddc2dd4a11d56a193092433d852c3961",
             assetSetIdentifier: "htdemucs-mlx-d4519e24",

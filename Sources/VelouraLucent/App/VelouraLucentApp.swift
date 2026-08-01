@@ -110,5 +110,13 @@ struct VelouraLucentApp: App {
         .commands {
             VelouraCommands()
         }
+
+        Window("Veloura Lucentについて", id: "about") {
+            VelouraAboutView()
+        }
+        .defaultSize(width: 760, height: 720)
+        .defaultLaunchBehavior(.suppressed)
+        .windowResizability(.contentMinSize)
+        .restorationBehavior(.disabled)
     }
 }

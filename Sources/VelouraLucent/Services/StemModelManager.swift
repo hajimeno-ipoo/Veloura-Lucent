@@ -57,24 +57,24 @@ struct StemModelLocalInspection: Equatable, Sendable {
 
     var recoveryActions: [StemModelRecoveryAction] {
         guard case .supportedAppleSilicon = platform else {
-            return [.revalidate]
+            return []
         }
         guard case .valid = manifest else {
-            return [.revalidate]
+            return []
         }
         guard case .ready = bundledRuntime else {
             // mlx.metallib is an app-bundled runtime asset. Model downloading cannot repair it.
-            return [.revalidate]
+            return []
         }
         switch installedModel {
         case .notChecked:
-            return [.revalidate]
+            return []
         case .missing:
-            return [.initialDownload, .revalidate]
+            return [.initialDownload]
         case .invalid:
-            return [.repair, .redownload, .revalidate]
+            return [.redownload]
         case .ready:
-            return [.redownload, .revalidate]
+            return [.redownload]
         }
     }
 }
@@ -113,7 +113,10 @@ enum StemModelManagerOperationState: Equatable, Sendable {
     case awaitingConfirmation(StemModelDownloadConfirmation)
     case acquiring(StemModelAcquisitionProgress)
     case cancelling(StemModelAcquisitionProgress)
-    case failed(message: String)
+    case failed(
+        message: String,
+        retryPurpose: StemModelAcquisitionPurpose?
+    )
 }
 
 enum StemModelManagerError: LocalizedError, Equatable, Sendable {
@@ -158,19 +161,25 @@ protocol StemModelLocalInspecting: Sendable {
     func inspect() async -> StemModelLocalInspection
 }
 
-struct ProductionStemModelLocalInspector: StemModelLocalInspecting, Sendable {
-    private let validator: StemModelAssetValidator
+protocol StemModelSelectionInspecting: StemModelLocalInspecting {
+    func inspect(model: StemSeparationModel) async -> StemModelLocalInspection
+}
+
+struct ProductionStemModelLocalInspector: StemModelSelectionInspecting, Sendable {
     private let store: StemModelInstallationStore
 
     init(
-        validator: StemModelAssetValidator = StemModelAssetValidator(),
         store: StemModelInstallationStore = StemModelInstallationStore()
     ) {
-        self.validator = validator
         self.store = store
     }
 
     func inspect() async -> StemModelLocalInspection {
+        await inspect(model: .htdemucs)
+    }
+
+    func inspect(model: StemSeparationModel) async -> StemModelLocalInspection {
+        let validator = StemModelAssetValidator(selectedModel: model)
         let manifest: StemModelManifest
         do {
             manifest = try validator.loadBundledManifest()
@@ -247,6 +256,7 @@ extension StemModelAcquisitionService: StemModelAcquisitionControlling {}
 @MainActor
 @Observable
 final class StemModelManager {
+    private(set) var selectedModel: StemSeparationModel = .htdemucs
     private(set) var inspectionState: StemModelInspectionState = .checking
     private(set) var operationState: StemModelManagerOperationState = .idle
 
@@ -302,9 +312,26 @@ final class StemModelManager {
         let identifier = UUID()
         inspectionIdentifier = identifier
         inspectionState = .checking
-        let inspection = await inspector.inspect()
+        let inspection: StemModelLocalInspection
+        if let selectingInspector = inspector as? any StemModelSelectionInspecting {
+            inspection = await selectingInspector.inspect(model: selectedModel)
+        } else {
+            inspection = await inspector.inspect()
+        }
         guard !Task.isCancelled, inspectionIdentifier == identifier else { return }
         inspectionState = .loaded(inspection)
+    }
+
+    func selectModel(_ model: StemSeparationModel) async {
+        guard model != selectedModel, !isAcquiringModels else { return }
+        if case .awaitingConfirmation = operationState {
+            operationState = .idle
+        }
+        if case .failed = operationState {
+            operationState = .idle
+        }
+        selectedModel = model
+        await inspectLocalResources()
     }
 
     func prepareAcquisitionConfirmation(
@@ -337,7 +364,20 @@ final class StemModelManager {
         )
     }
 
-    /// Call only from the affirmative action of the download confirmation UI.
+    func startAcquisition(purpose: StemModelAcquisitionPurpose) {
+        do {
+            try prepareAcquisitionConfirmation(purpose: purpose)
+            try confirmAcquisition()
+        } catch {
+            guard !isAcquiringModels else { return }
+            operationState = .failed(
+                message: error.localizedDescription,
+                retryPurpose: nil
+            )
+        }
+    }
+
+    /// Call only after an explicit model acquisition action from the UI.
     /// This is the sole point where the one-operation network capability is issued.
     func confirmAcquisition() throws {
         guard case .awaitingConfirmation(let confirmation) = operationState else {
@@ -389,7 +429,7 @@ final class StemModelManager {
         acquisitionTask = Task { [weak self] in
             guard let self else { return }
             do {
-                _ = try await acquisitionController.acquireModels(
+                let installation = try await acquisitionController.acquireModels(
                     manifest: manifest,
                     purpose: confirmation.purpose,
                     authorization: authorization
@@ -401,26 +441,19 @@ final class StemModelManager {
                 guard self.currentOperationIdentifier == authorization.operationIdentifier else {
                     return
                 }
-                let inspection = await inspector.inspect()
-                guard self.currentOperationIdentifier == authorization.operationIdentifier else {
-                    return
-                }
-                inspectionState = .loaded(inspection)
-                operationState = inspection.isReadyForStemProcessing
-                    ? .idle
-                    : .failed(
-                        message: StemModelManagerError.acquiredAssetsDidNotBecomeReady
-                            .localizedDescription
+                inspectionState = .loaded(
+                    StemModelLocalInspection(
+                        platform: inspection.platform,
+                        manifest: inspection.manifest,
+                        installedModel: .ready(installation),
+                        bundledRuntime: inspection.bundledRuntime
                     )
+                )
+                operationState = .idle
             } catch {
                 guard self.currentOperationIdentifier == authorization.operationIdentifier else {
                     return
                 }
-                let refreshedInspection = await inspector.inspect()
-                guard self.currentOperationIdentifier == authorization.operationIdentifier else {
-                    return
-                }
-                inspectionState = .loaded(refreshedInspection)
                 if let acquisitionError = error as? StemModelAcquisitionError,
                    acquisitionError == .cancelled(
                     operationIdentifier: authorization.operationIdentifier
@@ -429,7 +462,12 @@ final class StemModelManager {
                 } else if error is CancellationError {
                     operationState = .idle
                 } else {
-                    operationState = .failed(message: error.localizedDescription)
+                    operationState = .failed(
+                        message: error.localizedDescription,
+                        retryPurpose: error is StemModelAssetValidationError
+                            ? confirmation.purpose
+                            : nil
+                    )
                 }
             }
         }
@@ -462,6 +500,15 @@ final class StemModelManager {
     func dismissFailure() {
         guard case .failed = operationState else { return }
         operationState = .idle
+    }
+
+    func retryFailedAcquisition() {
+        guard case .failed(_, let retryPurpose) = operationState,
+              let retryPurpose else {
+            return
+        }
+        operationState = .idle
+        startAcquisition(purpose: retryPurpose)
     }
 
     func shutdown() {

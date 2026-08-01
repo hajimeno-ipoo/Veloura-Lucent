@@ -6,7 +6,6 @@ import Testing
 private enum AcquisitionFixtureError: Error, Equatable, Sendable {
     case downloadFailed(StemModelAssetKind)
     case manifestRejected
-    case stagedAssetsRejected
 }
 
 private struct AcquisitionDownloadCall: Equatable, Sendable {
@@ -133,9 +132,7 @@ private final class AcquisitionValidatorProbe: StemModelAcquisitionValidating, @
     private let lock = NSLock()
     private let validator: StemModelAssetValidator
     private var rejectsManifest = false
-    private var rejectsStagedAssets = false
     private var manifestValidationCountStorage = 0
-    private var stagedValidationCountStorage = 0
 
     init(manifest: StemModelManifest) {
         validator = StemModelAssetValidator(validationReference: manifest)
@@ -150,30 +147,9 @@ private final class AcquisitionValidatorProbe: StemModelAcquisitionValidating, @
         return try validator.validateManifest(manifest)
     }
 
-    func validateStagedModelAssets(
-        manifest: StemModelManifest,
-        rootURL: URL
-    ) throws -> ValidatedStemModelSnapshot {
-        lock.lock()
-        stagedValidationCountStorage += 1
-        let shouldReject = rejectsStagedAssets
-        lock.unlock()
-        if shouldReject { throw AcquisitionFixtureError.stagedAssetsRejected }
-        return try validator.validateStagedModelAssets(
-            manifest: manifest,
-            rootURL: rootURL
-        )
-    }
-
     func setRejectsManifest(_ value: Bool) {
         lock.lock()
         rejectsManifest = value
-        lock.unlock()
-    }
-
-    func setRejectsStagedAssets(_ value: Bool) {
-        lock.lock()
-        rejectsStagedAssets = value
         lock.unlock()
     }
 
@@ -183,11 +159,6 @@ private final class AcquisitionValidatorProbe: StemModelAcquisitionValidating, @
         return manifestValidationCountStorage
     }
 
-    var stagedValidationCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return stagedValidationCountStorage
-    }
 }
 
 private actor AcquisitionRecordingStore: StemModelAcquisitionStoring {
@@ -353,7 +324,6 @@ struct StemModelAcquisitionServiceTests {
             }
         #expect(installation.receipt.schemaVersion == 2)
         #expect(installation.receipt.sourceEvidence == expectedEvidence)
-        #expect(fixture.validator.stagedValidationCount == 1)
         #expect(await fixture.store.activatedOperationIdentifiers == [
             authorization.operationIdentifier,
         ])
@@ -376,10 +346,9 @@ struct StemModelAcquisitionServiceTests {
         #expect(values.first?.phase == .preparing)
         #expect(values.contains { $0.phase == .downloading })
         let validatingIndex = try #require(values.firstIndex { $0.phase == .validating })
-        let activatingIndex = try #require(values.firstIndex { $0.phase == .activating })
         let completedIndex = try #require(values.firstIndex { $0.phase == .completed })
-        #expect(validatingIndex < activatingIndex)
-        #expect(activatingIndex < completedIndex)
+        #expect(!values.contains { $0.phase == .activating })
+        #expect(validatingIndex < completedIndex)
         #expect(completedIndex == values.indices.last)
         #expect(values.contains { $0.isWaitingForConnectivity })
         #expect(values.allSatisfy { $0.operationIdentifier == authorization.operationIdentifier })
@@ -577,7 +546,6 @@ struct StemModelAcquisitionServiceTests {
             )
         }
 
-        #expect(fixture.validator.stagedValidationCount == 0)
         #expect(await fixture.store.activatedOperationIdentifiers.isEmpty)
         #expect(await fixture.store.discardedOperationIdentifiers == [
             authorization.operationIdentifier,
@@ -752,8 +720,8 @@ struct StemModelAcquisitionServiceTests {
         _ = try? await firstTask.value
     }
 
-    @Test("Manifest and staged validation failures happen before activation")
-    func validatorFailuresNeverStartOrActivateUnvalidatedAssets() async throws {
+    @Test("Manifest failure stops before download and final asset validation is delegated to activation")
+    func validationResponsibilitiesStayAtTheirSingleBoundaries() async throws {
         let manifestFailureFixture = try AcquisitionFixture()
         defer { manifestFailureFixture.removeTemporaryRoot() }
         manifestFailureFixture.validator.setRejectsManifest(true)
@@ -776,28 +744,21 @@ struct StemModelAcquisitionServiceTests {
         #expect(await manifestFailureFixture.downloader.calls.isEmpty)
         #expect(await manifestFailureFixture.store.makeStagingOperationIdentifiers.isEmpty)
 
-        let stagedFailureFixture = try AcquisitionFixture()
-        defer { stagedFailureFixture.removeTemporaryRoot() }
-        stagedFailureFixture.validator.setRejectsStagedAssets(true)
-        let secondAuthorization = stagedFailureFixture.service
+        let successFixture = try AcquisitionFixture()
+        defer { successFixture.removeTemporaryRoot() }
+        let secondAuthorization = successFixture.service
             .issueOneTimeAuthorizationAfterExplicitUserConfirmation(
-                manifest: stagedFailureFixture.manifest,
+                manifest: successFixture.manifest,
                 purpose: .initialInstall
             )
-        do {
-            _ = try await stagedFailureFixture.service.acquireModels(
-                manifest: stagedFailureFixture.manifest,
-                purpose: .initialInstall,
-                authorization: secondAuthorization,
-                progressHandler: { _ in }
-            )
-            Issue.record("Rejected staged assets unexpectedly activated")
-        } catch let error as AcquisitionFixtureError {
-            #expect(error == .stagedAssetsRejected)
-        }
-        #expect(await stagedFailureFixture.downloader.calls.count == 2)
-        #expect(await stagedFailureFixture.store.activatedOperationIdentifiers.isEmpty)
-        #expect(await stagedFailureFixture.store.discardedOperationIdentifiers == [
+        _ = try await successFixture.service.acquireModels(
+            manifest: successFixture.manifest,
+            purpose: .initialInstall,
+            authorization: secondAuthorization,
+            progressHandler: { _ in }
+        )
+        #expect(await successFixture.downloader.calls.count == 2)
+        #expect(await successFixture.store.activatedOperationIdentifiers == [
             secondAuthorization.operationIdentifier,
         ])
     }

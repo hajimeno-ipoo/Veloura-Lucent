@@ -173,3 +173,11 @@ SDRは、正解Stemに対する分離結果全体の近さを示す。値が高�
 
 BS-RoFormer-SW専用MLX SwiftランタイムのPython一致度、全編処理時間、メモリ実測は、
 `Docs/BSRoformerSwiftRuntimeValidation_2026-07-30.md`に保存している。
+
+公開Float16モデルrevision `13edef2e713151522e4049e92f011e0543c45d53`の互換性確認後、
+Veloura Lucentの既存Stem ModeへHTDemucsと切り替えて使える形で接続した。既定は
+HTDemucsのままで、自動フォールバックと新しい管理画面は追加していない。
+
+ユーザー指定実音源は、Release構成のアプリ本体でBS-RoFormer-SW分離、6→4Stem変換、
+既存Stem解析・補正、再ミックス、マスタリングまで`418.755秒`で完走した。この時間は
+単独分離の速度比較値ではなく、後続工程を含む統合確認の所要時間として分けて扱う。

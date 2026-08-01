@@ -15,6 +15,23 @@ struct StemModelInstallationStoreTests {
     }
 
     @Test
+    func bothModelsKeepIndependentActivePointers() {
+        let paths = StemModelStorePaths(
+            rootURL: URL(filePath: "/tmp/VelouraStemModelPointerTests")
+        )
+
+        #expect(paths.activePointerURL(for: .htdemucs) == paths.activePointerURL)
+        #expect(
+            paths.activePointerURL(for: .bsRoformerSW).lastPathComponent
+                == "active-bs-roformer-sw.json"
+        )
+        #expect(
+            paths.activePointerURL(for: .htdemucs)
+                != paths.activePointerURL(for: .bsRoformerSW)
+        )
+    }
+
+    @Test
     func missingActivePointerReturnsNoInstallation() async throws {
         let fixture = try makeFixture()
         defer { fixture.removeTemporaryRoot() }
@@ -245,6 +262,33 @@ struct StemModelInstallationStoreTests {
                 atPath: fixture.paths.receiptURL(in: stagingURL).path
             )
         )
+    }
+
+    @Test
+    func finderMetadataDoesNotInvalidateValidatedModelAssets() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.removeTemporaryRoot() }
+        let operationIdentifier = UUID()
+        let generationIdentifier = UUID()
+        let stagingURL = try await fixture.prepareStaging(
+            operationIdentifier: operationIdentifier
+        )
+        try Data([0x00]).write(
+            to: stagingURL.appending(path: ".DS_Store")
+        )
+
+        let installation = try await fixture.store.activate(
+            operationIdentifier: operationIdentifier,
+            generationIdentifier: generationIdentifier,
+            manifest: fixture.manifest,
+            sourceEvidence: fixture.sourceEvidence
+        )
+
+        #expect(
+            installation.snapshot.assets.count
+                == fixture.manifest.downloadableModelAssets.count
+        )
+        #expect(installation.receipt.generationIdentifier == generationIdentifier)
     }
 
     @Test

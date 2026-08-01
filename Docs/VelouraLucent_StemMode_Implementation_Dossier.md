@@ -510,30 +510,29 @@ Stem Mode画面をモデル状態にかかわらず維持し、右サイド「�
 - 破損
 - Revision不一致
 - SHA-256不一致
-- 初回取得
-- 修復
-- 完全再取得
+- AIモデルを取得（初回、破損時、完全再取得で共通）
 - 再検証
-- 取得進捗
-- 取得中断
 - 使用可能状態の表示
 
 モデルが未取得、破損、未確認、利用不可でも、Stem Mode画面を専用の管理画面へ置き換えない。入力選択と入力表示解析は利用でき、補正だけをモデルが利用可能になるまで無効にする。
 
 モデル名、固定Revision、`shifts / overlap`、`split / segment`、`batch size / run seed`は、「Stem分離」の`!`アイコンから、既存の`?`ヘルプと同じポップアップで表示する。
 
-### 5.2 取得前確認
+### 5.2 配布情報と取得進捗
 
-初回取得、修復、完全再取得のすべてで、通信前に次を表示する。
+アプリメニューの「Veloura Lucentについて」で、モデルごとに次を表示する。
 
 - 取得元
 - ファイル名
 - 合計容量
 - 固定Revision
 - License
-- ネットワーク通信を行うこと
+- 通信先ホスト
+- 固定配布URL
+- SHA-256
+- 保存先
 
-ユーザーが承認するまで通信を開始しない。
+右サイドの「AIモデルを取得」は、初回、破損時、利用可能時のすべてで同じ1ボタンとし、利用者が押した時だけ通信を開始する。取得中はRootが所有する画面内Liquid Glassモーダルへ、選択モデル、ファイル名、保存先、標準の処理中インジケーター、完了チェック、Liquid Glassキャンセルボタン、失敗を表示する。割合、受信容量、ファイル別進捗バーは表示しない。検証と有効化まで成功した時だけ自動で閉じる。右サイドへ取得中または失敗の表示を重複させない。
 
 ### 5.3 音楽処理で行わないこと
 
@@ -1207,16 +1206,13 @@ Stem Modeでは、通常モードのアプリ設定に続けて「Stem分離」�
 
 「Stem分離」には次を直接表示する。
 
+- HTDemucs／BS-RoFormer-SWの選択
 - モデル状態
 - モデル検証（ローカル資産の再検証）
-- モデル再取得（AIモデル2資産の完全再取得）
-- 未取得時のAIモデル取得
-- 破損時の修復
-- 取得・検証進捗
-- 取得中断
-- エラーと再インストール案内
+- AIモデルを取得（未取得、破損、AIモデル2資産の完全再取得で共通）
+- 同梱runtime破損時の再インストール案内
 
-初回取得、修復、完全再取得は、取得内容を示す確認画面でユーザーが承認するまで通信を開始しない。
+取得中、取得中断、取得失敗、ファイル名、保存先、標準インジケーター、完了チェックはRootの画面内Liquid Glassモーダルだけへ表示する。検証と有効化まで成功すると自動で閉じる。
 
 モデル名、固定Revision、分離設定は`!`アイコンのポップアップへまとめ、通常表示へ重複して並べない。
 
@@ -1471,8 +1467,9 @@ Stem Mode最終版は、既存マスタリング後に通常モードと同じ�
 
 モデル管理と音楽処理を次の境界へ分離する。
 
-- モデルの有無、破損、Revision、容量、SHA-256、同梱MLX資産は、アプリ起動時と右サイド「Stem分離」の明示操作で確認する
-- 初回取得、修復、完全再取得、再検証、取得進捗、中断は`StemModelManagementSection`と`StemModelManager`だけが扱う
+- モデルの有無、破損、Revision、容量、SHA-256、同梱MLX資産は、アプリ起動時と右サイド「Stem分離」のモデル切替時に自動確認する
+- 初回取得、破損時、完全再取得で共通の「AIモデルを取得」は`StemModelManagementSection`、取得状態と最終検証異常時の再ダウンロードは`StemModelManager`、取得進捗モーダルは`VelouraRootView`が扱う
+- モデル配布情報はアプリメニューの「Veloura Lucentについて」が扱う
 - モデル状態にかかわらずStem Mode画面を維持し、入力選択と入力表示解析を利用できる
 - モデルが利用可能になるまで補正操作だけを無効にする
 - 音楽処理の開始時とマスタリング再実行では`inspectLocalResources()`を呼ばず、モデル管理で使用可能と確認済みのinstallationを受け取る
@@ -1569,11 +1566,11 @@ Stem Mode最終版は、既存マスタリング後に通常モードと同じ�
 | `Services/StemCompletionNotificationService.swift` | controller | 通常モード通知domainを変えないStem完了通知 |
 | `Services/StemInputConversionService.swift` | workflow入力準備 | channel layoutを保持した44.1 kHz／stereo／Float32化 |
 | `Services/StemMasteringService.swift` | workflowマスタリング段 | 既存`MasteringService`、最終解析、既存3レポートの接続 |
-| `Services/StemModelAcquisitionService.swift` | `StemModelManager` | ユーザー確認後の固定2資産取得 |
+| `Services/StemModelAcquisitionService.swift` | `StemModelManager` | 右サイドの明示操作後の固定2資産取得 |
 | `Services/StemModelAssetValidator.swift` | model管理 | 容量、SHA-256、manifest、MLX実行資産の検証 |
 | `Services/StemModelDownloadClient.swift` | model acquisition | 固定revision、redirect、headerを守る取得 |
 | `Services/StemModelInstallationStore.swift` | model管理 | staging、receipt、active世代の原子的切替 |
-| `Services/StemModelManager.swift` | Rootと右サイドmodel管理 | 音楽処理と分離した取得・再取得・修復・再検証 |
+| `Services/StemModelManager.swift` | Rootと右サイドmodel管理 | 音楽処理と分離した取得・最終検証異常時の再ダウンロード・起動／モデル切替時の自動検証 |
 | `Services/StemModelStorePaths.swift` | model管理 | Application Support内の保存場所 |
 | `Services/StemSeparationService.swift` | workflow補正段 | 確認済みinstallationによるDemucs 4Stem分離だけ |
 | `Services/StemWorkflowLogging.swift` | session/controller | メモリ上のStemログ型。画面側で補正／masteringへ分ける |
@@ -1583,8 +1580,10 @@ Stem Mode最終版は、既存マスタリング後に通常モードと同じ�
 | `Views/StemModeCorrectionControlList.swift` | Stem補正設定 | 通常モードと同じロータリーノブ配置でrole別12設定の実値を編集 |
 | `Views/StemModeCorrectionSettingsView.swift` | 右上設定 | role、preset、補正値の編集 |
 | `Views/StemModeMasteringSettingsView.swift` | 右上設定 | 通常モードと同じmastering profile、開閉カード、ロータリーノブ、警告、値の編集 |
-| `Views/StemModelManagementSection.swift` | 右サイド「アプリ」タブ | model状態、取得・再取得・修復・再検証、進捗、確認画面、技術情報ポップアップ |
-| `Views/VelouraRootView.swift` | app entry | 通常モードとStem Modeの別画面切替 |
+| `Views/StemModelManagementSection.swift` | 右サイド「アプリ」タブ | model選択、状態、共通の取得・再取得、技術情報ポップアップ |
+| `Views/StemModelAcquisitionProgressSheet.swift` | Rootの画面内Liquid Glass取得モーダル | 選択モデル、ファイル名、保存先、標準インジケーター、完了チェック、Liquid Glassキャンセルボタン、失敗、最終検証異常時だけの再ダウンロード |
+| `Views/VelouraAboutView.swift` | アプリメニューの「Veloura Lucentについて」 | モデル別の取得元、Revision、License、容量、SHA-256、固定URL、保存先 |
+| `Views/VelouraRootView.swift` | app entry | 通常モードとStem Modeの別画面切替、モデル取得モーダルの表示と成功時の自動終了 |
 
 #### 14.7.3 通常モードの一本道へ修正するStem productionファイル
 
@@ -1834,9 +1833,8 @@ production実装と同時に変更するテストを、現在のテスト名と�
 ### 15.5 モデル管理
 
 - [x] モデル管理と音楽処理の完全分離
-- [x] 初回取得前確認
-- [x] 修復前確認
-- [x] 完全再取得前確認
+- [x] 初回取得の明示操作
+- [x] 破損時と完全再取得を初回取得と同じ「AIモデルを取得」へ統一
 - [x] 固定Revision検証
 - [x] 容量検証
 - [x] SHA-256検証
@@ -2000,7 +1998,7 @@ production実装と同時に変更するテストを、現在のテスト名と�
 - [x] 最終2mix生成
 - [x] 通常モード／Stem Mode切替
 - [x] 全画面領域確認
-- [ ] 右サイド「Stem分離」のモデル状態・モデル検証・モデル再取得・確認画面を確認
+- [ ] 右サイド「Stem分離」のモデル状態・モデル取得、Aboutの配布情報、Rootの取得進捗モーダルと最終検証異常時の再ダウンロードを確認
 - [ ] 補正キャンセル確認
 - [ ] マスタリングキャンセル確認
 - [ ] 書き出し確認

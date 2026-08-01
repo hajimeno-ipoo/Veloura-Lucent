@@ -1,53 +1,23 @@
 {
   "schemaVersion": 2,
-  "assetSetIdentifier": "htdemucs-d4519e24ddc2dd4a11d56a193092433d852c3961",
+  "assetSetIdentifier": "bs-roformer-sw-13edef2e713151522e4049e92f011e0543c45d53",
   "model": {
-    "name": "Demucs v4 htdemucs",
-    "repo": "mlx-community/demucs-mlx",
-    "revision": "d4519e24ddc2dd4a11d56a193092433d852c3961",
-    "licenseMetadata": "mit"
+    "name": "BS-RoFormer-SW",
+    "repo": "MrSimmo/BS_Roformer_SW-MLX",
+    "revision": "13edef2e713151522e4049e92f011e0543c45d53",
+    "licenseMetadata": "unknown"
   },
   "runtimePins": [
     {
-      "name": "demucs-mlx-swift",
-      "repo": "https://github.com/kylehowells/demucs-mlx-swift.git",
-      "revision": "c81c47178828db2d8bc66e64f80c745c64abdc94"
+      "name": "bs-roformer-mlx-swift",
+      "repo": "local:Vendor/bs-roformer-mlx-swift",
+      "revision": "cee13b8a16bd9b6eb51ac52f94d997e424069673"
     },
     {
       "name": "mlx-swift",
       "repo": "https://github.com/ml-explore/mlx-swift.git",
       "version": "0.30.6",
       "revision": "6ba4827fb82c97d012eec9ab4b2de21f85c3b33d"
-    },
-    {
-      "name": "swift-transformers",
-      "repo": "https://github.com/huggingface/swift-transformers.git",
-      "version": "1.1.6",
-      "revision": "573e5c9036c2f136b3a8a071da8e8907322403d0"
-    },
-    {
-      "name": "swift-jinja",
-      "repo": "https://github.com/huggingface/swift-jinja.git",
-      "version": "2.3.2",
-      "revision": "f731f03bf746481d4fda07f817c3774390c4d5b9"
-    },
-    {
-      "name": "swift-collections",
-      "repo": "https://github.com/apple/swift-collections.git",
-      "version": "1.4.0",
-      "revision": "8d9834a6189db730f6264db7556a7ffb751e99ee"
-    },
-    {
-      "name": "swift-argument-parser",
-      "repo": "https://github.com/apple/swift-argument-parser",
-      "version": "1.8.2",
-      "revision": "6a52f3251125d74daf04fcbd5e6f08a75d074382"
-    },
-    {
-      "name": "swift-numerics",
-      "repo": "https://github.com/apple/swift-numerics",
-      "version": "1.1.1",
-      "revision": "0c0290ff6b24942dadb83a929ffaaa1481df04a2"
     }
   ],
   "audioContract": {
@@ -77,17 +47,17 @@
   "downloadableModelAssets": [
     {
       "kind": "modelWeights",
-      "downloadURL": "https://huggingface.co/mlx-community/demucs-mlx/resolve/d4519e24ddc2dd4a11d56a193092433d852c3961/htdemucs.safetensors",
-      "installationRelativePath": "htdemucs/htdemucs.safetensors",
-      "byteCount": 168005865,
-      "sha256": "339d267a7a6983a11eedbdc00413c602a65e9b9103f695fb5c2b2a481cd9d297"
+      "downloadURL": "https://huggingface.co/MrSimmo/BS_Roformer_SW-MLX/resolve/13edef2e713151522e4049e92f011e0543c45d53/bs_roformer_sw.safetensors",
+      "installationRelativePath": "bs-roformer-sw/bs_roformer_sw.safetensors",
+      "byteCount": 349521144,
+      "sha256": "6c8303a829575d03f21562ea185be7b6b23e922052883dec1b9518ca00a920fc"
     },
     {
       "kind": "modelConfiguration",
-      "downloadURL": "https://huggingface.co/mlx-community/demucs-mlx/resolve/d4519e24ddc2dd4a11d56a193092433d852c3961/htdemucs_config.json",
-      "installationRelativePath": "htdemucs/htdemucs_config.json",
-      "byteCount": 1892,
-      "sha256": "9258499513944fc062fbca0f11be425a446ec5702869a87e225323d7a57d2a01"
+      "downloadURL": "https://huggingface.co/MrSimmo/BS_Roformer_SW-MLX/resolve/13edef2e713151522e4049e92f011e0543c45d53/bs_roformer_sw_config.json",
+      "installationRelativePath": "bs-roformer-sw/bs_roformer_sw_config.json",
+      "byteCount": 1141,
+      "sha256": "ab4ae4369276c2ff12ee86d55ce45c37a88a82f6744c33c0bb6a40c1c2f620f9"
     }
   ],
   "bundledRuntimeAssets": [

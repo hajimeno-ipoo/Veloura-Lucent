@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct StemModelManagementPresentationTests {
-    @Test("モデル未取得では確認付き初回取得と再検証を表示する")
+    @Test("モデル未取得では初回取得だけを表示する")
     func missingModelPresentsInitialDownloadWithoutSilentFallback() throws {
         let fixture = try Fixture()
 
@@ -15,17 +15,14 @@ struct StemModelManagementPresentationTests {
         #expect(presentation.title == "AIモデルが必要です")
         #expect(presentation.statusText == "未取得")
         #expect(presentation.allowsModelDownload)
-        #expect(
-            presentation.actions
-                == [.initialDownload, .revalidate]
-        )
+        #expect(presentation.actions == [.initialDownload])
         #expect(!presentation.actions.contains(.repair))
         #expect(!presentation.actions.contains(.redownload))
         #expect(!presentation.requiresAppReinstallation)
     }
 
-    @Test("モデル破損では修復と完全再取得の両方を選べる")
-    func invalidModelPresentsRepairAndRedownload() throws {
+    @Test("モデル破損でも取得ボタンを1つだけ表示する")
+    func invalidModelPresentsOneDownloadAction() throws {
         let fixture = try Fixture()
 
         let presentation = StemModelManagementSection.Presentation.make(
@@ -39,10 +36,7 @@ struct StemModelManagementPresentationTests {
         #expect(presentation.title == "AIモデルの修復が必要です")
         #expect(presentation.statusText == "修復必要")
         #expect(presentation.detail == "fixture checksum mismatch")
-        #expect(
-            presentation.actions
-                == [.repair, .redownload, .revalidate]
-        )
+        #expect(presentation.actions == [.redownload])
         #expect(presentation.allowsModelDownload)
     }
 
@@ -58,10 +52,7 @@ struct StemModelManagementPresentationTests {
 
         #expect(presentation.title == "Stem Modeのモデルを利用できます")
         #expect(presentation.statusText == "利用可能")
-        #expect(
-            presentation.actions
-                == [.redownload, .revalidate]
-        )
+        #expect(presentation.actions == [.redownload])
         #expect(presentation.allowsModelDownload)
     }
 
@@ -83,12 +74,10 @@ struct StemModelManagementPresentationTests {
         #expect(presentation.detail == "fixture metallib mismatch")
         #expect(presentation.requiresAppReinstallation)
         #expect(!presentation.allowsModelDownload)
-        #expect(
-            presentation.actions == [.revalidate]
-        )
+        #expect(presentation.actions.isEmpty)
     }
 
-    @Test("manifest異常時もモデル取得を禁止して再検証を残す")
+    @Test("manifest異常時は右サイドのモデル操作を表示しない")
     func invalidManifestNeverOffersModelDownload() {
         let inspection = StemModelLocalInspection(
             platform: .supportedAppleSilicon,
@@ -105,12 +94,10 @@ struct StemModelManagementPresentationTests {
         #expect(presentation.detail == "fixture manifest mismatch")
         #expect(presentation.requiresAppReinstallation)
         #expect(!presentation.allowsModelDownload)
-        #expect(
-            presentation.actions == [.revalidate]
-        )
+        #expect(presentation.actions.isEmpty)
     }
 
-    @Test("非Apple Siliconではモデル取得を禁止して再検証を残す")
+    @Test("非Apple Siliconでは右サイドのモデル操作を表示しない")
     func unsupportedPlatformNeverOffersModelDownload() throws {
         let fixture = try Fixture()
         let inspection = StemModelLocalInspection(
@@ -127,12 +114,10 @@ struct StemModelManagementPresentationTests {
         #expect(presentation.title == "このMacではStem Modeを実行できません")
         #expect(presentation.detail == "実行アーキテクチャ: x86_64")
         #expect(!presentation.allowsModelDownload)
-        #expect(
-            presentation.actions == [.revalidate]
-        )
+        #expect(presentation.actions.isEmpty)
     }
 
-    @Test("右サイドは承認済みの4つのモデル操作を区別して表示する")
+    @Test("右サイドは両モデルで取得ボタン名を統一する")
     func recoveryActionLabelsCoverEveryApprovedChoice() {
         let presentations = StemModelRecoveryAction.allCases.map {
             StemModelManagementSection.ActionPresentation(action: $0)
@@ -142,8 +127,7 @@ struct StemModelManagementPresentationTests {
             presentations.map(\.title) == [
                 "AIモデルを取得",
                 "AIモデルを修復",
-                "モデル再取得",
-                "モデル検証"
+                "AIモデルを取得"
             ]
         )
         #expect(
@@ -152,13 +136,13 @@ struct StemModelManagementPresentationTests {
         )
     }
 
-    @Test("確認表示は2資産の容量SHA固定Revisionと通信開始を明示する")
-    func confirmationPresentationContainsCompleteDownloadContract() throws {
+    @Test("About画面はモデル2資産の配布情報と保存先を表示する")
+    func aboutPresentationContainsCompleteDownloadContract() throws {
         let fixture = try Fixture()
-        let confirmation = fixture.confirmation(purpose: .initialInstall)
 
-        let presentation = StemModelManagementSection.DownloadConfirmationPresentation(
-            confirmation: confirmation
+        let presentation = VelouraAboutView.ModelPresentation(
+            model: .htdemucs,
+            manifest: fixture.manifest
         )
 
         #expect(presentation.repository == fixture.manifest.model.repo)
@@ -181,8 +165,12 @@ struct StemModelManagementPresentationTests {
             presentation.assets[1].sha256
                 == "9258499513944fc062fbca0f11be425a446ec5702869a87e225323d7a57d2a01"
         )
-        #expect(presentation.networkNotice.contains("ネットワーク通信"))
-        #expect(presentation.networkNotice.contains("押すまで"))
+        #expect(
+            presentation.saveDestination
+                == NSString(
+                    string: StemModelStorePaths.production.rootURL.path
+                ).abbreviatingWithTildeInPath
+        )
     }
 
     @Test("取得進捗は現在資産と全体を別々に算出する")
@@ -260,7 +248,7 @@ struct StemModelManagementPresentationTests {
         #expect(presentation.canRequestCancellation)
     }
 
-    @Test("オフライン待機中は右サイドに接続待機と中断可否を表示する")
+    @Test("オフライン待機中は進捗モーダルに接続待機と中断可否を表示する")
     func offlineWaitingKeepsProgressAndCancellationVisible() throws {
         let fixture = try Fixture()
         let totalBytes = fixture.manifest.downloadableModelAssets.reduce(Int64.zero) {
@@ -312,6 +300,33 @@ struct StemModelManagementPresentationTests {
         #expect(presentation.phase == .activating)
         #expect(presentation.stageTitle.contains("中断不可"))
         #expect(presentation.stageDetail.contains("中断できません"))
+        #expect(!presentation.canRequestCancellation)
+    }
+
+    @Test("完了phaseはチェック表示用の完了状態となり中断を禁止する")
+    func completedPhaseShowsCompletionAndDisablesCancellation() throws {
+        let fixture = try Fixture()
+        let totalBytes = fixture.manifest.downloadableModelAssets.reduce(Int64.zero) {
+            $0 + $1.byteCount
+        }
+        let progress = StemModelAcquisitionProgress(
+            operationIdentifier: UUID(),
+            purpose: .redownload,
+            phase: .completed,
+            assetKind: nil,
+            receivedBytes: totalBytes,
+            totalBytes: totalBytes,
+            isWaitingForConnectivity: false
+        )
+
+        let presentation = StemModelManagementSection.ProgressPresentation.make(
+            progress: progress,
+            manifest: fixture.manifest,
+            isCancelling: false
+        )
+
+        #expect(presentation.phase == .completed)
+        #expect(presentation.stageTitle == "モデル取得が完了しました")
         #expect(!presentation.canRequestCancellation)
     }
 }
@@ -409,28 +424,4 @@ private struct Fixture {
         )
     }
 
-    func confirmation(
-        purpose: StemModelAcquisitionPurpose
-    ) -> StemModelDownloadConfirmation {
-        StemModelDownloadConfirmation(
-            id: UUID(),
-            purpose: purpose,
-            repository: manifest.model.repo,
-            revision: manifest.model.revision,
-            license: manifest.model.licenseMetadata,
-            totalByteCount: manifest.downloadableModelAssets.reduce(Int64.zero) {
-                $0 + $1.byteCount
-            },
-            assets: manifest.downloadableModelAssets.map { asset in
-                StemModelDownloadConfirmation.Asset(
-                    kind: asset.kind,
-                    fileName: URL(fileURLWithPath: asset.installationRelativePath)
-                        .lastPathComponent,
-                    byteCount: asset.byteCount,
-                    sha256: asset.sha256,
-                    stableDownloadURL: asset.downloadURL
-                )
-            }
-        )
-    }
 }

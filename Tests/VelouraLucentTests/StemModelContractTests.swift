@@ -33,6 +33,37 @@ struct StemModelContractTests {
         #expect(Set(contract.downloadableModelAssets.map(\.kind)) == [.modelWeights, .modelConfiguration])
         #expect(contract.bundledRuntimeAssets.map(\.kind) == [.metalLibrary])
         #expect(manifest.downloadPolicy.requiresExplicitUserConfirmation)
+        #expect(manifest.downloadPolicy.allowedRedirectHosts == [
+            "huggingface.co",
+            "cas-bridge.xethub.hf.co",
+            "us.aws.cdn.hf.co",
+        ])
+    }
+
+    @Test
+    func bsRoformerManifestMatchesProductionContract() throws {
+        let validator = StemModelAssetValidator(selectedModel: .bsRoformerSW)
+        let manifest = try validator.loadManifest(
+            at: repositoryRootURL.appending(
+                path: "Sources/VelouraLucent/Resources/StemModels/bs-roformer-sw-manifest.json"
+            )
+        )
+        let contract = try validator.validateManifest(manifest)
+
+        #expect(contract.separationModel == .bsRoformerSW)
+        #expect(contract.identifier == "MrSimmo/BS_Roformer_SW-MLX:bs-roformer-sw")
+        #expect(contract.sourceOrder == [.drums, .bass, .other, .vocals])
+        #expect(contract.defaultSegmentSeconds == nil)
+        #expect(manifest.model.licenseMetadata == "unknown")
+        #expect(manifest.downloadPolicy.allowedRedirectHosts == [
+            "huggingface.co",
+            "cas-bridge.xethub.hf.co",
+            "us.aws.cdn.hf.co",
+        ])
+        #expect(manifest.downloadableModelAssets.map(\.byteCount).sorted() == [
+            1_141,
+            349_521_144,
+        ])
     }
 
     @Test

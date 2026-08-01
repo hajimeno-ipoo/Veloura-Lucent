@@ -8,6 +8,7 @@ struct StemSeparationProgress: Equatable, Sendable {
 
 enum StemSeparationServiceError: LocalizedError, Equatable, Sendable {
     case invalidOutputDirectory(String)
+    case missingModelAsset(StemModelAssetKind)
     case inputSampleRateMismatch(expected: Double, actual: Double)
     case inputChannelCountMismatch(expected: Int, actual: Int)
     case inputFrameCountMismatch(expected: Int, actual: Int)
@@ -25,6 +26,8 @@ enum StemSeparationServiceError: LocalizedError, Equatable, Sendable {
         switch self {
         case .invalidOutputDirectory(let path):
             "Stem分離の出力先が安全なローカルディレクトリではありません（\(path)）。"
+        case .missingModelAsset(let kind):
+            "検証済みStemモデルに必要な資産がありません（\(kind.rawValue)）。"
         case let .inputSampleRateMismatch(expected, actual):
             "Stem分離入力のサンプルレートが一致しません（必要: \(expected) Hz、実際: \(actual) Hz）。"
         case let .inputChannelCountMismatch(expected, actual):
@@ -79,7 +82,10 @@ protocol StemSeparationArtifactStoring: Sendable {
 extension StemTemporaryAudioStore: StemSeparationArtifactStoring {}
 
 struct StemSeparationBackendConfiguration: Equatable, Sendable {
+    let model: StemSeparationModel
     let modelDirectoryURL: URL
+    let modelWeightsURL: URL
+    let modelConfigurationURL: URL
     let shifts: Int
     let overlap: Float
     let split: Bool
@@ -135,6 +141,21 @@ struct DemucsStemSeparationBackendFactory: StemSeparationBackendCreating {
             )
             return DemucsStemSeparationBackend(separator: separator)
         }.value
+    }
+}
+
+struct StemSeparationBackendRouterFactory: StemSeparationBackendCreating {
+    func makeBackend(
+        configuration: StemSeparationBackendConfiguration
+    ) async throws -> any StemSeparationBackend {
+        switch configuration.model {
+        case .htdemucs:
+            return try await DemucsStemSeparationBackendFactory()
+                .makeBackend(configuration: configuration)
+        case .bsRoformerSW:
+            return try await BSRoformerStemSeparationBackendFactory()
+                .makeBackend(configuration: configuration)
+        }
     }
 }
 
@@ -198,7 +219,7 @@ struct StemSeparationService: StemSeparating, Sendable {
 
     init(
         artifactStore: any StemSeparationArtifactStoring = StemTemporaryAudioStore(),
-        backendFactory: any StemSeparationBackendCreating = DemucsStemSeparationBackendFactory()
+        backendFactory: any StemSeparationBackendCreating = StemSeparationBackendRouterFactory()
     ) {
         self.artifactStore = artifactStore
         self.backendFactory = backendFactory
@@ -221,8 +242,19 @@ struct StemSeparationService: StemSeparating, Sendable {
         )
         try validateInput(inputSignal, artifact: inputArtifact)
         let validatedSettings = try settings.validated(modelContract: installation.snapshot.contract)
+        let modelWeightsURL = try requiredModelAssetURL(
+            .modelWeights,
+            installation: installation
+        )
+        let modelConfigurationURL = try requiredModelAssetURL(
+            .modelConfiguration,
+            installation: installation
+        )
         let backend = try await backendFactory.makeBackend(configuration: StemSeparationBackendConfiguration(
+            model: installation.snapshot.contract.separationModel,
             modelDirectoryURL: installation.modelDirectoryURL,
+            modelWeightsURL: modelWeightsURL,
+            modelConfigurationURL: modelConfigurationURL,
             shifts: validatedSettings.shifts,
             overlap: validatedSettings.overlap,
             split: validatedSettings.split,
@@ -290,6 +322,16 @@ struct StemSeparationService: StemSeparating, Sendable {
             }
             throw error
         }
+    }
+
+    private func requiredModelAssetURL(
+        _ kind: StemModelAssetKind,
+        installation: ValidatedStemModelInstallation
+    ) throws -> URL {
+        guard let asset = installation.snapshot.assets.first(where: { $0.kind == kind }) else {
+            throw StemSeparationServiceError.missingModelAsset(kind)
+        }
+        return asset.fileURL
     }
 
     private func validatedDirectory(_ url: URL) throws -> URL {

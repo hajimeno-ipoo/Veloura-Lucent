@@ -164,11 +164,6 @@ enum StemModelAcquisitionError: Error, Equatable, LocalizedError, Sendable {
 
 protocol StemModelAcquisitionValidating: Sendable {
     func validateManifest(_ manifest: StemModelManifest) throws -> StemModelContract
-
-    func validateStagedModelAssets(
-        manifest: StemModelManifest,
-        rootURL: URL
-    ) throws -> ValidatedStemModelSnapshot
 }
 
 extension StemModelAssetValidator: StemModelAcquisitionValidating {}
@@ -214,7 +209,7 @@ actor StemModelAcquisitionService {
 
     init(
         downloader: any StemModelDownloading = StemModelDownloadClient(),
-        validator: any StemModelAcquisitionValidating = StemModelAssetValidator(),
+        validator: any StemModelAcquisitionValidating = StemModelAssetValidator(selectedModel: nil),
         store: any StemModelAcquisitionStoring = StemModelInstallationStore()
     ) {
         self.downloader = downloader
@@ -385,26 +380,12 @@ actor StemModelAcquisitionService {
                     isWaitingForConnectivity: false
                 )
             )
-            _ = try validator.validateStagedModelAssets(
-                manifest: manifest,
-                rootURL: stagingDirectoryURL
-            )
             try requireOperationCanContinue(operationIdentifier)
 
-            // Activation is the transaction commit point. Once entered, cancellation is
-            // refused rather than reporting cancellation after the active pointer changed.
+            // The store performs the single full asset validation immediately before
+            // activation. Once entered, cancellation is refused rather than reporting
+            // cancellation after the active pointer changed.
             setPhase(.activating, operationIdentifier: operationIdentifier)
-            progressHandler(
-                Self.progress(
-                    operationIdentifier: operationIdentifier,
-                    purpose: purpose,
-                    phase: .activating,
-                    assetKind: nil,
-                    receivedBytes: completedBytes,
-                    totalBytes: totalBytes,
-                    isWaitingForConnectivity: false
-                )
-            )
             let installation = try await store.activate(
                 operationIdentifier: operationIdentifier,
                 generationIdentifier: UUID(),

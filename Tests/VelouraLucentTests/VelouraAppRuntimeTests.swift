@@ -84,9 +84,67 @@ struct VelouraAppRuntimeTests {
     @Test("通常画面とfallbackは同じRootを使い、window消失ではruntimeを停止しない")
     func appEntryUsesRootAndShutsDownOnlyAtApplicationTermination() throws {
         let appSource = try source("Sources/VelouraLucent/App/VelouraLucentApp.swift")
+        let commandsSource = try source("Sources/VelouraLucent/App/VelouraCommands.swift")
         let rootSource = try source("Sources/VelouraLucent/Views/VelouraRootView.swift")
+        let managementSource = try source(
+            "Sources/VelouraLucent/Views/StemModelManagementSection.swift"
+        )
+        let acquisitionProgressSource = try source(
+            "Sources/VelouraLucent/Views/StemModelAcquisitionProgressSheet.swift"
+        )
 
         #expect(appSource.components(separatedBy: "VelouraRootView()").count - 1 == 2)
+        #expect(appSource.contains("Window(\"Veloura Lucentについて\", id: \"about\")"))
+        #expect(commandsSource.contains("CommandGroup(replacing: .appInfo)"))
+        #expect(commandsSource.contains("openWindow(id: \"about\")"))
+        #expect(rootSource.contains("StemModelAcquisitionProgressSheet("))
+        #expect(!managementSource.contains("AcquisitionProgressCard"))
+        #expect(!managementSource.contains("ModelDownloadConfirmationSheet"))
+        #expect(!acquisitionProgressSource.contains("ProgressRow"))
+        #expect(!acquisitionProgressSource.contains("ProgressView(value:"))
+        #expect(acquisitionProgressSource.contains("ProgressView()"))
+        #expect(acquisitionProgressSource.contains("\"checkmark.circle.fill\""))
+        #expect(acquisitionProgressSource.contains("Label(\"キャンセル\""))
+        #expect(!rootSource.contains(".sheet("))
+        #expect(rootSource.contains(".overlay {"))
+        #expect(rootSource.contains("Color.black.opacity(0.14)"))
+        #expect(acquisitionProgressSource.contains("private var modalSurface"))
+        #expect(
+            acquisitionProgressSource.contains(
+                ".velouraAdaptiveGlass(in: .rect(cornerRadius: 28))"
+            )
+        )
+        #expect(
+            acquisitionProgressSource.contains(
+                ".frame(minWidth: 660, maxWidth: 660, minHeight: 240)"
+            )
+        )
+        #expect(acquisitionProgressSource.contains("GlassEffectContainer(spacing: 0)"))
+        #expect(acquisitionProgressSource.contains(".buttonStyle(.plain)"))
+        #expect(
+            acquisitionProgressSource.contains(
+                "CancellationLiquidGlassHoverModifier("
+            )
+        )
+        #expect(
+            acquisitionProgressSource.contains(
+                ".regular.tint(.red.opacity(0.58)).interactive()"
+            )
+        )
+        #expect(
+            acquisitionProgressSource.contains(
+                "presentation.canRequestCancellation || isCancelling"
+            )
+        )
+        #expect(acquisitionProgressSource.contains(".disabled(isCancelling)"))
+        #expect(
+            acquisitionProgressSource.contains(
+                "isCancellationHovering && !isCancelling"
+            )
+        )
+        #expect(!acquisitionProgressSource.contains(".buttonStyle(.glass"))
+        #expect(!acquisitionProgressSource.contains("LiquidGlassSegmentedPicker"))
+        #expect(!acquisitionProgressSource.contains("ProcessingModeToolbarPicker"))
         #expect(appSource.contains("func applicationWillTerminate"))
         #expect(appSource.contains("VelouraAppRuntime.shared.shutdown()"))
         #expect(appSource.contains("await VelouraAppRuntime.shared.startIfNeeded()"))

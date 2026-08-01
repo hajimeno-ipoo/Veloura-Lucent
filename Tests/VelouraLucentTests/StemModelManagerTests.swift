@@ -29,6 +29,28 @@ private actor StemModelInspectorDouble: StemModelLocalInspecting {
     }
 }
 
+private actor SelectingStemModelInspectorDouble: StemModelSelectionInspecting {
+    private let inspection: StemModelLocalInspection
+    private var selectedModelsStorage: [StemSeparationModel] = []
+
+    init(inspection: StemModelLocalInspection) {
+        self.inspection = inspection
+    }
+
+    func inspect() async -> StemModelLocalInspection {
+        await inspect(model: .htdemucs)
+    }
+
+    func inspect(model: StemSeparationModel) async -> StemModelLocalInspection {
+        selectedModelsStorage.append(model)
+        return inspection
+    }
+
+    var selectedModels: [StemSeparationModel] {
+        selectedModelsStorage
+    }
+}
+
 private final class StemModelAuthorizationCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var countStorage = 0
@@ -151,10 +173,73 @@ private actor StemModelAcquisitionControllerDouble: StemModelAcquisitionControll
         }
         continuation.resume(throwing: StemModelManagerFixtureError.acquisitionFailed)
     }
+
+    func failValidation() throws {
+        guard let identifier = pending.keys.first,
+              let continuation = pending.removeValue(forKey: identifier) else {
+            throw StemModelManagerFixtureError.pendingAcquisitionMissing
+        }
+        continuation.resume(
+            throwing: StemModelAssetValidationError.assetChecksumMismatch(
+                kind: .modelWeights,
+                path: "/fixture/model.safetensors",
+                expected: "expected",
+                actual: "actual"
+            )
+        )
+    }
 }
 
 @MainActor
 struct StemModelManagerTests {
+    @Test("モデル選択は同じmanagerで選択モデルだけを再検証する")
+    func selectingModelReusesExistingManagerAndInspector() async throws {
+        let fixture = try StemModelManagerFixture()
+        let inspector = SelectingStemModelInspectorDouble(
+            inspection: fixture.missingInspection
+        )
+        let controller = StemModelAcquisitionControllerDouble(
+            successfulInstallation: fixture.installation
+        )
+        let manager = StemModelManager(
+            inspector: inspector,
+            acquisitionController: controller
+        )
+
+        await manager.inspectLocalResources()
+        await manager.selectModel(.bsRoformerSW)
+
+        #expect(manager.selectedModel == .bsRoformerSW)
+        #expect(await inspector.selectedModels == [.htdemucs, .bsRoformerSW])
+        #expect(controller.authorizationIssueCount == 0)
+        #expect(await controller.calls.isEmpty)
+    }
+
+    @Test("異常モデルから正常モデルへ切り替えるとStem処理可能状態へ戻る")
+    func selectingReadyModelRestoresStemReadiness() async throws {
+        let fixture = try StemModelManagerFixture()
+        let inspector = StemModelInspectorDouble(
+            inspections: [fixture.invalidInspection, fixture.readyInspection]
+        )
+        let controller = StemModelAcquisitionControllerDouble(
+            successfulInstallation: fixture.installation
+        )
+        let manager = StemModelManager(
+            inspector: inspector,
+            acquisitionController: controller
+        )
+
+        await manager.inspectLocalResources()
+        #expect(!manager.isReadyForStemProcessing)
+
+        await manager.selectModel(.bsRoformerSW)
+
+        #expect(manager.selectedModel == .bsRoformerSW)
+        #expect(manager.localInspection == fixture.readyInspection)
+        #expect(manager.isReadyForStemProcessing)
+        #expect(await inspector.callCount == 2)
+    }
+
     @Test("起動確認と再検証はローカルinspectorだけを使う")
     func startupAndRevalidationRemainLocalOnly() async throws {
         let fixture = try StemModelManagerFixture()
@@ -183,15 +268,9 @@ struct StemModelManagerTests {
     func recoveryActionsMatchInstalledModelState() throws {
         let fixture = try StemModelManagerFixture()
 
-        #expect(fixture.missingInspection.recoveryActions == [
-            .initialDownload, .revalidate,
-        ])
-        #expect(fixture.invalidInspection.recoveryActions == [
-            .repair, .redownload, .revalidate,
-        ])
-        #expect(fixture.readyInspection.recoveryActions == [
-            .redownload, .revalidate,
-        ])
+        #expect(fixture.missingInspection.recoveryActions == [.initialDownload])
+        #expect(fixture.invalidInspection.recoveryActions == [.redownload])
+        #expect(fixture.readyInspection.recoveryActions == [.redownload])
     }
 
     @Test("MLX実行資産が不正な場合はモデル取得を準備しない")
@@ -209,9 +288,7 @@ struct StemModelManagerTests {
         )
         await manager.inspectLocalResources()
 
-        #expect(manager.recoveryActions == [
-            .revalidate,
-        ])
+        #expect(manager.recoveryActions.isEmpty)
         for purpose in StemModelAcquisitionPurpose.allCases {
             #expect(
                 throws: StemModelManagerError.runtimeCannotBeRepairedByModelDownload
@@ -311,8 +388,8 @@ struct StemModelManagerTests {
         #expect(await controller.calls.isEmpty)
     }
 
-    @Test("肯定操作だけが一回限りの権限を発行し進捗後に再検証する")
-    func affirmativeConfirmationIssuesAuthorizationAndSuccessReinspects() async throws {
+    @Test("肯定操作だけが一回限りの権限を発行し取得済み検証結果を利用する")
+    func affirmativeConfirmationIssuesAuthorizationAndUsesValidatedResult() async throws {
         let fixture = try StemModelManagerFixture()
         let inspector = StemModelInspectorDouble(
             inspections: [fixture.missingInspection, fixture.readyInspection]
@@ -345,14 +422,49 @@ struct StemModelManagerTests {
         try await controller.completeSuccessfully()
         try await waitUntil { manager.operationState == .idle }
 
-        #expect(await inspector.callCount == 2)
+        #expect(await inspector.callCount == 1)
         #expect(manager.localInspection == fixture.readyInspection)
         #expect(manager.isReadyForStemProcessing)
         #expect(await controller.calls.count == 1)
     }
 
-    @Test("取得後モデルがreadyでなければ局所エラーとして保持する")
-    func successThatDoesNotValidateBecomesLocalFailure() async throws {
+    @Test("右サイドの取得操作は確認待ちを残さず取得を開始し成功後に利用可能へ戻る")
+    func explicitAcquisitionActionStartsImmediatelyAndClosesOnReadiness() async throws {
+        let fixture = try StemModelManagerFixture()
+        let inspector = StemModelInspectorDouble(
+            inspections: [fixture.missingInspection, fixture.readyInspection]
+        )
+        let controller = StemModelAcquisitionControllerDouble(
+            successfulInstallation: fixture.installation
+        )
+        let manager = StemModelManager(
+            inspector: inspector,
+            acquisitionController: controller
+        )
+        await manager.inspectLocalResources()
+
+        manager.startAcquisition(purpose: .initialInstall)
+
+        #expect(manager.pendingDownloadConfirmation == nil)
+        #expect(controller.authorizationIssueCount == 1)
+        try await waitUntil { await controller.hasPendingAcquisition }
+        try await waitUntil {
+            guard case .acquiring(let progress) = manager.operationState else {
+                return false
+            }
+            return progress.receivedBytes == 42
+        }
+
+        try await controller.completeSuccessfully()
+        try await waitUntil { manager.operationState == .idle }
+
+        #expect(manager.localInspection == fixture.readyInspection)
+        #expect(manager.isReadyForStemProcessing)
+        #expect(await controller.calls.count == 1)
+    }
+
+    @Test("取得成功後は追加のSHA検証を行わず返却済みinstallationを利用する")
+    func successfulAcquisitionDoesNotReinspectAssets() async throws {
         let fixture = try StemModelManagerFixture()
         let inspector = StemModelInspectorDouble(
             inspections: [fixture.missingInspection, fixture.invalidInspection]
@@ -369,15 +481,15 @@ struct StemModelManagerTests {
         try manager.confirmAcquisition()
         try await waitUntil { await controller.hasPendingAcquisition }
         try await controller.completeSuccessfully()
-        try await waitUntil { manager.isFailureState }
+        try await waitUntil { manager.operationState == .idle }
 
-        #expect(await inspector.callCount == 2)
-        #expect(manager.localInspection == fixture.invalidInspection)
-        #expect(!manager.isReadyForStemProcessing)
+        #expect(await inspector.callCount == 1)
+        #expect(manager.localInspection == fixture.readyInspection)
+        #expect(manager.isReadyForStemProcessing)
     }
 
-    @Test("取得失敗後もローカル資産を再検証して通常モードを阻害しない")
-    func acquisitionFailureReinspectsWithoutGlobalFailure() async throws {
+    @Test("通信などの取得失敗では再ダウンロード操作を表示しない")
+    func nonValidationFailureDoesNotOfferRetryDownload() async throws {
         let fixture = try StemModelManagerFixture()
         let inspector = StemModelInspectorDouble(
             inspections: [fixture.missingInspection, fixture.missingInspection]
@@ -396,14 +508,58 @@ struct StemModelManagerTests {
         try await controller.failAcquisition()
         try await waitUntil { manager.isFailureState }
 
-        #expect(await inspector.callCount == 2)
+        #expect(await inspector.callCount == 1)
         #expect(manager.localInspection == fixture.missingInspection)
-        #expect(manager.recoveryActions == [.initialDownload, .revalidate])
+        #expect(manager.recoveryActions == [.initialDownload])
         #expect(!manager.isReadyForStemProcessing)
+        guard case .failed(_, let retryPurpose) = manager.operationState else {
+            Issue.record("取得失敗状態が保持されていません")
+            return
+        }
+        #expect(retryPurpose == nil)
     }
 
-    @Test("取得中断後もローカル資産を再検証し取得状態を終了する")
-    func cancellationReinspectsAndReturnsToIdle() async throws {
+    @Test("最終検証の異常時だけ再ダウンロードし再検証できる")
+    func validationFailureOffersFullRetryDownload() async throws {
+        let fixture = try StemModelManagerFixture()
+        let inspector = StemModelInspectorDouble(
+            inspections: [fixture.missingInspection]
+        )
+        let controller = StemModelAcquisitionControllerDouble(
+            successfulInstallation: fixture.installation
+        )
+        let manager = StemModelManager(
+            inspector: inspector,
+            acquisitionController: controller
+        )
+        await manager.inspectLocalResources()
+
+        manager.startAcquisition(purpose: .initialInstall)
+        try await waitUntil { await controller.hasPendingAcquisition }
+        try await controller.failValidation()
+        try await waitUntil { manager.isFailureState }
+
+        guard case .failed(_, let retryPurpose) = manager.operationState else {
+            Issue.record("検証異常が取得失敗状態として保持されていません")
+            return
+        }
+        #expect(retryPurpose == .initialInstall)
+        #expect(await inspector.callCount == 1)
+
+        manager.retryFailedAcquisition()
+        try await waitUntil { await controller.calls.count == 2 }
+        try await waitUntil { await controller.hasPendingAcquisition }
+        #expect(await controller.calls.map(\.purpose) == [
+            .initialInstall, .initialInstall,
+        ])
+
+        try await controller.completeSuccessfully()
+        try await waitUntil { manager.operationState == .idle }
+        #expect(manager.isReadyForStemProcessing)
+    }
+
+    @Test("取得中断は追加検証を行わず取得状態を終了する")
+    func cancellationReturnsToIdleWithoutReinspection() async throws {
         let fixture = try StemModelManagerFixture()
         let inspector = StemModelInspectorDouble(
             inspections: [fixture.invalidInspection, fixture.invalidInspection]
@@ -416,7 +572,7 @@ struct StemModelManagerTests {
             acquisitionController: controller
         )
         await manager.inspectLocalResources()
-        try manager.prepareAcquisitionConfirmation(purpose: .repair)
+        try manager.prepareAcquisitionConfirmation(purpose: .redownload)
         try manager.confirmAcquisition()
         try await waitUntil { await controller.hasPendingAcquisition }
 
@@ -425,12 +581,12 @@ struct StemModelManagerTests {
         try await waitUntil { manager.operationState == .idle }
 
         #expect(await controller.cancellationIdentifiers == [operationIdentifier])
-        #expect(await inspector.callCount == 2)
+        #expect(await inspector.callCount == 1)
         #expect(manager.localInspection == fixture.invalidInspection)
-        #expect(manager.recoveryActions == [.repair, .redownload, .revalidate])
+        #expect(manager.recoveryActions == [.redownload])
     }
 
-    @Test("manifest不正はStem内に閉じ再検証だけを提示する")
+    @Test("manifest不正はStem内に閉じ右サイドの操作を表示しない")
     func invalidManifestRemainsAStemLocalState() async throws {
         let fixture = try StemModelManagerFixture()
         let inspection = StemModelLocalInspection(
@@ -452,13 +608,13 @@ struct StemModelManagerTests {
 
         #expect(manager.operationState == .idle)
         #expect(manager.localInspection == inspection)
-        #expect(manager.recoveryActions == [.revalidate])
+        #expect(manager.recoveryActions.isEmpty)
         #expect(!manager.isReadyForStemProcessing)
         #expect(controller.authorizationIssueCount == 0)
         #expect(await controller.calls.isEmpty)
     }
 
-    @Test("Apple Silicon以外ではモデル取得を提示せず再検証だけを残す")
+    @Test("Apple Silicon以外では右サイドのモデル操作を表示しない")
     func unsupportedArchitectureDoesNotOfferModelAcquisition() async throws {
         let fixture = try StemModelManagerFixture()
         let inspection = StemModelLocalInspection(
@@ -479,7 +635,7 @@ struct StemModelManagerTests {
         await manager.inspectLocalResources()
 
         #expect(!manager.isReadyForStemProcessing)
-        #expect(manager.recoveryActions == [.revalidate])
+        #expect(manager.recoveryActions.isEmpty)
         #expect(throws: StemModelManagerError.unsupportedPlatform(processArchitecture: "x86_64")) {
             try manager.prepareAcquisitionConfirmation(purpose: .initialInstall)
         }

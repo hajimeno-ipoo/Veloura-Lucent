@@ -13,6 +13,7 @@ enum StemSeparationSegmentLength: Equatable, Sendable {
 struct StemSeparationSettings: Equatable, Sendable {
     static let verifiedModelContractSegmentSeconds = 7.8
 
+    let model: StemSeparationModel
     let shifts: Int
     let overlap: Float
     let split: Bool
@@ -22,6 +23,7 @@ struct StemSeparationSettings: Equatable, Sendable {
 
     /// 承認済みの分離条件を、現在のStemセッションへ明示的に渡します。
     init(
+        model: StemSeparationModel = .htdemucs,
         shifts: Int,
         overlap: Float,
         split: Bool,
@@ -29,6 +31,7 @@ struct StemSeparationSettings: Equatable, Sendable {
         batchSize: Int,
         seed: Int?
     ) {
+        self.model = model
         self.shifts = shifts
         self.overlap = overlap
         self.split = split
@@ -42,6 +45,7 @@ struct StemSeparationSettings: Equatable, Sendable {
     /// `seed`は同じ入力と設定で分離結果を再現するため、処理開始時に明示します。
     static func metaHTDemucsProduction(seed: Int) -> Self {
         StemSeparationSettings(
+            model: .htdemucs,
             shifts: 2,
             overlap: 0.25,
             split: true,
@@ -49,6 +53,25 @@ struct StemSeparationSettings: Equatable, Sendable {
             batchSize: 1,
             seed: seed
         )
+    }
+
+    static let bsRoformerSWProduction = StemSeparationSettings(
+        model: .bsRoformerSW,
+        shifts: 0,
+        overlap: 0,
+        split: false,
+        segmentLength: .modelContract,
+        batchSize: 1,
+        seed: nil
+    )
+
+    static func production(for model: StemSeparationModel, seed: Int) -> Self {
+        switch model {
+        case .htdemucs:
+            .metaHTDemucsProduction(seed: seed)
+        case .bsRoformerSW:
+            .bsRoformerSWProduction
+        }
     }
 
     func validatedParameters() throws -> Self {
@@ -74,16 +97,10 @@ struct StemSeparationSettings: Equatable, Sendable {
 
     func validated(modelContract: StemModelContract) throws -> Self {
         _ = try validatedParameters()
-        guard modelContract.defaultSegmentSeconds.isFinite,
-              modelContract.defaultSegmentSeconds > 0 else {
-            throw StemSeparationSettingsError.invalidModelContractSegmentLength(
-                modelContract.defaultSegmentSeconds
-            )
-        }
-        guard modelContract.defaultSegmentSeconds == Self.verifiedModelContractSegmentSeconds else {
-            throw StemSeparationSettingsError.unverifiedModelContractSegmentLength(
-                expected: Self.verifiedModelContractSegmentSeconds,
-                actual: modelContract.defaultSegmentSeconds
+        guard modelContract.separationModel == model else {
+            throw StemSeparationSettingsError.modelMismatch(
+                expected: modelContract.separationModel,
+                actual: model
             )
         }
         guard modelContract.sampleRate == 44_100,
@@ -92,11 +109,32 @@ struct StemSeparationSettings: Equatable, Sendable {
               modelContract.sourceOrder == [.drums, .bass, .other, .vocals] else {
             throw StemSeparationSettingsError.unsupportedModelContract
         }
+        if model == .bsRoformerSW {
+            guard modelContract.defaultSegmentSeconds == nil,
+                  self == Self.bsRoformerSWProduction else {
+                throw StemSeparationSettingsError.unsupportedModelContract
+            }
+            return self
+        }
+        guard let defaultSegmentSeconds = modelContract.defaultSegmentSeconds,
+              defaultSegmentSeconds.isFinite,
+              defaultSegmentSeconds > 0 else {
+            throw StemSeparationSettingsError.invalidModelContractSegmentLength(
+                modelContract.defaultSegmentSeconds ?? 0
+            )
+        }
+        guard defaultSegmentSeconds == Self.verifiedModelContractSegmentSeconds else {
+            throw StemSeparationSettingsError.unverifiedModelContractSegmentLength(
+                expected: Self.verifiedModelContractSegmentSeconds,
+                actual: defaultSegmentSeconds
+            )
+        }
         return self
     }
 }
 
 enum StemSeparationSettingsError: LocalizedError, Equatable, Sendable {
+    case modelMismatch(expected: StemSeparationModel, actual: StemSeparationModel)
     case invalidShifts(Int)
     case invalidOverlap(Float)
     case invalidBatchSize(Int)
@@ -108,6 +146,8 @@ enum StemSeparationSettingsError: LocalizedError, Equatable, Sendable {
 
     var errorDescription: String? {
         switch self {
+        case let .modelMismatch(expected, actual):
+            "Stem分離設定のモデルが一致しません（必要: \(expected.displayName)、実際: \(actual.displayName)）。"
         case let .invalidShifts(value):
             "Stem分離のshiftsは0以上で指定してください（実際: \(value)）。"
         case let .invalidOverlap(value):

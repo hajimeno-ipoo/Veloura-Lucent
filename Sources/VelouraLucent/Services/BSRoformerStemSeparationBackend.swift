@@ -85,16 +85,13 @@ enum BSRoformerStemOutputMapper {
 }
 
 struct BSRoformerStemSeparationBackendFactory: StemSeparationBackendCreating {
-    let weightsURL: URL
-    let configurationURL: URL
-
     func makeBackend(
-        configuration _: StemSeparationBackendConfiguration
+        configuration: StemSeparationBackendConfiguration
     ) async throws -> any StemSeparationBackend {
         try await Task.detached(priority: .userInitiated) {
             let separator = try BSRoformerSeparator(
-                weightsURL: weightsURL,
-                configurationURL: configurationURL
+                weightsURL: configuration.modelWeightsURL,
+                configurationURL: configuration.modelConfigurationURL
             )
             return BSRoformerStemSeparationBackend(separator: separator)
         }.value

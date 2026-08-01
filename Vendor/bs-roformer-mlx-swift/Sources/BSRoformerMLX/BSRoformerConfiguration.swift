@@ -41,7 +41,37 @@ public struct BSRoformerConfiguration: Codable, Equatable, Sendable {
 
     public static func load(from url: URL) throws -> Self {
         let data = try Data(contentsOf: url)
-        let configuration = try JSONDecoder().decode(Self.self, from: data)
+        let decoder = JSONDecoder()
+        let configuration: Self
+        if let native = try? decoder.decode(Self.self, from: data) {
+            configuration = native
+        } else {
+            let published = try decoder.decode(PublishedConfiguration.self, from: data)
+            try published.validateRuntimeAssumptions()
+            configuration = Self(
+                sampleRate: published.sampleRate,
+                channels: published.stereo ? 2 : 1,
+                stemNames: published.instruments,
+                dimension: published.dimension,
+                depth: published.depth,
+                timeTransformerDepth: published.timeTransformerDepth,
+                frequencyTransformerDepth: published.frequencyTransformerDepth,
+                linearTransformerDepth: published.linearTransformerDepth,
+                frequenciesPerBand: published.frequenciesPerBand,
+                headDimension: published.headDimension,
+                headCount: published.headCount,
+                mlpExpansionFactor: published.mlpExpansionFactor,
+                maskEstimatorDepth: published.maskEstimatorDepth,
+                stftFFTSize: published.stftFFTSize,
+                stftHopLength: published.stftHopLength,
+                stftWindowLength: published.stftWindowLength,
+                stftNormalized: published.stftNormalized,
+                inferenceFrameCount: 801,
+                shortAudioThresholdSeconds: 10,
+                shortAudioInferenceFrameCount: 256,
+                overlapSeconds: 8
+            )
+        }
         try configuration.validate()
         return configuration
     }
@@ -86,6 +116,65 @@ public struct BSRoformerConfiguration: Codable, Equatable, Sendable {
               overlapSeconds == 8,
               stepSampleCount(for: chunkSampleCount) > 0 else {
             throw BSRoformerError.invalidConfiguration("チャンク設定が不正です")
+        }
+    }
+}
+
+private struct PublishedConfiguration: Decodable {
+    let modelClass: String
+    let sampleRate: Int
+    let instruments: [String]
+    let dimension: Int
+    let depth: Int
+    let stereo: Bool
+    let timeTransformerDepth: Int
+    let frequencyTransformerDepth: Int
+    let linearTransformerDepth: Int
+    let frequenciesPerBand: [Int]
+    let headDimension: Int
+    let headCount: Int
+    let stftFFTSize: Int
+    let stftHopLength: Int
+    let stftWindowLength: Int
+    let stftNormalized: Bool
+    let maskEstimatorDepth: Int
+    let mlpExpansionFactor: Int
+    let skipConnection: Bool
+    let zeroDC: Bool
+    let ropeTheta: Double
+
+    enum CodingKeys: String, CodingKey {
+        case modelClass = "model_class"
+        case sampleRate = "sample_rate"
+        case instruments
+        case dimension = "dim"
+        case depth
+        case stereo
+        case timeTransformerDepth = "time_transformer_depth"
+        case frequencyTransformerDepth = "freq_transformer_depth"
+        case linearTransformerDepth = "linear_transformer_depth"
+        case frequenciesPerBand = "freqs_per_bands"
+        case headDimension = "dim_head"
+        case headCount = "heads"
+        case stftFFTSize = "stft_n_fft"
+        case stftHopLength = "stft_hop_length"
+        case stftWindowLength = "stft_win_length"
+        case stftNormalized = "stft_normalized"
+        case maskEstimatorDepth = "mask_estimator_depth"
+        case mlpExpansionFactor = "mlp_expansion_factor"
+        case skipConnection = "skip_connection"
+        case zeroDC = "zero_dc"
+        case ropeTheta = "rope_theta"
+    }
+
+    func validateRuntimeAssumptions() throws {
+        guard modelClass == "BSRoformer",
+              !skipConnection,
+              zeroDC,
+              ropeTheta == 10_000 else {
+            throw BSRoformerError.invalidConfiguration(
+                "公開設定のmodel_class、skip_connection、zero_dc、rope_thetaが未対応です"
+            )
         }
     }
 }

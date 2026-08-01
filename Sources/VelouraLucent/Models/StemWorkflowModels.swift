@@ -277,7 +277,6 @@ enum StemModelRecoveryAction: String, CaseIterable, Identifiable, Sendable {
     case initialDownload
     case repair
     case redownload
-    case revalidate
 
     var id: String { rawValue }
 }

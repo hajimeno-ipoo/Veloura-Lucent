@@ -12,6 +12,7 @@ struct VelouraRootView: View {
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
     @State private var isInspectorPresented = true
     @State private var isWindowFullScreen = false
+    @State private var isModelAcquisitionProgressPresented = false
     @State private var windowBackgroundMaterialAmount =
         AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
     @State private var isWindowBackgroundBlurEnabled =
@@ -86,6 +87,28 @@ struct VelouraRootView: View {
         }
         .onChange(of: runtime.stemModelManager.isAcquiringModels, initial: true) { _, _ in
             runtime.stemWorkflowController.synchronizeModelReadiness()
+        }
+        .onChange(
+            of: runtime.stemModelManager.operationState,
+            initial: true
+        ) { _, newState in
+            synchronizeModelAcquisitionProgress(with: newState)
+        }
+        .overlay {
+            if isModelAcquisitionProgressPresented {
+                ZStack {
+                    Color.black.opacity(0.14)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+
+                    StemModelAcquisitionProgressSheet(
+                        modelManager: runtime.stemModelManager
+                    )
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
+                .zIndex(1)
+            }
         }
     }
 
@@ -358,6 +381,17 @@ struct VelouraRootView: View {
         FilePanelService.chooseAudioFile { URL in
             guard let URL else { return }
             Task { await model.inspectInput(URL) }
+        }
+    }
+
+    private func synchronizeModelAcquisitionProgress(
+        with state: StemModelManagerOperationState
+    ) {
+        switch state {
+        case .acquiring, .cancelling, .failed:
+            isModelAcquisitionProgressPresented = true
+        case .idle, .awaitingConfirmation:
+            isModelAcquisitionProgressPresented = false
         }
     }
 

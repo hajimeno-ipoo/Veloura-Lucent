@@ -12,8 +12,21 @@ Python参照出力との同一入力比較では、6ステムすべてで高い�
 - スワップ：`0`
 
 この結果は、Swiftランタイム単体が対象モデルを読み込み、6ステムを最後まで出力でき、
-Python参照実装に近い結果を返したことを示す。Veloura Lucent本体にはbackend adapterを
-追加したが、現行Stem Modeの既定分離器からの切り替えは行っていない。
+Python参照実装に近い結果を返したことを示す。
+
+その後、公開配布されているFloat16モデルと設定を同じランタイムで確認し、
+Veloura Lucent本体の既存Stem Modeへ選択式で接続した。既定はHTDemucsのままであり、
+自動フォールバックは追加していない。
+
+- 公開モデルrevision：`13edef2e713151522e4049e92f011e0543c45d53`
+- 公開safetensors：`349,521,144 bytes`
+- 公開safetensors SHA-256：`6c8303a829575d03f21562ea185be7b6b23e922052883dec1b9518ca00a920fc`
+- 公開config：`1,141 bytes`
+- 公開config SHA-256：`ab4ae4369276c2ff12ee86d55ce45c37a88a82f6744c33c0bb6a40c1c2f620f9`
+- 6.8秒入力：3チャンク、6Stemすべて出力
+- ユーザー指定実音源のアプリ三段階workflow：`418.755秒`で完走
+- Releaseアプリの既存取得画面：weightsの`us.aws.cdn.hf.co`転送を通過し、
+  2資産の容量・SHA-256検証、receipt保存、BS専用active pointer作成まで完了
 
 ## 実装範囲
 
@@ -35,15 +48,22 @@ Python参照実装に近い結果を返したことを示す。Veloura Lucent本
 - 進捗通知とキャンセル確認
 - 6ステムFloat32 WAV出力
 
-含めていないもの：
+Veloura Lucent本体へ追加したもの：
 
-- Veloura Lucent本体の分離器切り替え
-- モデル選択UI
-- モデル取得・配布・再配布
-- 複数モデル管理
+- 既存右サイド「Stem分離」内のHTDemucs／BS-RoFormer-SW選択
+- モデル別manifest、検証、独立active pointer
+- 選択モデルに対応するbackend routing
+- `vocals`、`drums`、`bass`の直接対応
+- `other + guitar + piano`の無係数Float32加算
+- 既存の進捗、キャンセル、ログ、4Stem保存への接続
+
+追加していないもの：
+
+- 新しい管理画面またはダウンロード画面
 - 自動フォールバック
+- HTDemucsからBS-RoFormer-SWへの既定変更
 - 通常モードの変更
-- Stem解析、Stem別補正、再ミックス、マスタリングの変更
+- Stem解析、Stem別補正、再ミックス、マスタリングの新方式
 
 ## 固定したモデル契約
 
@@ -71,6 +91,27 @@ Python参照実装に近い結果を返したことを示す。Veloura Lucent本
 - weight keys：`1,915`
 
 モデルファイル自体はプロジェクトへ同梱していない。
+
+### アプリで使う公開Float16資産
+
+アプリのmanifestは、次の公開資産を固定している。
+
+| 項目 | 値 |
+|---|---|
+| repository | `MrSimmo/BS_Roformer_SW-MLX` |
+| revision | `13edef2e713151522e4049e92f011e0543c45d53` |
+| weights | `bs_roformer_sw.safetensors` |
+| weights size | `349,521,144 bytes` |
+| weights SHA-256 | `6c8303a829575d03f21562ea185be7b6b23e922052883dec1b9518ca00a920fc` |
+| config | `bs_roformer_sw_config.json` |
+| config size | `1,141 bytes` |
+| config SHA-256 | `ab4ae4369276c2ff12ee86d55ce45c37a88a82f6744c33c0bb6a40c1c2f620f9` |
+| license metadata | `unknown` |
+
+公開weightsはStemTap形式のkey名を使う。ランタイム内で、1,915 keyを
+既存Swift層名へ一対一で正規化してから不足・余剰を検証する。テンソル値や推論式は
+変更しない。公開configのsnake_caseを読み込み、モデル構造を検証したうえで、
+確認済みの`latency_safe_v3`相当のチャンク条件を使う。
 
 ## Python参照との一致
 
@@ -191,20 +232,25 @@ python scripts/compare_python_outputs.py \
 
 ## 未確認事項・制限
 
-- Veloura Lucent本体には、明示したモデルURLで生成できるbackend adapterを追加済み
-- 6ステムから既存4ステムへの`other + guitar + piano`無係数Float32加算を実装済み
-- 現行Stem Modeの既定分離器はHTDemucsのままで、BS-RoFormerへの切り替えは未実装
-- adapterから既存の進捗・キャンセル契約への変換は実装済み
-- BS-RoFormerを使ったアプリ内の進捗、キャンセル、4Stem保存の実動作は未確認
+- 現行Stem Modeの既定分離器はHTDemucsのまま
+- BS-RoFormer-SWからHTDemucsへの自動フォールバックはない
+- 公開Float16モデルの6.8秒入力で6Stem出力を確認済み
+- ユーザー指定実音源を、Release構成のアプリ本体workflowで分離、4Stem保存、
+  Stem別解析・補正、再ミックス、マスタリングまで完走確認済み
+- モデル選択、進捗表示、キャンセルのコード接続と自動テストは確認済み
+- 実画面の既存右パネルでHTDemucs／BS-RoFormer-SWの切り替えと、
+  選択モデルの状態表示を確認済み
+- 実画面の既存取得確認から公開2資産を取得し、BS-RoFormer-SWが
+  「利用可能」になることを確認済み
+- 実画面からの全処理実行と、処理中キャンセルの手操作は未確認
 - 実音源の速度とメモリは各条件1回の実測
 - BS-RoFormer-SWチェックポイントの再配布ライセンスは未確認
 - モデル同梱・再配布は行っていない
 
-## 次の実装境界
+## アプリ統合結果
 
-アプリ本体にはBS-RoFormer専用backend adapterを追加し、この単独ランタイムの
-6ステムを次の4ステムへ変換して、既存の`StemSeparationBackendOutput`へ渡すところまで
-実装した。
+アプリ本体は、選択されたBS-RoFormer-SWの6ステムを次の4ステムへ変換し、
+既存の`StemSeparationBackendOutput`へ渡す。
 
 | 既存4Stem | BS-RoFormer-SW |
 |---|---|
@@ -213,5 +259,6 @@ python scripts/compare_python_outputs.py \
 | `bass` | `bass` |
 | `other` | `other + guitar + piano` |
 
-このadapterは既定分離器へ切り替えていない。次へ進む場合は、個人利用環境での
-モデル保存場所と、HTDemucsから切り替える接続だけを別途決める。
+既存右サイド内の選択だけを追加し、モデル保存、取得前確認、検証、進捗、
+キャンセル、ログ、後続三段階workflowは既存の仕組みを共用する。HTDemucsの既定値、
+通常モード、既存Stem解析・補正・再ミックス・マスタリングは変更していない。

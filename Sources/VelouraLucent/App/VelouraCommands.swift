@@ -104,8 +104,15 @@ extension FocusedValues {
 struct VelouraCommands: Commands {
     @FocusedValue(\.velouraCommandActions) private var actions
     @FocusedValue(\.velouraWorkspaceChromeActions) private var chromeActions
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("Veloura Lucentについて", systemImage: "info.circle") {
+                openWindow(id: "about")
+            }
+        }
+
         CommandGroup(after: .newItem) {
             Button("音声ファイルを開く…", systemImage: "waveform.badge.plus") {
                 actions?.chooseInputAudio()

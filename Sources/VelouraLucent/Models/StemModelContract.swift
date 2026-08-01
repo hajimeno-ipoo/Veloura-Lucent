@@ -56,6 +56,7 @@ struct StemNormalizationContract: Codable, Equatable, Sendable {
 }
 
 struct StemModelContract: Codable, Equatable, Sendable {
+    let separationModel: StemSeparationModel
     let identifier: String
     let version: String
     let assetSetIdentifier: String
@@ -69,7 +70,7 @@ struct StemModelContract: Codable, Equatable, Sendable {
     let scalarType: StemModelScalarType
     let normalization: StemNormalizationContract
     let runtime: StemModelRuntime
-    let defaultSegmentSeconds: Double
+    let defaultSegmentSeconds: Double?
     let downloadableModelAssets: [StemDownloadableModelAsset]
     let bundledRuntimeAssets: [StemBundledRuntimeAsset]
 }
