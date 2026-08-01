@@ -256,75 +256,82 @@ struct DetailedAnalysisComparisonView: View {
             )
 
             ViewThatFits(in: .horizontal) {
-                wideMetricTable(rows)
-                compactMetricList(rows)
+                wideMetricTable(
+                    rows,
+                    labelWidth: 152,
+                    numericWidth: 104,
+                    horizontalSpacing: 14
+                )
+                wideMetricTable(
+                    rows,
+                    labelWidth: 108,
+                    numericWidth: 72,
+                    horizontalSpacing: 8
+                )
             }
         }
         .analysisCard()
         .accessibilityElement(children: .contain)
     }
 
-    private func wideMetricTable(_ rows: [MetricComparisonRow]) -> some View {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 10) {
+    private func wideMetricTable(
+        _ rows: [MetricComparisonRow],
+        labelWidth: CGFloat,
+        numericWidth: CGFloat,
+        horizontalSpacing: CGFloat
+    ) -> some View {
+        Grid(
+            alignment: .leadingFirstTextBaseline,
+            horizontalSpacing: horizontalSpacing,
+            verticalSpacing: 10
+        ) {
             GridRow {
                 tableHeader("項目")
+                    .frame(width: labelWidth, alignment: .leading)
+                Color.clear
+                    .frame(width: 24, height: 1)
+                    .accessibilityHidden(true)
                 tableHeader("入力")
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: numericWidth, alignment: .trailing)
                 tableHeader(presentation.correctedTitle)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: numericWidth, alignment: .trailing)
                 tableHeader("最終版")
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: numericWidth, alignment: .trailing)
                 tableHeader(processingDeltaTitle)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: numericWidth, alignment: .trailing)
                 tableHeader("マスタリング差分")
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: numericWidth, alignment: .trailing)
             }
-            Divider().gridCellColumns(6)
+            Divider().gridCellColumns(7)
             ForEach(rows) { row in
                 GridRow {
-                    termLabel(row.definition)
+                    Text(row.definition.label)
+                        .font(.callout.weight(.semibold))
+                        .frame(width: labelWidth, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    TermHelpButton(
+                        title: row.definition.label,
+                        reading: row.definition.reading,
+                        description: row.definition.description
+                    )
                     metricValue(row.input, format: row.valueFormat, tint: .blue)
+                        .frame(width: numericWidth, alignment: .trailing)
                     metricValue(row.corrected, format: row.valueFormat, tint: .green)
+                        .frame(width: numericWidth, alignment: .trailing)
                     metricValue(row.mastered, format: row.valueFormat, tint: .orange)
+                        .frame(width: numericWidth, alignment: .trailing)
                     metricValue(row.correctionDelta, format: row.deltaFormat, tint: .primary)
+                        .frame(width: numericWidth, alignment: .trailing)
                     metricValue(row.masteringDelta, format: row.deltaFormat, tint: .primary)
+                        .frame(width: numericWidth, alignment: .trailing)
                 }
             }
         }
-    }
-
-    private func compactMetricList(_ rows: [MetricComparisonRow]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(rows) { row in
-                VStack(alignment: .leading, spacing: 8) {
-                    termLabel(row.definition)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 8)], alignment: .leading, spacing: 8) {
-                        valueChip(title: "入力", value: row.input, format: row.valueFormat, color: .blue)
-                        valueChip(
-                            title: presentation.correctedTitle,
-                            value: row.corrected,
-                            format: row.valueFormat,
-                            color: .green
-                        )
-                        valueChip(title: "最終版", value: row.mastered, format: row.valueFormat, color: .orange)
-                        valueChip(
-                            title: processingDeltaTitle,
-                            value: row.correctionDelta,
-                            format: row.deltaFormat,
-                            color: .primary
-                        )
-                        valueChip(title: "マスタリング差分", value: row.masteringDelta, format: row.deltaFormat, color: .primary)
-                    }
-                }
-                .padding(10)
-                .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
-            }
-        }
-    }
-
-    private func valueChip(title: String, value: Double?, format: MetricFormat, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            metricValue(value, format: format, tint: color)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func tableHeader(_ title: String) -> some View {
@@ -1281,6 +1288,22 @@ extension View {
                     .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
                     .allowsHitTesting(false)
             }
+    }
+
+    func analysisTableLabelCell(minWidth: CGFloat = 152) -> some View {
+        self
+            .font(.callout.weight(.semibold))
+            .frame(minWidth: minWidth, alignment: .leading)
+    }
+
+    func analysisTableNumericColumn(minWidth: CGFloat = 104) -> some View {
+        self
+            .frame(minWidth: minWidth, alignment: .trailing)
+    }
+
+    func analysisTableTextColumn(minWidth: CGFloat = 120) -> some View {
+        self
+            .frame(minWidth: minWidth, alignment: .leading)
     }
 }
 

@@ -884,26 +884,58 @@ struct StemWorkflowService: Sendable {
             step: .automaticRemixPlan,
             status: .completed,
             fraction: 1,
-            detail: "今回のraw／補正済みStemから自動値を算出済み"
+            detail: "今回のraw／補正済みStemから自動値を算出しました"
         )))
         await eventHandler(.log(
             runID: correction.runID,
             step: .remix,
-            message: "今回のraw／補正済みStemから自動gain・pan・衝突回避・reverb値を確認しました"
+            message: "今回のraw／補正済みStemから算出した自動値を確認します"
         ))
+        await appendRemixSettingLogs(
+            runID: correction.runID,
+            automaticPlan: correction.automaticRemixPlan,
+            appliedSettings: settings,
+            eventHandler: eventHandler
+        )
         await eventHandler(.log(
             runID: correction.runID,
             step: .remix,
-            message: "自動設定とユーザー上書きを確定してStem再ミックスを開始します"
+            message: "自動設定とユーザー上書きを確定し、Stem再ミックスを開始します"
         ))
 
         let raw44 = try await loadRawStems(correction.separation.stems)
         let raw48 = try await convertSignals(raw44, to: 48_000)
         let corrected48 = try await loadCorrectedStems(correction.stemEvaluations)
+        await eventHandler(.log(
+            runID: correction.runID,
+            step: .remix,
+            message: "raw／補正済みStemの安全確認を行います"
+        ))
         let guarded = remixSafetyGuard.protect(
             rawStemsByRole: raw48,
             correctedStemsByRole: corrected48
         )
+        if guarded.rawFallbackReasons.isEmpty {
+            await eventHandler(.log(
+                runID: correction.runID,
+                step: .remix,
+                message: "再ミックス安全確認: raw Stemへの差し替えなし"
+            ))
+        } else {
+            for role in Self.roleOrder {
+                guard let reason = guarded.rawFallbackReasons[role] else { continue }
+                await eventHandler(.log(
+                    runID: correction.runID,
+                    step: .remix,
+                    message: "再ミックス安全確認: \(role.stemModeDisplayTitle)をraw Stemへ戻しました"
+                ))
+                await eventHandler(.log(
+                    runID: correction.runID,
+                    step: .remix,
+                    message: "理由: \(reason)"
+                ))
+            }
+        }
         let remixSignals = try Self.roleOrder.map { role in
             guard let raw = raw48[role],
                   let corrected = guarded.stemsByRole[role] else {
@@ -930,19 +962,24 @@ struct StemWorkflowService: Sendable {
                         ? stage.stemModeRunningDetail
                         : stage.stemModeCompletedDetail
                 )))
-                if state == .completed {
-                    remixEventSink.send(.log(
-                        runID: correction.runID,
-                        step: .remix,
-                        message: stage.stemModeCompletedDetail
-                    ))
-                }
+                remixEventSink.send(.log(
+                    runID: correction.runID,
+                    step: .remix,
+                    message: state == .running
+                        ? stage.stemModeRunningDetail
+                        : stage.stemModeCompletedDetail
+                ))
             }
             await remixEventSink.finish()
         } catch {
             await remixEventSink.finish()
             throw error
         }
+        await eventHandler(.log(
+            runID: correction.runID,
+            step: .remix,
+            message: "Stem再ミックスを保存します"
+        ))
         await eventHandler(.displayProgress(.init(
             runID: correction.runID,
             step: .remixSave,
@@ -958,6 +995,11 @@ struct StemWorkflowService: Sendable {
             kind: .remixed48000,
             to: remixURL
         )
+        await eventHandler(.log(
+            runID: correction.runID,
+            step: .remix,
+            message: "Stem再ミックスを保存しました"
+        ))
         await eventHandler(.displayProgress(.init(
             runID: correction.runID,
             step: .remixSave,
@@ -965,17 +1007,32 @@ struct StemWorkflowService: Sendable {
             fraction: 1,
             detail: "Stem再ミックスを保存"
         )))
+        await eventHandler(.log(
+            runID: correction.runID,
+            step: .remix,
+            message: "Stem再ミックスを解析・ノイズ測定します"
+        ))
         let evaluation = try await evaluate(
             render.signal,
             purpose: .remix,
             analysisMode: correction.analysisMode,
             includeMastering: true
         )
+        await eventHandler(.log(
+            runID: correction.runID,
+            step: .remix,
+            message: "Stem再ミックスの解析・ノイズ測定が完了しました"
+        ))
         let pureSum = try await store.load(
             artifact: correction.remixArtifacts.correctedPureSum,
             expectedURL: correction.remixArtifacts.correctedPureSum.fileURL,
             expectedKind: .correctedPureSum48000
         )
+        await eventHandler(.log(
+            runID: correction.runID,
+            step: .validateRemix,
+            message: "再ミックスの構造・有限値・ピークを検証します"
+        ))
         await eventHandler(.displayProgress(.init(
             runID: correction.runID,
             step: .remixValidation,
@@ -1008,7 +1065,7 @@ struct StemWorkflowService: Sendable {
         await eventHandler(.log(
             runID: correction.runID,
             step: .validateRemix,
-            message: "再ミックスの構造・有限値・ピーク検証を完了しました"
+            message: "再ミックスの構造・有限値・ピーク検証が完了しました"
         ))
         try await progress(correction.runID, .remix, 1, "Stem再ミックス完了", eventHandler)
         try await progress(correction.runID, .validateRemix, 1, "Stem再ミックス検証完了", eventHandler)
@@ -1101,6 +1158,91 @@ struct StemWorkflowService: Sendable {
             path: runID.uuidString.lowercased(),
             directoryHint: .isDirectory
         ))
+    }
+
+    private func appendRemixSettingLogs(
+        runID: UUID,
+        automaticPlan: StemRemixAutomaticPlan,
+        appliedSettings: StemRemixSettings,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async {
+        await eventHandler(.log(
+            runID: runID,
+            step: .remix,
+            message: "自動再ミックス設定と適用値を確認します"
+        ))
+
+        for role in Self.roleOrder {
+            let automatic = automaticPlan.settings.settings(for: role)
+            let applied = appliedSettings.settings(for: role)
+            let title = role.stemModeDisplayTitle
+            await eventHandler(.log(
+                runID: runID,
+                step: .remix,
+                message: "自動判定根拠（\(title)）: gain rawとの差 \(Self.gainText(automaticPlan.gainEvidenceDB[role, default: 0])) / pan左右差 \(Self.panText(automaticPlan.panEvidence[role, default: 0])) / reverb raw空間成分の減少 \(Self.percentText(automaticPlan.reverbLossEvidence[role, default: 0]))"
+            ))
+            await eventHandler(.log(
+                runID: runID,
+                step: .remix,
+                message: "\(title)のgain: 自動値 \(Self.gainText(automatic.gainDB)) / 適用値 \(Self.gainText(applied.gainDB))"
+            ))
+            await eventHandler(.log(
+                runID: runID,
+                step: .remix,
+                message: "\(title)のpan: 自動値 \(Self.panText(automatic.pan)) / 適用値 \(Self.panText(applied.pan))"
+            ))
+            await eventHandler(.log(
+                runID: runID,
+                step: .remix,
+                message: "\(title)のreverb send: 自動値 \(Self.percentText(automatic.reverbSend)) / 適用値 \(Self.percentText(applied.reverbSend))"
+            ))
+        }
+
+        let automaticMasking = automaticPlan.settings.masking
+        let appliedMasking = appliedSettings.masking
+        await eventHandler(.log(
+            runID: runID,
+            step: .remix,
+            message: "衝突判定値: ドラム／ベース \(Self.percentText(automaticPlan.drumsBassCollision)) / ボーカル／その他 \(Self.percentText(automaticPlan.vocalsOtherCollision))"
+        ))
+        await eventHandler(.log(
+            runID: runID,
+            step: .remix,
+            message: "ドラム→ベース衝突回避: 自動値 \(Self.maskingText(enabled: automaticMasking.drumsToBassEnabled, amount: automaticMasking.drumsToBassAmount)) / 適用値 \(Self.maskingText(enabled: appliedMasking.drumsToBassEnabled, amount: appliedMasking.drumsToBassAmount))"
+        ))
+        await eventHandler(.log(
+            runID: runID,
+            step: .remix,
+            message: "ボーカル→その他衝突回避: 自動値 \(Self.maskingText(enabled: automaticMasking.vocalsToOtherEnabled, amount: automaticMasking.vocalsToOtherAmount)) / 適用値 \(Self.maskingText(enabled: appliedMasking.vocalsToOtherEnabled, amount: appliedMasking.vocalsToOtherAmount))"
+        ))
+        await eventHandler(.log(
+            runID: runID,
+            step: .remix,
+            message: "共通reverb: return 自動値 \(Self.percentText(automaticPlan.settings.reverbReturnLevel)) / 適用値 \(Self.percentText(appliedSettings.reverbReturnLevel))、decay 自動値 \(Self.secondsText(automaticPlan.settings.reverbDecaySeconds)) / 適用値 \(Self.secondsText(appliedSettings.reverbDecaySeconds))"
+        ))
+    }
+
+    private static func gainText(_ value: Float) -> String {
+        String(format: "%+.1f dB", value)
+    }
+
+    private static func panText(_ value: Float) -> String {
+        if abs(value) < 0.005 { return "中央" }
+        return value < 0
+            ? String(format: "L %.0f%%", abs(value) * 100)
+            : String(format: "R %.0f%%", value * 100)
+    }
+
+    private static func percentText(_ value: Float) -> String {
+        String(format: "%.0f%%", value * 100)
+    }
+
+    private static func secondsText(_ value: Float) -> String {
+        String(format: "%.2f 秒", value)
+    }
+
+    private static func maskingText(enabled: Bool, amount: Float) -> String {
+        "\(enabled ? "有効" : "無効")・\(percentText(amount))"
     }
 
     private func loadRawStems(_ artifacts: [StemAudioArtifact]) async throws -> [StemRole: AudioSignal] {

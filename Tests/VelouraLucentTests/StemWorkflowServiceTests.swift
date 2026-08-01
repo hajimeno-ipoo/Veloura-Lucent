@@ -348,10 +348,17 @@ struct StemWorkflowServiceTests {
         let correction = try await fixture.service.processCorrection(fixture.request)
         let completedSteps = WorkflowStringRecorder()
         let logLines = WorkflowStringRecorder()
+        var appliedSettings = correction.automaticRemixPlan.settings
+        appliedSettings.setSettings(
+            StemRemixRoleSettings(gainDB: 1.3, pan: -0.2, reverbSend: 0.3),
+            for: .drums
+        )
+        appliedSettings.reverbReturnLevel = 0.2
+        appliedSettings.reverbDecaySeconds = 1.5
 
         _ = try await fixture.service.processRemix(
             correction: correction,
-            settings: correction.automaticRemixPlan.settings
+            settings: appliedSettings
         ) { event in
             switch event {
             case .displayProgress(let progress) where progress.status == .completed:
@@ -365,9 +372,41 @@ struct StemWorkflowServiceTests {
 
         #expect(completedSteps.values() == StemModeProcessStep.remixSteps.map(\.id))
         let expectedStageLogs = StemRemixRenderStage.allCases.map(\.stemModeCompletedDetail)
-        #expect(expectedStageLogs.allSatisfy { logLines.values().contains($0) })
+        let expectedRunningLogs = StemRemixRenderStage.allCases.map(\.stemModeRunningDetail)
+        let recordedLogs = logLines.values()
+        #expect(expectedStageLogs.allSatisfy { recordedLogs.contains($0) })
+        #expect(expectedRunningLogs.allSatisfy { recordedLogs.contains($0) })
+        #expect(recordedLogs.contains("自動再ミックス設定と適用値を確認します"))
+        #expect(recordedLogs.contains { $0.hasPrefix("衝突判定値: ドラム／ベース ") })
+        #expect(recordedLogs.contains { $0.hasPrefix("ドラム→ベース衝突回避: 自動値 ") })
+        #expect(recordedLogs.contains { $0.hasPrefix("ボーカル→その他衝突回避: 自動値 ") })
+        #expect(recordedLogs.contains { $0.hasPrefix("共通reverb: return 自動値 ") })
+        let roleTitles = ["ドラム", "ベース", "その他", "ボーカル"]
+        #expect(roleTitles.allSatisfy { title in
+            recordedLogs.contains { $0.hasPrefix("自動判定根拠（\(title)）") }
+                && recordedLogs.contains { $0.hasPrefix("\(title)のgain: 自動値") }
+                && recordedLogs.contains { $0.hasPrefix("\(title)のpan: 自動値") }
+                && recordedLogs.contains { $0.hasPrefix("\(title)のreverb send: 自動値") }
+        })
+        #expect(recordedLogs.contains {
+            $0.contains("ドラムのgain: 自動値") && $0.contains("適用値 +1.3 dB")
+        })
+        #expect(recordedLogs.contains {
+            $0.contains("ドラムのpan: 自動値") && $0.contains("適用値 L 20%")
+        })
+        #expect(recordedLogs.contains {
+            $0.contains("ドラムのreverb send: 自動値") && $0.contains("適用値 30%")
+        })
+        #expect(recordedLogs.contains {
+            $0.contains("共通reverb: return 自動値")
+                && $0.contains("適用値 20%")
+                && $0.contains("適用値 1.50 秒")
+        })
+        #expect(recordedLogs.contains("Stem再ミックスを保存します"))
+        #expect(recordedLogs.contains("Stem再ミックスを解析・ノイズ測定します"))
+        #expect(recordedLogs.contains("再ミックスの構造・有限値・ピークを検証します"))
         #expect(logLines.values().contains(
-            "再ミックスの構造・有限値・ピーク検証を完了しました"
+            "再ミックスの構造・有限値・ピーク検証が完了しました"
         ))
     }
 

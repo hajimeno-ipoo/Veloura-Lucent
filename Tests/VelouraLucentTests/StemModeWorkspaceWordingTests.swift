@@ -394,7 +394,7 @@ struct StemModeWorkspaceWordingTests {
         #expect(stem.contains("roleAnalysisSnapshot"))
         #expect(stem.contains("protectionEvidence"))
         #expect(stem.contains("rawRemixEvaluation"))
-        #expect(stem.contains("validation.measurements"))
+        #expect(!stem.contains("validation.measurements"))
         #expect(stem.contains("validation.analysisIssues"))
         #expect(stem.contains("音声を選ぶと、入力、純粋加算または再ミックス、Stem Mode最終版"))
         #expect(!stem.contains("補正段の入力解析が完了すると"))
@@ -414,6 +414,42 @@ struct StemModeWorkspaceWordingTests {
         #expect(stem.contains("route決定の詳しい理由や処理経過は詳細ログ"))
         #expect(stem.contains("Text(\"DSP最終適用結果\")"))
         #expect(!stem.contains("通常モードroute、DSPと役割別guardの結果"))
+    }
+
+    @Test
+    func detailedAnalysisTablesUseSharedAlignmentRules() throws {
+        let standard = try source(
+            "Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"
+        )
+        let stem = try source(
+            "Sources/VelouraLucent/Views/StemModeDetailedAnalysisWorkspaceView.swift"
+        )
+        let validation = try source(
+            "Sources/VelouraLucent/Services/StemValidationService.swift"
+        )
+
+        #expect(standard.contains("func analysisTableLabelCell("))
+        #expect(standard.contains("func analysisTableNumericColumn("))
+        #expect(standard.contains("func analysisTableTextColumn("))
+        #expect(standard.contains("Divider().gridCellColumns(7)"))
+        #expect(standard.contains("Text(row.definition.label)"))
+        #expect(standard.contains("labelWidth: 108"))
+        #expect(standard.contains("numericWidth: 72"))
+        #expect(standard.contains("horizontalSpacing: 8"))
+        #expect(!standard.contains("compactMetricList"))
+        #expect(!standard.contains("valueChip"))
+        #expect(stem.contains("headerCell(\"処理段\")"))
+        #expect(stem.contains("headerCell(\"実行内容\")"))
+        #expect(stem.contains("Divider().gridCellColumns(3)"))
+        #expect(stem.contains("Divider().gridCellColumns(4)"))
+        #expect(stem.contains(".analysisTableNumericColumn()"))
+        #expect(!stem.contains("validationMeasurements("))
+        #expect(!stem.contains("再合成・残差・帯域・ノイズ測定"))
+        #expect(stem.contains("validationIssues(presentation.validation.analysisIssues)"))
+        #expect(!stem.contains("自動候補選択には使用しません"))
+        #expect(stem.contains("数値だけで完成音を自動選択しません"))
+        #expect(validation.contains("struct StemValidationMeasurement"))
+        #expect(validation.contains("measurements: measurements"))
     }
 
     @Test

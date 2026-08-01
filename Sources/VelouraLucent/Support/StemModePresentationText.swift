@@ -195,23 +195,23 @@ extension StemRemixRenderStage {
 
     var stemModeRunningDetail: String {
         switch self {
-        case .gain: "補正後の相対変化を基準にStem別gainを適用中"
-        case .masking: "実測衝突区間だけdynamic EQ／duckingを適用中"
-        case .pan: "rawから変化した左右バランスだけを補正中"
-        case .reverbSend: "pan後の各Stemから共通reverbへのsendを生成中"
-        case .sharedReverb: "一つの共通reverb returnを生成中"
-        case .dryReturnMix: "dry Stem合計へ共通reverb returnを加算中"
+        case .gain: "補正後の相対変化を基準にStem別gainを適用します"
+        case .masking: "実測衝突区間だけdynamic EQ／duckingを適用します"
+        case .pan: "rawから変化した左右バランスだけを補正します"
+        case .reverbSend: "pan後の各Stemから共通reverbへのsendを生成します"
+        case .sharedReverb: "一つの共通reverb returnを生成します"
+        case .dryReturnMix: "dry Stem合計へ共通reverb returnを加算します"
         }
     }
 
     var stemModeCompletedDetail: String {
         switch self {
-        case .gain: "Stem別gain適用完了"
-        case .masking: "条件付き帯域制御完了"
-        case .pan: "Stem別pan適用完了"
-        case .reverbSend: "Stem別reverb send生成完了"
-        case .sharedReverb: "共通reverb return生成完了"
-        case .dryReturnMix: "dry／reverb加算完了"
+        case .gain: "Stem別gainを適用しました"
+        case .masking: "条件付き帯域制御を完了しました"
+        case .pan: "Stem別panを適用しました"
+        case .reverbSend: "Stem別reverb sendを生成しました"
+        case .sharedReverb: "共通reverb returnを生成しました"
+        case .dryReturnMix: "dry／reverb加算を完了しました"
         }
     }
 }

@@ -132,35 +132,52 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                             if !evaluation.stageGuards.isEmpty {
                                 Text("DSP最終適用結果")
                                     .font(.callout.bold())
-                                ForEach(Array(evaluation.stageGuards.enumerated()), id: \.offset) { _, record in
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        HStack {
+                                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 8) {
+                                    GridRow {
+                                        headerCell("処理段")
+                                        headerCell("実行内容")
+                                            .analysisTableTextColumn(minWidth: 160)
+                                    }
+                                    Divider().gridCellColumns(2)
+                                    ForEach(Array(evaluation.stageGuards.enumerated()), id: \.offset) { index, record in
+                                        GridRow {
                                             Text(record.stage.stemModeDisplayTitle)
-                                            Spacer()
+                                                .analysisTableLabelCell()
                                             Text(record.action.stemModeDisplayTitle)
+                                                .font(.callout)
                                                 .foregroundStyle(.secondary)
+                                                .analysisTableTextColumn(minWidth: 160)
                                         }
-                                        Text(record.outcome.stemModeDisplayTitle)
-                                            .font(.callout.weight(.semibold))
-                                        Text(record.reason)
-                                            .font(.callout)
-                                            .foregroundStyle(.secondary)
-                                        if !record.protectedComponents.isEmpty {
-                                            Text(
-                                                "保護対象: "
-                                                    + record.protectedComponents
-                                                        .sorted { $0.rawValue < $1.rawValue }
-                                                        .map(\.stemModeDisplayTitle)
-                                                        .joined(separator: "、")
-                                            )
-                                            .font(.callout)
-                                            .foregroundStyle(.secondary)
+                                        GridRow {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(record.outcome.stemModeDisplayTitle)
+                                                    .font(.callout.weight(.semibold))
+                                                Text(record.reason)
+                                                    .font(.callout)
+                                                    .foregroundStyle(.secondary)
+                                                if !record.protectedComponents.isEmpty {
+                                                    Text(
+                                                        "保護対象: "
+                                                            + record.protectedComponents
+                                                                .sorted { $0.rawValue < $1.rawValue }
+                                                                .map(\.stemModeDisplayTitle)
+                                                                .joined(separator: "、")
+                                                    )
+                                                    .font(.callout)
+                                                    .foregroundStyle(.secondary)
+                                                }
+                                                ForEach(Array(record.protectionEvidence.enumerated()), id: \.offset) { _, evidence in
+                                                    protectionEvidenceRow(evidence)
+                                                }
+                                            }
+                                            .padding(.leading, 8)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .gridCellColumns(2)
                                         }
-                                        ForEach(Array(record.protectionEvidence.enumerated()), id: \.offset) { _, evidence in
-                                            protectionEvidenceRow(evidence)
+                                        if index < evaluation.stageGuards.count - 1 {
+                                            Divider().gridCellColumns(2)
                                         }
                                     }
-                                    .font(.callout)
                                 }
                             }
                         }
@@ -178,21 +195,24 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 8) {
                     GridRow {
                         Text("構造検証")
+                            .analysisTableLabelCell()
                             .foregroundStyle(.secondary)
                         Text(presentation.validation.canContinue ? "継続可能" : "継続不能")
+                            .font(.callout.weight(.semibold))
+                            .analysisTableTextColumn()
                     }
+                    Divider().gridCellColumns(2)
                     GridRow {
                         Text("解析確認事項")
+                            .analysisTableLabelCell()
                             .foregroundStyle(.secondary)
                         Text(presentation.validation.analysisIssues.count, format: .number)
+                            .font(.callout.monospacedDigit())
+                            .analysisTableTextColumn()
                     }
                 }
                 remixEvaluationComparison(presentation)
-                validationMeasurements(presentation.validation.measurements)
                 validationIssues(presentation.validation.analysisIssues)
-                Text("位相、相関、残差、帯域差、分離アーティファクトは解析・表示・レポートの材料であり、自動候補選択には使用しません。")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
             } else {
                 Text("補正後4Stemの純粋加算と解析が完了すると表示します。")
                     .foregroundStyle(.secondary)
@@ -244,25 +264,32 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             GridRow {
                 headerCell("項目")
                 headerCell("raw")
+                    .analysisTableNumericColumn()
                 headerCell("補正後")
+                    .analysisTableNumericColumn()
             }
+            Divider().gridCellColumns(3)
             GridRow {
                 Text("Integrated Loudness")
+                    .analysisTableLabelCell()
                 number(raw.audioMetrics.integratedLoudnessLUFS, unit: "LUFS", color: .blue)
                 number(corrected?.audioMetrics.integratedLoudnessLUFS, unit: "LUFS", color: .green)
             }
             GridRow {
                 Text("True Peak")
+                    .analysisTableLabelCell()
                 number(raw.audioMetrics.truePeakDBFS, unit: "dBTP", color: .blue)
                 number(corrected?.audioMetrics.truePeakDBFS, unit: "dBTP", color: .green)
             }
             GridRow {
                 Text("Transient")
+                    .analysisTableLabelCell()
                 number(Double(raw.audioAnalysis?.transientAmount ?? 0), unit: "", color: .blue)
                 number(corrected?.audioAnalysis.map { Double($0.transientAmount) }, unit: "", color: .green)
             }
             GridRow {
                 Text("Artifact band")
+                    .analysisTableLabelCell()
                 number(Double(raw.audioAnalysis?.artifactBandRatio ?? 0), unit: "", color: .blue)
                 number(corrected?.audioAnalysis.map { Double($0.artifactBandRatio) }, unit: "", color: .green)
             }
@@ -277,12 +304,16 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                 GridRow {
                     headerCell("保護対象")
                     headerCell("中央値")
+                        .analysisTableNumericColumn()
                     headerCell("変動幅")
+                        .analysisTableNumericColumn()
                     headerCell("扱い")
                 }
+                Divider().gridCellColumns(4)
                 ForEach(snapshot.features, id: \.feature) { distribution in
                     GridRow {
                         Text(distribution.feature.stemModeDisplayTitle)
+                            .analysisTableLabelCell()
                         number(
                             distribution.median,
                             unit: distribution.unit.stemModeDisplayUnit,
@@ -337,13 +368,18 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             GridRow {
                 headerCell("再ミックス解析")
                 headerCell("raw")
+                    .analysisTableNumericColumn()
                 headerCell("純粋加算")
+                    .analysisTableNumericColumn()
                 if remix != nil {
                     headerCell("再ミックス")
+                        .analysisTableNumericColumn()
                 }
             }
+            Divider().gridCellColumns(remix == nil ? 3 : 4)
             GridRow {
                 Text("Integrated Loudness")
+                    .analysisTableLabelCell()
                 number(raw.audioMetrics.integratedLoudnessLUFS, unit: "LUFS", color: .blue)
                 number(pureSum.audioMetrics.integratedLoudnessLUFS, unit: "LUFS", color: .cyan)
                 if let remix {
@@ -352,6 +388,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             }
             GridRow {
                 Text("True Peak")
+                    .analysisTableLabelCell()
                 number(raw.audioMetrics.truePeakDBFS, unit: "dBTP", color: .blue)
                 number(pureSum.audioMetrics.truePeakDBFS, unit: "dBTP", color: .cyan)
                 if let remix {
@@ -360,6 +397,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             }
             GridRow {
                 Text("位相・相関")
+                    .analysisTableLabelCell()
                 number(raw.audioMetrics.stereoCorrelation, unit: "", color: .blue)
                 number(pureSum.audioMetrics.stereoCorrelation, unit: "", color: .cyan)
                 if let remix {
@@ -368,6 +406,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             }
             GridRow {
                 Text("ステレオ幅")
+                    .analysisTableLabelCell()
                 number(raw.audioMetrics.stereoWidth, unit: "", color: .blue)
                 number(pureSum.audioMetrics.stereoWidth, unit: "", color: .cyan)
                 if let remix {
@@ -376,6 +415,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             }
             GridRow {
                 Text("ダイナミクス")
+                    .analysisTableLabelCell()
                 number(raw.audioMetrics.crestFactorDB, unit: "dB", color: .blue)
                 number(pureSum.audioMetrics.crestFactorDB, unit: "dB", color: .cyan)
                 if let remix {
@@ -384,31 +424,12 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             }
             GridRow {
                 Text("分離アーティファクト")
+                    .analysisTableLabelCell()
                 number(raw.audioAnalysis.map { Double($0.artifactBandRatio) }, unit: "", color: .blue)
                 number(pureSum.audioAnalysis.map { Double($0.artifactBandRatio) }, unit: "", color: .cyan)
                 if let remix {
                     number(remix.audioAnalysis.map { Double($0.artifactBandRatio) }, unit: "", color: .green)
                 }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func validationMeasurements(
-        _ measurements: [StemValidationMeasurement]
-    ) -> some View {
-        if !measurements.isEmpty {
-            DisclosureGroup("再合成・残差・帯域・ノイズ測定") {
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 7) {
-                    ForEach(measurements) { measurement in
-                        GridRow {
-                            Text(validationMeasurementTitle(measurement.id))
-                            Text(formatValidationMeasurement(measurement))
-                                .font(.callout.monospacedDigit())
-                        }
-                    }
-                }
-                .padding(.top, 8)
             }
         }
     }
@@ -446,54 +467,14 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             .font(.callout.monospacedDigit())
             .foregroundStyle(value == nil ? .secondary : color)
             .lineLimit(1)
+            .minimumScaleFactor(0.9)
+            .analysisTableNumericColumn()
     }
 
     private func percentage(_ ratio: Double) -> String {
         String(format: "%.1f%%", min(max(ratio, 0), 1) * 100)
     }
 
-    private func formatValidationMeasurement(
-        _ measurement: StemValidationMeasurement
-    ) -> String {
-        switch measurement.unit {
-        case "samples":
-            "\(Int(measurement.value.rounded())) samples"
-        case "ratio", "linear":
-            String(format: "%.4f", measurement.value)
-        default:
-            String(format: "%.2f %@", measurement.value, measurement.unit)
-        }
-    }
-
-    private func validationMeasurementTitle(_ id: String) -> String {
-        let prefixes: [(String, String)] = [
-            ("corrected-remix-difference.canonical-to-raw.", "入力2mix → raw再ミックス 残差"),
-            ("corrected-remix-difference.canonical-to-corrected.", "入力2mix → 補正済み純粋加算 残差"),
-            ("corrected-remix-difference.raw-to-corrected.", "raw → 補正済み純粋加算 残差"),
-            ("corrected-remix-correlation.canonical-to-raw.", "入力2mix → raw再ミックス 相関"),
-            ("corrected-remix-correlation.canonical-to-corrected.", "入力2mix → 補正済み純粋加算 相関"),
-            ("corrected-remix-correlation.raw-to-corrected.", "raw → 補正済み純粋加算 相関"),
-            ("corrected-remix-band-difference.canonical-to-raw.", "入力2mix → raw再ミックス 帯域差"),
-            ("corrected-remix-band-difference.canonical-to-corrected.", "入力2mix → 補正済み純粋加算 帯域差"),
-            ("corrected-remix-band-difference.raw-to-corrected.", "raw → 補正済み純粋加算 帯域差"),
-            ("corrected-remix-noise.", "補正済み純粋加算 ノイズ"),
-            ("corrected-remix.", "補正済み純粋加算")
-        ]
-        for (prefix, title) in prefixes where id.hasPrefix(prefix) {
-            let detail = id.dropFirst(prefix.count)
-                .replacingOccurrences(of: ".", with: " / ")
-                .replacingOccurrences(of: "sample-peak", with: "sample peak")
-                .replacingOccurrences(of: "true-peak", with: "true peak")
-                .replacingOccurrences(of: "over-range-samples", with: "上限超過sample数")
-                .replacingOccurrences(of: "raw-minus-canonical", with: "raw − 入力")
-                .replacingOccurrences(of: "corrected-minus-canonical", with: "補正後 − 入力")
-                .replacingOccurrences(of: "corrected-minus-raw", with: "補正後 − raw")
-                .replacingOccurrences(of: "canonical", with: "入力")
-                .replacingOccurrences(of: "corrected", with: "補正後")
-            return "\(title) / \(detail)"
-        }
-        return id
-    }
 }
 
 private extension StemRoleAnalysisFeature {
