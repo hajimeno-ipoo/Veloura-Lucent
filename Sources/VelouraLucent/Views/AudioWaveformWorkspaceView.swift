@@ -293,55 +293,60 @@ struct AudioWaveformWorkspaceView: View {
     private var transportControls: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 8) {
-                Button(sideAButtonTitle) {
+                WaveformTransportButton(
+                    title: sideAButtonTitle,
+                    isSelected: preview.activeComparisonSide == .a
+                        && comparisonFileURL(for: .a) != nil,
+                    isDisabled: comparisonFileURL(for: .a) == nil,
+                    showsSelectedAccessibilityTrait: true
+                ) {
                     onWillStartPlayback()
                     preview.playComparisonSide(.a)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .disabled(comparisonFileURL(for: .a) == nil)
 
-                Button(playPauseTitle, systemImage: playPauseSystemImage) {
+                WaveformTransportButton(
+                    title: playPauseTitle,
+                    systemImage: playPauseSystemImage,
+                    layout: .icon,
+                    isSelected: preview.isComparisonPlaybackRunning,
+                    isDisabled: activeComparisonFileURL == nil
+                ) {
                     onWillStartPlayback()
                     preview.toggleComparisonPlayback()
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .controlSize(.large)
-                .padding(10)
-                .help(playPauseTitle)
-                .accessibilityLabel(playPauseTitle)
-                .disabled(activeComparisonFileURL == nil)
 
-                Button("停止", systemImage: "stop.fill") {
+                WaveformTransportButton(
+                    title: "停止",
+                    systemImage: "stop.fill",
+                    layout: .icon,
+                    isDisabled: preview.activeTarget == nil
+                ) {
                     preview.stopPlayback()
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .padding(10)
-                .help("停止")
-                .disabled(preview.activeTarget == nil)
 
-                Button(sideBButtonTitle) {
+                WaveformTransportButton(
+                    title: sideBButtonTitle,
+                    isSelected: preview.activeComparisonSide == .b
+                        && comparisonFileURL(for: .b) != nil,
+                    isDisabled: comparisonFileURL(for: .b) == nil,
+                    showsSelectedAccessibilityTrait: true
+                ) {
                     onWillStartPlayback()
                     preview.playComparisonSide(.b)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .disabled(comparisonFileURL(for: .b) == nil)
 
-                Button(switchButtonTitle) {
+                WaveformTransportButton(
+                    title: switchButtonTitle,
+                    isDisabled: comparisonFileURL(for: .a) == nil
+                        || comparisonFileURL(for: .b) == nil
+                ) {
                     onWillStartPlayback()
                     preview.toggleComparisonSide()
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)
 
                 activeComparisonLabel
+                    .opacity(preview.isComparisonPlaybackRunning ? 1 : 0)
+                    .accessibilityHidden(!preview.isComparisonPlaybackRunning)
             }
             .padding(6)
             .velouraAdaptiveGlass(in: .capsule, interactive: true)
@@ -388,14 +393,16 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private var activeComparisonLabel: some View {
-        HStack(spacing: 6) {
+        let displayTint = activeComparisonTint.opacity(0.65)
+
+        return HStack(spacing: 6) {
             Circle()
-                .fill(activeComparisonTint)
+                .fill(displayTint)
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text("現在 \(activeSideTitle)")
                 .font(.callout.weight(.bold))
-                .foregroundStyle(activeComparisonTint)
+                .foregroundStyle(displayTint)
         }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -685,6 +692,160 @@ private extension View {
     func glassCard(cornerRadius: CGFloat) -> some View {
         self
             .velouraAdaptiveGlass(in: .rect(cornerRadius: cornerRadius))
+    }
+}
+
+private struct WaveformTransportButton: View {
+    enum Layout {
+        case text
+        case icon
+    }
+
+    let title: String
+    var systemImage: String?
+    var layout: Layout = .text
+    var isSelected = false
+    var isDisabled = false
+    var showsSelectedAccessibilityTrait = false
+    let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+    @Namespace private var glassNamespace
+
+    var body: some View {
+        Button(action: action) {
+            label
+                .font(labelFont)
+                .foregroundStyle(
+                    isSelected
+                        ? LiquidGlassSegmentedPickerStyle.selectedText
+                        : Color.primary
+                )
+                .padding(.horizontal, horizontalPadding)
+                .padding(.vertical, verticalPadding)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(
+            WaveformTransportButtonStyle(
+                tint: LiquidGlassSegmentedPickerStyle.selectedTint,
+                isSelected: isSelected,
+                isHovering: isHovering,
+                isDisabled: isDisabled,
+                reduceMotion: reduceMotion,
+                namespace: glassNamespace
+            )
+        )
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.38 : 1)
+        .onHover(perform: updateHover)
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(
+            showsSelectedAccessibilityTrait && isSelected ? .isSelected : []
+        )
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        if let systemImage {
+            Label(title, systemImage: systemImage)
+                .labelStyle(.iconOnly)
+        } else {
+            Text(title)
+        }
+    }
+
+    private var labelFont: Font {
+        switch layout {
+        case .text:
+            .callout.weight(isSelected ? .semibold : .regular)
+        case .icon:
+            .headline
+        }
+    }
+
+    private var horizontalPadding: CGFloat {
+        layout == .icon ? 10 : 12
+    }
+
+    private var verticalPadding: CGFloat {
+        layout == .icon ? 10 : 7
+    }
+
+    @MainActor
+    private func updateHover(_ hovering: Bool) {
+        let nextValue = !isDisabled && hovering
+        guard isHovering != nextValue else { return }
+
+        LiquidGlassMotion.perform(
+            reduceMotion: reduceMotion,
+            animation: LiquidGlassMotion.selection
+        ) {
+            isHovering = nextValue
+        }
+    }
+}
+
+private struct WaveformTransportButtonStyle: ButtonStyle {
+    let tint: Color
+    let isSelected: Bool
+    let isHovering: Bool
+    let isDisabled: Bool
+    let reduceMotion: Bool
+    let namespace: Namespace.ID
+
+    func makeBody(configuration: Configuration) -> some View {
+        let isPressed = configuration.isPressed && !isDisabled
+        let surfaceOpacity = if isPressed {
+            0.42
+        } else if isSelected && isHovering {
+            0.36
+        } else if isSelected {
+            0.30
+        } else if isHovering {
+            0.16
+        } else {
+            0.0
+        }
+
+        configuration.label
+            .modifier(
+                WaveformTransportButtonSurface(
+                    tint: tint.opacity(surfaceOpacity),
+                    isVisible: surfaceOpacity > 0,
+                    reduceMotion: reduceMotion,
+                    namespace: namespace
+                )
+            )
+            .scaleEffect(isPressed && !reduceMotion ? 0.94 : 1)
+            .brightness(isPressed ? -0.04 : 0)
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.08),
+                value: isPressed
+            )
+    }
+}
+
+private struct WaveformTransportButtonSurface: ViewModifier {
+    let tint: Color
+    let isVisible: Bool
+    let reduceMotion: Bool
+    let namespace: Namespace.ID
+
+    func body(content: Content) -> some View {
+        if isVisible {
+            content
+                .velouraAdaptiveGlass(
+                    in: .capsule,
+                    interactive: true,
+                    tint: tint
+                )
+                .glassEffectID("waveform-transport-button", in: namespace)
+                .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
+        } else {
+            content
+        }
     }
 }
 

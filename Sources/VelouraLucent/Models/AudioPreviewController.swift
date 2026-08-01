@@ -143,7 +143,11 @@ final class AudioPreviewController {
 
     func toggleComparisonSide() {
         let next: AudioComparisonSide = activeComparisonSide == .a ? .b : .a
-        playComparisonSide(next)
+        if isComparisonPlaybackRunning {
+            playComparisonSide(next)
+        } else {
+            activeComparisonSide = next
+        }
     }
 
     func setComparisonPair(_ pair: AudioComparisonPair) {

@@ -54,6 +54,32 @@ struct AudioPreviewControllerTests {
     }
 
     @Test
+    func comparisonSideToggleDoesNotStartStoppedPlayback() {
+        let controller = AudioPreviewController()
+
+        controller.toggleComparisonSide()
+
+        #expect(controller.activeComparisonSide == .b)
+        #expect(controller.activeTarget == nil)
+        #expect(controller.playbackState(for: .input) == .stopped)
+        #expect(controller.playbackState(for: .corrected) == .stopped)
+    }
+
+    @Test
+    func comparisonSideToggleDoesNotResumePausedPlayback() {
+        let controller = AudioPreviewController()
+        controller.activeTarget = .input
+        controller.cardState(for: .input).playbackState = .paused
+
+        controller.toggleComparisonSide()
+
+        #expect(controller.activeComparisonSide == .b)
+        #expect(controller.activeTarget == .input)
+        #expect(controller.playbackState(for: .input) == .paused)
+        #expect(controller.playbackState(for: .corrected) == .stopped)
+    }
+
+    @Test
     func switchingComparisonPairPreservesPausedPlaybackPosition() {
         let controller = AudioPreviewController()
         let snapshot = previewSnapshot(duration: 10)
