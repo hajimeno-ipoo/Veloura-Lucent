@@ -4,6 +4,7 @@ struct VelouraExportCommandAction: Identifiable {
     let id: String
     let title: String
     let isEnabled: Bool
+    var startsSection = false
     let perform: @MainActor (AudioExportFormat) -> Void
 }
 
@@ -186,6 +187,9 @@ struct VelouraCommands: Commands {
                 ForEach(AudioExportFormat.allCases) { format in
                     Menu(format.menuTitle) {
                         ForEach(actions?.exportActions ?? []) { exportAction in
+                            if exportAction.startsSection {
+                                Divider()
+                            }
                             Button(exportAction.title) {
                                 exportAction.perform(format)
                             }

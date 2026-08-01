@@ -404,8 +404,15 @@ struct StemModeWorkspaceWordingTests {
         #expect(stem.contains("TermHelpButton("))
         #expect(stem.contains("isExpanded: $showStemSpecificAnalysis"))
         #expect(stem.contains("isExpanded: $showRemixSpecificAnalysis"))
+        #expect(stem.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
+        #expect(stem.contains("animation: LiquidGlassMotion.panel"))
+        #expect(stem.contains(".transition(.opacity)"))
+        #expect(!stem.contains("transaction.disablesAnimations = true"))
         #expect(standard.contains("func analysisCard() -> some View"))
         #expect(standard.contains("DisclosureToggleButton("))
+        #expect(standard.contains("animation: LiquidGlassMotion.panel"))
+        #expect(standard.contains(".transition(.opacity)"))
+        #expect(!standard.contains("transaction.disablesAnimations = true"))
         #expect(stem.contains(".analysisCard()"))
         #expect(stem.contains("DisclosureToggleButton("))
         #expect(!stem.contains("stemAnalysisCard"))
@@ -523,7 +530,7 @@ struct StemModeWorkspaceWordingTests {
     }
 
     @Test
-    func resultsExposeEveryApprovedArtifactInTheApprovedOrder() throws {
+    func exportMenusExposeRequestedArtifactsInRequestedOrder() throws {
         let resultsSource = try source(
             "Sources/VelouraLucent/Views/WorkspaceToolbarView.swift"
         )
@@ -536,36 +543,39 @@ struct StemModeWorkspaceWordingTests {
 
         #expect(rootSource.contains("model.exportableArtifacts"))
         #expect(rootSource.contains("kind.stemModeDisplayTitle"))
-        #expect(rootSource.contains(".correctedPureSum48000"))
+        #expect(!rootSource.contains(".correctedPureSum48000"))
         #expect(rootSource.contains(".remixed48000"))
         #expect(rootSource.contains(".correctedStem(.drums)"))
         #expect(rootSource.contains(".correctedStem(.bass)"))
         #expect(rootSource.contains(".correctedStem(.other)"))
         #expect(rootSource.contains(".correctedStem(.vocals)"))
         #expect(rootSource.contains(".finalMaster"))
+        #expect(rootSource.contains("(.remixed48000, \"再ミックス済み\", false)"))
+        #expect(rootSource.contains("(.finalMaster, \"マスタリング済み\", false)"))
+        #expect(rootSource.contains("(.correctedStem(.drums), \"ドラム\", true)"))
+        #expect(rootSource.contains("(.correctedStem(.bass), \"ベース\", false)"))
+        #expect(rootSource.contains("(.correctedStem(.other), \"その他\", false)"))
+        #expect(rootSource.contains("(.correctedStem(.vocals), \"ボーカル\", false)"))
         #expect(resultsSource.contains("ForEach(commandActions.exportActions)"))
-        #expect(resultsSource.contains("純粋加算、再ミックス、補正済みStemまたはStem Mode最終版を書き出します"))
+        #expect(resultsSource.contains("if exportAction.startsSection"))
+        #expect(resultsSource.contains("再ミックス済み、マスタリング済み、または補正済みStemを書き出します"))
         #expect(!resultsSource.contains("raw Stem"))
         #expect(!resultsSource.contains("No Vocals"))
         #expect(!resultsSource.contains("試聴版"))
         #expect(resultsSource.contains("ForEach(AudioExportFormat.allCases)"))
         #expect(models.contains("exportArtifact: @MainActor (StemAudioArtifact, AudioExportFormat) async throws -> URL"))
 
-        let correctedRemix = try #require(
-            rootSource.range(of: ".correctedPureSum48000")
-        )
-        let correctedStems = try #require(
-            rootSource.range(of: ".correctedStem(.drums)")
-        )
         let remixed = try #require(
             rootSource.range(of: ".remixed48000")
         )
         let finalMaster = try #require(
             rootSource.range(of: ".finalMaster")
         )
-        #expect(correctedRemix.lowerBound < remixed.lowerBound)
-        #expect(remixed.lowerBound < correctedStems.lowerBound)
-        #expect(correctedStems.lowerBound < finalMaster.lowerBound)
+        let correctedStems = try #require(
+            rootSource.range(of: ".correctedStem(.drums)")
+        )
+        #expect(remixed.lowerBound < finalMaster.lowerBound)
+        #expect(finalMaster.lowerBound < correctedStems.lowerBound)
     }
 
     @Test

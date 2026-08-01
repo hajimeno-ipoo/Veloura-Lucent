@@ -145,6 +145,28 @@ struct WaveformViewportTests {
     }
 
     @Test
+    func keyboardStylePanMovesByTenPercentOfVisibleRangeAndClamps() {
+        var viewport = WaveformViewport()
+        viewport.setZoomPosition(
+            0.5,
+            maximumZoomScale: 16,
+            centeredAt: 0.5
+        )
+
+        viewport.moveVisibleRange(byVisibleSpanFraction: -0.1)
+        #expect(abs(viewport.startProgress - 0.35) < 0.000_001)
+
+        viewport.moveVisibleRange(byVisibleSpanFraction: 0.1)
+        #expect(abs(viewport.startProgress - 0.375) < 0.000_001)
+
+        viewport.moveVisibleRange(byVisibleSpanFraction: -10)
+        #expect(viewport.startProgress == 0)
+
+        viewport.moveVisibleRange(byVisibleSpanFraction: 10)
+        #expect(abs(viewport.startProgress - 0.75) < 0.000_001)
+    }
+
+    @Test
     func resetReturnsToTheFullWaveform() {
         var viewport = WaveformViewport()
         viewport.setZoomPosition(

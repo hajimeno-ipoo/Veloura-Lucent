@@ -230,13 +230,13 @@ struct VelouraRootView: View {
             exportActions: [
                 VelouraExportCommandAction(
                     id: "standard-corrected",
-                    title: "補正後を書き出し",
+                    title: "補正済み",
                     isEnabled: job.hasExistingOutput && !job.isProcessing,
                     perform: actions.exportCorrectedAudio
                 ),
                 VelouraExportCommandAction(
                     id: "standard-mastered",
-                    title: "最終版を書き出し",
+                    title: "マスタリング済み",
                     isEnabled: job.hasExistingMasteredOutput && !job.isMastering,
                     perform: actions.exportMasteredAudio
                 ),
@@ -325,23 +325,23 @@ struct VelouraRootView: View {
 
     private var stemExportCommandActions: [VelouraExportCommandAction] {
         let model = runtime.stemWorkspaceModel
-        let kinds: [StemArtifactKind] = [
-            .correctedPureSum48000,
-            .remixed48000,
-            .correctedStem(.drums),
-            .correctedStem(.bass),
-            .correctedStem(.other),
-            .correctedStem(.vocals),
-            .finalMaster,
+        let entries: [(kind: StemArtifactKind, title: String, startsSection: Bool)] = [
+            (.remixed48000, "再ミックス済み", false),
+            (.finalMaster, "マスタリング済み", false),
+            (.correctedStem(.drums), "ドラム", true),
+            (.correctedStem(.bass), "ベース", false),
+            (.correctedStem(.other), "その他", false),
+            (.correctedStem(.vocals), "ボーカル", false),
         ]
 
-        return kinds.map { kind in
-            let artifact = model.exportableArtifacts.first { $0.kind == kind }
+        return entries.map { entry in
+            let artifact = model.exportableArtifacts.first { $0.kind == entry.kind }
             return VelouraExportCommandAction(
-                id: kind.stemModeDisplayTitle,
-                title: kind.stemModeDisplayTitle,
+                id: entry.kind.stemModeDisplayTitle,
+                title: entry.title,
                 isEnabled: artifact != nil
                     && artifact.map(model.isExporting) != true,
+                startsSection: entry.startsSection,
                 perform: { format in
                     guard let artifact else { return }
                     Task {

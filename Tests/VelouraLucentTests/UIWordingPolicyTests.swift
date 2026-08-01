@@ -297,7 +297,8 @@ struct UIWordingPolicyTests {
         let source = try combinedSource([
             "Sources/VelouraLucent/Views/InspectorSettingsPanel.swift",
             "Sources/VelouraLucent/Views/AppSettingsPanel.swift",
-            "Sources/VelouraLucent/Views/SettingsDisclosureCard.swift"
+            "Sources/VelouraLucent/Views/SettingsDisclosureCard.swift",
+            "Sources/VelouraLucent/Views/DisclosureToggleButton.swift"
         ])
 
         #expect(!source.contains("Text(\"設定\")"))
@@ -318,6 +319,10 @@ struct UIWordingPolicyTests {
         #expect(source.contains("LiquidGlassSegmentedPicker("))
         #expect(source.contains("title: \"詳細設定\""))
         #expect(source.contains("title: \"補正プリセット\""))
+        #expect(source.contains("Image(systemName: \"chevron.right\")"))
+        #expect(source.contains(".rotationEffect(.degrees(isExpanded ? 90 : 0))"))
+        #expect(source.contains("animation: LiquidGlassMotion.panel"))
+        #expect(source.contains(".transition(.opacity)"))
         #expect(source.contains("title: \"解析モード\""))
         #expect(source.contains(".velouraAdaptiveGlass(in: .rect(cornerRadius: 14))"))
         #expect(source.contains("アプリ背景の透明感"))
@@ -461,6 +466,7 @@ struct UIWordingPolicyTests {
         #expect(commands.contains("title: \"Stem Mode\""))
         #expect(commands.contains("actions?.selectProcessingMode(mode)"))
         #expect(commands.contains("ForEach(actions?.exportActions ?? [])"))
+        #expect(commands.contains("if exportAction.startsSection"))
         #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: .command)"))
         #expect(commands.contains("if actions?.processingMode == .stem"))
         #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: [.command, .option])"))
@@ -475,6 +481,10 @@ struct UIWordingPolicyTests {
         #expect(root.contains("model.stopAuxiliaryPreviewPlayback()"))
         #expect(root.contains("exportActions: stemExportCommandActions"))
         #expect(toolbar.contains("ForEach(commandActions.exportActions)"))
+        #expect(toolbar.contains("if exportAction.startsSection"))
+        #expect(root.contains("title: \"補正済み\""))
+        #expect(root.contains("title: \"マスタリング済み\""))
+        #expect(toolbar.contains("補正済みまたはマスタリング済みの音源を書き出します"))
         #expect(preview.contains("func toggleComparisonPlayback()"))
         #expect(waveform.contains("preview.toggleComparisonPlayback()"))
         #expect(!waveform.contains("private func togglePlayback()"))

@@ -5,6 +5,7 @@ struct SettingsDisclosureCard<Content: View>: View {
     let summary: String
     let help: SettingHelp?
     @State private var isExpanded: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewBuilder let content: Content
 
     init(
@@ -35,6 +36,7 @@ struct SettingsDisclosureCard<Content: View>: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
                 .padding(.bottom, 24)
+                .transition(.opacity)
             }
         }
         .background {
@@ -72,6 +74,11 @@ struct SettingsDisclosureCard<Content: View>: View {
     }
 
     private func toggleExpanded() {
-        isExpanded.toggle()
+        LiquidGlassMotion.perform(
+            reduceMotion: reduceMotion,
+            animation: LiquidGlassMotion.panel
+        ) {
+            isExpanded.toggle()
+        }
     }
 }

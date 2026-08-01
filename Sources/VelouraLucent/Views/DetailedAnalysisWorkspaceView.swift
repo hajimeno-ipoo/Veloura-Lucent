@@ -98,6 +98,7 @@ struct DetailedAnalysisComparisonView: View {
     @State private var showDynamics = false
     @State private var showSpectrum = false
     @State private var showBands = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -927,6 +928,7 @@ struct DetailedAnalysisComparisonView: View {
 
             if isExpanded.wrappedValue {
                 content()
+                    .transition(.opacity)
             }
         }
     }
@@ -937,9 +939,10 @@ struct DetailedAnalysisComparisonView: View {
             isExpanded: isExpanded.wrappedValue,
             accessibilityHint: "解析項目を開閉します"
         ) {
-            var transaction = Transaction(animation: nil)
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
+            LiquidGlassMotion.perform(
+                reduceMotion: reduceMotion,
+                animation: LiquidGlassMotion.panel
+            ) {
                 isExpanded.wrappedValue.toggle()
             }
         }

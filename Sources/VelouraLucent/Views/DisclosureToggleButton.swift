@@ -8,9 +8,10 @@ struct DisclosureToggleButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+            Image(systemName: "chevron.right")
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(.primary)
+                .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 .frame(width: 32, height: 32)
                 .contentShape(.circle)
                 .glassEffect(.clear.interactive(), in: Circle())

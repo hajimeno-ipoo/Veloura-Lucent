@@ -124,6 +124,9 @@ struct WorkspaceToolbarView: View {
     @ViewBuilder
     private func exportMenuContent(format: AudioExportFormat) -> some View {
         ForEach(commandActions.exportActions) { exportAction in
+            if exportAction.startsSection {
+                Divider()
+            }
             Button(exportAction.title) {
                 exportAction.perform(format)
             }
@@ -205,8 +208,8 @@ struct WorkspaceToolbarView: View {
 
     private var exportHelp: String {
         processingMode == .standard
-            ? "補正後または最終版を書き出します"
-            : "純粋加算、再ミックス、補正済みStemまたはStem Mode最終版を書き出します"
+            ? "補正済みまたはマスタリング済みの音源を書き出します"
+            : "再ミックス済み、マスタリング済み、または補正済みStemを書き出します"
     }
 
     private func performCorrectionAction() {

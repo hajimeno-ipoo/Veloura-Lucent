@@ -6,6 +6,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
     @Bindable var model: StemModeWorkspaceModel
     @State private var showStemSpecificAnalysis = false
     @State private var showRemixSpecificAnalysis = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -233,9 +234,10 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                     isExpanded: isExpanded.wrappedValue,
                     accessibilityHint: "解析項目を開閉します"
                 ) {
-                    var transaction = Transaction(animation: nil)
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
+                    LiquidGlassMotion.perform(
+                        reduceMotion: reduceMotion,
+                        animation: LiquidGlassMotion.panel
+                    ) {
                         isExpanded.wrappedValue.toggle()
                     }
                 }
@@ -252,6 +254,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
 
             if isExpanded.wrappedValue {
                 content()
+                    .transition(.opacity)
             }
         }
         .analysisCard()

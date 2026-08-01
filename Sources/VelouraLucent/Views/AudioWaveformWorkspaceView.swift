@@ -46,8 +46,10 @@ struct AudioWaveformWorkspaceView: View {
     @State private var inputWaveformHeight = WaveformTrackResizeHandle.defaultHeight
     @State private var correctedWaveformHeight = WaveformTrackResizeHandle.defaultHeight
     @State private var masteredWaveformHeight = WaveformTrackResizeHandle.defaultHeight
+    @FocusState private var isWaveformKeyboardFocused: Bool
 
     private let waveformTrailingColumnWidth: CGFloat = 140
+    private let waveformKeyboardPanStep = 0.1
 
     init(
         preview: AudioPreviewController,
@@ -169,6 +171,30 @@ struct AudioWaveformWorkspaceView: View {
                 }
                 .padding(8)
                 .glassCard(cornerRadius: 16)
+                .focusable()
+                .focused($isWaveformKeyboardFocused)
+                .focusEffectDisabled()
+                .onKeyPress(
+                    keys: [.leftArrow, .rightArrow],
+                    phases: .all
+                ) { keyPress in
+                    guard waveformViewport.canZoomOut else { return .ignored }
+                    guard keyPress.phase != .up else { return .handled }
+
+                    switch keyPress.key {
+                    case .leftArrow:
+                        waveformViewport.moveVisibleRange(
+                            byVisibleSpanFraction: -waveformKeyboardPanStep
+                        )
+                    case .rightArrow:
+                        waveformViewport.moveVisibleRange(
+                            byVisibleSpanFraction: waveformKeyboardPanStep
+                        )
+                    default:
+                        return .ignored
+                    }
+                    return .handled
+                }
             }
         }
         .onChange(of: resetToken) {
@@ -177,6 +203,7 @@ struct AudioWaveformWorkspaceView: View {
             hoveredWaveformTarget = nil
             waveformPanStartProgress = nil
             isWaveformPanning = false
+            isWaveformKeyboardFocused = false
         }
         .onChange(of: playingWaveformProgress) {
             guard
@@ -426,6 +453,9 @@ struct AudioWaveformWorkspaceView: View {
                 onSeek: { progress in
                     preview.seek(to: progress, target: target)
                 },
+                onActivateKeyboardPan: {
+                    isWaveformKeyboardFocused = true
+                },
                 onPanChanged: { translationFraction in
                     panWaveform(by: translationFraction)
                 },
@@ -669,6 +699,7 @@ struct SeekableWaveformView: View {
     let isAvailable: Bool
     let showsHoverTime: Bool
     let onSeek: (Double) -> Void
+    let onActivateKeyboardPan: () -> Void
     let onPanChanged: (Double) -> Void
     let onPanEnded: (Double) -> Void
     let onHover: (Double?) -> Void
@@ -749,6 +780,7 @@ struct SeekableWaveformView: View {
             .simultaneousGesture(
                 SpatialTapGesture()
                     .onEnded { value in
+                        onActivateKeyboardPan()
                         guard let progress = seekProgress(
                             at: value.location.x,
                             width: proxy.size.width
@@ -760,6 +792,7 @@ struct SeekableWaveformView: View {
                 DragGesture(minimumDistance: 4)
                     .onChanged { value in
                         guard isAvailable, proxy.size.width > 0 else { return }
+                        onActivateKeyboardPan()
                         onPanChanged(
                             Double(value.translation.width / proxy.size.width)
                         )

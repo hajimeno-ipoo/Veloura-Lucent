@@ -128,6 +128,16 @@ struct WaveformViewport: Equatable {
         )
     }
 
+    mutating func moveVisibleRange(byVisibleSpanFraction fraction: Double) {
+        guard canZoomOut else { return }
+
+        let maximumStart = max(1 - visibleProgressSpan, 0)
+        startProgress = min(
+            max(startProgress + fraction * visibleProgressSpan, 0),
+            maximumStart
+        )
+    }
+
     func globalProgress(forLocalProgress progress: Double) -> Double {
         clamped(startProgress + clamped(progress) * visibleProgressSpan)
     }
