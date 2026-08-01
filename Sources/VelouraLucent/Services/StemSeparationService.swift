@@ -178,7 +178,12 @@ private final class DemucsStemSeparationBackend: StemSeparationBackend, @uncheck
                 audio: audio,
                 cancelToken: cancellationToken.demucsToken,
                 interpolateProgress: false,
-                progress: { progress in progressHandler(Double(progress.fraction), progress.stage) },
+                progress: { progress in
+                    progressHandler(
+                        Double(progress.fraction),
+                        "HTDemucs \(progress.stage)"
+                    )
+                },
                 completion: { result in
                     switch result {
                     case .success(let value):
