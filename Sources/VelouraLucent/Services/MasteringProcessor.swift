@@ -81,7 +81,15 @@ struct MasteringProcessor {
         saveDiagnostic(current, to: diagnosticOutputDirectory, order: 4, id: "saturate", label: "倍音調整後", logger: logger)
         try Task.checkCancellation()
 
-        let airDecision = routePlan.decision(for: .air)
+        let airInputSummary = MasteringAnalysisService.spectralSummary(signal: current)
+        let airDecision = MasteringRoutePlan.airDecision(
+            midBandLevelDB: airInputSummary.midBandLevelDB,
+            highBandLevelDB: airInputSummary.highBandLevelDB
+        )
+        logger?.log(
+            "空気感/直前再測定: 中域 \(String(format: "%.2f", airInputSummary.midBandLevelDB)) dB / "
+                + "高域 \(String(format: "%.2f", airInputSummary.highBandLevelDB)) dB / \(airDecision.reason)"
+        )
         if airDecision.action == .skip {
             logger?.skip(.air, reason: airDecision.reason)
             logger?.log("空気感: 早期終了 - \(airDecision.reason)")
@@ -91,7 +99,7 @@ struct MasteringProcessor {
             current = measure(label: "空気感", logger: logger, progressStep: .air) {
                 MasteringAirEnhancer().process(
                     signal: current,
-                    analysis: analysis,
+                    spectralSummary: airInputSummary,
                     settings: settings,
                     finishingIntensity: finishingIntensity,
                     logger: logger

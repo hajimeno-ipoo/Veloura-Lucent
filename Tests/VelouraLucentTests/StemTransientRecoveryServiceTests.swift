@@ -58,6 +58,31 @@ struct StemTransientRecoveryServiceTests {
     }
 
     @Test
+    func recoveredAttackDoesNotGenerateUltraHighAboveTwentyOneKilohertz() throws {
+        let rawBase = makeDrumSignal()
+        let raw = addingUltraHighReference(to: rawBase)
+        let correctedBase = AudioSignal(
+            channels: rawBase.channels.map {
+                SpectralDSP.lowPass($0, cutoff: 900, sampleRate: rawBase.sampleRate)
+            },
+            sampleRate: rawBase.sampleRate
+        )
+        let corrected = addingUltraHighReference(to: correctedBase)
+
+        let recovered = try service.recover(
+            role: .drums,
+            rawSignal: raw,
+            correctedSignal: corrected
+        )
+
+        let correctedUltraHigh = bandLevelDB(corrected, lower: 21_000, upper: 24_000)
+        let recoveredUltraHigh = bandLevelDB(recovered, lower: 21_000, upper: 24_000)
+        #expect(recoveredUltraHigh <= correctedUltraHigh + 0.25)
+        #expect(recoveredUltraHigh >= correctedUltraHigh - 0.25)
+        #expect(transientEnergy(recovered) > transientEnergy(corrected))
+    }
+
+    @Test
     func leavesNonDrumRolesUnchanged() throws {
         let raw = makeDrumSignal()
         let corrected = AudioSignal(
@@ -116,5 +141,34 @@ struct StemTransientRecoveryServiceTests {
             )
             return total + band.reduce(0.0) { $0 + Double($1 * $1) }
         }
+    }
+
+    private func addingUltraHighReference(to signal: AudioSignal) -> AudioSignal {
+        let channels = signal.channels.map { channel in
+            channel.indices.map { index in
+                let time = Double(index) / signal.sampleRate
+                return channel[index] + Float(sin(2 * .pi * 22_000 * time) * 0.002)
+            }
+        }
+        return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+    }
+
+    private func bandLevelDB(_ signal: AudioSignal, lower: Double, upper: Double) -> Double {
+        let spectrogram = SpectralDSP.stft(signal.monoMixdown())
+        let frequencyStep = signal.sampleRate / Double(spectrogram.fftSize)
+        let lowerBin = max(0, Int(ceil(lower / frequencyStep)))
+        let upperBin = min(spectrogram.binCount - 1, Int(floor(upper / frequencyStep)))
+        guard lowerBin <= upperBin else { return -120 }
+
+        var energy = 0.0
+        var count = 0
+        for frameIndex in 0..<spectrogram.frameCount {
+            for binIndex in lowerBin...upperBin {
+                let magnitude = Double(spectrogram.magnitude(frameIndex: frameIndex, binIndex: binIndex))
+                energy += magnitude * magnitude
+                count += 1
+            }
+        }
+        return 10 * log10(max(energy / Double(max(count, 1)), 1e-12))
     }
 }

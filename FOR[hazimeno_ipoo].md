@@ -6,7 +6,7 @@
 - まず、耳につくザラつきやシュワシュワ感を減らします。
 - ノイズ除去は `弱い / 標準 / 強い` から選べます。
 - そのあと、高い音の不足を少し補います。
-- 高い音の補い方では、倍音寄りの成分と立ち上がりを見て、16kHz 以上の伸びを作ります。
+- 高い音の補い方では、倍音寄りの成分と立ち上がりを見て、16kHz〜20kHzの範囲で伸びを作ります。20kHz〜21kHzで新しく足す成分を滑らかに減らし、21kHz以上へ新しい成分を加えません。元からある21kHz以上は残します。
 - 高い音をどれだけ足すかは、軽い `foldover補完量推定` が自動で決めます。
 - `foldover補完量推定` は、高域不足、16kHz以上の残り具合、18kHz以上の荒れも見て、足しすぎを避けます。
 - ノイズ除去では、低中域の音楽成分があり、静かな区間より高域が自然に伸びている時は、8kHz〜20kHzの煌びやかさ、空気感、超高域をできるだけ残します。
@@ -40,12 +40,12 @@
 - マスタリングでは、Crest FactorとLRAも測り、密度調整で強弱が減りすぎる時だけ、同じ密度調整工程内で圧縮音と工程入力を混ぜて適用量を弱めます。Crest Factorが3dBを超えて減る場合、または測定できたLRAが工程入力の60%を下回る場合が対象です。弱めても範囲へ戻らない時は、その密度調整工程だけ入力音を維持します。完成音を複数作って順位付けする工程は追加していません。
 - マスタリングの`targetLoudness`は、密度調整や仕上げ強度による隠れた増減を加えず、利用者が設定した値をそのまま内部の希望値として使います。True Peak、プリセットごとの音量変更上限、ノイズ戻り上限は従来どおり守ります。
 - マスタリングの420Hz〜1.2kHzは、低中域つまみや低域つまみに連動して常に削りません。既存のmud実測が過剰な時だけ、その超過量に応じて上限付きで下げます。120Hz〜420Hzの低中域つまみ自体は従来どおり使えます。
-- マスタリングの`highShelfGain`は10kHz以上の主調整に1回だけ使い、9kHz〜12kHzの不足補強とAir工程へ重ねて加えません。最後の高域保持も音声へは1回だけ適用し、前側の工程は基準測定だけにします。高域保持はヒス、サ行、シマーを確認し、安全な補強量がない時は5%を強制適用せず、その工程の入力音をそのまま維持します。
+- マスタリングの`highShelfGain`は10kHz〜20kHzの主調整に1回だけ使い、21kHz以上は増幅しません。9kHz〜12kHzの不足補強とAir工程へ重ねて加えません。最後の高域保持も音声へは1回だけ適用し、前側の工程は基準測定だけにします。高域保持はヒス、サ行、シマーを確認し、安全な補強量がない時は5%を強制適用せず、その工程の入力音をそのまま維持します。
 - マスタリングでは、補正後にサ行が強く残った素材だけ、最後に 5kHz〜9kHz の短時間ピークを軽く抑え、原音からの増えすぎを防ぎます。
-- マスタリングログでは、ラウドネス、高域戻りガード、ノイズ戻りガードを分けて表示し、どこに時間がかかったか見やすくしています。今回整理した密度、中低域、高域、Air、高域保持は、処理前、適用量、処理後、処理または見送りの理由を既存の詳細ログへ表示します。10kHz以上のShelfと9〜12kHzのBrillianceは測定位置と実測変化を分けて表示します。高域が実測で十分な時はAir追加を省略し、Shelf設定値をAirの要否判定へ重ねません。左サイドの工程表示や新しいログカードは増やしません。
+- マスタリングログでは、ラウドネス、高域戻りガード、ノイズ戻りガードを分けて表示し、どこに時間がかかったか見やすくしています。今回整理した密度、中低域、高域、Air、高域保持は、処理前、適用量、処理後、処理または見送りの理由を既存の詳細ログへ表示します。10kHz〜20kHzのShelfと9〜12kHzのBrillianceは測定位置と実測変化を分けて表示します。Airの直前にTone、Dynamics、Saturation後の音を再測定し、高域が実測で十分な時はAir追加を省略します。Shelf設定値や工程開始前の古い測定値をAirの要否判定へ重ねません。左サイドの工程表示や新しいログカードは増やしません。
 - マスタリングでは、低域は広げすぎず、中高域だけ広げるようにして、芯が痩せにくい形にしています。
 - マスタリングでは、ラウドネス調整後に演奏中と余韻の20Hz〜1kHzだけを確認し、低域と低中域が下がりすぎた時だけ上限付きで少し戻します。60Hz〜150Hzは低域の土台として分けて見ます。150Hz〜500Hzは演奏中フレームだけ最大0.5dB程度まで軽く戻し、胴鳴りと厚みが薄くなりすぎないようにします。この150Hz〜500Hzの確認は補正後の音を基準にします。原音がある時も、150Hz〜500Hz以外の低域保護で原音を参考にし、完全に戻すのではなく削れすぎた分だけ自然に軽く戻します。さらに、最終ノイズ確認後にも、補正後より150Hz〜500Hzが下がっている時だけ、演奏中の150Hz〜500Hzを最大0.5dB戻します。最後にプリセットごとの音量上限を確認します。静かな区間のノイズ除去は弱めません。
-- マルチバンド圧縮は、低域・中域・高域を整理しつつ、超高域は潰しすぎないように分けています。
+- マルチバンド圧縮は、低域・中域・高域を整理し、9kHz以上にも圧縮後の本体音と同じ平均音量変化を反映します。圧縮されない超高域だけが相対的に前へ出る状態を防ぎます。
 - 詳細設定では `ダイナミクス保持` と `仕上げの強さ` で、平坦さと押し出し感をまとめて調整できます。
 - 右設定パネルの補正の基本、掃除と修復、上級、マスタリングの基本、マスタリングの音色、マスタリングの上級は、提供されたノブ画像を使ったロータリーノブで調整します。ノブは値に合わせて回り、青い点の位置で現在値を見られます。
 - 入力・補正後・最終版の差は、中央の作業画面で続けて確認できます。
@@ -375,9 +375,9 @@ Macアプリ(SwiftUI)
   - `AudioSignalSampleRateConverter.swift` は、Stem専用のメモリ上`AudioSignal`を任意のサンプルレートへ変換します。変換前後のチャンネル、フレーム、NaN、Infinityを検証し、補正workflowがraw Stemを1回だけ48kHz処理信号へ変換する時に使います。通常モードの`AudioFileService`は変更していません。
   - `ConcurrentChannelProcessing.swift` は、左右チャンネルを同時に処理する共通処理を担当します。`NoiseMeasurementRunCache.swift` は、同じ音声のノイズ測定結果を再利用します。
   - `AudioAnalysisMode.swift`、`AudioAnalyzer.swift`、`HumRemover.swift`、`RumbleReducer.swift`、`SpectralGateDenoiser.swift`、`DenoiseMaskCoefficients.swift`、`DenoiseShimmerStabilizer.swift` は、補正パイプライン内で使う解析、ハム除去、低域ノイズ除去、ノイズ除去本体、ノイズ除去係数、シマー安定化を分けて置いています。
-  - `SibilanceShimmerGuard.swift`、`CorrectionSibilanceBalanceGuard.swift`、`ShimmerPeakLimiter.swift`、`LowMidResidueGuard.swift`、`CorrectionHarmonicRepair.swift`、`CorrectionHighFloorPreserver.swift`、`CorrectionMudGuard.swift`、`LowBandPhaseSafetyGuard.swift`、`PeakSafetyLimiter.swift` は、補正パイプライン内のサ行保護、サ行の相対悪化防止、シマー制限、低中域整理、高域補完、補正後高域保持、補正後こもり確認、通常モードの低域位相確認、最終ピーク保護を分けて置いています。
+  - `SibilanceShimmerGuard.swift`、`CorrectionSibilanceBalanceGuard.swift`、`ShimmerPeakLimiter.swift`、`LowMidResidueGuard.swift`、`CorrectionHarmonicRepair.swift`、`CorrectionHighFloorPreserver.swift`、`CorrectionMudGuard.swift`、`LowBandPhaseSafetyGuard.swift`、`PeakSafetyLimiter.swift` は、補正パイプライン内のサ行保護、サ行の相対悪化防止、シマー制限、低中域整理、高域補完、補正後高域保持、補正後こもり確認、通常モードの低域位相確認、最終ピーク保護を分けて置いています。`GeneratedHighFrequencyDeltaLimiter.swift`は、補正とマスタリングが新しく作った成分だけを20kHz〜21kHzで滑らかに減らし、21kHz以上へ加えない共通処理です。元の音に含まれる21kHz以上は削りません。
   - `MasteringSignalMath.swift` は、マスタリング内で使う音量変更、帯域測定、帯域増減、ピーク上限、RMS、パーセンタイルなどの共通計算を担当します。
-  - `MasteringToneStage.swift`、`MasteringDeEsserStage.swift`、`MasteringDynamicsStage.swift`、`MasteringSaturationStage.swift`、`MasteringAirEnhancer.swift`、`MasteringStereoStage.swift` は、マスタリング内の音色、ディエッサー、圧縮、倍音、空気感、ステレオ幅を分けて置いています。
+  - `MasteringToneStage.swift`、`MasteringDeEsserStage.swift`、`MasteringDynamicsStage.swift`、`MasteringSaturationStage.swift`、`MasteringAirEnhancer.swift`、`MasteringStereoStage.swift` は、マスタリング内の音色、ディエッサー、圧縮、倍音、空気感、ステレオ幅を分けて置いています。Airはその直前の音を再測定して実行要否を決め、実行する場合も21kHz以上へ新しい成分を加えません。
   - `MasteringHighReturnGuard.swift`、`MasteringNoiseReturnGuard.swift`、`MasteringLoudnessStage.swift`、`MasteringFinalLowMidSafety.swift`、`MasteringFinalLoudnessStage.swift` は、高域戻り防止、ノイズ戻り防止、基本音量調整、最終低中域の安全確認、最終音量復帰と音量上限を分けて置いています。
   - `MasteringHighFloorPreserver.swift` は、マスタリング内で音楽成分として残す高域を守る処理と、その高域保持後のノイズ戻り確認を担当します。
   - `MasteringNoiseReturnSupport.swift` は、マスタリング内のノイズ戻り判定で使う軽量測定、基準高域測定、高域を削りすぎない候補確認を担当します。
@@ -392,7 +392,7 @@ Macアプリ(SwiftUI)
 - `StemRoleAnalysisService.swift` は、補正workflowが1回だけ48kHz化した処理信号を直接受け取り、集約表示用のmedian／IQRとは別に、同じ時間位置を保つ役割別保護profileを作ります。vocalsは非周期高域・子音活動・サ行帯域・声道スペクトル包絡・倍音列・声の芯、drumsは複素スペクトル変化・attack・帯域別decay、bassは時間追跡する基音・倍音列・50/60 Hz付近の音程整合・低域位相、otherは時間／帯域別decay・ambience・mid/side・広帯域位相を解析します。44.1kHz信号は受理しません。
 - `StemRoleProtectionGuardService.swift` は、今回のraw Stem、各DSP直前Stem、DSP直後Stemの同一時間位置だけを比較します。サンプル由来の閾値や固定mappingを持たず、保護成分の存在量と当該DSP差分から連続的な弱化量を作ります。判断不能時は音を変えずDSP直前Stemを維持します。
 - `StemCorrectionService.swift` は、raw解析から通常モード既存routeを決め、通常モードの下位DSPを同じ順序で使います。各DSP内部guardとStem役割別guardが返した1本だけを次工程へ渡し、DSP単位の弱化・スキップ・直前音維持を記録します。Stem個別limiterやStem専用完成候補評価を使いません。
-  - `StemTransientRecoveryService.swift` は、ドラムのraw／補正済みStemを同じ時間位置で比較し、補正で不足した1.2〜12 kHzのアタック成分だけをrawに実在する向きとsample包絡線の範囲内で戻します。補正済み側が同等以上なら何も生成しません。
+  - `StemTransientRecoveryService.swift` は、ドラムのraw／補正済みStemを同じ時間位置で比較し、補正で不足した1.2〜12 kHzのアタック成分だけをrawに実在する向きとsample包絡線の範囲内で戻します。補正済み側が同等以上なら何も生成しません。回復差分は20kHz〜21kHzで滑らかに減らし、21kHz以上へ新しい成分を加えません。回復前から存在する21kHz以上とsample包絡線上限は維持します。
   - `StemMixService.swift` は、4StemのFloat32純粋加算とpeak測定だけを行います。No Vocals、自動gain preview、pan、width、tone、dynamics、limiterは作りません。
 - `StemRemixService.swift` は、各Stemのactive program level、raw／補正済みStemの同じ20 ms活動区間で方向が揃う左右中心差、余韻・side成分の減少、drums／bassとvocals／otherの時間・帯域重なりから自動値を作ります。左右差が画面の中央表示境界`0.005`未満、方向不一致、有効区間不足の場合は自動panを`0`にします。再ミックス時はStem別gain、pan前の衝突区間だけの帯域ducking、Stem別pan、pan後send、減衰制御・拡散付き共有reverbの順で処理し、normalization、saturation、limitingは行いません。
 - `StemValidationService.swift` は、分離、内部診断raw再ミックス、補正済み純粋加算、再ミックスの形式、長さ、有限値、残差、peak、相関、帯域差分、noise差分を記録します。構造的継続可否と解析issueを分け、解析値から音楽的合否や候補選択を作りません。

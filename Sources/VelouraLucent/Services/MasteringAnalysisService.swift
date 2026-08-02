@@ -72,6 +72,21 @@ enum MasteringAnalysisService {
         analyzeWithBenchmark(signal: signal).analysis
     }
 
+    static func spectralSummary(signal: AudioSignal) -> MasteringSpectralSummary {
+        let mono = signal.monoMixdown()
+        guard !mono.isEmpty else {
+            return MasteringSpectralSummary(
+                lowBandLevelDB: -120,
+                midBandLevelDB: -120,
+                highBandLevelDB: -120,
+                harshnessScore: 0
+            )
+        }
+        return spectralSummary(
+            from: spectralFrameSummary(for: mono, sampleRate: signal.sampleRate)
+        ).summary
+    }
+
     static func analyzeWithBenchmark(fileURL: URL) throws -> Benchmark {
         let signal = try AudioFileService.loadAudio(from: fileURL)
         return analyzeWithBenchmark(signal: signal)

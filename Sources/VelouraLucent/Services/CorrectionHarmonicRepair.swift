@@ -46,7 +46,11 @@ struct CorrectionHarmonicRepair: Sendable {
                 return tanhf(mixed * 0.98)
             }
         }
-        return AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+        let repaired = AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+        return GeneratedHighFrequencyDeltaLimiter.preserveOriginalUltraHigh(
+            original: signal,
+            processed: repaired
+        )
     }
 
     private func foldover(channel: [Float], sampleRate: Double, cutoff: Double, mix: Float) -> [Float] {
@@ -56,26 +60,29 @@ struct CorrectionHarmonicRepair: Sendable {
         let sourceStart = max(1, min(Int(max(cutoff * 0.5, 5_500) / frequencyStep), binCount - 1))
         let sourceEnd = max(sourceStart, min(Int(min(cutoff * 0.95, 12_000) / frequencyStep), binCount - 1))
         let targetStart = max(sourceStart + 1, min(Int(16_000 / frequencyStep), binCount - 1))
-        guard sourceEnd > sourceStart, targetStart < binCount else {
+        let targetEnd = min(Int(20_000 / frequencyStep), binCount - 1)
+        guard sourceEnd > sourceStart, targetStart <= targetEnd else {
             return Array(repeating: 0, count: channel.count)
         }
 
         var activeBins: [Int] = []
         var seenBins = Set<Int>()
         for sourceBin in sourceStart...sourceEnd {
-            let targetBin = min(binCount - 1, sourceBin * 2)
-            guard targetBin >= targetStart, seenBins.insert(targetBin).inserted else { continue }
+            let targetBin = sourceBin * 2
+            guard targetBin >= targetStart,
+                  targetBin <= targetEnd,
+                  seenBins.insert(targetBin).inserted else { continue }
             activeBins.append(targetBin)
         }
 
         return SpectralDSP.istftSparseHalfSpectrumFromSTFTFrames(
             channel,
             activeBins: activeBins
-        ) { _, sourceBinCount, sourceReal, sourceImag, realFrame, imagFrame in
+        ) { _, _, sourceReal, sourceImag, realFrame, imagFrame in
             for sourceBin in sourceStart...sourceEnd {
-                let targetBin = min(sourceBinCount - 1, sourceBin * 2)
-                guard targetBin >= targetStart else { continue }
-                let normalizedPosition = Float(targetBin - targetStart) / Float(max(sourceBinCount - targetStart - 1, 1))
+                let targetBin = sourceBin * 2
+                guard targetBin >= targetStart, targetBin <= targetEnd else { continue }
+                let normalizedPosition = Float(targetBin - targetStart) / Float(max(targetEnd - targetStart, 1))
                 let lift = mix * (1 - normalizedPosition * 0.45)
                 realFrame[targetBin] += sourceReal[sourceBin] * lift
                 imagFrame[targetBin] += sourceImag[sourceBin] * lift

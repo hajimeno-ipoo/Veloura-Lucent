@@ -72,7 +72,21 @@ struct StemTransientRecoveryService: Sendable {
                 return min(max(proposed, -rawLimit), rawLimit)
             }
         }
-        return AudioSignal(channels: channels, sampleRate: rawSignal.sampleRate)
+        let recovered = AudioSignal(channels: channels, sampleRate: rawSignal.sampleRate)
+        let ultraHighLimited = GeneratedHighFrequencyDeltaLimiter.preserveOriginalUltraHigh(
+            original: correctedSignal,
+            processed: recovered
+        )
+        let boundedChannels = rawSignal.channels.indices.map { channelIndex in
+            let rawChannel = rawSignal.channels[channelIndex]
+            let correctedChannel = correctedSignal.channels[channelIndex]
+            let limitedChannel = ultraHighLimited.channels[channelIndex]
+            return limitedChannel.indices.map { index in
+                let sampleLimit = max(abs(rawChannel[index]), abs(correctedChannel[index]))
+                return min(max(limitedChannel[index], -sampleLimit), sampleLimit)
+            }
+        }
+        return AudioSignal(channels: boundedChannels, sampleRate: rawSignal.sampleRate)
     }
 
     private func structurallyMatches(_ lhs: AudioSignal, _ rhs: AudioSignal) -> Bool {

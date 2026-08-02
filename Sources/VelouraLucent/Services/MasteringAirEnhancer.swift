@@ -3,14 +3,18 @@ import Foundation
 struct MasteringAirEnhancer {
     func process(
         signal: AudioSignal,
-        analysis: MasteringAnalysis,
+        spectralSummary: MasteringSpectralSummary,
         settings: MasteringSettings,
         finishingIntensity: Float,
         logger: AudioProcessingLogger?
     ) -> AudioSignal {
-        let harshnessGuard = MasteringSignalMath.clamped(1 - analysis.harshnessScore * 0.62, min: 0.28, max: 1)
+        let harshnessGuard = MasteringSignalMath.clamped(1 - spectralSummary.harshnessScore * 0.62, min: 0.28, max: 1)
         let requestedAir = settings.saturationAmount * 0.030
-        let adaptiveAir = MasteringSignalMath.clamped(Float((analysis.midBandLevelDB - analysis.highBandLevelDB) / 42), min: 0, max: 0.055)
+        let adaptiveAir = MasteringSignalMath.clamped(
+            Float((spectralSummary.midBandLevelDB - spectralSummary.highBandLevelDB) / 42),
+            min: 0,
+            max: 0.055
+        )
         let amount = MasteringSignalMath.clamped((requestedAir + adaptiveAir) * (0.55 + finishingIntensity * 0.65) * harshnessGuard, min: 0, max: 0.11)
         let before = MasteringSignalMath.bandRMSDB(signal: signal, lower: 10_000, upper: 20_000)
         guard amount > 0.001 else {
@@ -34,7 +38,10 @@ struct MasteringAirEnhancer {
             }
         }
 
-        let result = AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+        let result = GeneratedHighFrequencyDeltaLimiter.preserveOriginalUltraHigh(
+            original: signal,
+            processed: AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+        )
         let after = MasteringSignalMath.bandRMSDB(signal: result, lower: 10_000, upper: 20_000)
         logger?.log(
             "高域調整/Air: 処理前 \(String(format: "%.2f", before)) dB / "

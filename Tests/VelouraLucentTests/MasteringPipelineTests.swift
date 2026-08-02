@@ -670,8 +670,8 @@ struct MasteringPipelineTests {
             logger: raisedLogs
         )
 
-        let neutralShelf = neutralLogs.values.first { $0.hasPrefix("高域調整/10kHz以上（Shelf）:") }
-        let raisedShelf = raisedLogs.values.first { $0.hasPrefix("高域調整/10kHz以上（Shelf）:") }
+        let neutralShelf = neutralLogs.values.first { $0.hasPrefix("高域調整/10〜20kHz（Shelf）:") }
+        let raisedShelf = raisedLogs.values.first { $0.hasPrefix("高域調整/10〜20kHz（Shelf）:") }
         #expect(neutralShelf?.contains("設定gain +0.00 dB") == true)
         #expect(raisedShelf?.contains("設定gain +1.20 dB") == true)
         #expect(neutralShelf?.contains("実測変化") == true)
@@ -687,14 +687,14 @@ struct MasteringPipelineTests {
 
         let neutralAir = MasteringAirEnhancer().process(
             signal: signal,
-            analysis: highDeficitAnalysis,
+            spectralSummary: MasteringAnalysisService.spectralSummary(signal: signal),
             settings: neutralSettings,
             finishingIntensity: 0.5,
             logger: nil
         )
         let raisedAir = MasteringAirEnhancer().process(
             signal: signal,
-            analysis: highDeficitAnalysis,
+            spectralSummary: MasteringAnalysisService.spectralSummary(signal: signal),
             settings: raisedShelfSettings,
             finishingIntensity: 0.5,
             logger: nil

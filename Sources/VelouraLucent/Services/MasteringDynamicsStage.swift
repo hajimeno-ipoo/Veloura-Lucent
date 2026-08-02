@@ -36,10 +36,17 @@ extension MasteringProcessor {
             let compressedLow = compressBand(low, sampleRate: signal.sampleRate, settings: adjustedSettings.low)
             let compressedMid = compressBand(mid, sampleRate: signal.sampleRate, settings: adjustedSettings.mid)
             let compressedHigh = compressBand(high, sampleRate: signal.sampleRate, settings: adjustedSettings.high)
-
-            return channel.indices.map { index in
-                compressedLow[index] + compressedMid[index] + compressedHigh[index] + air[index]
+            let compressedBody = channel.indices.map {
+                compressedLow[$0] + compressedMid[$0] + compressedHigh[$0]
             }
+            let candidate = channel.indices.map { index in
+                compressedBody[index] + air[index]
+            }
+            return matchHighBandGain(
+                reference: channel,
+                processed: candidate,
+                sampleRate: signal.sampleRate
+            )
         }
 
         let compressed = AudioSignal(channels: channels, sampleRate: signal.sampleRate)
@@ -56,6 +63,78 @@ extension MasteringProcessor {
                 + formatOptionalDynamicDelta(constrained.metrics.loudnessRangeLU, reference: inputMetrics.loudnessRangeLU, unit: "LU")
         )
         return constrained.signal
+    }
+
+    private func matchHighBandGain(reference: [Float], processed: [Float], sampleRate: Double) -> [Float] {
+        guard !reference.isEmpty, reference.count == processed.count else { return processed }
+        let referenceSpectrum = SpectralDSP.stft(reference)
+        var processedSpectrum = SpectralDSP.stft(processed)
+        let bodyGain = spectralBandGain(
+            reference: referenceSpectrum,
+            processed: processedSpectrum,
+            lower: 20,
+            upper: 2_000,
+            sampleRate: sampleRate
+        )
+        let currentHighGain = spectralBandGain(
+            reference: referenceSpectrum,
+            processed: processedSpectrum,
+            lower: 9_000,
+            upper: sampleRate * 0.5,
+            sampleRate: sampleRate
+        )
+        guard bodyGain.isFinite, currentHighGain.isFinite, currentHighGain > 0 else {
+            return processed
+        }
+
+        let correction = bodyGain / currentHighGain
+        let frequencyStep = sampleRate / Double(processedSpectrum.fftSize)
+        for frameIndex in 0..<processedSpectrum.frameCount {
+            for binIndex in 0..<processedSpectrum.binCount {
+                let frequency = Double(binIndex) * frequencyStep
+                let gain: Float
+                if frequency < 8_500 {
+                    continue
+                } else if frequency < 9_000 {
+                    let position = Float((frequency - 8_500) / 500)
+                    gain = 1 + (correction - 1) * position
+                } else {
+                    gain = correction
+                }
+                processedSpectrum.scaleBin(frameIndex: frameIndex, binIndex: binIndex, by: gain)
+            }
+        }
+        return SpectralDSP.istft(processedSpectrum)
+    }
+
+    private func spectralBandGain(
+        reference: Spectrogram,
+        processed: Spectrogram,
+        lower: Double,
+        upper: Double,
+        sampleRate: Double
+    ) -> Float {
+        let frameCount = min(reference.frameCount, processed.frameCount)
+        let binCount = min(reference.binCount, processed.binCount)
+        guard frameCount > 0, binCount > 0 else { return 1 }
+
+        let frequencyStep = sampleRate / Double(reference.fftSize)
+        let lowerBin = max(0, Int(ceil(lower / frequencyStep)))
+        let upperBin = min(binCount - 1, Int(floor(upper / frequencyStep)))
+        guard lowerBin <= upperBin else { return 1 }
+
+        var referenceEnergy = 0.0
+        var processedEnergy = 0.0
+        for frameIndex in 0..<frameCount {
+            for binIndex in lowerBin...upperBin {
+                let referenceMagnitude = Double(reference.magnitude(frameIndex: frameIndex, binIndex: binIndex))
+                let processedMagnitude = Double(processed.magnitude(frameIndex: frameIndex, binIndex: binIndex))
+                referenceEnergy += referenceMagnitude * referenceMagnitude
+                processedEnergy += processedMagnitude * processedMagnitude
+            }
+        }
+        guard referenceEnergy > Double.leastNormalMagnitude else { return 1 }
+        return Float(sqrt(processedEnergy / referenceEnergy))
     }
 
     private func tunedCompressionSettings(

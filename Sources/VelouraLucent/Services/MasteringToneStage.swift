@@ -46,7 +46,11 @@ extension MasteringProcessor {
                 cutoff: 5_500,
                 sampleRate: signal.sampleRate
             )
-            let high = SpectralDSP.highPass(channel, cutoff: 10_000, sampleRate: signal.sampleRate)
+            let high = SpectralDSP.lowPass(
+                SpectralDSP.highPass(channel, cutoff: 10_000, sampleRate: signal.sampleRate),
+                cutoff: 20_000,
+                sampleRate: signal.sampleRate
+            )
             return channel.indices.map { index in
                 channel[index]
                     + low[index] * lowDelta
@@ -57,7 +61,10 @@ extension MasteringProcessor {
             }
         }
 
-        let toned = AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+        let toned = GeneratedHighFrequencyDeltaLimiter.preserveOriginalUltraHigh(
+            original: signal,
+            processed: AudioSignal(channels: channels, sampleRate: signal.sampleRate)
+        )
         let lowMidAfter = MasteringSignalMath.bandRMSDB(signal: toned, lower: 120, upper: 420)
         let roomAfter = MasteringSignalMath.bandRMSDB(signal: toned, lower: 420, upper: 1_200)
         let highShelfAfter = MasteringSignalMath.bandRMSDB(signal: toned, lower: 10_000, upper: 20_000)
@@ -72,7 +79,7 @@ extension MasteringProcessor {
                 + "理由 \(roomPlan.reason)"
         )
         logger?.log(
-            "高域調整/10kHz以上（Shelf）: 処理前 \(formatToneLevel(highBefore)) / "
+            "高域調整/10〜20kHz（Shelf）: 処理前 \(formatToneLevel(highBefore)) / "
                 + "設定gain \(String(format: "%+.2f", settings.highShelfGain)) dB / "
                 + "実測変化 \(formatSignedDB(highShelfAfter - highBefore)) / 処理後 \(formatToneLevel(highShelfAfter)) / "
                 + "理由 high shelf設定と入力帯域差から算出"
