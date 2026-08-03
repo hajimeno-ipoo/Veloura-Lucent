@@ -131,6 +131,7 @@ struct StemMasteringReports: Sendable {
 struct StemMasteringResult: Sendable {
     let finalArtifact: StemAudioArtifact
     let finalEvaluation: StemAudioEvaluationSnapshot
+    let masteringSettings: MasteringSettings
     let audioQualityReport: AudioQualityReport
     let completionReport: CompletionReport
     let noiseCheckReport: NoiseCheckReport

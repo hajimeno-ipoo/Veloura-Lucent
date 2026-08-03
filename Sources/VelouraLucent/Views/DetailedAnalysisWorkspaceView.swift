@@ -22,6 +22,7 @@ struct DetailedAnalysisPresentation {
     let failedText: String?
     let analyzingTargets: Set<DisplayAnalysisTarget>
     let failedTargets: Set<DisplayAnalysisTarget>
+    let availableTargets: Set<DisplayAnalysisTarget>
     let emptyTitle: String
     let emptyDescription: String
     let correctedTitle: String
@@ -50,6 +51,15 @@ struct DetailedAnalysisPresentation {
                 job.hasFailedDisplayAnalysis(for: $0)
             }
         )
+        availableTargets = Set(
+            DisplayAnalysisTarget.allDisplayTargets.filter { target in
+                switch target {
+                case .input: job.inputFile != nil
+                case .corrected: job.hasExistingOutput
+                case .mastered: job.hasExistingMasteredOutput
+                }
+            }
+        )
         emptyTitle = "入力音声は未解析です"
         emptyDescription = "音声を選ぶと、入力、補正後、最終版の詳細解析を表示します。"
         correctedTitle = "補正後"
@@ -65,6 +75,7 @@ struct DetailedAnalysisPresentation {
         failedText: String?,
         analyzingTargets: Set<DisplayAnalysisTarget>,
         failedTargets: Set<DisplayAnalysisTarget>,
+        availableTargets: Set<DisplayAnalysisTarget>,
         emptyTitle: String,
         emptyDescription: String,
         correctedTitle: String = "補正後"
@@ -78,6 +89,7 @@ struct DetailedAnalysisPresentation {
         self.failedText = failedText
         self.analyzingTargets = analyzingTargets
         self.failedTargets = failedTargets
+        self.availableTargets = availableTargets
         self.emptyTitle = emptyTitle
         self.emptyDescription = emptyDescription
         self.correctedTitle = correctedTitle
@@ -152,7 +164,7 @@ struct DetailedAnalysisComparisonView: View {
 
                     analysisDisclosureSection(
                         title: "周波数帯域詳細",
-                        help: "8つの帯域を、入力、\(presentation.correctedTitle)、最終版、処理差分、マスタリング差分で確認します。",
+                        help: "9つの帯域を、入力、\(presentation.correctedTitle)、最終版、処理差分、マスタリング差分で確認します。帯域差分は全体音量差を除いて表示します。",
                         isExpanded: $showBands
                     ) {
                         bandDetailRows(
@@ -231,17 +243,13 @@ struct DetailedAnalysisComparisonView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func aggregateState(for target: DisplayAnalysisTarget) -> AnalysisVisualState {
-        if presentation.analyzingTargets.contains(target) {
-            return .running
-        }
-        if presentation.failedTargets.contains(target) {
-            return .failed
-        }
-        if metrics(for: target) != nil {
-            return .completed
-        }
-        return .idle
+    private func aggregateState(for target: DisplayAnalysisTarget) -> DisplayAnalysisPresentationState {
+        DisplayAnalysisPresentationState.resolve(
+            hasSource: presentation.availableTargets.contains(target),
+            hasMetrics: metrics(for: target) != nil,
+            isRunning: presentation.analyzingTargets.contains(target),
+            hasFailed: presentation.failedTargets.contains(target)
+        )
     }
 
     private func metricComparisonCard(
@@ -831,14 +839,29 @@ struct DetailedAnalysisComparisonView: View {
     ) -> some View {
         let correctedMap = Dictionary(uniqueKeysWithValues: (corrected?.bandEnergies ?? []).map { ($0.id, $0.levelDB) })
         let masteredMap = Dictionary(uniqueKeysWithValues: (mastered?.bandEnergies ?? []).map { ($0.id, $0.levelDB) })
-        let rows = input.bandEnergies.map {
+        let rows = input.bandEnergies.map { band in
             BandDetailRow(
-                id: $0.id,
-                definition: termDefinition(for: $0.id),
-                range: $0.rangeDescription,
-                input: $0.levelDB,
-                corrected: correctedMap[$0.id],
-                mastered: masteredMap[$0.id]
+                id: band.id,
+                definition: termDefinition(for: band.id),
+                range: band.rangeDescription,
+                input: band.levelDB,
+                corrected: correctedMap[band.id],
+                mastered: masteredMap[band.id],
+                correctionDelta: corrected.flatMap { correctedMetrics in
+                    AudioQualityAssessmentService.normalizedBandDelta(
+                        id: band.id,
+                        reference: input,
+                        target: correctedMetrics
+                    )
+                },
+                masteringDelta: {
+                    guard let corrected, let mastered else { return nil }
+                    return AudioQualityAssessmentService.normalizedBandDelta(
+                        id: band.id,
+                        reference: corrected,
+                        target: mastered
+                    )
+                }()
             )
         }
         let allValues = rows.flatMap { [$0.input, $0.corrected ?? $0.input, $0.mastered ?? $0.corrected ?? $0.input] }
@@ -853,12 +876,6 @@ struct DetailedAnalysisComparisonView: View {
     }
 
     private func bandDetailRow(_ row: BandDetailRow, minValue: Double, maxValue: Double) -> some View {
-        let correctionDelta = row.corrected.map { $0 - row.input }
-        let masteringDelta = {
-            guard let corrected = row.corrected, let mastered = row.mastered else { return Optional<Double>.none }
-            return mastered - corrected
-        }()
-
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 termLabel(row.definition)
@@ -866,7 +883,7 @@ struct DetailedAnalysisComparisonView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text("補正 \(correctionDelta.map { formatValue($0, format: .dBDelta) } ?? "--") / 仕上げ \(masteringDelta.map { formatValue($0, format: .dBDelta) } ?? "--")")
+                Text("全体音量差を除く: 処理 \(row.correctionDelta.map { formatValue($0, format: .dBDelta) } ?? "--") / 仕上げ \(row.masteringDelta.map { formatValue($0, format: .dBDelta) } ?? "--")")
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -1013,12 +1030,27 @@ struct DetailedAnalysisComparisonView: View {
 
         let correctedMap = Dictionary(uniqueKeysWithValues: (corrected?.bandEnergies ?? []).map { ($0.id, $0.levelDB) })
         let masteredMap = Dictionary(uniqueKeysWithValues: (mastered?.bandEnergies ?? []).map { ($0.id, $0.levelDB) })
-        let bandRows = input.bandEnergies.map {
-            metricRow(
-                term: termDefinition(for: $0.id),
-                input: $0.levelDB,
-                corrected: correctedMap[$0.id],
-                mastered: masteredMap[$0.id],
+        let bandRows = input.bandEnergies.map { band in
+            MetricComparisonRow(
+                definition: termDefinition(for: band.id),
+                input: band.levelDB,
+                corrected: correctedMap[band.id],
+                mastered: masteredMap[band.id],
+                correctionDelta: corrected.flatMap {
+                    AudioQualityAssessmentService.normalizedBandDelta(
+                        id: band.id,
+                        reference: input,
+                        target: $0
+                    )
+                },
+                masteringDelta: {
+                    guard let corrected, let mastered else { return nil }
+                    return AudioQualityAssessmentService.normalizedBandDelta(
+                        id: band.id,
+                        reference: corrected,
+                        target: mastered
+                    )
+                }(),
                 valueFormat: .dB,
                 deltaFormat: .dBDelta
             )
@@ -1275,7 +1307,8 @@ struct DetailedAnalysisComparisonView: View {
             .presence,
             .sparkle,
             .air,
-            .ultraAir
+            .ultraAir,
+            .generatedUltraHigh
         ].map { ($0.id, $0) })
     }
 }
@@ -1310,23 +1343,10 @@ extension View {
     }
 }
 
-private enum AnalysisVisualState {
-    case idle
-    case running
-    case completed
-    case failed
-
-    var title: String {
-        switch self {
-        case .idle: "未解析"
-        case .running: "解析中"
-        case .completed: "完了"
-        case .failed: "失敗"
-        }
-    }
-
+private extension DisplayAnalysisPresentationState {
     var color: Color {
         switch self {
+        case .notSelected: .secondary
         case .idle: .secondary
         case .running: .blue
         case .completed: .green
@@ -1362,6 +1382,8 @@ private struct BandDetailRow: Identifiable {
     let input: Double
     let corrected: Double?
     let mastered: Double?
+    let correctionDelta: Double?
+    let masteringDelta: Double?
 }
 
 private struct TimelinePoint: Identifiable {
@@ -1406,6 +1428,7 @@ private struct TermDefinition: Identifiable {
     static let sparkle = TermDefinition(id: "sparkle", label: "煌びやかさ", reading: "きらびやかさ", description: "8kHzから12kHzの抜け感やきらめきです。")
     static let air = TermDefinition(id: "air", label: "空気感", reading: "くうきかん", description: "12kHzから16kHzの息感や空気の伸びです。")
     static let ultraAir = TermDefinition(id: "ultraAir", label: "超高域", reading: "ちょうこういき", description: "16kHzから20kHzの高域の最上部です。")
+    static let generatedUltraHigh = TermDefinition(id: "generatedUltraHigh", label: "生成超高域", reading: "せいせいちょうこういき", description: "21kHzから24kHzに新しく増えた成分を確認する帯域です。")
 }
 
 private enum MetricFormat {

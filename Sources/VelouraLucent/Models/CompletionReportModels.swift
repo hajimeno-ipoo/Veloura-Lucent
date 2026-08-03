@@ -14,10 +14,30 @@ struct CompletionReport: Sendable, Equatable {
     let loudnessRows: [CompletionReportRow]
     let noiseRows: [CompletionReportRow]
     let highFrequencyRows: [CompletionReportRow]
+    let lowFrequencyRows: [CompletionReportRow]
+    let qualityRows: [CompletionReportRow]
     let reminder: String
 
+    init(
+        loudnessRows: [CompletionReportRow],
+        noiseRows: [CompletionReportRow],
+        highFrequencyRows: [CompletionReportRow],
+        lowFrequencyRows: [CompletionReportRow] = [],
+        qualityRows: [CompletionReportRow] = [],
+        reminder: String
+    ) {
+        self.loudnessRows = loudnessRows
+        self.noiseRows = noiseRows
+        self.highFrequencyRows = highFrequencyRows
+        self.lowFrequencyRows = lowFrequencyRows
+        self.qualityRows = qualityRows
+        self.reminder = reminder
+    }
+
     var severity: CompletionReportSeverity {
-        (loudnessRows + noiseRows + highFrequencyRows).map(\.severity).max() ?? .normal
+        (loudnessRows + noiseRows + highFrequencyRows + lowFrequencyRows + qualityRows)
+            .map(\.severity)
+            .max() ?? .normal
     }
 }
 

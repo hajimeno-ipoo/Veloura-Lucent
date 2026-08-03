@@ -56,6 +56,11 @@ struct CompletionReportServiceTests {
         #expect(report.noiseRows.contains { $0.id == "noise-hiss" && $0.title == "ヒス・シュワシュワ" })
         #expect(report.highFrequencyRows.contains { $0.id == "high-air" && $0.detail.contains("入力差 -1.20 dB") })
         #expect(report.highFrequencyRows.contains { $0.id == "high-ultraAir" && $0.severity == .caution })
+        #expect(report.highFrequencyRows.contains { $0.id == "high-generatedUltraHigh" })
+        #expect(report.lowFrequencyRows.count == 2)
+        #expect(report.lowFrequencyRows.contains {
+            $0.id == "low-low" && $0.detail.contains("入力→補正後 +0.00 dB")
+        })
         #expect(report.reminder == "数値は確認材料です。最終判断は試聴で行ってください。")
     }
 
@@ -76,22 +81,81 @@ struct CompletionReportServiceTests {
         #expect(report.severity == .warning)
     }
 
+    @Test
+    func transientGeneratedUltraHighIncreaseUsesSameStageSeverityAsQualityWarning() throws {
+        let report = try #require(CompletionReportService.makeReport(
+            input: makeMetrics(
+                loudness: -18,
+                truePeak: -4,
+                bands: ["generatedUltraHigh": -60]
+            ),
+            corrected: makeMetrics(
+                loudness: -18,
+                truePeak: -4,
+                bands: ["generatedUltraHigh": -56]
+            ),
+            mastered: makeMetrics(
+                loudness: -14,
+                truePeak: -1,
+                bands: ["generatedUltraHigh": -60]
+            ),
+            inputNoise: makeNoise(hiss: -80, shimmer: -78),
+            correctedNoise: makeNoise(hiss: -84, shimmer: -82),
+            masteredNoise: makeNoise(hiss: -83, shimmer: -81),
+            correctionSettings: DenoiseStrength.balanced.settings,
+            masteringSettings: MasteringProfile.youtubeSpotify.settings
+        ))
+
+        #expect(report.highFrequencyRows.first { $0.id == "high-generatedUltraHigh" }?.severity == .warning)
+    }
+
+    @Test
+    func lowBalanceWarningRaisesOverallCompletionSeverity() throws {
+        let report = try #require(CompletionReportService.makeReport(
+            input: makeMetrics(
+                loudness: -14,
+                truePeak: -5,
+                masteringBands: ["low": -36, "lowMid": -36]
+            ),
+            corrected: makeMetrics(
+                loudness: -14,
+                truePeak: -5,
+                masteringBands: ["low": -32.9, "lowMid": -36]
+            ),
+            mastered: makeMetrics(
+                loudness: -14,
+                truePeak: -5,
+                masteringBands: ["low": -36, "lowMid": -36]
+            ),
+            inputNoise: makeNoise(hiss: -80, shimmer: -78),
+            correctedNoise: makeNoise(hiss: -80, shimmer: -78),
+            masteredNoise: makeNoise(hiss: -80, shimmer: -78),
+            correctionSettings: DenoiseStrength.balanced.settings,
+            masteringSettings: MasteringProfile.youtubeSpotify.settings
+        ))
+
+        #expect(report.lowFrequencyRows.first { $0.id == "low-low" }?.severity == .warning)
+        #expect(report.severity == .warning)
+    }
+
     private func makeMetrics(
         loudness: Double,
         truePeak: Double,
-        bands: [String: Double] = [:]
+        bands: [String: Double] = [:],
+        masteringBands: [String: Double] = [:]
     ) -> AudioMetricSnapshot {
         let defaultBands: [(id: String, label: String, range: String, level: Double)] = [
             ("sparkle", "煌びやかさ", "8-12kHz", -42),
             ("air", "空気感", "12-16kHz", -46),
             ("ultraAir", "超高域", "16-20kHz", -51),
+            ("generatedUltraHigh", "生成超高域", "21-24kHz", -60),
             ("mud", "こもり", "300Hz-1kHz", -30)
         ]
 
         return AudioMetricSnapshot(
             duration: 1,
             peakDBFS: truePeak - 0.2,
-            rmsDBFS: loudness - 8,
+            rmsDBFS: -26,
             crestFactorDB: 8,
             loudnessRangeLU: 3,
             integratedLoudnessLUFS: loudness,
@@ -113,7 +177,14 @@ struct CompletionReportServiceTests {
                     levelDB: bands[band.id] ?? band.level
                 )
             },
-            masteringBandEnergies: [],
+            masteringBandEnergies: AudioBandCatalog.masteringBands.map { band in
+                BandEnergyMetric(
+                    id: band.id,
+                    label: band.label,
+                    rangeDescription: band.rangeDescription,
+                    levelDB: masteringBands[band.id] ?? -36
+                )
+            },
             shortTermLoudness: [],
             dynamics: [],
             averageSpectrum: []

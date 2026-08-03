@@ -81,6 +81,15 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             failedText: analysisFailureText,
             analyzingTargets: analyzingTargets,
             failedTargets: failedTargets,
+            availableTargets: Set(
+                DisplayAnalysisTarget.allDisplayTargets.filter { target in
+                    switch target {
+                    case .input: model.selectedInputURL != nil
+                    case .corrected: model.correctedRemixPreviewArtifact != nil
+                    case .mastered: model.finalPreviewArtifact != nil
+                    }
+                }
+            ),
             emptyTitle: "入力2mixは未解析です",
             emptyDescription: "音声を選ぶと、入力、純粋加算または再ミックス、Stem Mode最終版の詳細解析を表示します。",
             correctedTitle: processedTitle
@@ -213,11 +222,11 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                     }
                 }
                 remixEvaluationComparison(presentation)
-                validationIssues(presentation.validation.analysisIssues)
             } else {
                 Text("補正後4Stemの純粋加算と解析が完了すると表示します。")
                     .foregroundStyle(.secondary)
             }
+            validationIssues(model.remixAnalysisPresentation?.validation.analysisIssues)
         }
     }
 
@@ -439,22 +448,34 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
 
     @ViewBuilder
     private func validationIssues(
-        _ issues: [StemValidationFailure]
+        _ issues: [StemValidationFailure]?
     ) -> some View {
-        if !issues.isEmpty {
-            DisclosureGroup("解析上の確認事項") {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(issue.check.stemModeDisplayTitle)・\(issue.subject)")
-                                .font(.callout.weight(.semibold))
-                            Text(issue.detail)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("解析上の確認事項")
+                .font(.callout.weight(.semibold))
+
+            if let issues {
+                if issues.isEmpty {
+                    Text("確認事項はありません。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(issue.check.stemModeDisplayTitle)・\(issue.subject)")
+                                    .font(.callout.weight(.semibold))
+                                Text(issue.detail)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
-                .padding(.top, 8)
+            } else {
+                Text("再ミックス解析が完了すると表示します。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         }
     }

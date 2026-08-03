@@ -159,12 +159,58 @@ private struct StemModeInspectorAudioPanel: View {
             masteredMetrics: model.finalMetrics,
             processedTitle: processedTitle,
             qualityReport: model.qualityReports?.audioQuality,
-            completionReport: model.qualityReports?.completion,
+            completionReport: completionReport,
+            peakCeilingDB: Double(
+                (model.qualityReports?.masteringSettings ?? model.masteringSettings).peakCeilingDB
+            ),
+            analysisState: analysisState,
             selectionTitle: selectionTitle,
             unavailableDescription: unavailableDescription
         ) {
             importantWarnings
         }
+    }
+
+    private var completionReport: CompletionReport? {
+        model.qualityReports?.completion
+    }
+
+    private func analysisState(_ selection: InspectorAudioSelection) -> DisplayAnalysisPresentationState {
+        let target: DisplayAnalysisTarget
+        let hasSource: Bool
+        let isRunning: Bool
+        let hasFailed: Bool
+
+        switch selection {
+        case .input:
+            target = .input
+            hasSource = model.selectedInputURL != nil
+            isRunning = model.isAnalyzingInput
+            hasFailed = model.inputAnalysisError != nil
+        case .corrected:
+            target = .corrected
+            hasSource = model.correctedRemixPreviewArtifact != nil
+            isRunning = model.isAnalyzingDisplayAudio && hasSource
+            hasFailed = model.displayAnalysisError != nil && hasSource
+        case .mastered:
+            target = .mastered
+            hasSource = model.finalPreviewArtifact != nil
+            isRunning = model.isAnalyzingDisplayAudio && hasSource
+            hasFailed = model.displayAnalysisError != nil && hasSource
+        }
+
+        let metrics: AudioMetricSnapshot?
+        switch target {
+        case .input: metrics = model.inputMetrics
+        case .corrected: metrics = model.correctedRemixMetrics
+        case .mastered: metrics = model.finalMetrics
+        }
+        return DisplayAnalysisPresentationState.resolve(
+            hasSource: hasSource,
+            hasMetrics: metrics != nil,
+            isRunning: isRunning,
+            hasFailed: hasFailed
+        )
     }
 
     private var processedTitle: String {
@@ -197,7 +243,6 @@ private struct StemModeInspectorAudioPanel: View {
 
     @ViewBuilder
     private var importantWarnings: some View {
-        let issues = model.remixAnalysisPresentation?.validation.analysisIssues ?? []
         if let lastError = model.session.lastError {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
@@ -210,8 +255,23 @@ private struct StemModeInspectorAudioPanel: View {
                 Image(systemName: "xmark.octagon.fill")
                     .foregroundStyle(.red)
             }
-        } else if !issues.isEmpty {
-            DisclosureGroup("再ミックス解析の確認事項（\(issues.count)件）") {
+        }
+
+        VStack(alignment: .leading, spacing: 6) {
+            Text("再ミックス解析の確認事項")
+                .font(.headline)
+
+            if let presentation = model.remixAnalysisPresentation {
+                let issues = presentation.validation.analysisIssues
+                if issues.isEmpty {
+                    Text("確認事項はありません。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(issues.count)件あります。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
                         Text("\(issue.subject): \(issue.detail)")
@@ -219,7 +279,10 @@ private struct StemModeInspectorAudioPanel: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.top, 6)
+            } else {
+                Text("再ミックス解析が完了すると表示します。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         }
     }

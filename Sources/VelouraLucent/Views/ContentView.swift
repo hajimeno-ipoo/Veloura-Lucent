@@ -109,17 +109,20 @@ struct WindowChromeConfigurator: NSViewRepresentable {
     let minSize: NSSize
     let appearanceState: WindowAppearanceState
     let hidesTitle: Bool
+    let extendsContentIntoTitlebar: Bool
     @Binding var isFullScreen: Bool
 
     init(
         minSize: NSSize,
         appearanceState: WindowAppearanceState,
         hidesTitle: Bool = true,
+        extendsContentIntoTitlebar: Bool = false,
         isFullScreen: Binding<Bool>
     ) {
         self.minSize = minSize
         self.appearanceState = appearanceState
         self.hidesTitle = hidesTitle
+        self.extendsContentIntoTitlebar = extendsContentIntoTitlebar
         _isFullScreen = isFullScreen
     }
 
@@ -129,13 +132,21 @@ struct WindowChromeConfigurator: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        context.coordinator.update(isFullScreen: $isFullScreen, appearanceState: appearanceState)
+        context.coordinator.update(
+            isFullScreen: $isFullScreen,
+            appearanceState: appearanceState,
+            extendsContentIntoTitlebar: extendsContentIntoTitlebar
+        )
         updateWindow(for: view, context: context)
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.update(isFullScreen: $isFullScreen, appearanceState: appearanceState)
+        context.coordinator.update(
+            isFullScreen: $isFullScreen,
+            appearanceState: appearanceState,
+            extendsContentIntoTitlebar: extendsContentIntoTitlebar
+        )
         updateWindow(for: nsView, context: context)
     }
 
@@ -160,6 +171,7 @@ struct WindowChromeConfigurator: NSViewRepresentable {
         coordinator.applyChrome(to: window)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = hidesTitle ? .hidden : .visible
+        coordinator.scheduleTransparentTitlebarReapplication(for: window)
     }
 
     @MainActor
@@ -168,11 +180,18 @@ struct WindowChromeConfigurator: NSViewRepresentable {
         private weak var previousWindowDelegate: NSWindowDelegate?
         private var isFullScreen: Binding<Bool>?
         private var appearanceState: WindowAppearanceState?
+        private var extendsContentIntoTitlebar = false
         private var restoresFullSizeContentView = false
+        private var titlebarReapplicationObservers: [NSObjectProtocol] = []
 
-        func update(isFullScreen: Binding<Bool>, appearanceState: WindowAppearanceState) {
+        func update(
+            isFullScreen: Binding<Bool>,
+            appearanceState: WindowAppearanceState,
+            extendsContentIntoTitlebar: Bool
+        ) {
             self.isFullScreen = isFullScreen
             self.appearanceState = appearanceState
+            self.extendsContentIntoTitlebar = extendsContentIntoTitlebar
         }
 
         func observe(_ window: NSWindow) {
@@ -182,9 +201,37 @@ struct WindowChromeConfigurator: NSViewRepresentable {
             previousWindowDelegate = window.delegate
             window.delegate = self
             restoresFullSizeContentView = window.styleMask.contains(.fullSizeContentView)
+            guard extendsContentIntoTitlebar else { return }
+
+            let notificationCenter = NotificationCenter.default
+            titlebarReapplicationObservers = [
+                notificationCenter.addObserver(
+                    forName: NSWindow.didBecomeKeyNotification,
+                    object: window,
+                    queue: .main
+                ) { [weak self, weak window] _ in
+                    Task { @MainActor [weak self, weak window] in
+                        guard let self, let window else { return }
+                        self.scheduleTransparentTitlebarReapplication(for: window)
+                    }
+                },
+                notificationCenter.addObserver(
+                    forName: NSApplication.didBecomeActiveNotification,
+                    object: nil,
+                    queue: .main
+                ) { [weak self, weak window] _ in
+                    Task { @MainActor [weak self, weak window] in
+                        guard let self, let window else { return }
+                        self.scheduleTransparentTitlebarReapplication(for: window)
+                    }
+                },
+            ]
         }
 
         func stopObservingWindow() {
+            let notificationCenter = NotificationCenter.default
+            titlebarReapplicationObservers.forEach(notificationCenter.removeObserver)
+            titlebarReapplicationObservers.removeAll()
             if let observedWindow, observedWindow.delegate === self {
                 observedWindow.delegate = previousWindowDelegate
             }
@@ -201,7 +248,7 @@ struct WindowChromeConfigurator: NSViewRepresentable {
             if isFullScreen {
                 prepareWindowForFullScreenTransition(window)
             } else {
-                if restoresFullSizeContentView {
+                if restoresFullSizeContentView || extendsContentIntoTitlebar {
                     window.styleMask.insert(.fullSizeContentView)
                 }
                 if appearanceState?.usesOpaqueBackground == true {
@@ -213,6 +260,23 @@ struct WindowChromeConfigurator: NSViewRepresentable {
             }
             if self.isFullScreen?.wrappedValue != isFullScreen {
                 self.isFullScreen?.wrappedValue = isFullScreen
+            }
+        }
+
+        func scheduleTransparentTitlebarReapplication(for window: NSWindow) {
+            guard extendsContentIntoTitlebar else { return }
+            Task { @MainActor [weak self, weak window] in
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                guard
+                    let self,
+                    let window,
+                    self.observedWindow === window,
+                    !window.styleMask.contains(.fullScreen)
+                else {
+                    return
+                }
+                window.styleMask.insert(.fullSizeContentView)
+                window.titlebarAppearsTransparent = true
             }
         }
 

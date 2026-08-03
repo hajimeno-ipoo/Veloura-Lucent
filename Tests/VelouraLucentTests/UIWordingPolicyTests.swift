@@ -15,15 +15,32 @@ struct UIWordingPolicyTests {
             "struct InspectorAnalysisPanelContent<AdditionalContent: View>: View"
         ))
         #expect(standardInspector.contains("Text(\"解析結果と品質確認\")"))
+        #expect(standardInspector.contains("Text(\"品質確認\")"))
+        #expect(!standardInspector.contains("Text(\"品質警告\")"))
         #expect(standardInspector.contains("Image(systemName: \"waveform.path.ecg\")"))
         #expect(standardInspector.contains(".accessibilityElement(children: .combine)"))
         #expect(standardInspector.contains("InspectorAnalysisPanelContent("))
         #expect(stemInspector.contains("InspectorAnalysisPanelContent("))
+        #expect(stemInspector.contains("Text(\"再ミックス解析の確認事項\")"))
+        #expect(stemInspector.contains("Text(\"確認事項はありません。\")"))
+        #expect(!stemInspector.contains("addingValidationIssues"))
 
         let sharedSource = standardInspector + stemInspector
         #expect(!sharedSource.contains("Text(\"音声の確認\")"))
         #expect(!sharedSource.contains("ContentUnavailableView("))
         #expect(!sharedSource.contains("minHeight: 140"))
+    }
+
+    @Test
+    func completionReportUsesTheSameSeverityRowsForLowBalance() throws {
+        let source = try combinedSource([
+            "Sources/VelouraLucent/Views/CompletionReportPopoverView.swift"
+        ])
+
+        #expect(source.contains(
+            "reportSection(title: \"低域バランス\", rows: report.lowFrequencyRows)"
+        ))
+        #expect(!source.contains("measurementSection"))
     }
 
     @Test

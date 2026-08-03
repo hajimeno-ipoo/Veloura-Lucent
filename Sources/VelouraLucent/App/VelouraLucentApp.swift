@@ -75,6 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func applyDockIcon() {
+        if Bundle.main.url(forResource: "VelouraLucent", withExtension: "icon") != nil {
+            return
+        }
+
         let candidateURLs = [
             Bundle.main.url(forResource: "AppIcon-1024", withExtension: "png"),
             AppResourceBundle.url(forResource: "AppIcon-1024", withExtension: "png"),

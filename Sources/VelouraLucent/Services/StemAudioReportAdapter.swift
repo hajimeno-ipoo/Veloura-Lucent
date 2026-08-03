@@ -9,12 +9,14 @@ enum StemAudioReportAdapter {
     static func makeAudioQualityReport(
         input: AudioMetricSnapshot?,
         remixed: AudioMetricSnapshot?,
-        mastered: AudioMetricSnapshot?
+        mastered: AudioMetricSnapshot?,
+        peakCeilingDB: Double
     ) -> AudioQualityReport? {
         guard let report = AudioQualityReportService.makeReport(
             input: input,
             corrected: remixed,
-            mastered: mastered
+            mastered: mastered,
+            peakCeilingDB: peakCeilingDB
         ) else {
             return nil
         }
@@ -62,6 +64,7 @@ enum StemAudioReportAdapter {
             loudnessRows: first.loudnessRows.map(stemCompletionRow),
             noiseRows: first.noiseRows.map(stemNoiseCompletionRow),
             highFrequencyRows: first.highFrequencyRows.map(stemCompletionRow),
+            lowFrequencyRows: first.lowFrequencyRows.map(stemLowCompletionRow),
             reminder: first.reminder
         )
     }
@@ -166,6 +169,16 @@ enum StemAudioReportAdapter {
             title: stemStageWording(row.title),
             value: stemStageWording(row.value),
             detail: detail,
+            severity: row.severity
+        )
+    }
+
+    private static func stemLowCompletionRow(_ row: CompletionReportRow) -> CompletionReportRow {
+        CompletionReportRow(
+            id: "stem-\(row.id)",
+            title: row.title,
+            value: row.value,
+            detail: row.detail.replacingOccurrences(of: "補正後", with: "Stem再ミックス"),
             severity: row.severity
         )
     }

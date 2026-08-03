@@ -96,12 +96,12 @@ struct VelouraAboutView: View {
 
     var body: some View {
         ScrollView {
-            GlassEffectContainer(spacing: 16) {
-                VStack(alignment: .leading, spacing: 16) {
-                    appHeader
-                    modelPicker
-                    selectedModelInformation
-                }
+            VStack(alignment: .leading, spacing: 16) {
+                appHeader
+                Divider()
+                modelPicker
+                Divider()
+                selectedModelInformation
             }
             .padding(20)
         }
@@ -119,6 +119,7 @@ struct VelouraAboutView: View {
                     reduceTransparency: reduceTransparency
                 ),
                 hidesTitle: false,
+                extendsContentIntoTitlebar: true,
                 isFullScreen: $isWindowFullScreen
             )
         )
@@ -151,29 +152,27 @@ struct VelouraAboutView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(18)
-        .velouraAdaptiveGlass(in: .rect(cornerRadius: 20), glass: .regular)
+        .padding(.vertical, 4)
     }
 
     private var modelPicker: some View {
-        Picker("AIモデル", selection: $selectedModel) {
-            ForEach(StemSeparationModel.allCases) { model in
-                Text(model.displayName)
-                    .tag(model)
-            }
-        }
-        .pickerStyle(.segmented)
-        .controlSize(.large)
+        LiquidGlassSegmentedPicker(
+            title: "AIモデル",
+            options: StemSeparationModel.allCases,
+            selection: $selectedModel,
+            label: \.displayName
+        )
         .accessibilityHint("表示するAIモデルの配布情報を切り替えます。")
     }
 
     @ViewBuilder
     private var selectedModelInformation: some View {
         if let presentation = presentations[selectedModel] {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 modelContract(presentation)
                 ForEach(presentation.assets) { asset in
-                    assetCard(asset)
+                    Divider()
+                    assetInformation(asset)
                 }
             }
         } else {
@@ -183,44 +182,50 @@ struct VelouraAboutView: View {
             )
             .foregroundStyle(.red)
             .textSelection(.enabled)
-            .padding(16)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .velouraAdaptiveGlass(
-                in: .rect(cornerRadius: 16),
-                tint: .red.opacity(0.12),
-                glass: .regular
-            )
         }
     }
 
     private func modelContract(_ presentation: ModelPresentation) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(presentation.model.displayName)
                 .font(.title2.bold())
-            detailValue(label: "取得元", value: presentation.repository)
-            detailValue(label: "固定Revision", value: presentation.revision)
-            detailValue(label: "License", value: presentation.license)
-            detailValue(label: "通信先ホスト", value: presentation.sourceHosts)
-            detailValue(
-                label: "合計容量",
-                value: "\(presentation.totalByteCount) bytes"
-            )
-            detailValue(label: "保存先", value: presentation.saveDestination)
+            informationList([
+                (label: "取得元", value: presentation.repository),
+                (label: "固定Revision", value: presentation.revision),
+                (label: "License", value: presentation.license),
+                (label: "通信先ホスト", value: presentation.sourceHosts),
+                (label: "合計容量", value: "\(presentation.totalByteCount) bytes"),
+                (label: "保存先", value: presentation.saveDestination),
+            ])
         }
-        .padding(16)
-        .velouraAdaptiveGlass(in: .rect(cornerRadius: 16), glass: .regular)
     }
 
-    private func assetCard(_ asset: AssetPresentation) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+    private func assetInformation(_ asset: AssetPresentation) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             Label(asset.fileName, systemImage: "doc")
                 .font(.headline)
-            detailValue(label: "容量", value: "\(asset.byteCount) bytes")
-            detailValue(label: "SHA-256", value: asset.sha256)
-            detailValue(label: "固定配布URL", value: asset.stableDownloadURL)
+            informationList([
+                (label: "容量", value: "\(asset.byteCount) bytes"),
+                (label: "SHA-256", value: asset.sha256),
+                (label: "固定配布URL", value: asset.stableDownloadURL),
+            ])
         }
-        .padding(16)
-        .velouraAdaptiveGlass(in: .rect(cornerRadius: 16), glass: .regular)
+    }
+
+    private func informationList(_ rows: [(label: String, value: String)]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(rows.indices, id: \.self) { index in
+                let row = rows[index]
+                detailValue(label: row.label, value: row.value)
+                    .padding(.vertical, 10)
+
+                if index < rows.count - 1 {
+                    Divider()
+                }
+            }
+        }
     }
 
     private func detailValue(label: String, value: String) -> some View {

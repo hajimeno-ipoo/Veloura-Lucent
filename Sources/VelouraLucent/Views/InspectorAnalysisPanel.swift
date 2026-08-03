@@ -13,6 +13,8 @@ struct InspectorAnalysisPanel: View {
             processedTitle: "補正後",
             qualityReport: qualityReport,
             completionReport: completionReport,
+            peakCeilingDB: peakCeilingDB,
+            analysisState: analysisState,
             selectionTitle: \.title,
             unavailableDescription: unavailableDescription
         ) {
@@ -24,7 +26,38 @@ struct InspectorAnalysisPanel: View {
         AudioQualityReportService.makeReport(
             input: job.inputMetrics,
             corrected: job.outputMetrics,
-            mastered: job.masteredMetrics
+            mastered: job.masteredMetrics,
+            peakCeilingDB: peakCeilingDB
+        )
+    }
+
+    private var peakCeilingDB: Double {
+        Double((job.appliedMasteringSettings ?? job.editableMasteringSettings).peakCeilingDB)
+    }
+
+    private func analysisState(_ selection: InspectorAudioSelection) -> DisplayAnalysisPresentationState {
+        let target: DisplayAnalysisTarget
+        let hasSource: Bool
+        let metrics: AudioMetricSnapshot?
+        switch selection {
+        case .input:
+            target = .input
+            hasSource = job.inputFile != nil
+            metrics = job.inputMetrics
+        case .corrected:
+            target = .corrected
+            hasSource = job.hasExistingOutput
+            metrics = job.outputMetrics
+        case .mastered:
+            target = .mastered
+            hasSource = job.hasExistingMasteredOutput
+            metrics = job.masteredMetrics
+        }
+        return DisplayAnalysisPresentationState.resolve(
+            hasSource: hasSource,
+            hasMetrics: metrics != nil,
+            isRunning: job.isAnalyzingDisplayAnalysis(for: target),
+            hasFailed: job.hasFailedDisplayAnalysis(for: target)
         )
     }
 
@@ -48,6 +81,8 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
     let processedTitle: String
     let qualityReport: AudioQualityReport?
     let completionReport: CompletionReport?
+    let peakCeilingDB: Double
+    let analysisState: (InspectorAudioSelection) -> DisplayAnalysisPresentationState
     let selectionTitle: (InspectorAudioSelection) -> String
     let unavailableDescription: (InspectorAudioSelection) -> String
     @ViewBuilder let additionalContent: AdditionalContent
@@ -78,9 +113,10 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
             if let metrics = selectedMetrics {
                 metricsGrid(metrics)
             } else {
+                let state = analysisState(selectedAudio)
                 Label {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("\(selectionTitle(selectedAudio))は未解析です")
+                        Text(emptyStateTitle(state, selection: selectedAudio))
                             .font(.headline)
                         Text(unavailableDescription(selectedAudio))
                             .font(.callout)
@@ -115,7 +151,7 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
                 title: "True Peak",
                 value: String(format: "%.2f dBTP", metrics.truePeakDBFS),
                 color: truePeakColor(metrics.truePeakDBFS),
-                help: "書き出しや再生で歪む可能性を見る最大ピークです。-0.3 dBTPを超える場合は試聴確認が必要です。"
+                help: truePeakHelp
             )
             metricCell(
                 title: "ダイナミクス",
@@ -160,11 +196,11 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
     private func qualityWarnings(_ report: AudioQualityReport) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
-                Text("品質警告")
+                Text("品質確認")
                     .font(.headline)
                 TermHelpButton(
-                    title: "品質警告",
-                    reading: "ひんしつけいこく",
+                    title: "品質確認",
+                    reading: "ひんしつかくにん",
                     description: "入力、\(processedTitle)、最終版の実測値を比較し、ピーク、高域、音量、ステレオ幅、音の起伏の大きな変化を表示します。"
                 )
                 Spacer()
@@ -174,12 +210,13 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
             }
 
             if report.items.isEmpty {
-                Label(
-                    "数値上の追加候補はありません。最終版を聴いて違和感がないか確認してください。",
-                    systemImage: "checkmark.circle.fill"
-                )
-                .font(.callout)
-                .foregroundStyle(.green)
+                Label {
+                    Text("数値上の追加候補はありません。最終版を聴いて違和感がないか確認してください。")
+                        .font(.callout)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("聴いて気になる場合の調整候補")
@@ -236,7 +273,33 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
     }
 
     private func truePeakColor(_ value: Double) -> Color {
-        value > -0.3 ? .red : .primary
+        selectedAudio == .mastered && value > peakCeilingDB ? .red : .primary
+    }
+
+    private var truePeakHelp: String {
+        if selectedAudio == .mastered {
+            return "書き出しや再生で歪む可能性を見る最大ピークです。今回の設定上限は \(String(format: "%.1f", peakCeilingDB)) dBTP です。"
+        }
+        return "書き出しや再生で歪む可能性を見る最大ピークです。入力と処理途中の値は、最終版の設定上限による合否判定には使いません。"
+    }
+
+    private func emptyStateTitle(
+        _ state: DisplayAnalysisPresentationState,
+        selection: InspectorAudioSelection
+    ) -> String {
+        let title = selectionTitle(selection)
+        switch state {
+        case .notSelected:
+            return "\(title)は未選択です"
+        case .idle:
+            return "\(title)は未解析です"
+        case .running:
+            return "\(title)を解析中です"
+        case .completed:
+            return "\(title)の解析結果を表示できません"
+        case .failed:
+            return "\(title)の解析に失敗しました"
+        }
     }
 
     private func qualitySeverityText(_ severity: AudioQualityReportSeverity) -> String {

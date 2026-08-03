@@ -24,7 +24,7 @@ struct AudioQualityReportServiceTests {
         )
         let mastered = makeSnapshot(
             integratedLoudnessLUFS: -16.5,
-            truePeakDBFS: -0.5,
+            truePeakDBFS: -0.7,
             stereoWidth: 0.92,
             crestFactorDB: 8.5,
             hf12Ratio: 0.16,
@@ -35,7 +35,8 @@ struct AudioQualityReportServiceTests {
         let report = try #require(AudioQualityReportService.makeReport(
             input: input,
             corrected: corrected,
-            mastered: mastered
+            mastered: mastered,
+            peakCeilingDB: -0.3
         ))
 
         #expect(report.items.isEmpty)
@@ -75,13 +76,13 @@ struct AudioQualityReportServiceTests {
         let report = try #require(AudioQualityReportService.makeReport(
             input: input,
             corrected: corrected,
-            mastered: mastered
+            mastered: mastered,
+            peakCeilingDB: -0.3
         ))
 
         #expect(report.severity == .warning)
         #expect(report.items.contains { $0.title == "補正後は音量を作らないため音量が下がっています" && $0.severity == .info })
-        #expect(report.items.contains { $0.title == "マスタリング後のピークが高すぎます" })
-        #expect(report.items.contains { $0.title == "マスタリング後の18kHz以上が増えています" })
+        #expect(report.items.contains { $0.title == "マスタリング後のピークが設定上限を超えています" })
         #expect(report.items.contains { $0.title == "補正後のステレオ幅が大きく変わっています" })
         #expect(report.items.contains { $0.title == "マスタリング後の音の起伏が小さくなっています" })
         #expect(report.items.contains { $0.title == "最終版の音量感が大きく上がっています" })
@@ -102,7 +103,8 @@ struct AudioQualityReportServiceTests {
         let report = AudioQualityReportService.makeReport(
             input: input,
             corrected: nil,
-            mastered: nil
+            mastered: nil,
+            peakCeilingDB: -0.3
         )
 
         #expect(report == nil)
@@ -132,7 +134,8 @@ struct AudioQualityReportServiceTests {
         let report = AudioQualityReportService.makeReport(
             input: input,
             corrected: corrected,
-            mastered: nil
+            mastered: nil,
+            peakCeilingDB: -0.3
         )
 
         #expect(report == nil)
@@ -171,7 +174,8 @@ struct AudioQualityReportServiceTests {
         let report = try #require(AudioQualityReportService.makeReport(
             input: input,
             corrected: corrected,
-            mastered: mastered
+            mastered: mastered,
+            peakCeilingDB: -0.3
         ))
 
         #expect(report.items.count == 1)
@@ -211,7 +215,8 @@ struct AudioQualityReportServiceTests {
         let report = try #require(AudioQualityReportService.makeReport(
             input: input,
             corrected: corrected,
-            mastered: mastered
+            mastered: mastered,
+            peakCeilingDB: -0.3
         ))
 
         #expect(report.items.contains { $0.title == "最終版の音量感が低めです" && $0.severity == .caution })
@@ -269,15 +274,65 @@ struct AudioQualityReportServiceTests {
         let report = try #require(AudioQualityReportService.makeReport(
             input: input,
             corrected: corrected,
-            mastered: mastered
+            mastered: mastered,
+            peakCeilingDB: -0.3
         ))
 
         #expect(report.items.contains { $0.title == "補正後の煌びやかさが下がっています" })
         #expect(report.items.contains { $0.title == "補正後の空気感が下がっています" })
         #expect(report.items.contains { $0.title == "補正後の超高域が下がっています" })
         #expect(report.items.contains { $0.title == "補正後のこもりが増えています" })
-        #expect(report.items.contains { $0.detail.contains("8kHz〜12kHz が 3.0 dB") })
-        #expect(report.items.contains { $0.detail.contains("16kHz〜20kHz が 3.0 dB") })
+        #expect(report.items.contains { $0.detail.contains("8〜12kHz が 3.0 dB") })
+        #expect(report.items.contains { $0.detail.contains("16〜20kHz が 3.0 dB") })
+    }
+
+    @Test
+    func bandJudgmentRemovesOverallLevelChangeAndDetectsGeneratedUltraHigh() throws {
+        let input = makeSnapshot(
+            integratedLoudnessLUFS: -18,
+            truePeakDBFS: -2,
+            stereoWidth: 0.8,
+            crestFactorDB: 10,
+            hf12Ratio: 0.1,
+            hf16Ratio: 0.04,
+            hf18Ratio: 0.02,
+            rmsDBFS: -20,
+            bands: ["sparkle": -40, "generatedUltraHigh": -70]
+        )
+        let corrected = makeSnapshot(
+            integratedLoudnessLUFS: -16,
+            truePeakDBFS: -1.5,
+            stereoWidth: 0.8,
+            crestFactorDB: 10,
+            hf12Ratio: 0.1,
+            hf16Ratio: 0.04,
+            hf18Ratio: 0.02,
+            rmsDBFS: -18,
+            bands: ["sparkle": -38, "generatedUltraHigh": -66]
+        )
+        let mastered = makeSnapshot(
+            integratedLoudnessLUFS: -16,
+            truePeakDBFS: -1,
+            stereoWidth: 0.8,
+            crestFactorDB: 10,
+            hf12Ratio: 0.1,
+            hf16Ratio: 0.04,
+            hf18Ratio: 0.02,
+            rmsDBFS: -18,
+            bands: ["sparkle": -38, "generatedUltraHigh": -68]
+        )
+
+        let report = try #require(AudioQualityReportService.makeReport(
+            input: input,
+            corrected: corrected,
+            mastered: mastered,
+            peakCeilingDB: -0.3
+        ))
+
+        #expect(!report.items.contains { $0.title.contains("煌びやかさ") })
+        #expect(report.items.contains {
+            $0.title == "補正後の生成超高域が増えています" && $0.severity == .warning
+        })
     }
 
     private func makeSnapshot(
@@ -288,6 +343,7 @@ struct AudioQualityReportServiceTests {
         hf12Ratio: Double,
         hf16Ratio: Double,
         hf18Ratio: Double,
+        rmsDBFS: Double = -12,
         bands: [String: Double] = [:]
     ) -> AudioMetricSnapshot {
         let defaultBands: [(id: String, label: String, range: String, level: Double)] = [
@@ -298,13 +354,14 @@ struct AudioQualityReportServiceTests {
             ("presence", "刺さり", "4-8kHz", -35),
             ("sparkle", "煌びやかさ", "8-12kHz", -38),
             ("air", "空気感", "12-16kHz", -44),
-            ("ultraAir", "超高域", "16-20kHz", -50)
+            ("ultraAir", "超高域", "16-20kHz", -50),
+            ("generatedUltraHigh", "生成超高域", "21-24kHz", -60)
         ]
 
         return AudioMetricSnapshot(
             duration: 1,
             peakDBFS: truePeakDBFS - 0.2,
-            rmsDBFS: truePeakDBFS - crestFactorDB,
+            rmsDBFS: rmsDBFS,
             crestFactorDB: crestFactorDB,
             loudnessRangeLU: 3.0,
             integratedLoudnessLUFS: integratedLoudnessLUFS,

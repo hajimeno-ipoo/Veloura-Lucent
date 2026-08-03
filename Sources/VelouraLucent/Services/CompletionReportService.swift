@@ -18,6 +18,12 @@ enum CompletionReportService {
             let inputNoise,
             let correctedNoise,
             let masteredNoise,
+            let qualityReport = AudioQualityReportService.makeReport(
+                input: input,
+                corrected: corrected,
+                mastered: mastered,
+                peakCeilingDB: Double(masteringSettings.peakCeilingDB)
+            ),
             let noiseReport = NoiseCheckReportService.makeReport(
                 input: inputNoise,
                 corrected: correctedNoise,
@@ -33,8 +39,22 @@ enum CompletionReportService {
             loudnessRows: loudnessRows(input: input, corrected: corrected, mastered: mastered, settings: masteringSettings),
             noiseRows: noiseRows(from: noiseReport),
             highFrequencyRows: highFrequencyRows(input: input, corrected: corrected, mastered: mastered),
+            lowFrequencyRows: lowFrequencyRows(input: input, corrected: corrected, mastered: mastered),
+            qualityRows: qualityRows(from: qualityReport),
             reminder: "数値は確認材料です。最終判断は試聴で行ってください。"
         )
+    }
+
+    private static func qualityRows(from report: AudioQualityReport) -> [CompletionReportRow] {
+        report.items.enumerated().map { index, item in
+            CompletionReportRow(
+                id: "quality-\(index)",
+                title: item.title,
+                value: qualitySeverityText(item.severity),
+                detail: item.detail,
+                severity: completionSeverity(from: item.severity)
+            )
+        }
     }
 
     private static func loudnessRows(
@@ -104,76 +124,105 @@ enum CompletionReportService {
         corrected: AudioMetricSnapshot,
         mastered: AudioMetricSnapshot
     ) -> [CompletionReportRow] {
-        [
+        AudioQualityAssessmentService.reportBandRules.map { rule in
             highFrequencyRow(
-                id: "sparkle",
-                title: "煌びやかさ",
-                range: "8〜12kHz",
+                rule: rule,
                 input: input,
                 corrected: corrected,
-                mastered: mastered,
-                cautionDropDB: 2.0,
-                warningDropDB: 4.0
-            ),
-            highFrequencyRow(
-                id: "air",
-                title: "空気感",
-                range: "12〜16kHz",
-                input: input,
-                corrected: corrected,
-                mastered: mastered,
-                cautionDropDB: 2.0,
-                warningDropDB: 4.0
-            ),
-            highFrequencyRow(
-                id: "ultraAir",
-                title: "超高域",
-                range: "16〜20kHz",
-                input: input,
-                corrected: corrected,
-                mastered: mastered,
-                cautionDropDB: 2.5,
-                warningDropDB: 5.0
+                mastered: mastered
             )
-        ]
+        }
     }
 
     private static func highFrequencyRow(
-        id: String,
-        title: String,
-        range: String,
+        rule: AudioQualityBandRule,
         input: AudioMetricSnapshot,
         corrected: AudioMetricSnapshot,
-        mastered: AudioMetricSnapshot,
-        cautionDropDB: Double,
-        warningDropDB: Double
+        mastered: AudioMetricSnapshot
     ) -> CompletionReportRow {
-        let inputValue = bandLevel(id, in: input) ?? -120
-        let correctedValue = bandLevel(id, in: corrected) ?? inputValue
-        let masteredValue = bandLevel(id, in: mastered) ?? correctedValue
-        let inputDelta = masteredValue - inputValue
-        let masteringDelta = masteredValue - correctedValue
-        let drop = -inputDelta
-        let severity: CompletionReportSeverity
-        if drop >= warningDropDB {
-            severity = .warning
-        } else if drop >= cautionDropDB {
-            severity = .caution
-        } else {
-            severity = .normal
+        guard
+            let masteredValue = bandLevel(rule.id, in: mastered),
+            let inputDelta = AudioQualityAssessmentService.normalizedBandDelta(
+                id: rule.id,
+                reference: input,
+                target: mastered
+            ),
+            let correctionDelta = AudioQualityAssessmentService.normalizedBandDelta(
+                id: rule.id,
+                reference: input,
+                target: corrected
+            ),
+            let masteringDelta = AudioQualityAssessmentService.normalizedBandDelta(
+                id: rule.id,
+                reference: corrected,
+                target: mastered
+            )
+        else {
+            return CompletionReportRow(
+                id: "high-\(rule.id)",
+                title: rule.label,
+                value: "未測定",
+                detail: "\(rule.range)の測定結果がありません。",
+                severity: .caution
+            )
         }
+        let severity = max(
+            completionSeverity(from: AudioQualityAssessmentService.severity(for: inputDelta, rule: rule)),
+            completionSeverity(from: AudioQualityAssessmentService.severity(for: correctionDelta, rule: rule)),
+            completionSeverity(from: AudioQualityAssessmentService.severity(for: masteringDelta, rule: rule))
+        )
 
         return CompletionReportRow(
-            id: "high-\(id)",
-            title: title,
+            id: "high-\(rule.id)",
+            title: rule.label,
             value: format(masteredValue, decimals: 2, unit: "dB"),
-            detail: "\(range) / 入力差 \(formatSigned(inputDelta, decimals: 2, unit: "dB")) / 仕上げ差 \(formatSigned(masteringDelta, decimals: 2, unit: "dB"))",
+            detail: "\(rule.range) / 全体音量差を除いた入力差 \(formatSigned(inputDelta, decimals: 2, unit: "dB")) / 処理差 \(formatSigned(correctionDelta, decimals: 2, unit: "dB")) / 仕上げ差 \(formatSigned(masteringDelta, decimals: 2, unit: "dB"))",
             severity: severity
         )
     }
 
     private static func bandLevel(_ id: String, in metrics: AudioMetricSnapshot) -> Double? {
         metrics.bandEnergies.first { $0.id == id }?.levelDB
+    }
+
+    private static func lowFrequencyRows(
+        input: AudioMetricSnapshot,
+        corrected: AudioMetricSnapshot,
+        mastered: AudioMetricSnapshot
+    ) -> [CompletionReportRow] {
+        AudioQualityAssessmentService.lowBalanceRules.compactMap { rule in
+            guard
+                let inputLevel = normalizedMasteringBandLevel(rule.id, in: input),
+                let correctedLevel = normalizedMasteringBandLevel(rule.id, in: corrected),
+                let masteredLevel = normalizedMasteringBandLevel(rule.id, in: mastered)
+            else {
+                return nil
+            }
+
+            let correctionDelta = correctedLevel - inputLevel
+            let masteringDelta = masteredLevel - correctedLevel
+            let inputDelta = masteredLevel - inputLevel
+            let severity = [correctionDelta, masteringDelta, inputDelta]
+                .map { AudioQualityAssessmentService.severity(for: $0, rule: rule) }
+                .max() ?? .normal
+
+            return CompletionReportRow(
+                id: "low-\(rule.id)",
+                title: "\(rule.label)（\(rule.range)）",
+                value: "入力比 \(formatSigned(inputDelta, decimals: 2, unit: "dB"))",
+                detail: "入力→補正後 \(formatSigned(correctionDelta, decimals: 2, unit: "dB")) / 補正後→最終版 \(formatSigned(masteringDelta, decimals: 2, unit: "dB"))",
+                severity: completionSeverity(from: severity)
+            )
+        }
+    }
+
+    private static func normalizedMasteringBandLevel(
+        _ id: String,
+        in metrics: AudioMetricSnapshot
+    ) -> Double? {
+        metrics.masteringBandEnergies.first { $0.id == id }.map {
+            $0.levelDB - metrics.rmsDBFS
+        }
     }
 
     private static func completionSeverity(from severity: NoiseCheckSeverity) -> CompletionReportSeverity {
@@ -184,6 +233,43 @@ enum CompletionReportService {
             return .caution
         case .warning:
             return .warning
+        }
+    }
+
+    private static func completionSeverity(
+        from severity: AudioQualityAssessmentSeverity
+    ) -> CompletionReportSeverity {
+        switch severity {
+        case .normal:
+            return .normal
+        case .caution:
+            return .caution
+        case .warning:
+            return .warning
+        }
+    }
+
+    private static func completionSeverity(
+        from severity: AudioQualityReportSeverity
+    ) -> CompletionReportSeverity {
+        switch severity {
+        case .info:
+            return .normal
+        case .caution:
+            return .caution
+        case .warning:
+            return .warning
+        }
+    }
+
+    private static func qualitySeverityText(_ severity: AudioQualityReportSeverity) -> String {
+        switch severity {
+        case .info:
+            return "確認"
+        case .caution:
+            return "注意"
+        case .warning:
+            return "警告"
         }
     }
 

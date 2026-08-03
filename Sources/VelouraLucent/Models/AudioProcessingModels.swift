@@ -73,7 +73,8 @@ enum AudioBandCatalog {
         AudioBandDescriptor(id: "presence", label: "刺さり", rangeDescription: "4-8kHz", lowerBound: 4_000, upperBound: 8_000),
         AudioBandDescriptor(id: "sparkle", label: "煌びやかさ", rangeDescription: "8-12kHz", lowerBound: 8_000, upperBound: 12_000),
         AudioBandDescriptor(id: "air", label: "空気感", rangeDescription: "12-16kHz", lowerBound: 12_000, upperBound: 16_000),
-        AudioBandDescriptor(id: "ultraAir", label: "超高域", rangeDescription: "16-20kHz", lowerBound: 16_000, upperBound: 20_000)
+        AudioBandDescriptor(id: "ultraAir", label: "超高域", rangeDescription: "16-20kHz", lowerBound: 16_000, upperBound: 20_000),
+        AudioBandDescriptor(id: "generatedUltraHigh", label: "生成超高域", rangeDescription: "21-24kHz", lowerBound: 21_000, upperBound: 24_000)
     ]
 
     static let masteringBands: [AudioBandDescriptor] = [

@@ -269,7 +269,17 @@ struct StemModeWorkspaceWordingTests {
         ))
         #expect(about.contains("WindowChromeConfigurator("))
         #expect(about.contains("hidesTitle: false"))
-        #expect(about.components(separatedBy: "glass: .regular").count - 1 == 4)
+        #expect(about.contains("extendsContentIntoTitlebar: true"))
+        #expect(standardWorkspace.contains("NSApplication.didBecomeActiveNotification"))
+        #expect(standardWorkspace.contains("NSWindow.didBecomeKeyNotification"))
+        #expect(standardWorkspace.contains("scheduleTransparentTitlebarReapplication"))
+        #expect(about.contains("LiquidGlassSegmentedPicker("))
+        #expect(about.contains("title: \"AIモデル\""))
+        #expect(about.contains("options: StemSeparationModel.allCases"))
+        #expect(!about.contains(".pickerStyle(.segmented)"))
+        #expect(about.contains("informationList("))
+        #expect(about.contains("Divider()"))
+        #expect(!about.contains(".velouraAdaptiveGlass("))
         #expect(!inspector.contains("onManageModels"))
         #expect(!standardWorkspace.contains(".background(TitlebarSidebarToggleConfigurator"))
         #expect(!standardWorkspace.contains(".background(TitlebarInspectorToggleConfigurator"))
@@ -336,6 +346,31 @@ struct StemModeWorkspaceWordingTests {
     }
 
     @Test
+    func aboutWindowReappliesTransparentTitlebarAfterActivation() throws {
+        let about = try source(
+            "Sources/VelouraLucent/Views/VelouraAboutView.swift"
+        )
+        let windowChrome = try source(
+            "Sources/VelouraLucent/Views/ContentView.swift"
+        )
+
+        #expect(about.contains("extendsContentIntoTitlebar: true"))
+        #expect(windowChrome.contains(
+            "NSApplication.didBecomeActiveNotification"
+        ))
+        #expect(windowChrome.contains("NSWindow.didBecomeKeyNotification"))
+        #expect(windowChrome.contains(
+            "scheduleTransparentTitlebarReapplication(for: window)"
+        ))
+        #expect(windowChrome.contains(
+            "Task.sleep(nanoseconds: 100_000_000)"
+        ))
+        #expect(windowChrome.contains(
+            "window.titlebarAppearsTransparent = true"
+        ))
+    }
+
+    @Test
     func stemEvaluationShowsOneWayCorrectionEvidenceWithoutCorpusDependency() throws {
         let source = try source(
             "Sources/VelouraLucent/Views/StemModeDetailedAnalysisWorkspaceView.swift"
@@ -396,6 +431,9 @@ struct StemModeWorkspaceWordingTests {
         #expect(stem.contains("rawRemixEvaluation"))
         #expect(!stem.contains("validation.measurements"))
         #expect(stem.contains("validation.analysisIssues"))
+        #expect(stem.contains("Text(\"解析上の確認事項\")"))
+        #expect(stem.contains("Text(\"確認事項はありません。\")"))
+        #expect(stem.contains("Text(\"再ミックス解析が完了すると表示します。\")"))
         #expect(stem.contains("音声を選ぶと、入力、純粋加算または再ミックス、Stem Mode最終版"))
         #expect(!stem.contains("補正段の入力解析が完了すると"))
         #expect(stem.contains("@State private var showStemSpecificAnalysis = false"))
@@ -452,7 +490,7 @@ struct StemModeWorkspaceWordingTests {
         #expect(stem.contains(".analysisTableNumericColumn()"))
         #expect(!stem.contains("validationMeasurements("))
         #expect(!stem.contains("再合成・残差・帯域・ノイズ測定"))
-        #expect(stem.contains("validationIssues(presentation.validation.analysisIssues)"))
+        #expect(stem.contains("validationIssues(model.remixAnalysisPresentation?.validation.analysisIssues)"))
         #expect(!stem.contains("自動候補選択には使用しません"))
         #expect(stem.contains("数値だけで完成音を自動選択しません"))
         #expect(validation.contains("struct StemValidationMeasurement"))

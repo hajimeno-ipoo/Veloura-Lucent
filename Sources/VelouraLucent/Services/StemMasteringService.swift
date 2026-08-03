@@ -101,7 +101,8 @@ struct StemMasteringService: Sendable {
         guard let audioQuality = StemAudioReportAdapter.makeAudioQualityReport(
             input: canonicalInputEvaluation.audioMetrics,
             remixed: masteringInputEvaluation.audioMetrics,
-            mastered: finalEvaluation.audioMetrics
+            mastered: finalEvaluation.audioMetrics,
+            peakCeilingDB: Double(settings.peakCeilingDB)
         ) else {
             throw StemMasteringError.reportUnavailable(.audioQuality)
         }
@@ -244,6 +245,7 @@ struct StemMasteringService: Sendable {
             let result = StemMasteringResult(
                 finalArtifact: finalArtifact,
                 finalEvaluation: finalEvaluation,
+                masteringSettings: request.settings,
                 audioQualityReport: reports.audioQuality,
                 completionReport: reports.completion,
                 noiseCheckReport: reports.noiseCheck

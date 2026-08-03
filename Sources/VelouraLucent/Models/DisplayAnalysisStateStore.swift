@@ -37,6 +37,37 @@ enum DisplayAnalysisState: Hashable, Sendable {
     case failed
 }
 
+enum DisplayAnalysisPresentationState: Hashable, Sendable {
+    case notSelected
+    case idle
+    case running
+    case completed
+    case failed
+
+    static func resolve(
+        hasSource: Bool,
+        hasMetrics: Bool,
+        isRunning: Bool,
+        hasFailed: Bool
+    ) -> DisplayAnalysisPresentationState {
+        if isRunning { return .running }
+        if hasFailed { return .failed }
+        if hasMetrics { return .completed }
+        if !hasSource { return .notSelected }
+        return .idle
+    }
+
+    var title: String {
+        switch self {
+        case .notSelected: "未選択"
+        case .idle: "未解析"
+        case .running: "解析中"
+        case .completed: "完了"
+        case .failed: "失敗"
+        }
+    }
+}
+
 struct DisplayAnalysisStateStore {
     private var statesByTarget: [DisplayAnalysisTarget: [DisplayAnalysisKind: DisplayAnalysisState]]
 

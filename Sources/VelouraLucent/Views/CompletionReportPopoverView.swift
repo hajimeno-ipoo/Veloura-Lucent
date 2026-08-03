@@ -18,6 +18,12 @@ struct CompletionReportPopoverView: View {
                 reportSection(title: "音量とピーク", rows: report.loudnessRows)
                 reportSection(title: "ノイズ", rows: report.noiseRows)
                 reportSection(title: "高域保持", rows: report.highFrequencyRows)
+                if !report.lowFrequencyRows.isEmpty {
+                    reportSection(title: "低域バランス", rows: report.lowFrequencyRows)
+                }
+                if !report.qualityRows.isEmpty {
+                    reportSection(title: "共通品質判定", rows: report.qualityRows)
+                }
 
                 Text(report.reminder)
                     .font(.body)

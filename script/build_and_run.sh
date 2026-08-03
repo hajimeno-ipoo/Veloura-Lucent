@@ -14,6 +14,8 @@ FINAL_APP_BINARY="$FINAL_APP_BUNDLE/Contents/MacOS/$BUILD_PRODUCT_NAME"
 LEGACY_APP_BUNDLE="$DIST_DIR/SpectralLifter.app"
 APP_LOCALIZATION_SOURCE="$ROOT_DIR/Resources/ja.lproj"
 ICON_SOURCE="$ROOT_DIR/Resources/AppIcon-1024.png"
+ICON_COMPOSER_SOURCE="$ROOT_DIR/Resources/VelouraLucent.icon"
+ICON_COMPOSER_NAME="VelouraLucent"
 RUNTIME_ICON_NAME="AppIcon-1024.png"
 RESOURCE_BUNDLE_NAME="${BUILD_PRODUCT_NAME}_${BUILD_PRODUCT_NAME}.bundle"
 
@@ -414,6 +416,29 @@ render_icon() {
   sips -z "$size" "$size" "$ICON_SOURCE" --out "$3/$output_name" >/dev/null
 }
 
+prepare_icon_composer_source() {
+  [[ -d "$ICON_COMPOSER_SOURCE" ]] || return
+
+  local ictool_path=""
+  local rendered_icon_path="$STAGING_DIR/$RUNTIME_ICON_NAME"
+  ictool_path="$(dirname "$(/usr/bin/xcode-select -p)")/Applications/Icon Composer.app/Contents/Executables/ictool"
+  [[ -x "$ictool_path" ]] ||
+    die "Icon Composer ictool is missing: $ictool_path"
+
+  "$ictool_path" "$ICON_COMPOSER_SOURCE" \
+    --export-image \
+    --output-file "$rendered_icon_path" \
+    --platform macOS \
+    --rendition Default \
+    --width 1024 \
+    --height 1024 \
+    --scale 1 >/dev/null
+
+  [[ -f "$rendered_icon_path" ]] ||
+    die "Icon Composer did not render the app icon: $rendered_icon_path"
+  ICON_SOURCE="$rendered_icon_path"
+}
+
 write_asset_catalog_metadata() {
   cat >"$ICON_CATALOG/Contents.json" <<'JSON'
 {
@@ -539,6 +564,7 @@ RESOURCE_BUNDLE="$BUILD_DIR/$RESOURCE_BUNDLE_NAME"
 
 initialize_staging_paths
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
+prepare_icon_composer_source
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
 /usr/bin/ditto "$RESOURCE_BUNDLE" "$TARGET_RESOURCE_BUNDLE"
@@ -547,12 +573,17 @@ generate_app_icon_assets
 if [[ -f "$ICON_SOURCE" ]]; then
   cp "$ICON_SOURCE" "$APP_RESOURCES/$RUNTIME_ICON_NAME"
 fi
+if [[ -d "$ICON_COMPOSER_SOURCE" ]]; then
+  /usr/bin/ditto "$ICON_COMPOSER_SOURCE" "$APP_RESOURCES/$ICON_COMPOSER_NAME.icon"
+fi
 if [[ -d "$APP_LOCALIZATION_SOURCE" ]]; then
   cp -R "$APP_LOCALIZATION_SOURCE" "$APP_RESOURCES/ja.lproj"
 fi
 
 ICON_PLIST_BLOCK=""
-if [[ -f "$ICON_SOURCE" ]]; then
+if [[ -d "$ICON_COMPOSER_SOURCE" ]]; then
+  ICON_PLIST_BLOCK=$'  <key>CFBundleIconFile</key>\n  <string>AppIcon</string>\n  <key>CFBundleIconName</key>\n  <string>VelouraLucent</string>'
+elif [[ -f "$ICON_SOURCE" ]]; then
   ICON_PLIST_BLOCK=$'  <key>CFBundleIconFile</key>\n  <string>AppIcon</string>\n  <key>CFBundleIconName</key>\n  <string>AppIcon</string>'
 fi
 

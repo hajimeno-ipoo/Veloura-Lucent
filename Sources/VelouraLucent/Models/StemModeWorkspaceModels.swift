@@ -509,21 +509,25 @@ struct StemModeQualityReports: Sendable {
     let audioQuality: AudioQualityReport
     let completion: CompletionReport
     let noiseCheck: NoiseCheckReport
+    let masteringSettings: MasteringSettings
 
     init(masteringResult: StemMasteringResult) {
         audioQuality = masteringResult.audioQualityReport
         completion = masteringResult.completionReport
         noiseCheck = masteringResult.noiseCheckReport
+        masteringSettings = masteringResult.masteringSettings
     }
 
     init(
         audioQuality: AudioQualityReport,
         completion: CompletionReport,
-        noiseCheck: NoiseCheckReport
+        noiseCheck: NoiseCheckReport,
+        masteringSettings: MasteringSettings
     ) {
         self.audioQuality = audioQuality
         self.completion = completion
         self.noiseCheck = noiseCheck
+        self.masteringSettings = masteringSettings
     }
 }
 
