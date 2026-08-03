@@ -15,6 +15,7 @@ final class VelouraAppRuntime {
     let stemWorkspaceModel: StemModeWorkspaceModel
 
     @ObservationIgnored private var didStart = false
+    @ObservationIgnored private let storageMaintenance: AppStorageMaintenance
 
     init(
         standardActions: ProcessingActions = ProcessingActions(
@@ -25,11 +26,13 @@ final class VelouraAppRuntime {
         stemWorkflowControllerFactory: ((
             StemWorkflowSession,
             StemModelManager
-        ) -> StemWorkflowController)? = nil
+        ) -> StemWorkflowController)? = nil,
+        storageMaintenance: AppStorageMaintenance = .production
     ) {
         self.standardActions = standardActions
         self.stemModelManager = stemModelManager
         self.stemWorkflowSession = stemWorkflowSession
+        self.storageMaintenance = storageMaintenance
 
         let controller = stemWorkflowControllerFactory?(
             stemWorkflowSession,
@@ -56,6 +59,7 @@ final class VelouraAppRuntime {
     func startIfNeeded() async {
         guard !didStart else { return }
         didStart = true
+        await storageMaintenance.prepareForLaunch()
         await stemModelManager.inspectLocalResources()
         stemWorkflowController.synchronizeModelReadiness()
     }

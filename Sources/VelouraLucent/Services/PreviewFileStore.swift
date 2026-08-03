@@ -14,13 +14,16 @@ enum PreviewFileStore {
     }
 
     static func removeAllPreviewFiles() {
-        let fileManager = FileManager.default
-        guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    static func removeOwnedPreviewFileIfPresent(_ url: URL?) {
+        guard let url else { return }
+        let normalized = url.standardizedFileURL
+        guard normalized.deletingLastPathComponent() == directory.standardizedFileURL else {
             return
         }
-        for file in files where file.pathExtension == AudioFileService.outputFileExtension {
-            try? fileManager.removeItem(at: file)
-        }
+        try? FileManager.default.removeItem(at: normalized)
     }
 
     private static func shortPreviewBaseName(from fileName: String) -> String {

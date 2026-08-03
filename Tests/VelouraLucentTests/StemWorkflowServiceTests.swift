@@ -176,6 +176,7 @@ private enum WorkflowServiceTestError: Error {
 
 private actor RecordingFailingMasteringService: StemWorkflowMastering {
     private(set) var receivedInputURL: URL?
+    private(set) var foundPreviousFinalArtifact = false
 
     func process(
         _ request: StemMasteringRequest,
@@ -183,6 +184,11 @@ private actor RecordingFailingMasteringService: StemWorkflowMastering {
         logHandler: @escaping @Sendable (String) -> Void
     ) async throws -> StemMasteringResult {
         receivedInputURL = request.masteringInput.artifact.fileURL
+        foundPreviousFinalArtifact = FileManager.default.fileExists(
+            atPath: request.sessionDirectory.appending(
+                path: StemMasteringService.finalMasterFileName
+            ).path
+        )
         throw WorkflowServiceTestError.masteringFailed
     }
 }
@@ -318,6 +324,10 @@ struct StemWorkflowServiceTests {
             correction: correction,
             settings: correction.automaticRemixPlan.settings
         )
+        let previousFinalURL = correction.sessionDirectory.appending(
+            path: StemMasteringService.finalMasterFileName
+        )
+        try Data("previous final".utf8).write(to: previousFinalURL)
 
         await #expect(throws: WorkflowServiceTestError.masteringFailed) {
             _ = try await masteringWorkflow.processMastering(.init(
@@ -328,6 +338,8 @@ struct StemWorkflowServiceTests {
 
         let inputURL = await recorder.receivedInputURL
         #expect(inputURL?.lastPathComponent == "stem-remix-48000.wav")
+        #expect(await !recorder.foundPreviousFinalArtifact)
+        #expect(!FileManager.default.fileExists(atPath: previousFinalURL.path))
         #expect(!FileManager.default.fileExists(
             atPath: correction.sessionDirectory.appending(path: "mastering-input-48000.wav").path
         ))

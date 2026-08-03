@@ -51,7 +51,7 @@ die() {
 }
 
 usage() {
-  printf 'usage: %s [run|debug|--debug|logs|--logs|telemetry|--telemetry|verify|--verify]\n' "$0" >&2
+  printf 'usage: %s [run|debug|--debug|logs|--logs|telemetry|--telemetry|verify|--verify|package|--package]\n' "$0" >&2
 }
 
 validate_mode() {
@@ -61,7 +61,7 @@ validate_mode() {
   fi
 
   case "$MODE" in
-    run|debug|--debug|logs|--logs|telemetry|--telemetry|verify|--verify)
+    run|debug|--debug|logs|--logs|telemetry|--telemetry|verify|--verify|package|--package)
       ;;
     *)
       usage
@@ -630,6 +630,9 @@ open_app() {
 case "$MODE" in
   run)
     open_app
+    finalize_published_app
+    ;;
+  --package|package)
     finalize_published_app
     ;;
   --debug|debug)

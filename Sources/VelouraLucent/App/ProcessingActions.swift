@@ -90,6 +90,8 @@ final class ProcessingActions {
         let resolvedAnalysisMode = job.selectedAnalysisMode.resolvedMode
         let initialAnalysis = job.inputCorrectionAnalysisMode == resolvedAnalysisMode ? job.inputCorrectionAnalysis : nil
         displayAnalysis.cancelTasks(for: [.corrected, .mastered])
+        PreviewFileStore.removeOwnedPreviewFileIfPresent(job.masteredOutputFile)
+        PreviewFileStore.removeOwnedPreviewFileIfPresent(job.outputFile)
         job.beginProcessing(appliedSettings: appliedSettings)
 
         let taskID = UUID()
@@ -166,6 +168,7 @@ final class ProcessingActions {
         let selectionID = displayAnalysis.selectionID
         let appliedSettings = job.editableMasteringSettings
         displayAnalysis.cancelTasks(for: [.mastered])
+        PreviewFileStore.removeOwnedPreviewFileIfPresent(job.masteredOutputFile)
         job.beginMastering(appliedSettings: appliedSettings)
 
         let taskID = UUID()

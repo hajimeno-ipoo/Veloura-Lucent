@@ -37,7 +37,9 @@ struct StemModelManagementSection: View {
             if !managementActions.isEmpty {
                 RecoveryActionSection(
                     actions: managementActions,
-                    isDisabled: isDisabled || modelManager.isAcquiringModels,
+                    isDisabled: isDisabled
+                        || modelManager.isAcquiringModels
+                        || !currentPresentation.allowsModelDownload,
                     onAction: performRecoveryAction
                 )
             }
@@ -68,7 +70,7 @@ struct StemModelManagementSection: View {
     }
 
     private var managementActions: [StemModelRecoveryAction] {
-        currentPresentation.actions
+        currentPresentation.visibleActions
     }
 
     private var separationInformation: String {
@@ -164,6 +166,11 @@ extension StemModelManagementSection {
             actions.contains(.initialDownload)
                 || actions.contains(.repair)
                 || actions.contains(.redownload)
+        }
+
+        var visibleActions: [StemModelRecoveryAction] {
+            guard actions.isEmpty, tone == .success else { return actions }
+            return [.initialDownload]
         }
 
         static func make(inspectionState: StemModelInspectionState) -> Self {
@@ -285,7 +292,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "Stem Modeのモデルを利用できます",
                     statusText: "利用可能",
-                    message: "AIモデル2資産と同梱MLX実行資産は検証済みです。必要な場合は、取得ボタンから選択中モデルのAIモデル2資産を完全再取得できます。",
+                    message: "AIモデル2資産と同梱MLX実行資産は検証済みです。再取得は必要ありません。",
                     detail: nil,
                     symbolName: "checkmark.seal",
                     tone: .success,

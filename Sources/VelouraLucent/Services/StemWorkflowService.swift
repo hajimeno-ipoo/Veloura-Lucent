@@ -1098,6 +1098,9 @@ struct StemWorkflowService: Sendable {
             artifact: remix.artifact,
             evaluation: remix.evaluation
         )
+        try store.removeIfPresent(
+            correction.sessionDirectory.appending(path: StemMasteringService.finalMasterFileName)
+        )
         let masteringEventSink = OrderedStemWorkflowEventSink(eventHandler: eventHandler)
         let mastering: StemMasteringResult
         do {

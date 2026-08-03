@@ -74,7 +74,7 @@ struct StemModelLocalInspection: Equatable, Sendable {
         case .invalid:
             return [.redownload]
         case .ready:
-            return [.redownload]
+            return []
         }
     }
 }

@@ -448,6 +448,7 @@ verify_third_party_notices() {
   actual_paths="$(
     find "$NOTICE_ROOT" -type f \
       ! -path "$NOTICE_ROOT/README.md" \
+      ! -path "$NOTICE_ROOT/.DS_Store" \
       ! -path "$NOTICE_MANIFEST_PATH" |
       while IFS= read -r notice_file; do
         printf '%s\n' "${notice_file#"$NOTICE_ROOT/"}"

@@ -17,6 +17,12 @@ struct MasteringService {
     ) async throws -> URL {
         let outputURL = Self.temporaryOutputURL(for: inputFile)
         let outputPath = outputURL.path(percentEncoded: false)
+        var didComplete = false
+        defer {
+            if !didComplete {
+                removeFileIfPresent(at: outputURL)
+            }
+        }
         let logger = MasteringClosureLogger(logHandler: logHandler)
 
         do {
@@ -110,6 +116,7 @@ struct MasteringService {
             throw AppError.outputNotFound(outputPath)
         }
 
+        didComplete = true
         return outputURL
     }
 

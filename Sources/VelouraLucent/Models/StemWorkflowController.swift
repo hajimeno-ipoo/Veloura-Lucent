@@ -442,6 +442,8 @@ final class StemWorkflowController {
         do {
             prepareExecution(kind: .mastering, runID: runID, usesExistingSession: true)
             try session.startMastering(runID: runID)
+            workspaceModel?.clearMasteringResult()
+            updatePreviewSourcesFromValidatedArtifacts()
             let workflowRequest = StemWorkflowMasteringRequest(
                 remix: remixResult,
                 masteringSettings: request.masteringSettings

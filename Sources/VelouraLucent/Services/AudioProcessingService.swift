@@ -13,6 +13,12 @@ struct AudioProcessingService {
     ) async throws -> URL {
         let outputURL = Self.temporaryOutputURL(for: inputFile)
         let outputPath = outputURL.path(percentEncoded: false)
+        var didComplete = false
+        defer {
+            if !didComplete {
+                removeFileIfPresent(at: outputURL)
+            }
+        }
 
         let logger = ClosureLogger(logHandler: logHandler)
         do {
@@ -39,6 +45,7 @@ struct AudioProcessingService {
             throw AppError.outputNotFound(outputPath)
         }
 
+        didComplete = true
         return outputURL
     }
 

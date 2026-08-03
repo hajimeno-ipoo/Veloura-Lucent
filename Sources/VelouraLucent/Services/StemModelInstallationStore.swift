@@ -134,6 +134,62 @@ actor StemModelInstallationStore {
         }
     }
 
+    func discardStaleStagingDirectories() throws {
+        guard pathExistsIncludingSymbolicLink(paths.stagingRootURL) else { return }
+        try requireNoSymbolicLinks(from: paths.rootURL, through: paths.stagingRootURL)
+        do {
+            try fileManager.removeItem(at: paths.stagingRootURL)
+        } catch {
+            throw StemModelInstallationStoreError.fileOperationFailed(
+                operation: "stale staging removal",
+                path: paths.stagingRootURL.path,
+                reason: error.localizedDescription
+            )
+        }
+    }
+
+    func pruneInactiveGenerations(
+        assetSetIdentifier: String,
+        keeping generationIdentifier: UUID
+    ) throws {
+        let assetSetURL = paths.assetSetDirectoryURL(assetSetIdentifier: assetSetIdentifier)
+        guard pathExistsIncludingSymbolicLink(assetSetURL) else { return }
+        try requireNoSymbolicLinks(from: paths.rootURL, through: assetSetURL)
+
+        let candidates: [URL]
+        do {
+            candidates = try fileManager.contentsOfDirectory(
+                at: assetSetURL,
+                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+            )
+        } catch {
+            throw StemModelInstallationStoreError.fileOperationFailed(
+                operation: "generation listing",
+                path: assetSetURL.path,
+                reason: error.localizedDescription
+            )
+        }
+
+        for candidate in candidates {
+            guard let candidateIdentifier = UUID(uuidString: candidate.lastPathComponent),
+                  candidateIdentifier != generationIdentifier else {
+                continue
+            }
+            let values = try candidate.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true else { continue }
+            try requireNoSymbolicLinks(from: paths.rootURL, through: candidate)
+            do {
+                try fileManager.removeItem(at: candidate)
+            } catch {
+                throw StemModelInstallationStoreError.fileOperationFailed(
+                    operation: "inactive generation removal",
+                    path: candidate.path,
+                    reason: error.localizedDescription
+                )
+            }
+        }
+    }
+
     func activate(
         operationIdentifier: UUID,
         generationIdentifier: UUID,
@@ -216,6 +272,10 @@ actor StemModelInstallationStore {
         try replaceActivePointerAtomically(
             pointer,
             at: paths.activePointerURL(for: contract.separationModel)
+        )
+        try? pruneInactiveGenerations(
+            assetSetIdentifier: manifest.assetSetIdentifier,
+            keeping: generationIdentifier
         )
         return installation
     }

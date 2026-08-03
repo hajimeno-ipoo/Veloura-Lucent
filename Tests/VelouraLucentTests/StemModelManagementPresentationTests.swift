@@ -40,8 +40,8 @@ struct StemModelManagementPresentationTests {
         #expect(presentation.allowsModelDownload)
     }
 
-    @Test("検証済みモデルには完全再取得を残す")
-    func readyModelStillOffersUserInitiatedRedownload() throws {
+    @Test("検証済みモデルには無効な取得ボタンを表示する")
+    func readyModelShowsDisabledDownloadAction() throws {
         let fixture = try Fixture()
 
         let presentation = StemModelManagementSection.Presentation.make(
@@ -52,8 +52,9 @@ struct StemModelManagementPresentationTests {
 
         #expect(presentation.title == "Stem Modeのモデルを利用できます")
         #expect(presentation.statusText == "利用可能")
-        #expect(presentation.actions == [.redownload])
-        #expect(presentation.allowsModelDownload)
+        #expect(presentation.actions.isEmpty)
+        #expect(presentation.visibleActions == [.initialDownload])
+        #expect(!presentation.allowsModelDownload)
     }
 
     @Test("同梱MLX実行資産の異常時はモデル取得を禁止し再インストールを案内する")

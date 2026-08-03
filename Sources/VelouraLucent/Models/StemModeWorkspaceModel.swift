@@ -829,6 +829,12 @@ final class StemModeWorkspaceModel {
         finalEvaluation = result.finalEvaluation
     }
 
+    func clearMasteringResult() {
+        qualityReports = nil
+        finalArtifact = nil
+        finalEvaluation = nil
+    }
+
     /// Controllerがartifact検証を完了した後に、完全なpreview候補一覧を渡す境界です。
     /// 未検証のartifactをこのAPIへ渡してはいけません。
     func updatePreviewSources(

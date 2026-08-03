@@ -76,7 +76,7 @@ struct StemModelInstallationStoreTests {
     }
 
     @Test
-    func reactivationSwitchesPointerAndKeepsPreviousValidatedGeneration() async throws {
+    func reactivationSwitchesPointerAndRemovesPreviousValidatedGeneration() async throws {
         let fixture = try makeFixture()
         defer { fixture.removeTemporaryRoot() }
         let firstOperation = UUID()
@@ -100,10 +100,24 @@ struct StemModelInstallationStoreTests {
         )
 
         #expect(first.generationDirectoryURL != second.generationDirectoryURL)
-        #expect(FileManager.default.fileExists(atPath: first.generationDirectoryURL.path))
+        #expect(!FileManager.default.fileExists(atPath: first.generationDirectoryURL.path))
         #expect(FileManager.default.fileExists(atPath: second.generationDirectoryURL.path))
         let active = try #require(try await fixture.store.loadActive(manifest: fixture.manifest))
         #expect(active.receipt.generationIdentifier == secondGeneration)
+    }
+
+    @Test
+    func staleStagingDirectoriesAreRemovedTogether() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.removeTemporaryRoot() }
+        let firstOperation = UUID()
+        let secondOperation = UUID()
+        _ = try await fixture.store.makeStagingDirectory(operationIdentifier: firstOperation)
+        _ = try await fixture.store.makeStagingDirectory(operationIdentifier: secondOperation)
+
+        try await fixture.store.discardStaleStagingDirectories()
+
+        #expect(!FileManager.default.fileExists(atPath: fixture.paths.stagingRootURL.path))
     }
 
     @Test

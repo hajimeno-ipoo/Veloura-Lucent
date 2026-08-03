@@ -162,7 +162,8 @@ struct VelouraAppRuntimeTests {
             standardActions: ProcessingActions(
                 notificationReporter: NoOpCompletionNotificationReporter.shared
             ),
-            stemModelManager: manager
+            stemModelManager: manager,
+            storageMaintenance: makeRuntimeStorageMaintenance()
         )
         defer { runtime.shutdown() }
 
@@ -209,7 +210,8 @@ struct VelouraAppRuntimeTests {
             standardActions: ProcessingActions(
                 notificationReporter: NoOpCompletionNotificationReporter.shared
             ),
-            stemModelManager: manager
+            stemModelManager: manager,
+            storageMaintenance: makeRuntimeStorageMaintenance()
         )
         defer { runtime.shutdown() }
 
@@ -269,6 +271,22 @@ private func source(_ relativePath: String) throws -> String {
     return try String(
         contentsOf: repositoryRoot.appending(path: relativePath),
         encoding: .utf8
+    )
+}
+
+private func makeRuntimeStorageMaintenance() -> AppStorageMaintenance {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: "VelouraAppRuntimeTests-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    let modelPaths = StemModelStorePaths(
+        rootURL: root.appending(path: "StemModels", directoryHint: .isDirectory)
+    )
+    return AppStorageMaintenance(
+        standardPreviewRootURL: root.appending(path: "Preview", directoryHint: .isDirectory),
+        stemTemporaryRootURL: root.appending(path: "StemPreview", directoryHint: .isDirectory),
+        applicationSupportRootURL: root,
+        modelStore: StemModelInstallationStore(paths: modelPaths)
     )
 }
 

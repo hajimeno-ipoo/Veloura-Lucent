@@ -145,7 +145,7 @@
 - 高域修復後のシマー保護は、修復でヒス、サ行、シマーが実際に増えた時だけ実行します。
 - サ行/シマー保護は、5kHz〜9kHzのサ行、6kHz〜10kHzの刺さり、10kHz〜14kHzのチリつきを別々に測り、前後フレームより短時間だけ大きい部分を下げます。
 - 8kHz〜12kHzの持続する煌びやかさと、12kHz〜16kHzの空気感は、サ行/シマー保護で常時削らない設計です。
-- プレビュー用の一時ファイルは `VelouraLucentPreview` に作り、新しい入力選択時と画面終了時に掃除します。
+- プレビュー用の一時ファイルは `VelouraLucentPreview` に作ります。補正・マスタリングの再実行前に前回の同工程出力を削除し、失敗・キャンセルでは今回の未完成出力を削除します。新しい入力選択、アプリ起動、アプリ終了でも一時領域全体を掃除します。
 - 画面表示用の解析は、既に入力・補正後・最終版の結果がそろっている時は再実行せず、キャッシュ済みの結果を使います。
 - 補正の低域ノイズ整理とシマー制限は、測定回数をログに出します。シマー制限は、静かなヒス床が低くても、8kHz〜14kHzで短時間だけ飛び出るチラつきがあれば実行します。
 - シマー制限は、長い音源で全体測定を何度も繰り返さないよう、代表区間で軽く測り、強い補正時だけ最後に全体確認を1回行います。16kHz以上の空気感は戻して守ります。
@@ -199,7 +199,7 @@
 - 画面: `SwiftUI`、Rootが所有する共通`NavigationSplitView`と`WorkspaceShellView`、中央作業画面、開閉式の左右パネル、`toolbar`
 - Stem Modeの分離基盤: アプリはreview済みの`demucs-mlx-swift`と`bs-roformer-mlx-swift`をモデル別backendとして使います。既定は従来どおり`htdemucs`で、本番のshift平均回数は`shifts=2`です。BS-RoFormer-SWは設定、1,915重み、STFT、62帯域分割、時間・周波数RoFormer、複素mask、iSTFTを専用runtimeが担当します。`MLX Swift 0.30.6`などの正確な組合せは固定し、同じ部品を重複宣言しません。通常／Stemの切替、モデル取得・復旧、分離、Stem別補正、内部診断用raw再ミックス、補正済み純粋加算、任意再ミックス、既存Mastering、Stem単位の原子的確定をStem専用作業画面へ接続しています。通常モードの公開処理は変更していません。
 - BS-RoFormer-SWのSwift検証とアプリ接続: `Vendor/bs-roformer-mlx-swift`に、確認済みの6Stemモデル1つだけを動かすMLX Swift 0.30.6ランタイムを置いています。Pythonと同じ44.1kHz全編入力で6Stem相関0.9999804以上、指定48kHz原音は112.31秒、peak memory footprint約8.10GB、swap 0で完走しました。公開Float16モデルrevision `13edef2e713151522e4049e92f011e0543c45d53`も読み込み、6.8秒入力を3チャンクで6Stem出力できることを確認しています。アプリは右サイドの既存「Stem分離」内でHTDemucs／BS-RoFormer-SWを選び、後者の6Stemを`vocals`、`drums`、`bass`、`other + guitar + piano`の既存4Stem契約へ変換します。既定変更、新管理画面、自動fallbackはありません。ユーザー指定実音源はRelease構成の既存三段階workflowを418.755秒で完走しました。結果は`Docs/BSRoformerSwiftRuntimeValidation_2026-07-30.md`に保存しています。
-- Stem Modeのモデル取得: 選択中モデルのweightsとconfigだけを、各manifestに記録した40桁revisionを含む固定URLから取得します。HTDemucsは合計168,007,757 bytes、BS-RoFormer-SWは合計349,522,285 bytesです。取得元、2ファイル、合計容量、revision、記録済みlicense metadata、通信先、固定URL、保存先は、アプリメニューの「Veloura Lucentについて」でモデル別に確認できます。右サイドは、初回、破損時、完全再取得のすべてで1つの「AIモデルを取得」を表示します。押すと通信を開始し、Rootが所有する画面内Liquid Glassモーダルへモデル名、取得ファイル、保存先、標準の処理中インジケーター、完了チェック、Liquid Glassキャンセルボタン、失敗を表示します。割合、受信容量、ファイル別進捗バーは表示しません。検証と有効化まで成功するとモーダルは自動で閉じます。最終検証で異常を検知した時だけ同じモーダルに「再ダウンロード」を表示し、2資産を最初から取り直します。通信失敗など最終検証以外の失敗では、この再ダウンロードボタンを表示しません。転送先はモデル別manifestの完全一致リストだけを許可し、HTDemucsとBS-RoFormer-SWのweightsで実際に返された`us.aws.cdn.hf.co`を両モデルのmanifestへ固定しています。ReleaseアプリからBS-RoFormer-SWの同転送先を通過し、2資産の容量・SHA-256検証、receipt保存、BS専用active pointer作成まで完了することを確認しています。
+- Stem Modeのモデル取得: 選択中モデルのweightsとconfigだけを、各manifestに記録した40桁revisionを含む固定URLから取得します。HTDemucsは合計168,007,757 bytes、BS-RoFormer-SWは合計349,522,285 bytesです。取得元、2ファイル、合計容量、revision、記録済みlicense metadata、通信先、固定URL、保存先は、アプリメニューの「Veloura Lucentについて」でモデル別に確認できます。右サイドは「AIモデルを取得」を同じ位置へ表示し、初回または破損時だけ有効、正常な取得済みモデルでは無効にします。正常時はモデル管理側にも取得許可を渡さないため、再取得は開始しません。押すと通信を開始し、Rootが所有する画面内Liquid Glassモーダルへモデル名、取得ファイル、保存先、標準の処理中インジケーター、完了チェック、Liquid Glassキャンセルボタン、失敗を表示します。割合、受信容量、ファイル別進捗バーは表示しません。検証と有効化まで成功するとモーダルは自動で閉じます。最終検証で異常を検知した時だけ同じモーダルに「再ダウンロード」を表示し、2資産を最初から取り直します。通信失敗など最終検証以外の失敗では、この再ダウンロードボタンを表示しません。有効化成功後は同じモデルの非active世代を削除します。転送先はモデル別manifestの完全一致リストだけを許可し、HTDemucsとBS-RoFormer-SWのweightsで実際に返された`us.aws.cdn.hf.co`を両モデルのmanifestへ固定しています。ReleaseアプリからBS-RoFormer-SWの同転送先を通過し、2資産の容量・SHA-256検証、receipt保存、BS専用active pointer作成まで完了することを確認しています。
 - Stem Modeのモデル検証: 取得した2資産はApplication Supportのstagingへ置き、2資産を取り終えた後に1回だけ、`X-Repo-Commit`、完成容量、SHA-256、モデル別config契約、receiptを全件確認します。その後、同じvolume内で2資産一式を検証済み世代として原子的に有効化します。アプリ起動時とモデル切替時のローカル検証は残します。HTDemucsとBS-RoFormer-SWは別々のactive pointerを持ち、一方の取得・修復で他方を置き換えません。時限付き転送先URLは保存しません。失敗や中断では同じモデルの以前の検証済み世代を残します。
 - Stem Modeの実行資産: `mlx.metallib`はモデル取得と切り離し、`mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib`へ1個だけ置いて署名アプリへ同梱します。AIモデル2資産はアプリへ同梱せず、`mlx.metallib`用の外部配布先も作りません。
 - アプリ資産の場所: SwiftPMで直接実行する時と署名済み`.app`ではresource bundleの場所が異なります。画像、manifest、同梱MLX資産は`AppResourceBundle`から取得し、本番アプリで開発用`Bundle.module`の探索へ戻らないようにします。
@@ -298,19 +298,19 @@ Macアプリ(SwiftUI)
 ## コードベースの構造
 - `Sources/VelouraLucent/App/`
   - アプリの起動です。Dock アイコンの上書きもここで行います。
-  - `VelouraAppRuntime.swift` は、通常モードの処理、Stemモデル管理、Stem専用sessionを別々に所有します。通常補正・マスタリング中だけmode切替を止め、利用者が開始したモデル取得中は通常モードへ戻っても取得を継続します。モードを切り替える時は、非表示になる側の試聴再生を停止し、切り替え先の再生とは重ねません。共有runtimeは画面やウィンドウが消えた時には停止せず、アプリ自体の終了時だけ停止します。
+  - `VelouraAppRuntime.swift` は、通常モードの処理、Stemモデル管理、Stem専用sessionを別々に所有します。起動時は`AppStorageMaintenance.swift`を通して、通常／Stemの前回一時領域、旧`StemRuns`、旧`StemCalibrationRuns`、未完了のモデル`Staging`を削除してからモデル状態を確認します。通常補正・マスタリング中だけmode切替を止め、利用者が開始したモデル取得中は通常モードへ戻っても取得を継続します。モードを切り替える時は、非表示になる側の試聴再生を停止し、切り替え先の再生とは重ねません。共有runtimeは画面やウィンドウが消えた時には停止せず、アプリ自体の終了時だけ停止します。
 - `Sources/VelouraLucent/Resources/`
   - アプリ内で使う画像、Stem Modeのモデル契約、第三者ライセンスです。
   - `StemModels/stem-model-manifest.json` と `StemModels/bs-roformer-sw-manifest.json` は、それぞれの採用モデル、40桁revision、2つのstable download URL、AIモデル2資産の容量・SHA-256・Application Support保存契約、`mlx.metallib`の同梱契約、依存関係、音声入出力、Metal生成元を記録します。
   - HTDemucsとBS-RoFormer-SWのweights／configはSwift Package resourceへ入れません。`mlx.metallib`だけを固定したMLXソースから準備し、配布アプリへ同梱します。大きなモデル資産とMetal資産はGitへ入れません。
-  - `ThirdPartyNotices/` は、モデルと実行時依存が使うLICENSE、ACKNOWLEDGMENTS、model cardを同梱する場所です。`third-party-notices-manifest.json` が18ファイルの場所、サイズ、SHA-256を固定し、準備スクリプトと配布スクリプトが欠落や差し替わりを止めます。
+  - `ThirdPartyNotices/` は、モデルと実行時依存が使うLICENSE、ACKNOWLEDGMENTS、model cardを同梱する場所です。`third-party-notices-manifest.json` が18ファイルの場所、サイズ、SHA-256を固定し、準備スクリプトと配布スクリプトが欠落や差し替わりを止めます。macOSが自動生成する`.DS_Store`だけはnoticeではないため一覧比較から除外し、それ以外の未記載ファイルは従来どおり停止対象にします。
   - `Rotary_Knob/2.png` は、右設定パネルのロータリーノブで回転するノブ本体です。金属の筋、光沢、青い点を含みます。
   - `Rotary_Knob/3.png` は、右設定パネルのロータリーノブで固定表示する土台です。数値枠、外周円弧、3点目盛り、`− / ＋` ボタン外観を含みます。
 - `Sources/VelouraLucent/Views/`
   - 画面です。差分サマリー、スペクトログラム、比較表示もここです。
   - `VelouraRootView.swift` は通常モードとStem Modeの共通入口です。通常／fallbackの両方から同じRootを使い、mode切替だけで処理所有者を破棄しません。
   - `WorkspaceShellView.swift` は、左220〜300 pt（基準260 pt）の共通`NavigationSplitView`、中央620 pt以上、右440 ptの共通外枠と、中央の固定ヘッダー・スクロール本文・固定下部・詳細ログ切り替え、通常／Stem共通の下部寸法を担当します。
-- `StemModelManagementSection.swift` は、右サイド「アプリ」タブの既存「Stem分離」内でHTDemucs／BS-RoFormer-SWを切り替えます。同じ場所で、選択モデルの状態、初回・破損時・完全再取得で共通の「AIモデルを取得」、同梱runtime破損時の再インストール案内、`!`アイコンの分離情報を担当します。「選択できる操作」という見出しと、手動の「モデル検証」は表示しません。取得中、失敗、保存先、標準インジケーター、完了チェック、キャンセル、最終検証異常時だけの再ダウンロードは`VelouraRootView`の`StemModelAcquisitionProgressSheet`だけへ表示し、右サイドへ重複表示しません。モデル状態は正常時も状態名・説明を省略しません。各ボタンは同じ横幅、高さ32 pt、中央寄せのアイコンと文字、上部ツールバーと同じLiquid Glassのホバー反応を持ちます。通常モードなどで使う小型ボタンは従来の大きさを維持します。専用モデル管理画面への切り替えは行いません。
+- `StemModelManagementSection.swift` は、右サイド「アプリ」タブの既存「Stem分離」内でHTDemucs／BS-RoFormer-SWを切り替えます。同じ場所で、選択モデルの状態、初回取得、破損時の再取得、同梱runtime破損時の再インストール案内、`!`アイコンの分離情報を担当します。「AIモデルを取得」は正常なモデルでも同じ位置に表示しますが、無効化して再取得は許可しません。「選択できる操作」という見出しと、手動の「モデル検証」は表示しません。取得中、失敗、保存先、標準インジケーター、完了チェック、キャンセル、最終検証異常時だけの再ダウンロードは`VelouraRootView`の`StemModelAcquisitionProgressSheet`だけへ表示し、右サイドへ重複表示しません。モデル状態は正常時も状態名・説明を省略しません。各ボタンは同じ横幅、高さ32 pt、中央寄せのアイコンと文字、上部ツールバーと同じLiquid Glassのホバー反応を持ちます。通常モードなどで使う小型ボタンは従来の大きさを維持します。専用モデル管理画面への切り替えは行いません。
 - Stem分離のヘルプは、HTDemucs／BS-RoFormer-SWのどちらも`モデル`、`revision`、`方式`、`出力`、`設定`の順で表示します。HTDemucsはshifts、overlap、split、segment、batch size、run seedを表示し、BS-RoFormer-SWは`設定（固定）`としてSTFT、帯域・周波数ビン、推論チャンク、短音源時のチャンク、ステップ、dim／depth／headsを表示します。BS-RoFormer-SWの設定は利用者が変更する項目ではありません。ダウンロード中も右サイドの「AIモデルを取得」は表示し、モデル管理側の二重開始防止に合わせて無効化します。
 - `VelouraAboutView.swift` の上部は「AIモデル情報」というモデル管理見出しを置かず、アプリ説明を表示します。アプリ本体の`CFBundleShortVersionString`が存在する時だけバージョンを表示し、未設定の版番号は作りません。AIモデルの切り替えは上部ツールバーのモード選択と同じ`LiquidGlassSegmentedPicker`を使います。上部、モデル情報、ファイル情報にカード背景は置かず、情報は区切り線で読み分けます。Aboutウィンドウは既存の`WindowChromeConfigurator`で内容をタイトルバーまで広げます。前面化またはアプリ復帰でSwiftUIがタイトルバーを更新した後も、Aboutだけは透明化を再適用し、ネイティブの3点ボタンの背後を標準`regularMaterial`のグラス面へつなげます。ウィンドウタイトル「Veloura Lucentについて」は残し、3点ボタンを独自実装には置き換えません。
   - `WorkspaceToolbarView.swift` は、Rootが常時所有する通常／Stem共通toolbarの表示を担当します。同じ位置のまま、現在のモードに応じて既存の入力、補正、マスタリング、書き出し処理へ接続します。
@@ -398,7 +398,7 @@ Macアプリ(SwiftUI)
 - `StemValidationService.swift` は、分離、内部診断raw再ミックス、補正済み純粋加算、再ミックスの形式、長さ、有限値、残差、peak、相関、帯域差分、noise差分を記録します。構造的継続可否と解析issueを分け、解析値から音楽的合否や候補選択を作りません。
 - `StemWorkflowService.swift` は、「補正を実行」「再ミックスを実行」「マスタリングを実行」を別APIでつなぎます。`StemRemixSafetyGuardService.swift`はrawに対する全体極性反転が明確なroleだけをrawへ戻します。純粋加算は比較基準として保存し、再ミックスは別成果物として保存し、マスタリングは検証済み再ミックスだけを既存処理へ渡します。再ミックスの人向け詳細ログには、自動判定根拠、Stem別gain／pan／reverb sendの自動値と適用値、衝突回避、共通reverb、各処理段の開始・完了、保存、解析、検証を記録します。
   - `StemWorkflowLogging.swift` は、現在セッションID、時刻、level、工程を持つStem専用ログを表します。保存履歴用の「最近の操作」状態は持ちません。
-  - `StemWorkflowService.swift` は、現在セッションのWAVをmacOSの一時領域`VelouraLucentStemPreview/<session-id>`へ置きます。アプリ終了、入力変更、補正キャンセル時に該当セッションを削除します。AIモデルのApplication Support保存先とは別です。
+  - `StemWorkflowService.swift` は、現在セッションのWAVをmacOSの一時領域`VelouraLucentStemPreview/<session-id>`へ置きます。補正再実行では旧セッション、再ミックス再実行では旧再ミックスと最終版、マスタリング再実行では旧最終版を先に削除します。失敗・キャンセルでは今回の未完成出力を削除し、アプリ起動、終了、入力変更でも不要な一時セッションを削除します。AIモデルのApplication Support保存先とは別です。
 - `Sources/VelouraLucent/Support/`
   - FFT まわりなどの共通処理です。
   - `InputAudioDropSupport.swift` は、ドロップされたファイルが実在する音声ファイルかどうかを確認します。音声以外のファイルやフォルダは入力として扱いません。
@@ -665,7 +665,7 @@ Macアプリ(SwiftUI)
 - 完了通知を変える時は、`ProcessingJob` から直接OS機能を呼ばず、`CompletionNotificationReporting` を通します。テストでは記録用の差し替え先を使い、本物の通知を送らずに確認します。
 - 補正とマスタリングのキャンセルを変える時は、ツールバーの表示だけではなく、保持しているTask、別スレッドの作業、主要工程の停止確認、途中出力の削除をまとめて確認します。
 - Stem Modeのキャンセルを変える時は、補正時のStem一時WAV削除、入力・入力表示解析・設定維持、マスタリング時の下流未完成WAVだけの削除、補正済み4Stem・補正完了表示維持、完了確定後のキャンセル禁止、アプリ終了・入力変更時の一時セッション削除をまとめて確認します。
-- Stemモデル取得を変える時は、右サイドの明示操作前に通信しないこと、stable URLの40桁revision、`X-Repo-Commit`、個別・合計容量、ダウンロード後1回だけのSHA-256とconfig契約検証、receipt、原子的active切替、既存世代保持、最終検証異常時だけの再ダウンロードを一組でテストします。
+- Stemモデル取得を変える時は、右サイドの明示操作前に通信しないこと、正常な取得済みモデルでは取得ボタンが無効で再取得を開始できないこと、stable URLの40桁revision、`X-Repo-Commit`、個別・合計容量、ダウンロード後1回だけのSHA-256とconfig契約検証、receipt、原子的active切替、切替成功後の非active世代削除、失敗時の旧active世代維持、最終検証異常時だけの再ダウンロードを一組でテストします。
 - Stemの役割別補正を変える時は、raw／補正後の各Stemと、入力2mix／raw再ミックス／補正済み純粋加算／実行済み再ミックスを既存解析・NoiseMeasurement・DSP内部guard・Stem役割別guardで自動確認します。ユーザーへStem単位の専門的な合否判定は求めません。性質の異なる複数の所有AI生成音源で解析接続と異常の有無を確認し、1曲の値を全音源の固定基準にしません。独立Stem試聴欄はraw／補正後を手動確認する機能であり、品質候補の選択には使いません。完成音の確認を求める場合は、純粋加算／再ミックス／最終版を「自然」「違和感がある」「判断できない」で確認します。
 - Stemの役割解析を変える時は、44.1kHz raw正本を変更していないこと、補正workflowが1回だけ作った48kHz処理信号を直接解析していること、集約用median／IQRと本番guard用の時間整列profileを混同していないこと、全保護対象が有限値で同じframe位置に揃うこと、サンプル音源由来の絶対gateを増やしていないことを確認します。
 - Stem工程guardを変える時は、今回のraw Stemと各DSP直前／直後だけを基準にしていること、問題区間のDSP差分だけを弱められること、判断不能・DSP失敗では当該DSP直前入力を維持できること、前工程で安全だった音まで取り消さないことを確認します。
@@ -686,3 +686,10 @@ Macアプリ(SwiftUI)
 - 補正のノイズ除去ログは、解析済みのSTFT結果から高域メトリクスを使い回し、ログ用の再STFTを避けます。
 - マスタリング解析の帯域集計は、Metal対応Macでは本処理でMetalを使い、STFT全体を保持せず分割して計算します。ログでCPU経路かMetal経路かを確認できます。
 - 無理に複雑な仕組みにせず、今の処理順を保って改善します。
+
+## ローカルインストール用DMG
+
+- `script/package_local_dmg.sh` は、アプリをビルドして起動せずに `dist/Veloura Lucent.app` を更新し、そのアプリと `/Applications` へのリンクを `dist/Veloura Lucent Local.dmg` にまとめます。
+- DMG作成時に、イメージの検証、Applicationsリンクの向き、DMG内アプリの署名検証を行います。
+- AIモデル本体はアプリやDMGへ同梱せず、インストール後も既存のApplication Support保存先へ取得します。一時WAVもmacOSの一時フォルダを使うため、DMG内へ保存しません。
+- これはローカルインストール用です。Developer ID署名やnotarizationはこの処理へ追加していません。

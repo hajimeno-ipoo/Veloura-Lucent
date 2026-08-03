@@ -264,13 +264,13 @@ struct StemModelManagerTests {
         #expect(await controller.calls.isEmpty)
     }
 
-    @Test("missing・invalid・readyは承認済みの取得操作だけを提示する")
+    @Test("missing・invalidだけが承認済みの取得操作を提示する")
     func recoveryActionsMatchInstalledModelState() throws {
         let fixture = try StemModelManagerFixture()
 
         #expect(fixture.missingInspection.recoveryActions == [.initialDownload])
         #expect(fixture.invalidInspection.recoveryActions == [.redownload])
-        #expect(fixture.readyInspection.recoveryActions == [.redownload])
+        #expect(fixture.readyInspection.recoveryActions.isEmpty)
     }
 
     @Test("MLX実行資産が不正な場合はモデル取得を準備しない")
