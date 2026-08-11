@@ -158,7 +158,6 @@ private struct StemModeInspectorAudioPanel: View {
             processedMetrics: model.correctedRemixMetrics,
             masteredMetrics: model.finalMetrics,
             processedTitle: processedTitle,
-            qualityReport: model.qualityReports?.audioQuality,
             completionReport: completionReport,
             peakCeilingDB: Double(
                 (model.qualityReports?.masteringSettings ?? model.masteringSettings).peakCeilingDB

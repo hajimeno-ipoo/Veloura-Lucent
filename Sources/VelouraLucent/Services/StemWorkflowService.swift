@@ -77,6 +77,9 @@ enum StemWorkflowEvent: Sendable {
 struct StemWorkflowCorrectionResult: Sendable {
     let runID: UUID
     let sessionDirectory: URL
+    let sourceDisplayName: String
+    let sourceFileInfo: AudioFileInfo?
+    let separationModelDisplayName: String
     let input: StemInputPreparedResult
     let canonicalInputEvaluation: StemAudioEvaluationSnapshot
     let separation: StemSeparationResult
@@ -831,6 +834,10 @@ struct StemWorkflowService: Sendable {
             return StemWorkflowCorrectionResult(
                 runID: request.runID,
                 sessionDirectory: directory,
+                sourceDisplayName: request.sourceURL.deletingPathExtension().lastPathComponent,
+                sourceFileInfo: try? AudioFileService.fileInfo(for: request.sourceURL),
+                separationModelDisplayName: StemProductionModelProfile.identify(request.manifest)?.displayName
+                    ?? request.manifest.model.name,
                 input: prepared,
                 canonicalInputEvaluation: canonicalEvaluation,
                 separation: separation,
@@ -1106,9 +1113,12 @@ struct StemWorkflowService: Sendable {
         do {
             mastering = try await masteringService.process(
                 StemMasteringRequest(
-                runID: request.runID,
-                sessionDirectory: correction.sessionDirectory,
-                canonicalReference: canonicalReference,
+                    runID: request.runID,
+                    sessionDirectory: correction.sessionDirectory,
+                    sourceDisplayName: correction.sourceDisplayName,
+                    sourceFileInfo: correction.sourceFileInfo,
+                    separationModelDisplayName: correction.separationModelDisplayName,
+                    canonicalReference: canonicalReference,
                 masteringInput: masteringInput,
                 correctionSettings: correction.correctionSettings,
                 settings: request.masteringSettings

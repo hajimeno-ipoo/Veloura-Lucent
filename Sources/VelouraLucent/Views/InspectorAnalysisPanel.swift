@@ -11,7 +11,6 @@ struct InspectorAnalysisPanel: View {
             processedMetrics: job.outputMetrics,
             masteredMetrics: job.masteredMetrics,
             processedTitle: "補正後",
-            qualityReport: qualityReport,
             completionReport: completionReport,
             peakCeilingDB: peakCeilingDB,
             analysisState: analysisState,
@@ -20,15 +19,6 @@ struct InspectorAnalysisPanel: View {
         ) {
             EmptyView()
         }
-    }
-
-    private var qualityReport: AudioQualityReport? {
-        AudioQualityReportService.makeReport(
-            input: job.inputMetrics,
-            corrected: job.outputMetrics,
-            mastered: job.masteredMetrics,
-            peakCeilingDB: peakCeilingDB
-        )
     }
 
     private var peakCeilingDB: Double {
@@ -79,7 +69,6 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
     let processedMetrics: AudioMetricSnapshot?
     let masteredMetrics: AudioMetricSnapshot?
     let processedTitle: String
-    let qualityReport: AudioQualityReport?
     let completionReport: CompletionReport?
     let peakCeilingDB: Double
     let analysisState: (InspectorAudioSelection) -> DisplayAnalysisPresentationState
@@ -93,7 +82,7 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("解析結果と品質確認")
+                Text("解析結果")
                     .font(.title3.bold())
                 Spacer()
                 if isAnalyzing {
@@ -128,10 +117,6 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
                 }
                 .padding(.vertical, 6)
                 .accessibilityElement(children: .combine)
-            }
-
-            if let qualityReport {
-                qualityWarnings(qualityReport)
             }
 
             additionalContent
@@ -191,54 +176,6 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
         .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
         .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .combine)
-    }
-
-    private func qualityWarnings(_ report: AudioQualityReport) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack {
-                Text("品質確認")
-                    .font(.headline)
-                TermHelpButton(
-                    title: "品質確認",
-                    reading: "ひんしつかくにん",
-                    description: "入力、\(processedTitle)、最終版の実測値を比較し、ピーク、高域、音量、ステレオ幅、音の起伏の大きな変化を表示します。"
-                )
-                Spacer()
-                Text(qualitySeverityText(report.severity))
-                    .font(.body)
-                    .foregroundStyle(qualitySeverityColor(report.severity))
-            }
-
-            if report.items.isEmpty {
-                Label {
-                    Text("数値上の追加候補はありません。最終版を聴いて違和感がないか確認してください。")
-                        .font(.callout)
-                } icon: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("聴いて気になる場合の調整候補")
-                        .font(.body)
-                    ForEach(Array(report.items.enumerated()), id: \.offset) { _, item in
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title)
-                                    .font(.body)
-                                Text(item.detail)
-                                    .font(.body)
-                                    .foregroundStyle(.secondary)
-                            }
-                        } icon: {
-                            Image(systemName: qualitySeverityIcon(item.severity))
-                                .foregroundStyle(qualitySeverityColor(item.severity))
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.vertical, 4)
     }
 
     private var completionReportControl: some View {
@@ -302,36 +239,4 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
         }
     }
 
-    private func qualitySeverityText(_ severity: AudioQualityReportSeverity) -> String {
-        switch severity {
-        case .info:
-            "確認"
-        case .caution:
-            "注意"
-        case .warning:
-            "警告"
-        }
-    }
-
-    private func qualitySeverityColor(_ severity: AudioQualityReportSeverity) -> Color {
-        switch severity {
-        case .info:
-            .secondary
-        case .caution:
-            VelouraTextColors.orange
-        case .warning:
-            .red
-        }
-    }
-
-    private func qualitySeverityIcon(_ severity: AudioQualityReportSeverity) -> String {
-        switch severity {
-        case .info:
-            "info.circle.fill"
-        case .caution:
-            "exclamationmark.circle.fill"
-        case .warning:
-            "exclamationmark.triangle.fill"
-        }
-    }
 }

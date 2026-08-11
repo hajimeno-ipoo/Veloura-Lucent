@@ -2,6 +2,11 @@
   "schemaVersion": 1,
   "notices": [
     {
+      "relativePath": "BS-RoFormer-SW/MODEL_NOTICE.md",
+      "byteCount": 1428,
+      "sha256": "be5db8b5512ea71a84b551411b5d24ab697410db742ea68c2d99edbf20b51df5"
+    },
+    {
       "relativePath": "demucs-mlx-swift/LICENSE",
       "byteCount": 1069,
       "sha256": "3271b37c55a37787ad3c5fade17a85fda5e98636f08c9e9c094591280b6a0a2e"

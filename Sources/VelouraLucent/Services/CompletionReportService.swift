@@ -9,7 +9,13 @@ enum CompletionReportService {
         correctedNoise: NoiseMeasurementSnapshot?,
         masteredNoise: NoiseMeasurementSnapshot?,
         correctionSettings: CorrectionSettings,
-        masteringSettings: MasteringSettings
+        masteringSettings: MasteringSettings,
+        mode: CompletionReportMode = .standard,
+        trackTitle: String? = nil,
+        processingSourceName: String? = nil,
+        inputFileInfo: AudioFileInfo? = nil,
+        processedFileInfo: AudioFileInfo? = nil,
+        masteredFileInfo: AudioFileInfo? = nil
     ) -> CompletionReport? {
         guard
             let input,
@@ -35,14 +41,59 @@ enum CompletionReportService {
             return nil
         }
 
+        let document = CompletionReportDocumentService.make(
+            input: input,
+            processed: corrected,
+            mastered: mastered,
+            noiseReport: noiseReport,
+            mode: mode,
+            trackTitle: trackTitle,
+            processingSourceName: processingSourceName,
+            inputFileInfo: inputFileInfo,
+            processedFileInfo: processedFileInfo,
+            masteredFileInfo: masteredFileInfo
+        )
         return CompletionReport(
             loudnessRows: loudnessRows(input: input, corrected: corrected, mastered: mastered, settings: masteringSettings),
             noiseRows: noiseRows(from: noiseReport),
             highFrequencyRows: highFrequencyRows(input: input, corrected: corrected, mastered: mastered),
             lowFrequencyRows: lowFrequencyRows(input: input, corrected: corrected, mastered: mastered),
             qualityRows: qualityRows(from: qualityReport),
-            reminder: "数値は確認材料です。最終判断は試聴で行ってください。"
+            reminder: "数値は確認材料です。音楽的な良し悪しは目標値だけで決めず、入力・中間段階・最終版を同じ音量で聴き比べて判断してください。",
+            mode: mode,
+            summary: document.summary,
+            comparisonRows: document.comparisonRows,
+            comparisonNotes: document.comparisonNotes,
+            sections: document.sections,
+            charts: document.charts,
+            safetyRows: safetyRows(
+                mastered: mastered,
+                peakCeilingDB: Double(masteringSettings.peakCeilingDB),
+                masteredOffsetSeconds: document.masteredOffsetSeconds
+            )
         )
+    }
+
+    private static func safetyRows(
+        mastered: AudioMetricSnapshot,
+        peakCeilingDB: Double,
+        masteredOffsetSeconds: Double?
+    ) -> [CompletionReportRow] {
+        var rows: [CompletionReportRow] = []
+        if !mastered.integratedLoudnessLUFS.isFinite || !mastered.truePeakDBFS.isFinite {
+            rows.append(CompletionReportRow(id: "invalid", title: "測定値異常", value: "要確認", detail: "最終版に有限でない測定値があります。", severity: .warning))
+        }
+        if mastered.truePeakDBFS > peakCeilingDB {
+            rows.append(CompletionReportRow(id: "peak-over", title: "True Peak上限超過", value: format(mastered.truePeakDBFS, decimals: 2, unit: "dBTP"), detail: "設定上限 \(format(peakCeilingDB, decimals: 2, unit: "dBTP"))を超えています。", severity: .warning))
+        }
+        if let offset = masteredOffsetSeconds, abs(offset) > 0.05 {
+            rows.append(CompletionReportRow(id: "time-offset", title: "開始位置のずれ", value: milliseconds(offset), detail: "入力と最終版の包絡波形から50 msを超える時間差を検出しました。", severity: .warning))
+        }
+        return rows
+    }
+
+    private static func milliseconds(_ seconds: Double) -> String {
+        "\(formatSigned(seconds * 1_000, decimals: 0, unit: "ms"))"
     }
 
     private static func qualityRows(from report: AudioQualityReport) -> [CompletionReportRow] {
@@ -274,10 +325,12 @@ enum CompletionReportService {
     }
 
     private static func format(_ value: Double, decimals: Int, unit: String) -> String {
-        "\(String(format: "%.\(decimals)f", value)) \(unit)"
+        let number = String(format: "%.\(decimals)f", value)
+        return unit.isEmpty ? number : "\(number) \(unit)"
     }
 
     private static func formatSigned(_ value: Double, decimals: Int, unit: String) -> String {
-        "\(String(format: value >= 0 ? "+%.\(decimals)f" : "%.\(decimals)f", value)) \(unit)"
+        let number = String(format: value >= 0 ? "+%.\(decimals)f" : "%.\(decimals)f", value)
+        return unit.isEmpty ? number : "\(number) \(unit)"
     }
 }

@@ -254,6 +254,43 @@ struct NoiseCheckReportServiceTests {
     }
 
     @Test
+    func noiseComparisonUsesInputAsSharedReference() throws {
+        let report = try #require(NoiseCheckReportService.makeReport(
+            input: snapshot(hiss: -72, sibilance: 6.2, shimmer: -72, mud: -21.2, hum: 2, rumble: -48, room: -52),
+            corrected: snapshot(hiss: -72, sibilance: 7.9, shimmer: -72, mud: -21.2, hum: 2, rumble: -48, room: -52),
+            mastered: snapshot(hiss: -72, sibilance: 7.4, shimmer: -72, mud: -20.8, hum: 2, rumble: -48, room: -52),
+            correctionSettings: DenoiseStrength.gentle.settings,
+            settings: MasteringProfile.natural.settings
+        ))
+
+        let sibilance = try #require(report.rows.first { $0.id == "sibilance" })
+        let mud = try #require(report.rows.first { $0.id == "mud" })
+
+        #expect(abs((sibilance.correctedDeltaFromInputDB ?? 0) - 1.7) < 0.000_001)
+        #expect(abs((sibilance.masteredDeltaFromInputDB ?? 0) - 1.2) < 0.000_001)
+        #expect(abs((sibilance.latestDeltaFromInputDB ?? 0) - 1.2) < 0.000_001)
+        #expect(abs(mud.correctedDeltaFromInputDB ?? 1) < 0.000_001)
+        #expect(abs((mud.masteredDeltaFromInputDB ?? 0) - 0.4) < 0.000_001)
+    }
+
+    @Test
+    func noiseComparisonDeltaScaleCentersClampsAndFitsRowDeltas() {
+        let scale = InputRelativeDeltaScale()
+
+        #expect(scale.ratio(for: 0) == 0.5)
+        #expect(scale.ratio(for: -1) < 0.5)
+        #expect(scale.ratio(for: 1) > 0.5)
+        #expect(scale.ratio(for: -100) == 0)
+        #expect(scale.ratio(for: 100) == 1)
+        #expect(scale.ratio(for: 1.2) < scale.ratio(for: 1.7))
+
+        let fittedScale = InputRelativeDeltaScale.fitting([-12.5, -12.8])
+        #expect(fittedScale.maximumMagnitudeDB == 14)
+        #expect(fittedScale.ratio(for: -12.8) > 0)
+        #expect(fittedScale.ratio(for: -12.8) < fittedScale.ratio(for: -12.5))
+    }
+
+    @Test
     func reportRequiresAtLeastOneStage() {
         #expect(NoiseCheckReportService.makeReport(
             input: nil,

@@ -85,7 +85,7 @@ struct VelouraRootView: View {
         .onChange(of: runtime.stemModelManager.inspectionState, initial: true) { _, _ in
             runtime.stemWorkflowController.synchronizeModelReadiness()
         }
-        .onChange(of: runtime.stemModelManager.isAcquiringModels, initial: true) { _, _ in
+        .onChange(of: runtime.stemModelManager.isModelOperationInProgress, initial: true) { _, _ in
             runtime.stemWorkflowController.synchronizeModelReadiness()
         }
         .onChange(
@@ -184,7 +184,12 @@ struct VelouraRootView: View {
             correctionSettings: job.appliedCorrectionSettings
                 ?? job.editableCorrectionSettings,
             masteringSettings: job.appliedMasteringSettings
-                ?? job.editableMasteringSettings
+                ?? job.editableMasteringSettings,
+            mode: .standard,
+            trackTitle: job.inputFile?.deletingPathExtension().lastPathComponent,
+            inputFileInfo: job.inputFileInfo,
+            processedFileInfo: job.outputFileInfo,
+            masteredFileInfo: job.masteredFileInfo
         )
     }
 

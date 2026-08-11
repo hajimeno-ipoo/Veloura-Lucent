@@ -427,9 +427,9 @@ verify_third_party_notices() {
     die "missing tracked third-party notice manifest: $NOTICE_MANIFEST_PATH"
 
   verify_manifest_value_for_file "$NOTICE_MANIFEST_PATH" "schemaVersion" "1"
-  verify_array_count_for_file "$NOTICE_MANIFEST_PATH" "notices" "18" "relativePath"
+  verify_array_count_for_file "$NOTICE_MANIFEST_PATH" "notices" "19" "relativePath"
 
-  for ((index = 0; index < 18; index += 1)); do
+  for ((index = 0; index < 19; index += 1)); do
     relative_path="$(manifest_value_for_file "$NOTICE_MANIFEST_PATH" "notices.$index.relativePath")"
     expected_bytes="$(manifest_value_for_file "$NOTICE_MANIFEST_PATH" "notices.$index.byteCount")"
     expected_sha256="$(manifest_value_for_file "$NOTICE_MANIFEST_PATH" "notices.$index.sha256")"
@@ -459,7 +459,7 @@ verify_third_party_notices() {
   [[ "$actual_paths" == "$expected_paths" ]] ||
     die "third-party notice file set does not match third-party-notices-manifest.json"
 
-  printf 'verified third-party notices: 18 files\n'
+  printf 'verified third-party notices: 19 files\n'
 }
 
 download_and_verify() {

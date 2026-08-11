@@ -107,6 +107,95 @@ struct StemModelInstallationStoreTests {
     }
 
     @Test
+    func removingInstalledModelDeletesOnlySelectedModelAssetsAndPointer() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.removeTemporaryRoot() }
+        let operationIdentifier = UUID()
+        _ = try await fixture.prepareStaging(operationIdentifier: operationIdentifier)
+        _ = try await fixture.store.activate(
+            operationIdentifier: operationIdentifier,
+            generationIdentifier: UUID(),
+            manifest: fixture.manifest,
+            sourceEvidence: fixture.sourceEvidence
+        )
+
+        let otherAssetSetURL = fixture.paths.assetSetDirectoryURL(
+            assetSetIdentifier: "bs-roformer-sw-fixture"
+        )
+        try FileManager.default.createDirectory(
+            at: otherAssetSetURL,
+            withIntermediateDirectories: true
+        )
+        let otherAssetURL = otherAssetSetURL.appending(path: "keep.bin")
+        try Data("keep".utf8).write(to: otherAssetURL)
+        let otherPointerURL = fixture.paths.activePointerURL(for: .bsRoformerSW)
+        try Data("{}".utf8).write(to: otherPointerURL)
+
+        try await fixture.store.removeInstalledModel(manifest: fixture.manifest)
+
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: fixture.paths.assetSetDirectoryURL(
+                    assetSetIdentifier: fixture.manifest.assetSetIdentifier
+                ).path
+            )
+        )
+        #expect(!FileManager.default.fileExists(atPath: fixture.paths.activePointerURL.path))
+        #expect(FileManager.default.fileExists(atPath: otherAssetURL.path))
+        #expect(FileManager.default.fileExists(atPath: otherPointerURL.path))
+        #expect(try await fixture.store.loadActive(manifest: fixture.manifest) == nil)
+    }
+
+    @Test
+    func removingInstalledModelUnlinksLeafSymbolicLinksWithoutDeletingExternalTargets() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.removeTemporaryRoot() }
+        try FileManager.default.createDirectory(
+            at: fixture.paths.versionsRootURL,
+            withIntermediateDirectories: true
+        )
+
+        let externalDirectory = fixture.temporaryRootURL.appending(
+            path: "external-model",
+            directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(
+            at: externalDirectory,
+            withIntermediateDirectories: true
+        )
+        let externalAsset = externalDirectory.appending(path: "keep.bin")
+        try Data("keep".utf8).write(to: externalAsset)
+        try FileManager.default.createSymbolicLink(
+            at: fixture.paths.assetSetDirectoryURL(
+                assetSetIdentifier: fixture.manifest.assetSetIdentifier
+            ),
+            withDestinationURL: externalDirectory
+        )
+
+        let externalPointer = fixture.temporaryRootURL.appending(
+            path: "external-active.json"
+        )
+        try Data("{}".utf8).write(to: externalPointer)
+        try FileManager.default.createSymbolicLink(
+            at: fixture.paths.activePointerURL,
+            withDestinationURL: externalPointer
+        )
+
+        try await fixture.store.removeInstalledModel(manifest: fixture.manifest)
+
+        #expect(FileManager.default.fileExists(atPath: externalAsset.path))
+        #expect(FileManager.default.fileExists(atPath: externalPointer.path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: fixture.paths.assetSetDirectoryURL(
+                    assetSetIdentifier: fixture.manifest.assetSetIdentifier
+                ).path
+            )
+        )
+        #expect(!FileManager.default.fileExists(atPath: fixture.paths.activePointerURL.path))
+    }
+
+    @Test
     func staleStagingDirectoriesAreRemovedTogether() async throws {
         let fixture = try makeFixture()
         defer { fixture.removeTemporaryRoot() }

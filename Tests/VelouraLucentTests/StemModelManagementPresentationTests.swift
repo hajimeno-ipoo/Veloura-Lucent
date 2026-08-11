@@ -137,6 +137,31 @@ struct StemModelManagementPresentationTests {
         )
     }
 
+    @Test("取得確認は削除確認と同じ簡潔な標準アラート文にする")
+    func downloadConfirmationUsesConciseAlertCopy() {
+        let confirmation = StemModelDownloadConfirmation(
+            id: UUID(),
+            model: .htdemucs,
+            purpose: .initialInstall,
+            repository: "example/repository",
+            revision: "example-revision",
+            license: "example-license",
+            totalByteCount: 123,
+            assets: []
+        )
+
+        let presentation = StemModelManagementSection.DownloadConfirmationPresentation(
+            confirmation: confirmation
+        )
+
+        #expect(presentation.title == "AIモデルを取得しますか？")
+        #expect(presentation.affirmativeTitle == "取得")
+        #expect(presentation.alertMessage == "Stem分離に必要なAIモデルを取得します。")
+        #expect(!presentation.alertMessage.contains(confirmation.repository))
+        #expect(!presentation.alertMessage.contains(confirmation.revision))
+        #expect(!presentation.alertMessage.contains(confirmation.license))
+    }
+
     @Test("About画面はモデル2資産の配布情報と保存先を表示する")
     func aboutPresentationContainsCompleteDownloadContract() throws {
         let fixture = try Fixture()
@@ -149,6 +174,8 @@ struct StemModelManagementPresentationTests {
         #expect(presentation.repository == fixture.manifest.model.repo)
         #expect(presentation.revision == fixture.manifest.model.revision)
         #expect(presentation.license == fixture.manifest.model.licenseMetadata)
+        #expect(presentation.licenseStatus.contains("MIT"))
+        #expect(presentation.provenance.contains("adefossez/demucs"))
         #expect(presentation.totalByteCount == 168_007_757)
         #expect(presentation.assets.count == 2)
         #expect(presentation.assets.map(\.kind) == [.modelWeights, .modelConfiguration])
@@ -172,6 +199,18 @@ struct StemModelManagementPresentationTests {
                     string: StemModelStorePaths.production.rootURL.path
                 ).abbreviatingWithTildeInPath
         )
+    }
+
+    @Test("Aboutで表示する両モデルの権利・来歴情報を保持する")
+    func rightsAndProvenanceInformationCoversBothModels() {
+        let htdemucs = StemSeparationModel.htdemucs.rightsAndProvenance
+        let bsRoformer = StemSeparationModel.bsRoformerSW.rightsAndProvenance
+
+        #expect(htdemucs.licenseStatus.contains("MIT"))
+        #expect(htdemucs.provenance.contains("adefossez/demucs"))
+        #expect(bsRoformer.licenseStatus.contains("unknown"))
+        #expect(bsRoformer.licenseStatus.contains("未宣言"))
+        #expect(bsRoformer.provenance.contains("enerjazzer/BS-ROFO-SW-Fixed"))
     }
 
     @Test("取得進捗は現在資産と全体を別々に算出する")

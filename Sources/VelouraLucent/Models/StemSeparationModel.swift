@@ -30,6 +30,26 @@ enum StemSeparationModel: String, CaseIterable, Codable, Identifiable, Sendable 
             "active-bs-roformer-sw.json"
         }
     }
+
+    var rightsAndProvenance: StemModelRightsAndProvenance {
+        switch self {
+        case .htdemucs:
+            StemModelRightsAndProvenance(
+                licenseStatus: "取得元のモデルカードはMITを示し、元のDemucsもMITと記載しています。",
+                provenance: "adefossez/demucsの事前学習済みweightを、MLX用のsafetensorsとJSON設定へ直接変換したモデルです。"
+            )
+        case .bsRoformerSW:
+            StemModelRightsAndProvenance(
+                licenseStatus: "取得元のLicense metadataはunknownで、上流ライセンスは未宣言と記載されています。",
+                provenance: "enerjazzer/BS-ROFO-SW-FixedのBS-Rofo-SW-Fixed.ckptを、FP16のsafetensorsへ変換したモデルです。"
+            )
+        }
+    }
+}
+
+struct StemModelRightsAndProvenance: Equatable, Sendable {
+    let licenseStatus: String
+    let provenance: String
 }
 
 struct StemProductionModelProfile: Sendable {

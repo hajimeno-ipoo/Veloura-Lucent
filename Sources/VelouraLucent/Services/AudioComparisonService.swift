@@ -2,12 +2,21 @@ import Accelerate
 import Foundation
 
 enum AudioComparisonService {
-    static func analyze(fileURL: URL) throws -> AudioMetricSnapshot {
+    static func analyze(
+        fileURL: URL,
+        includeCompletionReportAnalysis: Bool = false
+    ) throws -> AudioMetricSnapshot {
         let signal = try AudioFileService.loadAudio(from: fileURL)
-        return try analyze(signal: signal)
+        return try analyze(
+            signal: signal,
+            includeCompletionReportAnalysis: includeCompletionReportAnalysis
+        )
     }
 
-    static func analyze(signal: AudioSignal) throws -> AudioMetricSnapshot {
+    static func analyze(
+        signal: AudioSignal,
+        includeCompletionReportAnalysis: Bool = false
+    ) throws -> AudioMetricSnapshot {
         let mono = signal.monoMixdown()
         guard !mono.isEmpty else {
             return emptySnapshot()
@@ -17,15 +26,26 @@ enum AudioComparisonService {
         let waveformMetrics = waveformMetrics(for: mono, sampleRate: signal.sampleRate, loudness: loudnessMeasurement)
         let channelMetrics = channelMetrics(for: signal, loudness: loudnessMeasurement)
         let frequencyMetrics = try frequencyMetrics(for: mono, sampleRate: signal.sampleRate)
+        let reportAnalysis = includeCompletionReportAnalysis
+            ? CompletionReportAudioAnalysisService.analyze(
+                signal: signal,
+                mono: mono,
+                averageSpectrum: frequencyMetrics.averageSpectrum
+            )
+            : .unavailable
         return snapshot(
             duration: duration(for: signal),
             waveformMetrics: waveformMetrics,
             channelMetrics: channelMetrics,
-            frequencyMetrics: frequencyMetrics
+            frequencyMetrics: frequencyMetrics,
+            reportAnalysis: reportAnalysis
         )
     }
 
-    static func analyzeConcurrently(signal: AudioSignal) async throws -> AudioMetricSnapshot {
+    static func analyzeConcurrently(
+        signal: AudioSignal,
+        includeCompletionReportAnalysis: Bool = false
+    ) async throws -> AudioMetricSnapshot {
         try Task.checkCancellation()
         let mono = signal.monoMixdown()
         guard !mono.isEmpty else {
@@ -58,12 +78,27 @@ enum AudioComparisonService {
             try Task.checkCancellation()
             return metrics
         }
+        let reportAnalysisTask: Task<CompletionReportAudioAnalysis, Error>? = includeCompletionReportAnalysis
+            ? Task.detached(priority: .utility) {
+                let frequency = try await frequencyTask.value
+                try Task.checkCancellation()
+                return try Self.completionReportAnalysis(
+                    signal: signal,
+                    mono: mono,
+                    averageSpectrum: frequency.averageSpectrum,
+                    cancellationCheck: {
+                        try Task.checkCancellation()
+                    }
+                )
+            }
+            : nil
 
         let cancelTasks: @Sendable () -> Void = {
             loudnessTask.cancel()
             waveformTask.cancel()
             channelTask.cancel()
             frequencyTask.cancel()
+            reportAnalysisTask?.cancel()
         }
 
         return try await withTaskCancellationHandler {
@@ -71,11 +106,14 @@ enum AudioComparisonService {
                 let waveformResult = try await waveformTask.value
                 let channelResult = try await channelTask.value
                 let frequencyResult = try await frequencyTask.value
+                let reportAnalysisResult = try await reportAnalysisTask?.value ?? .unavailable
+                try Task.checkCancellation()
                 return snapshot(
                     duration: duration(for: signal),
                     waveformMetrics: waveformResult,
                     channelMetrics: channelResult,
-                    frequencyMetrics: frequencyResult
+                    frequencyMetrics: frequencyResult,
+                    reportAnalysis: reportAnalysisResult
                 )
             } catch {
                 cancelTasks()
@@ -120,7 +158,8 @@ enum AudioComparisonService {
         duration: TimeInterval,
         waveformMetrics: WaveformMetrics,
         channelMetrics: ChannelMetrics,
-        frequencyMetrics: FrequencyMetrics
+        frequencyMetrics: FrequencyMetrics,
+        reportAnalysis: CompletionReportAudioAnalysis
     ) -> AudioMetricSnapshot {
         AudioMetricSnapshot(
             duration: duration,
@@ -143,7 +182,22 @@ enum AudioComparisonService {
             masteringBandEnergies: frequencyMetrics.masteringBandEnergies,
             shortTermLoudness: waveformMetrics.shortTermLoudness,
             dynamics: waveformMetrics.dynamics,
-            averageSpectrum: frequencyMetrics.averageSpectrum
+            averageSpectrum: frequencyMetrics.averageSpectrum,
+            completionReportAnalysis: reportAnalysis
+        )
+    }
+
+    private static func completionReportAnalysis(
+        signal: AudioSignal,
+        mono: [Float],
+        averageSpectrum: [SpectrumMetric],
+        cancellationCheck: () throws -> Void
+    ) throws -> CompletionReportAudioAnalysis {
+        try CompletionReportAudioAnalysisService.analyze(
+            signal: signal,
+            mono: mono,
+            averageSpectrum: averageSpectrum,
+            cancellationCheck: cancellationCheck
         )
     }
 

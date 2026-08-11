@@ -18,7 +18,10 @@ enum StemAudioEvaluationService {
             return converted
         }
 
-        let audioMetrics = try await AudioComparisonService.analyzeConcurrently(signal: analysisSignal)
+        let audioMetrics = try await AudioComparisonService.analyzeConcurrently(
+            signal: analysisSignal,
+            includeCompletionReportAnalysis: request.purpose.includesCompletionReportAnalysis
+        )
         try Task.checkCancellation()
 
         let noiseMeasurements = try await runCancellableDetachedWorker(priority: .utility) {

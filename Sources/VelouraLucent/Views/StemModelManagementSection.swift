@@ -2,12 +2,22 @@ import SwiftUI
 
 @MainActor
 struct StemModelManagementSection: View {
+    private enum Layout {
+        static let cardMaxWidth: CGFloat = 360
+    }
+
     @Bindable var modelManager: StemModelManager
     let settings: StemSeparationSettings?
     let modelPresentation: StemModeModelPresentation?
     let isDisabled: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isSeparationHelpPresented = false
+    @State private var presentedConfirmation: StemModelDownloadConfirmation?
+    @State private var confirmationErrorMessage: String?
+    @State private var presentedDeletionConfirmation: StemSeparationModel?
+    @State private var deletionErrorMessage: String?
+    @Namespace private var separationHelpNamespace
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -15,11 +25,12 @@ struct StemModelManagementSection: View {
                 Text("Stem分離")
                     .font(.headline)
                 Spacer(minLength: 0)
-                TermHelpButton(
-                    title: "Stem分離情報",
-                    reading: "現在使用するモデルと分離設定",
-                    description: separationInformation,
-                    systemImage: "exclamationmark.circle"
+                StemSeparationHelpButton(
+                    isPresented: $isSeparationHelpPresented,
+                    reduceMotion: reduceMotion,
+                    namespace: separationHelpNamespace,
+                    selectedModel: modelManager.selectedModel,
+                    separationInformation: separationInformation
                 )
             }
 
@@ -32,7 +43,19 @@ struct StemModelManagementSection: View {
                     || modelManager.isAcquiringModels
             )
 
+            StemSeparationChoiceGuide(selectedModel: modelManager.selectedModel)
+
             RecoveryStatusCard(presentation: currentPresentation)
+                .alert(
+                    "AIモデルを取得できませんでした",
+                    isPresented: acquisitionErrorIsPresented
+                ) {
+                    Button("OK") {
+                        confirmationErrorMessage = nil
+                    }
+                } message: {
+                    Text(confirmationErrorMessage ?? "")
+                }
 
             if !managementActions.isEmpty {
                 RecoveryActionSection(
@@ -42,6 +65,48 @@ struct StemModelManagementSection: View {
                         || !currentPresentation.allowsModelDownload,
                     onAction: performRecoveryAction
                 )
+                .alert(
+                    downloadConfirmationTitle,
+                    isPresented: downloadConfirmationIsPresented,
+                    presenting: presentedConfirmation
+                ) { confirmation in
+                    let presentation = DownloadConfirmationPresentation(
+                        confirmation: confirmation
+                    )
+                    Button("キャンセル", role: .cancel) {
+                        cancelPendingConfirmation()
+                    }
+                    Button(presentation.affirmativeTitle) {
+                        confirmAcquisition()
+                    }
+                } message: { confirmation in
+                    Text(
+                        DownloadConfirmationPresentation(
+                            confirmation: confirmation
+                        ).alertMessage
+                    )
+                }
+            }
+
+            ModelRemovalActionButton(
+                isDisabled: isDisabled
+                    || modelManager.isModelOperationInProgress
+                    || !modelManager.canRemoveSelectedModel,
+                action: prepareModelRemoval
+            )
+            .alert(
+                "AIモデルを削除しますか？",
+                isPresented: deletionConfirmationIsPresented,
+                presenting: presentedDeletionConfirmation
+            ) { model in
+                Button("キャンセル", role: .cancel) {
+                    presentedDeletionConfirmation = nil
+                }
+                Button("削除", role: .destructive) {
+                    confirmModelRemoval(model)
+                }
+            } message: { model in
+                Text("「\(model.displayName)」を削除します。再利用には再取得が必要です。")
             }
         }
         .transaction { transaction in
@@ -53,11 +118,78 @@ struct StemModelManagementSection: View {
             guard case .checking = modelManager.inspectionState else { return }
             await modelManager.inspectLocalResources()
         }
+        .onChange(of: modelManager.pendingDownloadConfirmation, initial: true) {
+            _, confirmation in
+            presentedConfirmation = confirmation
+        }
+        .alert(
+            "AIモデルを削除できませんでした",
+            isPresented: deletionErrorIsPresented
+        ) {
+            Button("OK") {
+                deletionErrorMessage = nil
+            }
+        } message: {
+            Text(deletionErrorMessage ?? "")
+        }
         .accessibilityElement(children: .contain)
     }
 
     private var currentPresentation: Presentation {
         Presentation.make(inspectionState: modelManager.inspectionState)
+    }
+
+    private var deletionConfirmationIsPresented: Binding<Bool> {
+        Binding(
+            get: { presentedDeletionConfirmation != nil },
+            set: { isPresented in
+                if !isPresented {
+                    presentedDeletionConfirmation = nil
+                }
+            }
+        )
+    }
+
+    private var downloadConfirmationIsPresented: Binding<Bool> {
+        Binding(
+            get: { presentedConfirmation != nil },
+            set: { isPresented in
+                if !isPresented {
+                    presentedConfirmation = nil
+                }
+            }
+        )
+    }
+
+    private var downloadConfirmationTitle: String {
+        guard let presentedConfirmation else {
+            return "AIモデルを取得しますか？"
+        }
+        return DownloadConfirmationPresentation(
+            confirmation: presentedConfirmation
+        ).title
+    }
+
+    private var acquisitionErrorIsPresented: Binding<Bool> {
+        Binding(
+            get: { confirmationErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    confirmationErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private var deletionErrorIsPresented: Binding<Bool> {
+        Binding(
+            get: { deletionErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    deletionErrorMessage = nil
+                }
+            }
+        )
     }
 
     private var selectedModelBinding: Binding<StemSeparationModel> {
@@ -132,13 +264,60 @@ struct StemModelManagementSection: View {
     }
 
     private func performRecoveryAction(_ action: StemModelRecoveryAction) {
+        confirmationErrorMessage = nil
         switch action {
         case .initialDownload:
-            modelManager.startAcquisition(purpose: .initialInstall)
+            prepareAcquisition(.initialInstall)
         case .repair:
-            modelManager.startAcquisition(purpose: .repair)
+            prepareAcquisition(.repair)
         case .redownload:
-            modelManager.startAcquisition(purpose: .redownload)
+            prepareAcquisition(.redownload)
+        }
+    }
+
+    private func prepareAcquisition(_ purpose: StemModelAcquisitionPurpose) {
+        do {
+            try modelManager.prepareAcquisitionConfirmation(purpose: purpose)
+        } catch {
+            confirmationErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func confirmAcquisition() {
+        do {
+            try modelManager.confirmAcquisition()
+            confirmationErrorMessage = nil
+            presentedConfirmation = nil
+        } catch {
+            modelManager.cancelPendingConfirmation()
+            presentedConfirmation = nil
+            confirmationErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func cancelPendingConfirmation() {
+        modelManager.cancelPendingConfirmation()
+        confirmationErrorMessage = nil
+        presentedConfirmation = nil
+    }
+
+    private func prepareModelRemoval() {
+        guard modelManager.canRemoveSelectedModel else { return }
+        deletionErrorMessage = nil
+        presentedDeletionConfirmation = modelManager.selectedModel
+    }
+
+    private func confirmModelRemoval(_ model: StemSeparationModel) {
+        deletionErrorMessage = nil
+        presentedDeletionConfirmation = nil
+        Task {
+            do {
+                try await modelManager.removeSelectedModel(
+                    expectedModel: model
+                )
+            } catch {
+                deletionErrorMessage = error.localizedDescription
+            }
         }
     }
 }
@@ -268,7 +447,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "AIモデルが必要です",
                     statusText: "未取得",
-                    message: "Stem Modeを使うには、固定RevisionのAIモデル2資産が必要です。取得ボタンを押すと通信を開始し、ファイル名、保存先、進捗をモーダルへ表示します。",
+                    message: "Stem Modeを使うには、固定RevisionのAIモデル2資産が必要です。取得を承認するまでネットワーク通信は開始しません。",
                     detail: nil,
                     symbolName: "arrow.down.circle",
                     tone: .warning,
@@ -280,7 +459,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "AIモデルの修復が必要です",
                     statusText: "修復必要",
-                    message: "AIモデル2資産を取得し直す必要があります。取得ボタンを押すと、進捗画面を表示して完全再取得を開始します。",
+                    message: "AIモデル2資産を取得し直す必要があります。承認した後にだけ完全再取得を開始します。",
                     detail: message,
                     symbolName: "wrench.and.screwdriver",
                     tone: .error,
@@ -300,6 +479,29 @@ extension StemModelManagementSection {
                     requiresAppReinstallation: false,
                     actions: inspection.recoveryActions
                 )
+            }
+        }
+    }
+
+    struct DownloadConfirmationPresentation: Equatable, Sendable {
+        let title: String
+        let affirmativeTitle: String
+        let alertMessage: String
+
+        init(confirmation: StemModelDownloadConfirmation) {
+            switch confirmation.purpose {
+            case .initialInstall:
+                title = "AIモデルを取得しますか？"
+                affirmativeTitle = "取得"
+                alertMessage = "Stem分離に必要なAIモデルを取得します。"
+            case .repair:
+                title = "AIモデルを修復しますか？"
+                affirmativeTitle = "修復"
+                alertMessage = "選択中のAIモデルを取得し直します。"
+            case .redownload:
+                title = "AIモデルを再取得しますか？"
+                affirmativeTitle = "再取得"
+                alertMessage = "選択中のAIモデルを再取得します。"
             }
         }
     }
@@ -441,17 +643,17 @@ extension StemModelManagementSection {
             case .initialDownload:
                 title = "AIモデルを取得"
                 systemImage = "arrow.down.circle"
-                help = "選択中モデルの取得を開始し、進捗画面を開きます。"
+                help = "選択中モデルを取得する前の確認を開きます。承認するまで通信しません。"
                 isPrimary = true
             case .repair:
                 title = "AIモデルを修復"
                 systemImage = "wrench.and.screwdriver"
-                help = "欠落・破損したAIモデル2資産を取得し直します。"
+                help = "欠落・破損したAIモデル2資産の取得確認を開きます。"
                 isPrimary = true
             case .redownload:
                 title = "AIモデルを取得"
                 systemImage = "arrow.clockwise.circle"
-                help = "選択中モデルのAIモデル2資産を完全再取得します。"
+                help = "選択中モデルのAIモデル2資産を完全再取得する確認を開きます。"
                 isPrimary = false
             }
         }
@@ -459,6 +661,256 @@ extension StemModelManagementSection {
 }
 
 private extension StemModelManagementSection {
+    struct StemSeparationChoiceGuide: View {
+        let selectedModel: StemSeparationModel
+
+        var body: some View {
+            Group {
+                if selectedModel == .htdemucs {
+                    ChoiceRow(
+                        title: "HTDemucs",
+                        emphasis: "安定・実績・バランス重視",
+                        detail: "はじめやすさや、全体のバランスを重視する場合に。",
+                        color: .pink
+                    )
+                } else {
+                    ChoiceRow(
+                        title: "BS-RoFormer-SW",
+                        emphasis: "精度・細かさ・分離感重視",
+                        detail: "ボーカルや楽器を、より細かく分けたい場合に。",
+                        color: .blue
+                    )
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: Layout.cardMaxWidth, alignment: .leading)
+            .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    struct ChoiceRow: View {
+        let title: String
+        let emphasis: String
+        let detail: String
+        let color: Color
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.callout.bold())
+                    .foregroundStyle(color)
+                Text(emphasis)
+                    .font(.callout.weight(.semibold))
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    struct StemSeparationHelpButton: View {
+        @Binding var isPresented: Bool
+        let reduceMotion: Bool
+        let namespace: Namespace.ID
+        let selectedModel: StemSeparationModel
+        let separationInformation: String
+
+        var body: some View {
+            Button {
+                LiquidGlassMotion.perform(
+                    reduceMotion: reduceMotion,
+                    animation: LiquidGlassMotion.panel
+                ) {
+                    isPresented.toggle()
+                }
+            } label: {
+                Image(systemName: "exclamationmark.circle")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .glassEffect(.clear.interactive(), in: Circle())
+                    .liquidGlassEffectID("stem-separation-help", in: namespace, isActive: !isPresented)
+                    .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Stem分離モデルの詳しい比較")
+            .help("Stem分離モデルの仕組み・特徴・比較を表示します")
+            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+                StemSeparationHelpContent(
+                    selectedModel: selectedModel,
+                    separationInformation: separationInformation
+                )
+                    .frame(width: 480, height: 560)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 14))
+                    .glassEffectID("stem-separation-help", in: namespace)
+                    .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
+            }
+        }
+    }
+
+    struct StemSeparationHelpContent: View {
+        let selectedModel: StemSeparationModel
+        let separationInformation: String
+
+        var body: some View {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Stem分離モデルの詳しい比較")
+                        .font(.title3.bold())
+
+                    HelpSection(title: "仕組み") {
+                        selectedModelDescription
+                    }
+
+                    HelpSection(title: "\(selectedModel.displayName)の特徴") {
+                        HelpBulletList(items: selectedModelFeatures)
+                    }
+
+                    HelpSection(title: "違い") {
+                        ComparisonTable()
+                    }
+
+                    Text("分離結果は、楽曲、録音状態、音の重なり方によって変わります。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
+
+                    HelpSection(title: "選択中モデルの詳細情報") {
+                        Text(separationInformation)
+                            .font(.callout.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(18)
+            }
+            .accessibilityElement(children: .contain)
+        }
+
+        @ViewBuilder
+        private var selectedModelDescription: some View {
+            switch selectedModel {
+            case .htdemucs:
+                HelpModelDescription(
+                    title: "HTDemucs",
+                    description: "音の波形と、周波数ごとの音の分布を組み合わせて判断するモデルです。"
+                )
+            case .bsRoformerSW:
+                HelpModelDescription(
+                    title: "BS-RoFormer-SW",
+                    description: "音を周波数帯に分け、時間と周波数の関係を見ながら判断するモデルです。"
+                )
+            }
+        }
+
+        private var selectedModelFeatures: [String] {
+            switch selectedModel {
+            case .htdemucs:
+                [
+                    "定番として使われているモデル",
+                    "関連する情報や実装例が多い",
+                    "全体のバランスを重視した分離",
+                    "比較的扱いやすい",
+                ]
+            case .bsRoformerSW:
+                [
+                    "音を細かく捉えることを重視",
+                    "ボーカルや楽器の分離感を求める場合に向く",
+                    "音のにじみや混ざりを減らすことを狙う",
+                    "音の細部を分けたい場合に有力",
+                ]
+            }
+        }
+    }
+
+    struct HelpSection<Content: View>: View {
+        let title: String
+        @ViewBuilder let content: Content
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.headline)
+                content
+            }
+        }
+    }
+
+    struct HelpModelDescription: View {
+        let title: String
+        let description: String
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.callout.bold())
+                Text(description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    struct HelpBulletList: View {
+        let items: [String]
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(items, id: \.self) { item in
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        Text(item)
+                            .font(.callout)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        }
+    }
+
+    struct ComparisonTable: View {
+        private let rows = [
+            ("設計", "波形と周波数情報を組み合わせる方式", "時間と周波数の関係を見る方式"),
+            ("分離の方向性", "全体のバランスを重視", "細かな分離感を重視"),
+            ("情報の多さ", "定番で関連情報が多い", "比較的新しい方式"),
+            ("扱い方", "比較的扱いやすい", "細部まで分けたい場合に使う"),
+        ]
+
+        var body: some View {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    Text("比較する点")
+                    Text("HTDemucs")
+                    Text("BS-RoFormer-SW")
+                }
+                .font(.caption.bold())
+
+                Divider().gridCellColumns(3)
+
+                ForEach(rows, id: \.0) { row in
+                    GridRow(alignment: .top) {
+                        Text(row.0).fontWeight(.semibold)
+                        Text(row.1)
+                        Text(row.2)
+                    }
+                    .font(.caption)
+                    Divider().gridCellColumns(3)
+                }
+            }
+            .accessibilityElement(children: .contain)
+        }
+    }
+
     struct RecoveryStatusCard: View {
         let presentation: Presentation
 
@@ -508,6 +960,7 @@ private extension StemModelManagementSection {
                 }
             }
             .padding(12)
+            .frame(maxWidth: Layout.cardMaxWidth, alignment: .leading)
             .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
             .accessibilityElement(children: .contain)
         }
@@ -563,6 +1016,28 @@ private extension StemModelManagementSection {
                 )
                 .help(presentation.help)
             }
+        }
+    }
+
+    struct ModelRemovalActionButton: View {
+        let isDisabled: Bool
+        let action: () -> Void
+
+        var body: some View {
+            LiquidGlassActionButton(
+                title: "AIモデルを削除",
+                systemImage: "trash",
+                isDisabled: isDisabled,
+                layout: .inspectorWide,
+                action: action
+            )
+            .foregroundStyle(.red)
+            .help(
+                isDisabled
+                    ? "選択中モデルに削除できる取得データがないか、モデル操作・Stem処理が進行中です。"
+                    : "選択中モデルの取得データを削除する確認を開きます。"
+            )
+            .accessibilityHint("もう一方のモデルと作成済み音声は削除しません。")
         }
     }
 

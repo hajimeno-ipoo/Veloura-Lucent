@@ -190,6 +190,23 @@ actor StemModelInstallationStore {
         }
     }
 
+    func removeInstalledModel(manifest: StemModelManifest) throws {
+        let contract = try validator.validateManifest(manifest)
+        let assetSetURL = paths.assetSetDirectoryURL(
+            assetSetIdentifier: manifest.assetSetIdentifier
+        )
+        let activePointerURL = paths.activePointerURL(for: contract.separationModel)
+
+        try removeStoreEntryIfPresent(
+            assetSetURL,
+            operation: "installed model removal"
+        )
+        try removeStoreEntryIfPresent(
+            activePointerURL,
+            operation: "active pointer removal"
+        )
+    }
+
     func activate(
         operationIdentifier: UUID,
         generationIdentifier: UUID,
@@ -698,6 +715,26 @@ actor StemModelInstallationStore {
             throw StemModelInstallationStoreError.fileOperationFailed(
                 operation: "volume validation",
                 path: firstURL.path,
+                reason: error.localizedDescription
+            )
+        }
+    }
+
+    private func removeStoreEntryIfPresent(
+        _ url: URL,
+        operation: String
+    ) throws {
+        guard pathExistsIncludingSymbolicLink(url) else { return }
+        try requireNoSymbolicLinks(
+            from: paths.rootURL,
+            through: url.deletingLastPathComponent()
+        )
+        do {
+            try fileManager.removeItem(at: url)
+        } catch {
+            throw StemModelInstallationStoreError.fileOperationFailed(
+                operation: operation,
+                path: url.path,
                 reason: error.localizedDescription
             )
         }

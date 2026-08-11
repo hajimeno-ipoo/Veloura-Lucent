@@ -74,6 +74,12 @@ struct StemMasteringService: Sendable {
         canonicalInputEvaluation: StemAudioEvaluationSnapshot,
         masteringInputEvaluation: StemAudioEvaluationSnapshot,
         finalEvaluation: StemAudioEvaluationSnapshot,
+        canonicalInputArtifact: StemAudioArtifact,
+        masteringInputArtifact: StemAudioArtifact,
+        finalArtifact: StemAudioArtifact,
+        sourceDisplayName: String,
+        sourceFileInfo: AudioFileInfo?,
+        separationModelDisplayName: String,
         correctionSettings: StemRoleCorrectionSettings,
         settings: MasteringSettings
     ) throws -> StemMasteringReports {
@@ -114,7 +120,12 @@ struct StemMasteringService: Sendable {
             remixedNoise: masteringInputEvaluation.noiseMeasurements,
             masteredNoise: finalEvaluation.noiseMeasurements,
             correctionSettings: correctionSettings,
-            masteringSettings: settings
+            masteringSettings: settings,
+            sourceDisplayName: sourceDisplayName,
+            separationModelDisplayName: separationModelDisplayName,
+            inputFileInfo: sourceFileInfo ?? audioFileInfo(for: canonicalInputArtifact),
+            remixedFileInfo: audioFileInfo(for: masteringInputArtifact),
+            masteredFileInfo: audioFileInfo(for: finalArtifact)
         ) else {
             throw StemMasteringError.reportUnavailable(.completion)
         }
@@ -237,6 +248,12 @@ struct StemMasteringService: Sendable {
                 canonicalInputEvaluation: request.canonicalReference.evaluation,
                 masteringInputEvaluation: request.masteringInput.evaluation,
                 finalEvaluation: finalEvaluation,
+                canonicalInputArtifact: request.canonicalReference.artifact,
+                masteringInputArtifact: request.masteringInput.artifact,
+                finalArtifact: finalArtifact,
+                sourceDisplayName: request.sourceDisplayName,
+                sourceFileInfo: request.sourceFileInfo,
+                separationModelDisplayName: request.separationModelDisplayName,
                 correctionSettings: request.correctionSettings,
                 settings: request.settings
             )
@@ -262,6 +279,19 @@ struct StemMasteringService: Sendable {
             }
             throw error
         }
+    }
+
+    private static func audioFileInfo(for artifact: StemAudioArtifact) -> AudioFileInfo {
+        AudioFileInfo(
+            formatName: "WAV",
+            sampleRate: artifact.sampleRate,
+            channelCount: artifact.channelCount,
+            duration: artifact.sampleRate > 0
+                ? Double(artifact.frameCount) / artifact.sampleRate
+                : 0,
+            bitDepth: 32,
+            isFloatingPoint: true
+        )
     }
 
     private func finalArtifactURL(in sessionDirectory: URL) throws -> URL {

@@ -190,6 +190,18 @@ private actor StemModelAcquisitionControllerDouble: StemModelAcquisitionControll
     }
 }
 
+private actor StemModelRemovalControllerDouble: StemModelRemovalControlling {
+    private var removedAssetSetIdentifiersStorage: [String] = []
+
+    func removeInstalledModel(manifest: StemModelManifest) async throws {
+        removedAssetSetIdentifiersStorage.append(manifest.assetSetIdentifier)
+    }
+
+    var removedAssetSetIdentifiers: [String] {
+        removedAssetSetIdentifiersStorage
+    }
+}
+
 @MainActor
 struct StemModelManagerTests {
     @Test("モデル選択は同じmanagerで選択モデルだけを再検証する")
@@ -213,6 +225,71 @@ struct StemModelManagerTests {
         #expect(await inspector.selectedModels == [.htdemucs, .bsRoformerSW])
         #expect(controller.authorizationIssueCount == 0)
         #expect(await controller.calls.isEmpty)
+    }
+
+    @Test("選択中モデルの削除後は再検査して未取得へ戻る")
+    func removingSelectedModelReinspectsAndReturnsToMissing() async throws {
+        let fixture = try StemModelManagerFixture()
+        let inspector = StemModelInspectorDouble(
+            inspections: [fixture.readyInspection, fixture.missingInspection]
+        )
+        let acquisitionController = StemModelAcquisitionControllerDouble(
+            successfulInstallation: fixture.installation
+        )
+        let removalController = StemModelRemovalControllerDouble()
+        let manager = StemModelManager(
+            inspector: inspector,
+            acquisitionController: acquisitionController,
+            removalController: removalController
+        )
+
+        await manager.inspectLocalResources()
+        #expect(manager.canRemoveSelectedModel)
+
+        try await manager.removeSelectedModel(expectedModel: .htdemucs)
+
+        #expect(
+            await removalController.removedAssetSetIdentifiers
+                == [fixture.manifest.assetSetIdentifier]
+        )
+        #expect(manager.localInspection == fixture.missingInspection)
+        #expect(!manager.canRemoveSelectedModel)
+        #expect(!manager.isModelOperationInProgress)
+        #expect(await inspector.callCount == 2)
+    }
+
+    @Test("破損モデルは削除可能で未取得モデルは削除不可")
+    func removalAvailabilityMatchesInstalledModelState() async throws {
+        let fixture = try StemModelManagerFixture()
+        let invalidInspector = StemModelInspectorDouble(
+            inspections: [fixture.invalidInspection]
+        )
+        let invalidManager = StemModelManager(
+            inspector: invalidInspector,
+            acquisitionController: StemModelAcquisitionControllerDouble(
+                successfulInstallation: fixture.installation
+            ),
+            removalController: StemModelRemovalControllerDouble()
+        )
+        await invalidManager.inspectLocalResources()
+        #expect(invalidManager.canRemoveSelectedModel)
+
+        let missingInspector = StemModelInspectorDouble(
+            inspections: [fixture.missingInspection]
+        )
+        let missingManager = StemModelManager(
+            inspector: missingInspector,
+            acquisitionController: StemModelAcquisitionControllerDouble(
+                successfulInstallation: fixture.installation
+            ),
+            removalController: StemModelRemovalControllerDouble()
+        )
+        await missingManager.inspectLocalResources()
+
+        #expect(!missingManager.canRemoveSelectedModel)
+        await #expect(throws: StemModelManagerError.modelRemovalUnavailable) {
+            try await missingManager.removeSelectedModel(expectedModel: .htdemucs)
+        }
     }
 
     @Test("異常モデルから正常モデルへ切り替えるとStem処理可能状態へ戻る")
@@ -364,6 +441,7 @@ struct StemModelManagerTests {
 
         #expect(fixture.installation.receipt.schemaVersion == 2)
         #expect(fixture.installation.receipt.sourceEvidence.count == 2)
+        #expect(confirmation.model == .htdemucs)
         #expect(confirmation.repository == fixture.manifest.model.repo)
         #expect(confirmation.revision == fixture.manifest.model.revision)
         #expect(confirmation.license == fixture.manifest.model.licenseMetadata)
@@ -428,8 +506,8 @@ struct StemModelManagerTests {
         #expect(await controller.calls.count == 1)
     }
 
-    @Test("右サイドの取得操作は確認待ちを残さず取得を開始し成功後に利用可能へ戻る")
-    func explicitAcquisitionActionStartsImmediatelyAndClosesOnReadiness() async throws {
+    @Test("確認済み再試行の直接開始は成功後に利用可能へ戻る")
+    func confirmedRetryStartClosesOnReadiness() async throws {
         let fixture = try StemModelManagerFixture()
         let inspector = StemModelInspectorDouble(
             inspections: [fixture.missingInspection, fixture.readyInspection]

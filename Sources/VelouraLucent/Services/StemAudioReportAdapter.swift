@@ -40,7 +40,12 @@ enum StemAudioReportAdapter {
         remixedNoise: NoiseMeasurementSnapshot?,
         masteredNoise: NoiseMeasurementSnapshot?,
         correctionSettings: StemRoleCorrectionSettings,
-        masteringSettings: MasteringSettings
+        masteringSettings: MasteringSettings,
+        sourceDisplayName: String,
+        separationModelDisplayName: String,
+        inputFileInfo: AudioFileInfo,
+        remixedFileInfo: AudioFileInfo,
+        masteredFileInfo: AudioFileInfo
     ) -> CompletionReport? {
         let reports = correctionSettings.allRoleSettings.compactMap { roleSettings in
             CompletionReportService.makeReport(
@@ -51,7 +56,13 @@ enum StemAudioReportAdapter {
                 correctedNoise: remixedNoise,
                 masteredNoise: masteredNoise,
                 correctionSettings: roleSettings,
-                masteringSettings: masteringSettings
+                masteringSettings: masteringSettings,
+                mode: .stem,
+                trackTitle: sourceDisplayName,
+                processingSourceName: separationModelDisplayName,
+                inputFileInfo: inputFileInfo,
+                processedFileInfo: remixedFileInfo,
+                masteredFileInfo: masteredFileInfo
             )
         }
         guard reports.count == StemRole.allCases.count,
@@ -65,7 +76,15 @@ enum StemAudioReportAdapter {
             noiseRows: first.noiseRows.map(stemNoiseCompletionRow),
             highFrequencyRows: first.highFrequencyRows.map(stemCompletionRow),
             lowFrequencyRows: first.lowFrequencyRows.map(stemLowCompletionRow),
-            reminder: first.reminder
+            qualityRows: [],
+            reminder: first.reminder,
+            mode: .stem,
+            summary: first.summary,
+            comparisonRows: first.comparisonRows,
+            comparisonNotes: first.comparisonNotes,
+            sections: first.sections,
+            charts: first.charts,
+            safetyRows: first.safetyRows
         )
     }
 

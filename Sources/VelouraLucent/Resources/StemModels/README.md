@@ -61,5 +61,6 @@ Verify only the files required to build and sign the application:
 script/prepare_stem_models.sh --verify-packaging
 ```
 
-The model card, upstream MIT notice, runtime licenses, acknowledgements, and
-the fixed notice inventory are tracked under `Resources/ThirdPartyNotices`.
+The HTDemucs model card, upstream MIT notice, BS-RoFormer-SW project model
+notice, runtime licenses, acknowledgements, and the fixed notice inventory are
+tracked under `Resources/ThirdPartyNotices`.

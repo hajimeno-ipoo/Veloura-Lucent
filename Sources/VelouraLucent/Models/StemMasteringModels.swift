@@ -116,6 +116,9 @@ struct StemMasteringInputMaterial: Sendable {
 struct StemMasteringRequest: Sendable {
     let runID: UUID
     let sessionDirectory: URL
+    let sourceDisplayName: String
+    let sourceFileInfo: AudioFileInfo?
+    let separationModelDisplayName: String
     let canonicalReference: StemCanonicalMasteringReference
     let masteringInput: StemMasteringInputMaterial
     let correctionSettings: StemRoleCorrectionSettings

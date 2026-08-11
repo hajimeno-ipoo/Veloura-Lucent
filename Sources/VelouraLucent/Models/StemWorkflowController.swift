@@ -8,7 +8,7 @@ enum StemWorkflowControllerError: LocalizedError {
     case workflowAlreadyActive
     case remixNotReady
     case masteringNotReady
-    case modelAcquisitionInProgress
+    case modelOperationInProgress
     case validatedResourcesUnavailable
     case eventRunMismatch(expected: UUID, actual: UUID)
     case artifactIsNotValidated(String)
@@ -25,8 +25,8 @@ enum StemWorkflowControllerError: LocalizedError {
             "補正済み4Stemと純粋加算が確定していないため、再ミックスを開始できません。"
         case .masteringNotReady:
             "検証済みStem再ミックスが確定していないため、マスタリングを開始できません。"
-        case .modelAcquisitionInProgress:
-            "AIモデルの取得または再検証が進行中のため、Stem Mode処理を開始できません。"
+        case .modelOperationInProgress:
+            "AIモデルの取得・削除・再検証が進行中のため、Stem Mode処理を開始できません。"
         case .validatedResourcesUnavailable:
             "右サイドのStem分離で使用可能と確認されたStem Mode資産がありません。"
         case let .eventRunMismatch(expected, actual):
@@ -297,7 +297,7 @@ final class StemWorkflowController {
 
     func synchronizeModelReadiness() {
         guard let workspaceModel else { return }
-        if modelManager.isAcquiringModels {
+        if modelManager.isModelOperationInProgress {
             workspaceModel.setModelOperationInProgress(true)
             return
         }
@@ -346,7 +346,7 @@ final class StemWorkflowController {
             guard let workspaceModel else {
                 throw StemWorkflowControllerError.workspaceUnavailable
             }
-            if !modelManager.isAcquiringModels,
+            if !modelManager.isModelOperationInProgress,
                let resources = readyResourcesFromCurrentInspection() {
                 let settings = try StemSeparationSettings
                     .production(
@@ -1128,8 +1128,8 @@ final class StemWorkflowController {
     }
 
     private func currentReadyResources() throws -> ReadyResources {
-        guard !modelManager.isAcquiringModels else {
-            throw StemWorkflowControllerError.modelAcquisitionInProgress
+        guard !modelManager.isModelOperationInProgress else {
+            throw StemWorkflowControllerError.modelOperationInProgress
         }
         guard let resources = readyResourcesFromCurrentInspection() else {
             throw StemWorkflowControllerError.validatedResourcesUnavailable

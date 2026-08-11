@@ -594,6 +594,10 @@ private func makeImmediateCorrectionResult(
     return StemWorkflowCorrectionResult(
         runID: request.runID,
         sessionDirectory: directory,
+        sourceDisplayName: request.sourceURL.deletingPathExtension().lastPathComponent,
+        sourceFileInfo: try? AudioFileService.fileInfo(for: request.sourceURL),
+        separationModelDisplayName: StemProductionModelProfile.identify(request.manifest)?.displayName
+            ?? request.manifest.model.name,
         input: StemInputPreparedResult(
             artifact: input,
             channelMatrix: StemInputChannelMatrix(

@@ -21,6 +21,7 @@ struct StemAudioEvaluationServiceTests {
         #expect(snapshot.audioMetrics.duration > 0)
         #expect(snapshot.audioMetrics.bandEnergies.isEmpty == false)
         #expect(snapshot.audioMetrics.masteringBandEnergies.isEmpty == false)
+        #expect(snapshot.audioMetrics.completionReportAnalysis.displayWaveform.isEmpty == false)
         #expect(snapshot.noiseMeasurements.values.count == 7)
         #expect(snapshot.audioAnalysis != nil)
         #expect(snapshot.masteringAnalysis != nil)
@@ -55,6 +56,7 @@ struct StemAudioEvaluationServiceTests {
         ])
         #expect(rawStemSnapshot.audioAnalysis != nil)
         #expect(rawStemSnapshot.masteringAnalysis == nil)
+        #expect(rawStemSnapshot.audioMetrics.completionReportAnalysis == .unavailable)
 
         #expect(finalMasterSnapshot.completedMeasurements == [
             .audioComparisonSnapshot,
@@ -63,6 +65,7 @@ struct StemAudioEvaluationServiceTests {
         ])
         #expect(finalMasterSnapshot.audioAnalysis == nil)
         #expect(finalMasterSnapshot.masteringAnalysis != nil)
+        #expect(finalMasterSnapshot.audioMetrics.completionReportAnalysis.displayWaveform.isEmpty == false)
     }
 
     @Test
@@ -172,6 +175,13 @@ struct StemAudioEvaluationServiceTests {
         ]
 
         #expect(purposes == [.rawStem(role: .drums), .correctedStem(role: .vocals), .correctedPureSum])
+        #expect(StemAudioEvaluationPurpose.canonicalInput.includesCompletionReportAnalysis)
+        #expect(StemAudioEvaluationPurpose.remix.includesCompletionReportAnalysis)
+        #expect(StemAudioEvaluationPurpose.finalMaster.includesCompletionReportAnalysis)
+        #expect(!StemAudioEvaluationPurpose.rawStem(role: .drums).includesCompletionReportAnalysis)
+        #expect(!StemAudioEvaluationPurpose.correctedStem(role: .vocals).includesCompletionReportAnalysis)
+        #expect(!StemAudioEvaluationPurpose.rawRemix.includesCompletionReportAnalysis)
+        #expect(!StemAudioEvaluationPurpose.correctedPureSum.includesCompletionReportAnalysis)
     }
 
     @Test

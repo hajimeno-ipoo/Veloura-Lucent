@@ -35,6 +35,15 @@ enum StemAudioEvaluationPurpose: Equatable, Sendable {
     case correctedPureSum
     case remix
     case finalMaster
+
+    var includesCompletionReportAnalysis: Bool {
+        switch self {
+        case .canonicalInput, .remix, .finalMaster:
+            true
+        case .rawStem, .correctedStem, .rawRemix, .correctedPureSum:
+            false
+        }
+    }
 }
 
 enum StemAudioEvaluationMeasurement: String, Equatable, Sendable {

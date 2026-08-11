@@ -162,6 +162,27 @@ struct AudioComparisonServiceTests {
     }
 
     @Test
+    func completionReportAnalysisIsOptInForSynchronousAndConcurrentAnalysis() async throws {
+        let signal = makeStereoSignal(rightScale: 0.8)
+
+        let defaultSynchronous = try AudioComparisonService.analyze(signal: signal)
+        let reportSynchronous = try AudioComparisonService.analyze(
+            signal: signal,
+            includeCompletionReportAnalysis: true
+        )
+        let defaultConcurrent = try await AudioComparisonService.analyzeConcurrently(signal: signal)
+        let reportConcurrent = try await AudioComparisonService.analyzeConcurrently(
+            signal: signal,
+            includeCompletionReportAnalysis: true
+        )
+
+        #expect(defaultSynchronous.completionReportAnalysis == .unavailable)
+        #expect(defaultConcurrent.completionReportAnalysis == .unavailable)
+        #expect(reportSynchronous.completionReportAnalysis.displayWaveform.isEmpty == false)
+        #expect(reportConcurrent.completionReportAnalysis.displayWaveform.isEmpty == false)
+    }
+
+    @Test
     func concurrentAnalysisStopsWhenTaskIsCancelled() async {
         let sampleRate = 48_000.0
         let frameCount = Int(sampleRate * 10)

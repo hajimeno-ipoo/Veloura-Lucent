@@ -175,7 +175,10 @@ final class DisplayAnalysisCoordinator {
         if missingKinds.contains(.metrics) {
             do {
                 let metrics = try await DisplayAnalysisSupport.measure("比較指標", logHandler: logHandler) {
-                    try await AudioComparisonService.analyzeConcurrently(signal: signal)
+                    try await AudioComparisonService.analyzeConcurrently(
+                        signal: signal,
+                        includeCompletionReportAnalysis: true
+                    )
                 }
                 guard isCurrentMetricSelection(target: target, selectionID: selectionID, fileURL: url) else { return }
                 finishMetricsAnalysis(metrics, for: target)

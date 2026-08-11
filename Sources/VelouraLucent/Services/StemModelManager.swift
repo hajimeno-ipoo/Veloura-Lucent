@@ -96,6 +96,7 @@ struct StemModelDownloadConfirmation: Equatable, Sendable, Identifiable {
     }
 
     let id: UUID
+    let model: StemSeparationModel
     let purpose: StemModelAcquisitionPurpose
     let repository: String
     let revision: String
@@ -130,6 +131,9 @@ enum StemModelManagerError: LocalizedError, Equatable, Sendable {
     case confirmationNoLongerMatchesCurrentManifest
     case invalidDownloadByteTotal
     case acquiredAssetsDidNotBecomeReady
+    case modelOperationAlreadyInProgress
+    case modelRemovalUnavailable
+    case selectedModelChanged
 
     var errorDescription: String? {
         switch self {
@@ -153,6 +157,12 @@ enum StemModelManagerError: LocalizedError, Equatable, Sendable {
             return "Stem Modeのモデル取得容量を安全に集計できません。"
         case .acquiredAssetsDidNotBecomeReady:
             return "取得後の再検証でStem Modeのモデル資産を有効化できませんでした。"
+        case .modelOperationAlreadyInProgress:
+            return "Stem Modeのモデル操作が既に進行中です。"
+        case .modelRemovalUnavailable:
+            return "選択中のStem Modeモデルには削除できる取得データがありません。"
+        case .selectedModelChanged:
+            return "削除確認後に選択中のStem Modeモデルが変わったため、削除を中止しました。"
         }
     }
 }
@@ -253,24 +263,34 @@ protocol StemModelAcquisitionControlling: Sendable {
 
 extension StemModelAcquisitionService: StemModelAcquisitionControlling {}
 
+protocol StemModelRemovalControlling: Sendable {
+    func removeInstalledModel(manifest: StemModelManifest) async throws
+}
+
+extension StemModelInstallationStore: StemModelRemovalControlling {}
+
 @MainActor
 @Observable
 final class StemModelManager {
     private(set) var selectedModel: StemSeparationModel = .htdemucs
     private(set) var inspectionState: StemModelInspectionState = .checking
     private(set) var operationState: StemModelManagerOperationState = .idle
+    private(set) var isRemovingModel = false
 
     @ObservationIgnored private let inspector: any StemModelLocalInspecting
     @ObservationIgnored private let acquisitionController: any StemModelAcquisitionControlling
+    @ObservationIgnored private let removalController: any StemModelRemovalControlling
     @ObservationIgnored private var inspectionIdentifier = UUID()
     @ObservationIgnored private var acquisitionTask: Task<Void, Never>?
 
     init(
         inspector: any StemModelLocalInspecting = ProductionStemModelLocalInspector(),
-        acquisitionController: any StemModelAcquisitionControlling = StemModelAcquisitionService()
+        acquisitionController: any StemModelAcquisitionControlling = StemModelAcquisitionService(),
+        removalController: any StemModelRemovalControlling = StemModelInstallationStore()
     ) {
         self.inspector = inspector
         self.acquisitionController = acquisitionController
+        self.removalController = removalController
     }
 
     var localInspection: StemModelLocalInspection? {
@@ -291,6 +311,25 @@ final class StemModelManager {
         case .acquiring, .cancelling:
             return true
         case .idle, .awaitingConfirmation, .failed:
+            return false
+        }
+    }
+
+    var isModelOperationInProgress: Bool {
+        isAcquiringModels || isRemovingModel
+    }
+
+    var canRemoveSelectedModel: Bool {
+        guard !isModelOperationInProgress,
+              case .loaded(let inspection) = inspectionState,
+              case .supportedAppleSilicon = inspection.platform,
+              case .valid = inspection.manifest else {
+            return false
+        }
+        switch inspection.installedModel {
+        case .ready, .invalid:
+            return true
+        case .notChecked, .missing:
             return false
         }
     }
@@ -323,7 +362,7 @@ final class StemModelManager {
     }
 
     func selectModel(_ model: StemSeparationModel) async {
-        guard model != selectedModel, !isAcquiringModels else { return }
+        guard model != selectedModel, !isModelOperationInProgress else { return }
         if case .awaitingConfirmation = operationState {
             operationState = .idle
         }
@@ -337,6 +376,9 @@ final class StemModelManager {
     func prepareAcquisitionConfirmation(
         purpose: StemModelAcquisitionPurpose
     ) throws {
+        guard !isRemovingModel else {
+            throw StemModelManagerError.modelOperationAlreadyInProgress
+        }
         guard operationState == .idle || isFailedState else {
             throw StemModelManagerError.acquisitionAlreadyInProgress
         }
@@ -478,6 +520,40 @@ final class StemModelManager {
         operationState = .idle
     }
 
+    func removeSelectedModel(expectedModel: StemSeparationModel) async throws {
+        guard !isModelOperationInProgress,
+              operationState == .idle || isFailedState else {
+            throw StemModelManagerError.modelOperationAlreadyInProgress
+        }
+        guard selectedModel == expectedModel else {
+            throw StemModelManagerError.selectedModelChanged
+        }
+        guard case .loaded(let inspection) = inspectionState,
+              case .supportedAppleSilicon = inspection.platform,
+              case .valid(let manifest) = inspection.manifest else {
+            throw StemModelManagerError.modelRemovalUnavailable
+        }
+        switch inspection.installedModel {
+        case .ready, .invalid:
+            break
+        case .notChecked, .missing:
+            throw StemModelManagerError.modelRemovalUnavailable
+        }
+
+        if isFailedState {
+            operationState = .idle
+        }
+        isRemovingModel = true
+        defer { isRemovingModel = false }
+        do {
+            try await removalController.removeInstalledModel(manifest: manifest)
+            await inspectLocalResources()
+        } catch {
+            await inspectLocalResources()
+            throw error
+        }
+    }
+
     func requestAcquisitionCancellation() {
         let progress: StemModelAcquisitionProgress
         switch operationState {
@@ -586,6 +662,7 @@ final class StemModelManager {
         }
         return StemModelDownloadConfirmation(
             id: id,
+            model: selectedModel,
             purpose: purpose,
             repository: manifest.model.repo,
             revision: manifest.model.revision,

@@ -82,6 +82,9 @@ struct StemMasteringServiceTests {
         let request = StemMasteringRequest(
             runID: UUID(),
             sessionDirectory: root,
+            sourceDisplayName: "test-source",
+            sourceFileInfo: nil,
+            separationModelDisplayName: "HTDemucs",
             canonicalReference: try StemCanonicalMasteringReference(
                 artifact: canonicalArtifact,
                 evaluation: canonicalEvaluation

@@ -282,6 +282,7 @@ struct AudioMetricSnapshot: Sendable {
     let shortTermLoudness: [TimedLevelMetric]
     let dynamics: [DynamicsMetric]
     let averageSpectrum: [SpectrumMetric]
+    var completionReportAnalysis: CompletionReportAudioAnalysis = .unavailable
 }
 
 enum StereoCorrelationTimelineStatus: String, Sendable {
@@ -378,6 +379,20 @@ struct NoiseCheckRow: Sendable, Equatable, Identifiable {
     let correctionEffectText: String
     let masteringEffectText: String
     let recommendedActions: [NoiseCheckAction]
+
+    var correctedDeltaFromInputDB: Double? {
+        guard let input, let corrected else { return nil }
+        return corrected.levelDB - input.levelDB
+    }
+
+    var masteredDeltaFromInputDB: Double? {
+        guard let input, let mastered else { return nil }
+        return mastered.levelDB - input.levelDB
+    }
+
+    var latestDeltaFromInputDB: Double? {
+        masteredDeltaFromInputDB ?? correctedDeltaFromInputDB
+    }
 }
 
 struct NoiseCheckAction: Sendable, Equatable, Identifiable {
@@ -422,6 +437,36 @@ struct NoiseCheckDisplayScale: Sendable, Equatable {
         let normalized = max(0, min(1.0, (value - minimum) / span))
         let softened = sqrt(normalized)
         return max(0.28, min(0.92, 0.28 + softened * 0.64))
+    }
+}
+
+struct InputRelativeDeltaScale: Sendable, Equatable {
+    let maximumMagnitudeDB: Double
+    let unchangedThresholdDB: Double
+
+    init(maximumMagnitudeDB: Double = 6.0, unchangedThresholdDB: Double = 1.0) {
+        self.maximumMagnitudeDB = maximumMagnitudeDB
+        self.unchangedThresholdDB = unchangedThresholdDB
+    }
+
+    static func fitting(
+        _ deltaValues: [Double],
+        minimumMagnitudeDB: Double = 6.0,
+        paddingDB: Double = 1.0,
+        unchangedThresholdDB: Double = 1.0
+    ) -> InputRelativeDeltaScale {
+        let largestMagnitude = deltaValues.map(abs).max() ?? 0
+        let fittedMagnitude = ceil(largestMagnitude + max(paddingDB, 0))
+        return InputRelativeDeltaScale(
+            maximumMagnitudeDB: max(minimumMagnitudeDB, fittedMagnitude),
+            unchangedThresholdDB: unchangedThresholdDB
+        )
+    }
+
+    func ratio(for deltaDB: Double) -> Double {
+        let magnitude = max(maximumMagnitudeDB, 0.1)
+        let clamped = max(-magnitude, min(magnitude, deltaDB))
+        return (clamped + magnitude) / (magnitude * 2)
     }
 }
 

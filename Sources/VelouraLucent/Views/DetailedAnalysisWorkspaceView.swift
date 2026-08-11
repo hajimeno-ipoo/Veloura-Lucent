@@ -106,6 +106,7 @@ struct DetailedAnalysisPresentation {
 
 struct DetailedAnalysisComparisonView: View {
     let presentation: DetailedAnalysisPresentation
+    private let noiseDeltaScale = InputRelativeDeltaScale()
     @State private var showLoudness = false
     @State private var showDynamics = false
     @State private var showSpectrum = false
@@ -164,7 +165,7 @@ struct DetailedAnalysisComparisonView: View {
 
                     analysisDisclosureSection(
                         title: "周波数帯域詳細",
-                        help: "9つの帯域を、入力、\(presentation.correctedTitle)、最終版、処理差分、マスタリング差分で確認します。帯域差分は全体音量差を除いて表示します。",
+                        help: "9つの帯域を、入力、\(presentation.correctedTitle)、最終版の3段階と、入力を基準にした差分で確認します。実測値と差分は同じ小数第2位の表示値から計算します。",
                         isExpanded: $showBands
                     ) {
                         bandDetailRows(
@@ -359,30 +360,13 @@ struct DetailedAnalysisComparisonView: View {
 
     private func noiseComparisonCard(_ report: NoiseCheckReport) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                sectionLabel(
-                    title: "ノイズ7種類比較",
-                    help: "ヒス、サ行、高域のチラつき、こもり、ハム、低域ゴロゴロ、環境音を、入力、\(presentation.correctedTitle)、最終版で比較します。"
-                )
-                Spacer()
-                Text(noiseSeverityText(report.severity))
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(noiseSeverityColor(report.severity))
-            }
+            sectionLabel(
+                title: "ノイズ7種類比較",
+                help: "ヒス、サ行、高域のチラつき、こもり、ハム、低域ゴロゴロ、環境音を、入力、\(presentation.correctedTitle)、最終版で比較します。"
+            )
 
             ForEach(report.rows) { row in
                 noiseRow(row)
-            }
-
-            if !report.recommendedActions.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("聴いて気になる場合の調整候補")
-                        .font(.headline)
-                    ForEach(report.recommendedActions) { action in
-                        noiseActionRow(action)
-                    }
-                }
-                .padding(.top, 4)
             }
         }
         .analysisCard()
@@ -396,87 +380,159 @@ struct DetailedAnalysisComparisonView: View {
                     Text(row.label)
                         .font(.headline)
                     Text(row.measurementDescription)
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                     Text(row.displayDescription)
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(row.summaryText)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(noiseSeverityColor(row.severity))
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(noiseOriginalComparisonStatus(row))
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(noiseOriginalComparisonColor(row))
+                    Text(noiseOriginalComparisonReason(row))
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            noiseBarLine(title: "入力", value: row.input, row: row, tint: .blue)
-            noiseBarLine(
-                title: presentation.correctedTitle,
-                value: row.corrected,
-                row: row,
-                tint: .green,
-                detail: row.correctionEffectText
-            )
-            noiseBarLine(title: "最終版", value: row.mastered, row: row, tint: .orange, detail: row.masteringEffectText)
+            noiseStageFlow(row)
+            noiseOriginalDeltaComparison(row)
         }
         .padding(12)
         .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
     }
 
-    private func noiseBarLine(
-        title: String,
-        value: NoiseCheckValue?,
-        row: NoiseCheckRow,
-        tint: Color,
-        detail: String? = nil
-    ) -> some View {
-        HStack(spacing: 10) {
-            Text(title)
-                .font(.callout.weight(.semibold))
-                .frame(width: 48, alignment: .leading)
-            GeometryReader { proxy in
-                let ratio = row.displayScale.ratio(for: value?.levelDB)
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.secondary.opacity(value == nil ? 0.16 : 0.10))
-                    if value != nil {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(tint.opacity(0.72))
-                            .frame(width: max(3, proxy.size.width * ratio))
-                    }
-                }
-            }
-            .frame(height: 10)
-            Text(value.map { formatNoiseValue($0) } ?? "--")
-                .font(.callout.monospacedDigit().weight(.semibold))
-                .frame(width: 86, alignment: .trailing)
-            if let detail {
-                Text(detail)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(width: 132, alignment: .leading)
-            }
+    private func noiseStageFlow(_ row: NoiseCheckRow) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            noiseStageValue(title: "入力", value: row.input, tint: .blue)
+            noiseStageTransition(deltaDB: row.correctionDeltaDB)
+            noiseStageValue(title: presentation.correctedTitle, value: row.corrected, tint: .green)
+            noiseStageTransition(deltaDB: row.masteringDeltaDB)
+            noiseStageValue(title: "最終版", value: row.mastered, tint: .orange)
         }
     }
 
-    private func noiseActionRow(_ action: NoiseCheckAction) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(action.title)
-                    .font(.callout.weight(.semibold))
-                Spacer()
-                Text("\(action.currentValue) -> \(action.recommendedValue)")
-                    .font(.callout.monospacedDigit().weight(.semibold))
-            }
-            Text(action.reason)
+    private func noiseStageValue(
+        title: String,
+        value: NoiseCheckValue?,
+        tint: Color
+    ) -> some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.callout.weight(.semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            Text(value.map { formatNoiseValue($0) } ?? "--")
+                .font(.callout.monospacedDigit().weight(.semibold))
+                .foregroundStyle(value == nil ? Color.secondary : tint)
+        }
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func noiseStageTransition(deltaDB: Double?) -> some View {
+        VStack(spacing: 2) {
+            Image(systemName: "arrow.right")
+                .foregroundStyle(.secondary)
+            Text(formatNoiseDelta(deltaDB))
+                .font(.callout.monospacedDigit().weight(.semibold))
+            Text(noiseDeltaDirectionText(deltaDB))
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Text(action.caution)
+                .lineLimit(1)
+        }
+        .frame(width: 104)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func noiseOriginalDeltaComparison(_ row: NoiseCheckRow) -> some View {
+        let displayScale = InputRelativeDeltaScale.fitting(
+            [row.correctedDeltaFromInputDB, row.masteredDeltaFromInputDB].compactMap { $0 }
+        )
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("原音を基準にした差分")
+                .font(.callout.weight(.semibold))
+            HStack(spacing: 8) {
+                Color.clear.frame(width: 112, height: 1)
+                HStack(spacing: 8) {
+                    Text("ノイズ減少 \(formatNoiseDelta(-displayScale.maximumMagnitudeDB))")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .multilineTextAlignment(.leading)
+                    Text("原音 0")
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .multilineTextAlignment(.center)
+                    Text("ノイズ増加 \(formatNoiseDelta(displayScale.maximumMagnitudeDB))")
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .multilineTextAlignment(.trailing)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                Color.clear.frame(width: 92, height: 1)
+            }
+            noiseOriginalDeltaTrack(
+                title: presentation.correctedTitle,
+                deltaDB: row.correctedDeltaFromInputDB,
+                displayScale: displayScale
+            )
+            noiseOriginalDeltaTrack(
+                title: "最終版",
+                deltaDB: row.masteredDeltaFromInputDB,
+                displayScale: displayScale
+            )
+            Text("中央の帯は原音との差が±1.0 dB以内です。表示範囲は補正後と最終版の差に合わせて項目ごとに調整します。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
-        .padding(10)
-        .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
+    }
+
+    private func noiseOriginalDeltaTrack(
+        title: String,
+        deltaDB: Double?,
+        displayScale: InputRelativeDeltaScale
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.callout.weight(.semibold))
+                .lineLimit(2)
+                .frame(width: 112, alignment: .leading)
+            GeometryReader { proxy in
+                let unchangedStart = proxy.size.width * displayScale.ratio(for: -displayScale.unchangedThresholdDB)
+                let unchangedEnd = proxy.size.width * displayScale.ratio(for: displayScale.unchangedThresholdDB)
+                let center = proxy.size.width * displayScale.ratio(for: 0)
+                ZStack(alignment: .topLeading) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.10))
+                        .frame(height: 10)
+                        .offset(y: 2)
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.accentColor.opacity(0.14))
+                        .frame(width: max(1, unchangedEnd - unchangedStart), height: 10)
+                        .offset(x: unchangedStart, y: 2)
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.70))
+                        .frame(width: 1, height: 14)
+                        .offset(x: center)
+                    if let deltaDB {
+                        Image(systemName: noiseDeltaMarkerSymbol(deltaDB, displayScale: displayScale))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(noiseDeltaColor(deltaDB))
+                            .position(
+                                x: max(6, min(proxy.size.width - 6, proxy.size.width * displayScale.ratio(for: deltaDB))),
+                                y: 7
+                            )
+                    }
+                }
+            }
+            .frame(height: 14)
+            Text(formatNoiseDelta(deltaDB))
+                .font(.callout.monospacedDigit().weight(.semibold))
+                .frame(width: 92, alignment: .trailing)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title)、原音比 \(formatNoiseDelta(deltaDB))")
     }
 
     private func correlationCard(stages: [AnalysisStageMetrics]) -> some View {
@@ -840,89 +896,173 @@ struct DetailedAnalysisComparisonView: View {
         let correctedMap = Dictionary(uniqueKeysWithValues: (corrected?.bandEnergies ?? []).map { ($0.id, $0.levelDB) })
         let masteredMap = Dictionary(uniqueKeysWithValues: (mastered?.bandEnergies ?? []).map { ($0.id, $0.levelDB) })
         let rows = input.bandEnergies.map { band in
-            BandDetailRow(
+            let comparison = FrequencyBandDisplayComparison(
+                input: band.levelDB,
+                corrected: correctedMap[band.id],
+                mastered: masteredMap[band.id]
+            )
+            return BandDetailRow(
                 id: band.id,
                 definition: termDefinition(for: band.id),
                 range: band.rangeDescription,
-                input: band.levelDB,
-                corrected: correctedMap[band.id],
-                mastered: masteredMap[band.id],
-                correctionDelta: corrected.flatMap { correctedMetrics in
-                    AudioQualityAssessmentService.normalizedBandDelta(
-                        id: band.id,
-                        reference: input,
-                        target: correctedMetrics
-                    )
-                },
-                masteringDelta: {
-                    guard let corrected, let mastered else { return nil }
-                    return AudioQualityAssessmentService.normalizedBandDelta(
-                        id: band.id,
-                        reference: corrected,
-                        target: mastered
-                    )
-                }()
+                input: comparison.input,
+                corrected: comparison.corrected,
+                mastered: comparison.mastered,
+                correctionDelta: comparison.correctionDelta,
+                masteringDelta: comparison.masteringDelta,
+                masteredDeltaFromInput: comparison.masteredDeltaFromInput
             )
         }
-        let allValues = rows.flatMap { [$0.input, $0.corrected ?? $0.input, $0.mastered ?? $0.corrected ?? $0.input] }
-        let minValue = (allValues.min() ?? -60) - 3
-        let maxValue = (allValues.max() ?? 0) + 3
-
         return VStack(alignment: .leading, spacing: 12) {
             ForEach(rows) { row in
-                bandDetailRow(row, minValue: minValue, maxValue: maxValue)
+                bandDetailRow(row)
             }
         }
     }
 
-    private func bandDetailRow(_ row: BandDetailRow, minValue: Double, maxValue: Double) -> some View {
+    private func bandDetailRow(_ row: BandDetailRow) -> some View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 termLabel(row.definition)
                 Text(row.range)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("全体音量差を除く: 処理 \(row.correctionDelta.map { formatValue($0, format: .dBDelta) } ?? "--") / 仕上げ \(row.masteringDelta.map { formatValue($0, format: .dBDelta) } ?? "--")")
-                    .font(.callout.monospacedDigit())
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
-            bandBar(title: "入力", value: row.input, minValue: minValue, maxValue: maxValue, tint: .blue)
-            bandBar(
-                title: presentation.correctedTitle,
-                value: row.corrected,
-                minValue: minValue,
-                maxValue: maxValue,
-                tint: .green
-            )
-            bandBar(title: "最終版", value: row.mastered, minValue: minValue, maxValue: maxValue, tint: .orange)
+            bandStageFlow(row)
+            bandInputRelativeDeltaComparison(row)
         }
         .padding(10)
         .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
     }
 
-    private func bandBar(title: String, value: Double?, minValue: Double, maxValue: Double, tint: Color) -> some View {
-        let ratio = value.map { max(0, min(1, ($0 - minValue) / max(maxValue - minValue, 1))) } ?? 0
-        return HStack(spacing: 8) {
+    private func bandStageFlow(_ row: BandDetailRow) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            bandStageValue(title: "入力", value: row.input, tint: .blue)
+            bandStageTransition(deltaDB: row.correctionDelta)
+            bandStageValue(title: presentation.correctedTitle, value: row.corrected, tint: .green)
+            bandStageTransition(deltaDB: row.masteringDelta)
+            bandStageValue(title: "最終版", value: row.mastered, tint: .orange)
+        }
+    }
+
+    private func bandStageValue(title: String, value: Double?, tint: Color) -> some View {
+        VStack(spacing: 4) {
             Text(title)
+                .font(.callout.weight(.semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            Text(value.map { formatValue($0, format: .dB) } ?? "--")
+                .font(.callout.monospacedDigit().weight(.semibold))
+                .foregroundStyle(value == nil ? Color.secondary : tint)
+        }
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func bandStageTransition(deltaDB: Double?) -> some View {
+        VStack(spacing: 2) {
+            Image(systemName: "arrow.right")
+                .foregroundStyle(.secondary)
+            Text(formatBandDelta(deltaDB))
+                .font(.callout.monospacedDigit().weight(.semibold))
+            Text(bandDeltaDirectionText(deltaDB))
                 .font(.callout)
-                .frame(width: 48, alignment: .leading)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: 104)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func bandInputRelativeDeltaComparison(_ row: BandDetailRow) -> some View {
+        let displayScale = InputRelativeDeltaScale.fitting(
+            [row.correctionDelta, row.masteredDeltaFromInput].compactMap { $0 }
+        )
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("入力を基準にした差分")
+                .font(.callout.weight(.semibold))
+            HStack(spacing: 8) {
+                Color.clear.frame(width: 112, height: 1)
+                HStack(spacing: 8) {
+                    Text("帯域減少 \(formatBandDelta(-displayScale.maximumMagnitudeDB))")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .multilineTextAlignment(.leading)
+                    Text("入力 0.00 dB")
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .multilineTextAlignment(.center)
+                    Text("帯域増加 \(formatBandDelta(displayScale.maximumMagnitudeDB))")
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .multilineTextAlignment(.trailing)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                Color.clear.frame(width: 92, height: 1)
+            }
+            bandInputRelativeDeltaTrack(
+                title: presentation.correctedTitle,
+                deltaDB: row.correctionDelta,
+                displayScale: displayScale,
+                tint: .green
+            )
+            bandInputRelativeDeltaTrack(
+                title: "最終版",
+                deltaDB: row.masteredDeltaFromInput,
+                displayScale: displayScale,
+                tint: .orange
+            )
+            Text("中央の帯は入力との差が±1.00 dB以内です。表示範囲は補正後と最終版の差に合わせて帯域ごとに調整します。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func bandInputRelativeDeltaTrack(
+        title: String,
+        deltaDB: Double?,
+        displayScale: InputRelativeDeltaScale,
+        tint: Color
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.callout.weight(.semibold))
+                .lineLimit(2)
+                .frame(width: 112, alignment: .leading)
             GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
+                let unchangedStart = proxy.size.width * displayScale.ratio(for: -displayScale.unchangedThresholdDB)
+                let unchangedEnd = proxy.size.width * displayScale.ratio(for: displayScale.unchangedThresholdDB)
+                let center = proxy.size.width * displayScale.ratio(for: 0)
+                ZStack(alignment: .topLeading) {
+                    Capsule()
                         .fill(Color.secondary.opacity(0.10))
-                    if value != nil {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(tint.opacity(0.70))
-                            .frame(width: proxy.size.width * ratio)
+                        .frame(height: 10)
+                        .offset(y: 2)
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.accentColor.opacity(0.14))
+                        .frame(width: max(1, unchangedEnd - unchangedStart), height: 10)
+                        .offset(x: unchangedStart, y: 2)
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.70))
+                        .frame(width: 1, height: 14)
+                        .offset(x: center)
+                    if let deltaDB {
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(tint)
+                            .position(
+                                x: max(6, min(proxy.size.width - 6, proxy.size.width * displayScale.ratio(for: deltaDB))),
+                                y: 7
+                            )
                     }
                 }
             }
-            .frame(height: 10)
-            Text(value.map { formatValue($0, format: .dB) } ?? "--")
-                .font(.callout.monospacedDigit())
-                .frame(width: 74, alignment: .trailing)
+            .frame(height: 14)
+            Text(formatBandDelta(deltaDB))
+                .font(.callout.monospacedDigit().weight(.semibold))
+                .frame(width: 92, alignment: .trailing)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title)、入力比 \(formatBandDelta(deltaDB))")
     }
 
     private func unavailableCard(title: String, description: String) -> some View {
@@ -1247,20 +1387,91 @@ struct DetailedAnalysisComparisonView: View {
         return fallback
     }
 
-    private func noiseSeverityText(_ severity: NoiseCheckSeverity) -> String {
-        switch severity {
-        case .low: "確認"
-        case .caution: "注意"
-        case .warning: "警告"
-        }
-    }
-
     private func noiseSeverityColor(_ severity: NoiseCheckSeverity) -> Color {
         switch severity {
         case .low: .secondary
         case .caution: .orange
         case .warning: .red
         }
+    }
+
+    private func noiseOriginalComparisonStatus(_ row: NoiseCheckRow) -> String {
+        guard let deltaDB = row.latestDeltaFromInputDB else { return row.summaryText }
+        if deltaDB >= noiseDeltaScale.unchangedThresholdDB {
+            return "ノイズが増加"
+        }
+        if deltaDB <= -noiseDeltaScale.maximumMagnitudeDB {
+            return "ノイズが大きく減少"
+        }
+        if deltaDB <= -noiseDeltaScale.unchangedThresholdDB {
+            return "ノイズが減少"
+        }
+        return "原音とほぼ同じ"
+    }
+
+    private func noiseOriginalComparisonReason(_ row: NoiseCheckRow) -> String {
+        guard let deltaDB = row.latestDeltaFromInputDB else { return "原音との比較待ち" }
+        let currentLevel = noiseCurrentLevelText(row.severity)
+        if abs(deltaDB) < noiseDeltaScale.unchangedThresholdDB {
+            return "原音比 \(formatNoiseDelta(deltaDB))・±1.0 dB以内・現在は\(currentLevel)"
+        }
+        return "原音比 \(formatNoiseDelta(deltaDB))・現在は\(currentLevel)"
+    }
+
+    private func noiseOriginalComparisonColor(_ row: NoiseCheckRow) -> Color {
+        guard let deltaDB = row.latestDeltaFromInputDB else { return noiseSeverityColor(row.severity) }
+        return noiseDeltaColor(deltaDB)
+    }
+
+    private func noiseDeltaColor(_ deltaDB: Double) -> Color {
+        if deltaDB >= noiseDeltaScale.unchangedThresholdDB { return .red }
+        if deltaDB <= -noiseDeltaScale.unchangedThresholdDB { return .green }
+        return .secondary
+    }
+
+    private func noiseCurrentLevelText(_ severity: NoiseCheckSeverity) -> String {
+        switch severity {
+        case .low: "目立つ問題なし"
+        case .caution: "少し目立つ"
+        case .warning: "目立つ"
+        }
+    }
+
+    private func noiseDeltaDirectionText(_ deltaDB: Double?) -> String {
+        guard let deltaDB else { return "比較待ち" }
+        if abs(deltaDB) < 0.05 { return "変化なし" }
+        return deltaDB > 0 ? "ノイズ増加" : "ノイズ減少"
+    }
+
+    private func bandDeltaDirectionText(_ deltaDB: Double?) -> String {
+        guard let deltaDB else { return "比較待ち" }
+        if abs(deltaDB) < 0.005 { return "変化なし" }
+        return deltaDB > 0 ? "帯域増加" : "帯域減少"
+    }
+
+    private func formatBandDelta(_ deltaDB: Double?) -> String {
+        guard let deltaDB else { return "--" }
+        if abs(deltaDB) < 0.005 { return "±0.00 dB" }
+        return formatValue(deltaDB, format: .dBDelta)
+    }
+
+    private func noiseDeltaMarkerSymbol(
+        _ deltaDB: Double,
+        displayScale: InputRelativeDeltaScale
+    ) -> String {
+        if deltaDB <= -displayScale.maximumMagnitudeDB {
+            return "arrowtriangle.left.fill"
+        }
+        if deltaDB >= displayScale.maximumMagnitudeDB {
+            return "arrowtriangle.right.fill"
+        }
+        return "circle.fill"
+    }
+
+    private func formatNoiseDelta(_ deltaDB: Double?) -> String {
+        guard let deltaDB else { return "--" }
+        if abs(deltaDB) < 0.05 { return "±0.0 dB" }
+        return String(format: deltaDB > 0 ? "+%.1f dB" : "%.1f dB", deltaDB)
     }
 
     private func formatNoiseValue(_ value: NoiseCheckValue) -> String {
@@ -1384,6 +1595,7 @@ private struct BandDetailRow: Identifiable {
     let mastered: Double?
     let correctionDelta: Double?
     let masteringDelta: Double?
+    let masteredDeltaFromInput: Double?
 }
 
 private struct TimelinePoint: Identifiable {

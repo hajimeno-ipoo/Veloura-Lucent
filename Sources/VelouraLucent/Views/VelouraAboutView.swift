@@ -18,6 +18,8 @@ struct VelouraAboutView: View {
         let repository: String
         let revision: String
         let license: String
+        let licenseStatus: String
+        let provenance: String
         let sourceHosts: String
         let totalByteCount: Int64
         let saveDestination: String
@@ -30,6 +32,8 @@ struct VelouraAboutView: View {
             repository = manifest.model.repo
             revision = manifest.model.revision
             license = manifest.model.licenseMetadata
+            licenseStatus = model.rightsAndProvenance.licenseStatus
+            provenance = model.rightsAndProvenance.provenance
             sourceHosts = Set(
                 manifest.downloadableModelAssets.compactMap {
                     URL(string: $0.downloadURL)?.host
@@ -195,6 +199,8 @@ struct VelouraAboutView: View {
                 (label: "取得元", value: presentation.repository),
                 (label: "固定Revision", value: presentation.revision),
                 (label: "License", value: presentation.license),
+                (label: "ライセンス情報", value: presentation.licenseStatus),
+                (label: "モデルの来歴", value: presentation.provenance),
                 (label: "通信先ホスト", value: presentation.sourceHosts),
                 (label: "合計容量", value: "\(presentation.totalByteCount) bytes"),
                 (label: "保存先", value: presentation.saveDestination),

@@ -214,17 +214,38 @@ struct StemModeWorkspaceWordingTests {
         #expect(modelManagement.contains("LiquidGlassSegmentedPicker("))
         #expect(modelManagement.contains("title: \"分離モデル\""))
         #expect(modelManagement.contains("options: StemSeparationModel.allCases"))
+        #expect(modelManagement.contains("StemSeparationChoiceGuide(selectedModel:"))
+        #expect(modelManagement.contains("安定・実績・バランス重視"))
+        #expect(modelManagement.contains("精度・細かさ・分離感重視"))
+        #expect(modelManagement.contains("StemSeparationHelpContent("))
+        #expect(modelManagement.contains("HelpSection(title: \"仕組み\")"))
+        #expect(modelManagement.contains("HelpSection(title: \"\\(selectedModel.displayName)の特徴\")"))
+        #expect(modelManagement.contains("ComparisonTable()"))
+        #expect(modelManagement.contains("分離結果は、楽曲、録音状態、音の重なり方によって変わります。"))
+        #expect(!modelManagement.contains("50曲"))
+        #expect(!modelManagement.contains("最大メモリ"))
         #expect(modelManagement.contains("LabeledContent(\"モデル状態\")"))
         #expect(modelManagement.contains("Text(presentation.title)"))
         #expect(modelManagement.contains("Text(presentation.message)"))
         #expect(!modelManagement.contains("Text(\"選択できる操作\")"))
         #expect(!modelManagement.contains("if !modelManager.isAcquiringModels"))
-        #expect(modelManagement.contains(
-            "isDisabled: isDisabled || modelManager.isAcquiringModels"
-        ))
+        #expect(modelManagement.contains("|| modelManager.isAcquiringModels"))
         #expect(modelManagement.contains("HStack(spacing: 10)"))
         #expect(modelManagement.contains("LiquidGlassActionButton("))
         #expect(modelManagement.contains("layout: .inspectorWide"))
+        #expect(modelManagement.contains("prepareAcquisitionConfirmation(purpose:"))
+        #expect(!modelManagement.contains("ModelDownloadConfirmationSheet"))
+        #expect(modelManagement.contains("downloadConfirmationIsPresented"))
+        #expect(modelManagement.contains("Button(presentation.affirmativeTitle)"))
+        #expect(modelManagement.contains("Stem分離に必要なAIモデルを取得します。"))
+        #expect(!modelManagement.contains("DownloadContractCard"))
+        #expect(!modelManagement.contains("RightsAndProvenanceCard"))
+        #expect(!modelManagement.contains("DownloadAssetCard"))
+        #expect(modelManagement.contains("try modelManager.confirmAcquisition()"))
+        #expect(modelManagement.contains("承認するまでネットワーク通信は開始しません"))
+        #expect(modelManagement.contains("\"AIモデルを削除しますか？\""))
+        #expect(modelManagement.contains("Button(\"削除\", role: .destructive)"))
+        #expect(!modelManagement.contains("ModelDeletionConfirmationSheet"))
         #expect(!modelManagement.contains(".buttonStyle(.bordered)"))
         #expect(liquidGlassActionButton.contains("var layout: Layout = .compact"))
         #expect(liquidGlassActionButton.contains("case inspectorWide"))
@@ -234,7 +255,7 @@ struct StemModeWorkspaceWordingTests {
         #expect(liquidGlassActionButton.contains(".onHover(perform: updateHover)"))
         #expect(liquidGlassActionButton.contains(".liquidGlassCapsuleMorphSurface("))
         #expect(liquidGlassActionButton.contains("LiquidGlassMotion.perform("))
-        #expect(modelManagement.contains("systemImage: \"exclamationmark.circle\""))
+        #expect(modelManagement.contains("Image(systemName: \"exclamationmark.circle\")"))
         #expect(!modelManagement.contains("title = \"モデル検証\""))
         #expect(modelAcquisitionSheet.contains("canRetryDownload: retryPurpose != nil"))
         #expect(modelAcquisitionSheet.contains("title: \"再ダウンロード\""))
@@ -245,19 +266,14 @@ struct StemModeWorkspaceWordingTests {
             ).count - 1 == 2
         )
         #expect(modelManagement.contains("shifts / overlap"))
-        #expect(modelManagement.contains("split / segment"))
-        #expect(modelManagement.contains("batch size / run seed"))
-        #expect(modelManagement.contains("入力選択後に生成"))
+        #expect(!modelManagement.contains("split / segment"))
+        #expect(!modelManagement.contains("batch size / run seed"))
+        #expect(!modelManagement.contains("入力選択後に生成"))
         #expect(modelManagement.contains("方式　Demucs v4"))
         #expect(modelManagement.contains("出力　4Stem"))
-        #expect(modelManagement.contains("設定　shifts / overlap"))
-        #expect(modelManagement.contains("方式　STFT／62帯域分割／時間・周波数RoFormer"))
-        #expect(modelManagement.contains("出力　6Stem → 既存4Stem"))
-        #expect(modelManagement.contains("設定（固定）　STFT FFT / hop / window　2048 / 512 / 2048"))
-        #expect(modelManagement.contains("帯域 / 周波数ビン　　　 62 / 1025"))
-        #expect(modelManagement.contains("推論チャンク　　　　　 801フレーム"))
-        #expect(modelManagement.contains("短音源 / ステップ　　　 10秒未満: 256フレーム / 8秒"))
-        #expect(modelManagement.contains("dim / depth / heads　　 256 / 12 / 8"))
+        #expect(modelManagement.contains("STFT FFT / hop / window"))
+        #expect(modelManagement.contains("6Stem → 既存4Stem"))
+        #expect(modelManagement.contains("dim / depth / heads"))
         #expect(!modelManagement.contains("shifts / overlap　0 / 0"))
         #expect(!about.contains("Text(\"AIモデル情報\")"))
         #expect(about.contains(
@@ -278,6 +294,8 @@ struct StemModeWorkspaceWordingTests {
         #expect(about.contains("options: StemSeparationModel.allCases"))
         #expect(!about.contains(".pickerStyle(.segmented)"))
         #expect(about.contains("informationList("))
+        #expect(about.contains("(label: \"ライセンス情報\""))
+        #expect(about.contains("(label: \"モデルの来歴\""))
         #expect(about.contains("Divider()"))
         #expect(!about.contains(".velouraAdaptiveGlass("))
         #expect(!inspector.contains("onManageModels"))
@@ -689,6 +707,8 @@ struct StemModeWorkspaceWordingTests {
         #expect(!stemInspector.contains("private func qualityWarnings("))
         #expect(!stemInspector.contains("private var completionReportControl"))
         #expect(stemInspector.contains("processedTitle: processedTitle"))
+        #expect(!standardInspector.contains("qualityReport:"))
+        #expect(!stemInspector.contains("qualityReport:"))
         #expect(stemInspector.contains("model.remixedPreviewArtifact == nil"))
 
         #expect(root.contains("private func chooseStemInputAudio()"))
@@ -699,6 +719,34 @@ struct StemModeWorkspaceWordingTests {
 
         #expect(recentLog.contains("case .remix: \"slider.horizontal.3\""))
         #expect(recentLog.contains("case .mastering: \"waveform.badge.checkmark\""))
+    }
+
+    @Test
+    func stemSeparationSeparatesBeginnerChoiceFromDetailedHelp() throws {
+        let source = try source(
+            "Sources/VelouraLucent/Views/StemModelManagementSection.swift"
+        )
+
+        #expect(source.contains("StemSeparationChoiceGuide(selectedModel:"))
+        #expect(source.contains("static let cardMaxWidth: CGFloat = 360"))
+        #expect(
+            source.components(
+                separatedBy: ".frame(maxWidth: Layout.cardMaxWidth, alignment: .leading)"
+            ).count - 1 == 2
+        )
+        #expect(source.contains("if selectedModel == .htdemucs"))
+        #expect(source.contains("安定・実績・バランス重視"))
+        #expect(source.contains("精度・細かさ・分離感重視"))
+        #expect(source.contains("StemSeparationHelpContent("))
+        #expect(source.contains("HelpSection(title: \"仕組み\")"))
+        #expect(source.contains("HelpSection(title: \"\\(selectedModel.displayName)の特徴\")"))
+        #expect(source.contains("ComparisonTable()"))
+        #expect(source.contains("分離結果は、楽曲、録音状態、音の重なり方によって変わります。"))
+        #expect(!source.contains("50曲"))
+        #expect(!source.contains("最大メモリ"))
+        #expect(source.contains("HelpSection(title: \"選択中モデルの詳細情報\")"))
+        #expect(source.contains("6Stem → 既存4Stem"))
+        #expect(source.contains("shifts / overlap"))
     }
 
     @Test

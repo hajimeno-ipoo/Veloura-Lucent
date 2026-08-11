@@ -1,17 +1,20 @@
 # Stem Mode Third-Party Source Files
 
 This directory preserves upstream license, acknowledgment, and model-card files
-without rewriting their terms. It is a technical inventory, not a legal
-interpretation.
+without rewriting their terms. It also contains a clearly identified
+Veloura Lucent project notice for BS-RoFormer-SW, whose upstream license is
+undeclared. It is a technical inventory, not a legal interpretation.
 
 `third-party-notices-manifest.json` fixes the relative path, byte count, and
-SHA-256 of all 18 upstream files. `script/prepare_stem_models.sh --verify-only`
-validates that manifest together with the three Stem Mode runtime assets.
+SHA-256 of 18 upstream files and one project-maintained model notice.
+`script/prepare_stem_models.sh --verify-only` validates that manifest together
+with the three Stem Mode runtime assets.
 
 The runtime dependency closure is fixed by `StemModels/stem-model-manifest.json`:
 
 | Component | Fixed source | Preserved files |
 |---|---|---|
+| BS-RoFormer-SW model provenance | `MrSimmo/BS_Roformer_SW-MLX@13edef2e713151522e4049e92f011e0543c45d53` | `BS-RoFormer-SW/MODEL_NOTICE.md` (Veloura Lucent project notice; source license metadata `unknown`, upstream license `undeclared`) |
 | Demucs model metadata | `mlx-community/demucs-mlx@d4519e24ddc2dd4a11d56a193092433d852c3961` | `mlx-community-demucs-mlx/MODEL_CARD.md` |
 | Original Demucs | `adefossez/demucs@eeac1d15891af95b1288d2884b95baa3e5baa96c` | `demucs/LICENSE` |
 | demucs-mlx-swift | `c81c47178828db2d8bc66e64f80c745c64abdc94` | `demucs-mlx-swift/LICENSE` |

@@ -3,7 +3,7 @@ import Testing
 
 struct UIWordingPolicyTests {
     @Test
-    func inspectorQualitySummaryUsesCompactUnavailableStateInBothModes() throws {
+    func inspectorAnalysisSummaryUsesCompactUnavailableStateInBothModes() throws {
         let standardInspector = try combinedSource([
             "Sources/VelouraLucent/Views/InspectorAnalysisPanel.swift"
         ])
@@ -14,9 +14,10 @@ struct UIWordingPolicyTests {
         #expect(standardInspector.contains(
             "struct InspectorAnalysisPanelContent<AdditionalContent: View>: View"
         ))
-        #expect(standardInspector.contains("Text(\"解析結果と品質確認\")"))
-        #expect(standardInspector.contains("Text(\"品質確認\")"))
-        #expect(!standardInspector.contains("Text(\"品質警告\")"))
+        #expect(standardInspector.contains("Text(\"解析結果\")"))
+        #expect(!standardInspector.contains("Text(\"品質確認\")"))
+        #expect(!standardInspector.contains("qualityWarnings("))
+        #expect(!standardInspector.contains("qualityReport:"))
         #expect(standardInspector.contains("Image(systemName: \"waveform.path.ecg\")"))
         #expect(standardInspector.contains(".accessibilityElement(children: .combine)"))
         #expect(standardInspector.contains("InspectorAnalysisPanelContent("))
@@ -32,15 +33,20 @@ struct UIWordingPolicyTests {
     }
 
     @Test
-    func completionReportUsesTheSameSeverityRowsForLowBalance() throws {
+    func completionReportUsesDetailedThreeStageDocumentWithoutAdjustmentCandidates() throws {
         let source = try combinedSource([
             "Sources/VelouraLucent/Views/CompletionReportPopoverView.swift"
         ])
 
-        #expect(source.contains(
-            "reportSection(title: \"低域バランス\", rows: report.lowFrequencyRows)"
-        ))
-        #expect(!source.contains("measurementSection"))
+        #expect(source.contains("CompletionReportComparisonView(report: report)"))
+        #expect(source.contains("ForEach(report.sections)"))
+        #expect(source.contains("CompletionReportStageDeltaGrid"))
+        #expect(source.contains("Grid(alignment: .leading"))
+        #expect(source.contains("入力→\\(middleTitle)"))
+        #expect(source.contains("\\(middleTitle)→最終版"))
+        #expect(source.contains("report.safetyRows.isEmpty"))
+        #expect(source.contains("minWidth: 760"))
+        #expect(!source.contains("調整候補"))
     }
 
     @Test
@@ -66,8 +72,8 @@ struct UIWordingPolicyTests {
             #expect(!source.contains(bannedPhrase))
         }
 
-        #expect(source.contains("数値上の追加候補はありません。最終版を聴いて違和感がないか確認してください。"))
-        #expect(source.contains("聴いて気になる場合の調整候補"))
+        #expect(!source.contains("数値上の追加候補はありません。最終版を聴いて違和感がないか確認してください。"))
+        #expect(!source.contains("聴いて気になる場合の調整候補"))
         #expect(source.contains("目標値に必ず合わせるものではなく、仕上げ意図を確認する目安です。"))
         #expect(source.contains("目安:"))
         #expect(source.contains("聴き比べてください"))
@@ -844,6 +850,75 @@ struct UIWordingPolicyTests {
         #expect(source.contains("formatTime"))
         #expect(source.contains("sharedDuration: timeAxisDuration"))
         #expect(source.contains("chartXScale(domain: 0 ... max(sharedDuration ?? snapshot.duration, 0.1))"))
+        #expect(!source.contains("Text(\"時間 →\")"))
+    }
+
+    @Test
+    func noiseComparisonExplainsStageAndInputRelativeChanges() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"])
+
+        #expect(source.contains("noiseStageFlow(row)"))
+        #expect(source.contains("noiseOriginalDeltaComparison(row)"))
+        #expect(source.contains("Text(\"原音を基準にした差分\")"))
+        #expect(source.contains("Text(\"原音 0\")"))
+        #expect(source.contains("中央の帯は原音との差が±1.0 dB以内です。"))
+        #expect(source.contains("表示範囲は補正後と最終版の差に合わせて項目ごとに調整します。"))
+        #expect(source.contains("InputRelativeDeltaScale.fitting("))
+        #expect(source.contains("displayScale: displayScale"))
+        #expect(source.contains("deltaDB: row.correctedDeltaFromInputDB"))
+        #expect(source.contains("deltaDB: row.masteredDeltaFromInputDB"))
+        #expect(!source.contains("private func noiseBarLine("))
+        #expect(!source.contains("noiseSeverityText(report.severity)"))
+        #expect(!source.contains("report.recommendedActions"))
+        #expect(!source.contains("private func noiseActionRow("))
+    }
+
+    @Test
+    func frequencyBandDetailsUseConsistentDisplayedValuesAndDeltas() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"])
+
+        #expect(source.contains("bandStageFlow(row)"))
+        #expect(source.contains("bandInputRelativeDeltaComparison(row)"))
+        #expect(source.contains("FrequencyBandDisplayComparison("))
+        #expect(source.contains("Text(\"入力を基準にした差分\")"))
+        #expect(source.contains("Text(\"入力 0.00 dB\")"))
+        #expect(source.contains("Text(\"帯域減少 "))
+        #expect(source.contains("Text(\"帯域増加 "))
+        #expect(source.contains("masteredDeltaFromInput: comparison.masteredDeltaFromInput"))
+        #expect(source.contains("deltaDB: row.correctionDelta"))
+        #expect(source.contains("deltaDB: row.masteredDeltaFromInput"))
+        #expect(source.contains("formatBandDelta("))
+        #expect(source.contains("±1.00 dB以内"))
+        #expect(source.contains("実測値と差分は同じ小数第2位の表示値から計算します。"))
+        #expect(source.contains("表示範囲は補正後と最終版の差に合わせて帯域ごとに調整します。"))
+        #expect(!source.contains("private func bandBar("))
+        #expect(!source.contains("全体音量差を除く: 処理"))
+        #expect(!source.contains("入力を基準にした差分（全体音量差を除く）"))
+    }
+
+    @Test
+    func noiseAndFrequencyBandDetailsUseReadableTextHierarchy() throws {
+        let source = try combinedSource(["Sources/VelouraLucent/Views/DetailedAnalysisWorkspaceView.swift"])
+        let noiseSection = try sourceSection(
+            source,
+            from: "private func noiseRow(",
+            to: "private func correlationCard("
+        )
+        let frequencyBandSection = try sourceSection(
+            source,
+            from: "private func bandDetailRow(",
+            to: "private func unavailableCard("
+        )
+
+        #expect(noiseSection.contains("Text(row.measurementDescription)\n                        .font(.body)"))
+        #expect(noiseSection.contains("Text(row.displayDescription)\n                        .font(.body)"))
+        #expect(frequencyBandSection.contains("Text(row.range)\n                    .font(.body)"))
+        #expect(!noiseSection.contains(".font(.footnote"))
+        #expect(!frequencyBandSection.contains(".font(.footnote"))
+        #expect(noiseSection.contains(".font(.callout)"))
+        #expect(frequencyBandSection.contains(".font(.callout)"))
+        #expect(noiseSection.contains(".lineLimit(2)"))
+        #expect(frequencyBandSection.contains(".lineLimit(2)"))
     }
 
     private func combinedSource(_ relativePaths: [String]) throws -> String {
@@ -851,6 +926,12 @@ struct UIWordingPolicyTests {
         return try relativePaths
             .map { try String(contentsOf: root.appendingPathComponent($0), encoding: .utf8) }
             .joined(separator: "\n")
+    }
+
+    private func sourceSection(_ source: String, from start: String, to end: String) throws -> String {
+        let startRange = try #require(source.range(of: start))
+        let endRange = try #require(source.range(of: end, range: startRange.upperBound..<source.endIndex))
+        return String(source[startRange.lowerBound..<endRange.lowerBound])
     }
 
 }

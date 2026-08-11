@@ -74,7 +74,12 @@ struct AnalysisReportingConsistencyTests {
             remixedNoise: emptyNoise,
             masteredNoise: emptyNoise,
             correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
-            masteringSettings: MasteringProfile.youtubeSpotify.settings
+            masteringSettings: MasteringProfile.youtubeSpotify.settings,
+            sourceDisplayName: "test-source",
+            separationModelDisplayName: "HTDemucs",
+            inputFileInfo: testFileInfo(sampleRate: 44_100),
+            remixedFileInfo: testFileInfo(sampleRate: 48_000),
+            masteredFileInfo: testFileInfo(sampleRate: 48_000)
         ))
 
         #expect(report.qualityRows.isEmpty)
@@ -84,7 +89,30 @@ struct AnalysisReportingConsistencyTests {
         #expect(report.lowFrequencyRows.first { $0.id == "stem-low-low" }?.detail.contains("Stem再ミックス→最終版 -2.00 dB") == true)
         #expect(report.lowFrequencyRows.first { $0.id == "stem-low-low" }?.severity == .caution)
         #expect(report.lowFrequencyRows.first { $0.id == "stem-low-lowMid" }?.value == "入力比 +1.00 dB")
-        #expect(report.severity == .caution)
+        #expect(report.severity == .normal)
+        #expect(report.safetyRows.isEmpty)
+        #expect(report.mode == .stem)
+        #expect(report.comparisonRows.first { $0.id == "loudness" } != nil)
+        #expect(report.comparisonRows.first { $0.id == "sample-rate" }?.inputValue == "44.1 kHz")
+        #expect(report.sections.map(\.title) == [
+            "1. 原音「test-source」の分析",
+            "2. 再ミックス音源の分析",
+            "3. マスタリング音源の分析",
+            "ノイズ除去・補正・再ミックス・マスタリングの総合評価"
+        ])
+        #expect(report.sections[1].subsections.map(\.title).contains("HTDemucs由来の問題について"))
+        #expect(report.sections[3].subsections.map(\.title).contains("4ステム分離と再ミックス"))
+    }
+
+    private func testFileInfo(sampleRate: Double) -> AudioFileInfo {
+        AudioFileInfo(
+            formatName: "WAV",
+            sampleRate: sampleRate,
+            channelCount: 2,
+            duration: 1,
+            bitDepth: 32,
+            isFloatingPoint: true
+        )
     }
 
     @Test

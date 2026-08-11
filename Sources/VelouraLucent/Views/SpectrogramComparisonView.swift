@@ -30,9 +30,6 @@ struct SpectrogramComparisonView: View {
                     description: "横方向が時間、縦方向が周波数です。色は入力、\(correctedTitle)、最終版で共通の表示dBを示します。赤に近いほど強く、青や黒に近いほど弱い成分です。"
                 )
                 Spacer()
-                Text("時間 →")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
             }
 
             HStack(alignment: .center, spacing: 8) {
