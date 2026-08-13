@@ -396,3 +396,10 @@ swift test
 - Stem ModeはApple SiliconのMLX実行環境を使用します。Stem Modeを利用できない場合でも、通常補正は利用できます。
 - Stemモデルの取得、再取得、修復にはネットワーク接続が必要です。ローカルのモデル検証にはネットワーク接続を使いません。
 - 補正後、補正済みStem、補正済み純粋加算、Stem再ミックス、最終版は、ユーザーが書き出すまで一時ファイルです。
+
+## ライセンスと第三者通知
+
+- Veloura Lucent本体は[MIT License](LICENSE)で提供します。
+- Stem Modeが使用する第三者ソフトウェア、MLX実行資産、モデルの配布情報は、[ThirdPartyNotices](Sources/VelouraLucent/Resources/ThirdPartyNotices/README.md)にまとめています。配布アプリにも同じライセンス・謝辞・モデル通知を同梱します。
+- HTDemucsの取得元[`mlx-community/demucs-mlx`](https://huggingface.co/mlx-community/demucs-mlx/tree/d4519e24ddc2dd4a11d56a193092433d852c3961)は、License metadataを`MIT`と表示しています。
+- BS-RoFormer-SWの取得元[`MrSimmo/BS_Roformer_SW-MLX`](https://huggingface.co/MrSimmo/BS_Roformer_SW-MLX/tree/13edef2e713151522e4049e92f011e0543c45d53)は、License metadataが`unknown`で、上流ライセンスも未宣言です。Veloura LucentはこのモデルのweightsとconfigをアプリやDMGへ同梱せず、ユーザーの承認後に取得します。この記載は、未宣言のライセンスに代わる許諾を与えるものではありません。
