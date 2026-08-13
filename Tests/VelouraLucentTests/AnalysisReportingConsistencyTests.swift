@@ -65,16 +65,21 @@ struct AnalysisReportingConsistencyTests {
             lowMid: -27
         )
         let emptyNoise = NoiseMeasurementSnapshot(values: [])
+        let masteringSettings = MasteringProfile.youtubeSpotify.settings
+        let noiseReport = try #require(StemAudioReportAdapter.makeNoiseCheckReport(
+            input: emptyNoise,
+            remixed: emptyNoise,
+            mastered: emptyNoise,
+            masteringSettings: masteringSettings
+        ))
 
         let report = try #require(StemAudioReportAdapter.makeCompletionReport(
             input: input,
             remixed: remixed,
             mastered: mastered,
-            inputNoise: emptyNoise,
-            remixedNoise: emptyNoise,
-            masteredNoise: emptyNoise,
-            correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
-            masteringSettings: MasteringProfile.youtubeSpotify.settings,
+            noiseReport: noiseReport,
+            reportContext: try reportContext(model: .htdemucs),
+            masteringSettings: masteringSettings,
             sourceDisplayName: "test-source",
             separationModelDisplayName: "HTDemucs",
             inputFileInfo: testFileInfo(sampleRate: 44_100),
@@ -94,7 +99,7 @@ struct AnalysisReportingConsistencyTests {
         #expect(report.mode == .stem)
         #expect(report.comparisonRows.first { $0.id == "loudness" } != nil)
         #expect(report.comparisonRows.first { $0.id == "sample-rate" }?.inputValue == "44.1 kHz")
-        #expect(report.sections.map(\.title) == [
+        #expect(Array(report.sections.prefix(4)).map(\.title) == [
             "1. 原音「test-source」の分析",
             "2. 再ミックス音源の分析",
             "3. マスタリング音源の分析",
@@ -102,6 +107,55 @@ struct AnalysisReportingConsistencyTests {
         ])
         #expect(report.sections[1].subsections.map(\.title).contains("HTDemucs由来の問題について"))
         #expect(report.sections[3].subsections.map(\.title).contains("4ステム分離と再ミックス"))
+        #expect(report.sections.contains { $0.id == "stem-run-contract" })
+        #expect(report.sections.filter { $0.id.hasPrefix("stem-role-") }.count == 4)
+    }
+
+    @Test
+    func sixStemCompletionRecordsEachRoleSettingsGuardsFallbackAndAppliedRemix() throws {
+        let snapshot = metrics(rms: -18, low: -28, lowMid: -30)
+        let emptyNoise = NoiseMeasurementSnapshot(values: [])
+        let masteringSettings = MasteringProfile.streaming.settings
+        let noiseReport = try #require(StemAudioReportAdapter.makeNoiseCheckReport(
+            input: emptyNoise,
+            remixed: emptyNoise,
+            mastered: emptyNoise,
+            masteringSettings: masteringSettings
+        ))
+        let context = try reportContext(model: .bsRoformerSW, fallbackRole: .piano)
+
+        let report = try #require(StemAudioReportAdapter.makeCompletionReport(
+            input: snapshot,
+            remixed: snapshot,
+            mastered: snapshot,
+            noiseReport: noiseReport,
+            reportContext: context,
+            masteringSettings: masteringSettings,
+            sourceDisplayName: "six-stem-source",
+            separationModelDisplayName: "BS-RoFormer-SW",
+            inputFileInfo: testFileInfo(sampleRate: 44_100),
+            remixedFileInfo: testFileInfo(sampleRate: 48_000),
+            masteredFileInfo: testFileInfo(sampleRate: 48_000)
+        ))
+
+        let contractParagraphs = try #require(
+            report.sections.first { $0.id == "stem-run-contract" }
+        ).subsections.flatMap(\.paragraphs)
+        #expect(contractParagraphs.contains { $0.contains("BS-RoFormer-SW（6 Stem）") })
+        #expect(report.sections.filter { $0.id.hasPrefix("stem-role-") }.count == 6)
+
+        let guitar = try #require(report.sections.first { $0.id == "stem-role-guitar" })
+        let guitarParagraphs = guitar.subsections.flatMap(\.paragraphs)
+        #expect(guitarParagraphs.contains { $0.contains("profile 強い") })
+        #expect(guitarParagraphs.contains("gain: +2.50 dB"))
+        #expect(guitar.subsections.filter { $0.id.contains("-guard-") }.count == StemCorrectionStage.allCases.count)
+
+        let piano = try #require(report.sections.first { $0.id == "stem-role-piano" })
+        let pianoParagraphs = piano.subsections.flatMap(\.paragraphs)
+        #expect(pianoParagraphs.contains { $0.contains("raw Stem（補正済み候補は不採用）") })
+        #expect(pianoParagraphs.contains("fallback理由: piano guard失敗"))
+        #expect(piano.subsections.allSatisfy { !$0.id.contains("-guard-") })
+        #expect(noiseReport.recommendedActions.allSatisfy { $0.stage == .mastering })
     }
 
     private func testFileInfo(sampleRate: Double) -> AudioFileInfo {
@@ -112,6 +166,44 @@ struct AnalysisReportingConsistencyTests {
             duration: 1,
             bitDepth: 32,
             isFloatingPoint: true
+        )
+    }
+
+    private func reportContext(
+        model: StemSeparationModel,
+        fallbackRole: StemRole? = nil
+    ) throws -> StemMasteringReportContext {
+        let contract = makeStemTestRunContract(model: model)
+        var remix = StemRemixSettings()
+        remix.setSettings(
+            StemRemixRoleSettings(gainDB: 2.5, pan: -0.25, reverbSend: 0.2),
+            for: .guitar
+        )
+        let guards = StemCorrectionStage.allCases.map { stage in
+            StemCorrectionStageGuardRecord(
+                stage: stage,
+                action: .run,
+                outcome: .completed,
+                reason: "\(stage.rawValue)を完了"
+            )
+        }
+        return try StemMasteringReportContext(
+            runContract: contract,
+            appliedRemixSettings: remix,
+            roleEvidence: contract.pureSumOrder.map { role in
+                let settings: CorrectionSettings = role == .guitar
+                    ? DenoiseStrength.strong.settings
+                    : DenoiseStrength.balanced.settings
+                let usesFallback = role == fallbackRole
+                return StemMasteringRoleReportEvidence(
+                    role: role,
+                    selectedCorrectionSettings: settings,
+                    effectiveCorrectionSettings: usesFallback ? nil : settings,
+                    stageGuards: usesFallback ? [] : guards,
+                    usedRawFallback: usesFallback,
+                    fallbackReason: usesFallback ? "piano guard失敗" : nil
+                )
+            }
         )
     }
 

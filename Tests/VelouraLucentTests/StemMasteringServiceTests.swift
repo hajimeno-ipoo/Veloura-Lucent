@@ -23,6 +23,23 @@ private actor RecordingMasteringProcessor: StemMasteringProcessing {
     }
 }
 
+private actor RecordingStemFinalEvaluator: StemFinalAudioEvaluating {
+    let snapshot: StemAudioEvaluationSnapshot
+    private(set) var callCount = 0
+
+    init(snapshot: StemAudioEvaluationSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    func evaluate(
+        signal: AudioSignal,
+        request: StemAudioEvaluationRequest
+    ) async throws -> StemAudioEvaluationSnapshot {
+        callCount += 1
+        return snapshot
+    }
+}
+
 private final class StemMasteringStringRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var storage: [String] = []
@@ -78,7 +95,12 @@ struct StemMasteringServiceTests {
             masteringSignal,
             purpose: .remix
         )
+        let finalEvaluation = try await evaluate(
+            masteringSignal,
+            purpose: .finalMaster
+        )
         let processor = RecordingMasteringProcessor(outputURL: processorOutput)
+        let finalEvaluator = RecordingStemFinalEvaluator(snapshot: finalEvaluation)
         let request = StemMasteringRequest(
             runID: UUID(),
             sessionDirectory: root,
@@ -93,14 +115,14 @@ struct StemMasteringServiceTests {
                 artifact: masteringArtifact,
                 evaluation: masteringEvaluation
             ),
-            correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
+            reportContext: try reportContext(model: .htdemucs),
             settings: MasteringProfile.streaming.settings
         )
         let logRecorder = StemMasteringStringRecorder()
 
         let result = try await StemMasteringService(
             masteringProcessor: processor,
-            finalEvaluator: ProductionStemFinalAudioEvaluator(),
+            finalEvaluator: finalEvaluator,
             artifactStore: store
         ).process(
             request,
@@ -109,11 +131,15 @@ struct StemMasteringServiceTests {
         )
 
         #expect(await processor.receivedInputURL == masteringArtifact.fileURL)
+        #expect(await finalEvaluator.callCount == 1)
         #expect(result.finalArtifact.kind == .finalMaster)
         #expect(result.finalArtifact.fileURL.lastPathComponent == StemMasteringService.finalMasterFileName)
         #expect(FileManager.default.fileExists(atPath: result.finalArtifact.fileURL.path))
         #expect(!FileManager.default.fileExists(atPath: processorOutput.path))
         #expect(!FileManager.default.fileExists(atPath: root.appending(path: "mastering-input-48000.wav").path))
+        #expect(result.noiseCheckReport.recommendedActions.allSatisfy { $0.stage == .mastering })
+        #expect(result.completionReport.sections.contains { $0.id == "stem-run-contract" })
+        #expect(result.completionReport.sections.filter { $0.id.hasPrefix("stem-role-") }.count == 4)
         #expect(logRecorder.values() == [
             "既存マスタリングログ",
             "マスタリング済み音声を読み込みます",
@@ -159,6 +185,35 @@ struct StemMasteringServiceTests {
                 includeMasteringAnalysisSnapshot: true,
                 analysisMode: .cpu
             )
+        )
+    }
+
+    private func reportContext(
+        model: StemSeparationModel
+    ) throws -> StemMasteringReportContext {
+        let contract = makeStemTestRunContract(model: model)
+        let settings = DenoiseStrength.balanced.settings
+        let guards = StemCorrectionStage.allCases.map { stage in
+            StemCorrectionStageGuardRecord(
+                stage: stage,
+                action: .run,
+                outcome: .completed,
+                reason: "テストで完了を確認"
+            )
+        }
+        return try StemMasteringReportContext(
+            runContract: contract,
+            appliedRemixSettings: StemRemixSettings(),
+            roleEvidence: contract.pureSumOrder.map { role in
+                StemMasteringRoleReportEvidence(
+                    role: role,
+                    selectedCorrectionSettings: settings,
+                    effectiveCorrectionSettings: settings,
+                    stageGuards: guards,
+                    usedRawFallback: false,
+                    fallbackReason: nil
+                )
+            }
         )
     }
 

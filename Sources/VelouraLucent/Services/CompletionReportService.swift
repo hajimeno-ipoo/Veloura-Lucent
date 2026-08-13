@@ -41,6 +41,79 @@ enum CompletionReportService {
             return nil
         }
 
+        return makeReport(
+            input: input,
+            corrected: corrected,
+            mastered: mastered,
+            noiseReport: noiseReport,
+            qualityReport: qualityReport,
+            masteringSettings: masteringSettings,
+            mode: mode,
+            trackTitle: trackTitle,
+            processingSourceName: processingSourceName,
+            inputFileInfo: inputFileInfo,
+            processedFileInfo: processedFileInfo,
+            masteredFileInfo: masteredFileInfo
+        )
+    }
+
+    /// Stem Modeの全体2mix測定と、1回だけ生成済みのNoise Reportから報告を作ります。
+    /// Stemごとの補正設定は役割別Sectionへ別途記録し、ここへ架空の共通値を渡しません。
+    static func makeStemReport(
+        input: AudioMetricSnapshot?,
+        remixed: AudioMetricSnapshot?,
+        mastered: AudioMetricSnapshot?,
+        noiseReport: NoiseCheckReport,
+        masteringSettings: MasteringSettings,
+        trackTitle: String?,
+        processingSourceName: String?,
+        inputFileInfo: AudioFileInfo?,
+        remixedFileInfo: AudioFileInfo?,
+        masteredFileInfo: AudioFileInfo?
+    ) -> CompletionReport? {
+        guard let input,
+              let remixed,
+              let mastered,
+              let qualityReport = AudioQualityReportService.makeReport(
+                  input: input,
+                  corrected: remixed,
+                  mastered: mastered,
+                  peakCeilingDB: Double(masteringSettings.peakCeilingDB)
+              ) else {
+            return nil
+        }
+
+        return makeReport(
+            input: input,
+            corrected: remixed,
+            mastered: mastered,
+            noiseReport: noiseReport,
+            qualityReport: qualityReport,
+            masteringSettings: masteringSettings,
+            mode: .stem,
+            trackTitle: trackTitle,
+            processingSourceName: processingSourceName,
+            inputFileInfo: inputFileInfo,
+            processedFileInfo: remixedFileInfo,
+            masteredFileInfo: masteredFileInfo
+        )
+    }
+
+    private static func makeReport(
+        input: AudioMetricSnapshot,
+        corrected: AudioMetricSnapshot,
+        mastered: AudioMetricSnapshot,
+        noiseReport: NoiseCheckReport,
+        qualityReport: AudioQualityReport,
+        masteringSettings: MasteringSettings,
+        mode: CompletionReportMode,
+        trackTitle: String?,
+        processingSourceName: String?,
+        inputFileInfo: AudioFileInfo?,
+        processedFileInfo: AudioFileInfo?,
+        masteredFileInfo: AudioFileInfo?
+    ) -> CompletionReport {
+
         let document = CompletionReportDocumentService.make(
             input: input,
             processed: corrected,

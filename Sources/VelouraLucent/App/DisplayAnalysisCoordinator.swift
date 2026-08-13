@@ -68,7 +68,8 @@ final class DisplayAnalysisCoordinator {
         let selectionID = UUID()
         cancelTasks()
         inputSelectionID = selectionID
-        PreviewFileStore.removeAllPreviewFiles()
+        PreviewFileStore.removeOwnedPreviewFileIfPresent(job.masteredOutputFile)
+        PreviewFileStore.removeOwnedPreviewFileIfPresent(job.outputFile)
         job.prepareForSelection(url)
         preview.stopPlayback()
         preview.setComparisonPair(.inputVsCorrected)

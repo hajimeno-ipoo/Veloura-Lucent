@@ -26,6 +26,7 @@ enum StemMasteringError: Error, Equatable, LocalizedError, Sendable {
     case finalArtifactAlreadyExists(String)
     case temporaryOutputMissing(String)
     case unsafeTemporaryOutputURL(String)
+    case invalidReportContext
     case reportUnavailable(StemMasteringReportKind)
 
     var errorDescription: String? {
@@ -44,6 +45,8 @@ enum StemMasteringError: Error, Equatable, LocalizedError, Sendable {
             "通常モードのマスタリング一時出力が見つかりません（\(path)）。"
         case .unsafeTemporaryOutputURL(let path):
             "通常モードのマスタリング一時出力が入力または最終成果物と重複しています（\(path)）。"
+        case .invalidReportContext:
+            "Stem最終報告のrun契約と役割別実行記録が一致しません。"
         case .reportUnavailable(let kind):
             "Stem最終品質レポートを生成できませんでした（\(kind.rawValue)）。"
         }
@@ -113,6 +116,59 @@ struct StemMasteringInputMaterial: Sendable {
     }
 }
 
+struct StemMasteringRoleReportEvidence: Sendable {
+    let role: StemRole
+    let selectedCorrectionSettings: CorrectionSettings
+    let effectiveCorrectionSettings: CorrectionSettings?
+    let stageGuards: [StemCorrectionStageGuardRecord]
+    let usedRawFallback: Bool
+    let fallbackReason: String?
+}
+
+struct StemMasteringReportContext: Sendable {
+    let runContract: StemModelRunContract
+    let appliedRemixSettings: StemRemixSettings
+    let roleEvidence: [StemMasteringRoleReportEvidence]
+
+    init(
+        runContract: StemModelRunContract,
+        appliedRemixSettings: StemRemixSettings,
+        roleEvidence: [StemMasteringRoleReportEvidence]
+    ) throws {
+        let roles = runContract.activeRoles
+        let evidenceRoles = roleEvidence.map(\.role)
+        guard !roles.isEmpty,
+              Set(roles).count == roles.count,
+              Set(roles) == Set(runContract.validationRoles),
+              Set(roles) == Set(runContract.pureSumOrder),
+              Set(runContract.pureSumOrder).count == runContract.pureSumOrder.count,
+              roleEvidence.count == roles.count,
+              Set(evidenceRoles).count == evidenceRoles.count,
+              Set(evidenceRoles) == Set(roles),
+              roleEvidence.allSatisfy({ evidence in
+                  if evidence.usedRawFallback {
+                      let guardStages = evidence.stageGuards.map(\.stage)
+                      return evidence.effectiveCorrectionSettings == nil
+                          && evidence.fallbackReason?.isEmpty == false
+                          && (guardStages.isEmpty || (
+                              guardStages.count == StemCorrectionStage.allCases.count
+                                  && Set(guardStages) == Set(StemCorrectionStage.allCases)
+                          ))
+                  }
+                  let guardStages = evidence.stageGuards.map(\.stage)
+                  return evidence.effectiveCorrectionSettings != nil
+                      && evidence.fallbackReason == nil
+                      && guardStages.count == StemCorrectionStage.allCases.count
+                      && Set(guardStages) == Set(StemCorrectionStage.allCases)
+              }) else {
+            throw StemMasteringError.invalidReportContext
+        }
+        self.runContract = runContract
+        self.appliedRemixSettings = appliedRemixSettings
+        self.roleEvidence = roleEvidence
+    }
+}
+
 struct StemMasteringRequest: Sendable {
     let runID: UUID
     let sessionDirectory: URL
@@ -121,7 +177,7 @@ struct StemMasteringRequest: Sendable {
     let separationModelDisplayName: String
     let canonicalReference: StemCanonicalMasteringReference
     let masteringInput: StemMasteringInputMaterial
-    let correctionSettings: StemRoleCorrectionSettings
+    let reportContext: StemMasteringReportContext
     let settings: MasteringSettings
 }
 

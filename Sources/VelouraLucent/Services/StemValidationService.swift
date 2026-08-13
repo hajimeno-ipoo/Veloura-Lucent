@@ -90,8 +90,8 @@ struct StemValidationResult: Equatable, Sendable {
 }
 
 struct StemValidationService: Sendable {
-    private static let roleOrder: [StemRole] = [.drums, .bass, .other, .vocals]
-    private static let float32SumOrder: [StemRole] = [.vocals, .drums, .bass, .other]
+    private static let defaultValidationRoles: [StemRole] = [.drums, .bass, .other, .vocals]
+    private static let defaultPureSumOrder: [StemRole] = [.vocals, .drums, .bass, .other]
     private static let comparisonBandIDs = AudioBandCatalog.comparisonBands.map(\.id)
     private static let noiseMeasurementIDs = [
         NoiseMeasurementID.hiss,
@@ -116,6 +116,8 @@ struct StemValidationService: Sendable {
     func validateSeparatedStems(
         source: AudioSignal,
         stems: [StemMixInput],
+        validationRoles: [StemRole] = Self.defaultValidationRoles,
+        pureSumOrder: [StemRole] = Self.defaultPureSumOrder,
         expectedSampleRate: Double,
         expectedChannelCount: Int
     ) -> StemValidationResult {
@@ -125,12 +127,26 @@ struct StemValidationService: Sendable {
         failures.append(contentsOf: validateExpectedStereoContract(expectedChannelCount))
         failures.append(contentsOf: validateExpectedSampleRateContract(expectedSampleRate))
 
-        if stems.count != Self.roleOrder.count {
+        let expectedRoleSet = Set(validationRoles)
+        if validationRoles.isEmpty
+            || expectedRoleSet.count != validationRoles.count
+            || Set(pureSumOrder).count != pureSumOrder.count
+            || expectedRoleSet != Set(pureSumOrder) {
+            failures.append(
+                StemValidationFailure(
+                    check: .roleCoverage,
+                    subject: "validation-contract",
+                    detail: "検証役割と純粋加算順が一致しません"
+                )
+            )
+        }
+
+        if stems.count != validationRoles.count {
             failures.append(
                 StemValidationFailure(
                     check: .stemCount,
                     subject: "stems",
-                    detail: "期待: \(Self.roleOrder.count)、実際: \(stems.count)"
+                    detail: "期待: \(validationRoles.count)、実際: \(stems.count)"
                 )
             )
         }
@@ -147,7 +163,16 @@ struct StemValidationService: Sendable {
                 )
             }
         }
-        for role in Self.roleOrder where signals[role] == nil {
+        for role in signals.keys where !expectedRoleSet.contains(role) {
+            failures.append(
+                StemValidationFailure(
+                    check: .roleCoverage,
+                    subject: role.rawValue,
+                    detail: "契約外の役割です"
+                )
+            )
+        }
+        for role in validationRoles where signals[role] == nil {
             failures.append(
                 StemValidationFailure(
                     check: .roleCoverage,
@@ -167,7 +192,7 @@ struct StemValidationService: Sendable {
             )
         )
         let expectedFrameCount = source.frameCount
-        for role in Self.roleOrder {
+        for role in validationRoles {
             guard let signal = signals[role] else { continue }
             failures.append(
                 contentsOf: validateSignal(
@@ -181,7 +206,7 @@ struct StemValidationService: Sendable {
         }
 
         guard failures.isEmpty,
-              let summed = sumSignals(signals, order: Self.float32SumOrder)
+              let summed = sumSignals(signals, order: pureSumOrder)
         else {
             return StemValidationResult(
                 phase: .separatedStems,
@@ -206,7 +231,7 @@ struct StemValidationService: Sendable {
         }
 
         measurements.append(contentsOf: peakMeasurements(signal: source, prefix: "source"))
-        for role in Self.roleOrder {
+        for role in validationRoles {
             if let signal = signals[role] {
                 measurements.append(
                     contentsOf: peakMeasurements(signal: signal, prefix: "stem.\(role.rawValue)")

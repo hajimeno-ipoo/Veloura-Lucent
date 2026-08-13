@@ -4,7 +4,7 @@ import Testing
 
 struct BSRoformerStemSeparationBackendTests {
     @Test
-    func mapsSixStemsToExistingFourStemContract() throws {
+    func mapsAllSixStemsWithoutChangingSamplesOrFormat() throws {
         let bass = try audio([0.1, 0.2, 0.3, 0.4])
         let drums = try audio([0.5, 0.6, 0.7, 0.8])
         let other = try audio([1, 2, 3, 4])
@@ -12,7 +12,7 @@ struct BSRoformerStemSeparationBackendTests {
         let guitar = try audio([0.01, 0.02, 0.03, 0.04])
         let piano = try audio([0.001, 0.002, 0.003, 0.004])
 
-        let output = try BSRoformerStemOutputMapper.makeFourStemOutput(
+        let output = try BSRoformerStemOutputMapper.makeSixStemOutput(
             from: BSRoformerSeparation(stems: [
                 .bass: bass,
                 .drums: drums,
@@ -23,19 +23,16 @@ struct BSRoformerStemSeparationBackendTests {
             ])
         )
 
-        #expect(Set(output.stems.keys) == Set(StemRole.allCases.map(\.rawValue)))
+        #expect(Set(output.stems.keys) == Set(
+            StemProductionModelProfile.profile(for: .bsRoformerSW).sourceOrder.map(\.rawValue)
+        ))
         #expect(output.stems[StemRole.bass.rawValue]?.channelMajorSamples == bass.channelMajorSamples)
         #expect(output.stems[StemRole.drums.rawValue]?.channelMajorSamples == drums.channelMajorSamples)
+        #expect(output.stems[StemRole.other.rawValue]?.channelMajorSamples == other.channelMajorSamples)
         #expect(output.stems[StemRole.vocals.rawValue]?.channelMajorSamples == vocals.channelMajorSamples)
-
-        var expectedOther = other.channelMajorSamples
-        for index in expectedOther.indices {
-            expectedOther[index] += guitar.channelMajorSamples[index]
-            expectedOther[index] += piano.channelMajorSamples[index]
-        }
-        #expect(output.stems[StemRole.other.rawValue]?.channelMajorSamples == expectedOther)
-        #expect(output.stems[StemRole.other.rawValue]?.channelCount == 2)
-        #expect(output.stems[StemRole.other.rawValue]?.sampleRate == 44_100)
+        #expect(output.stems[StemRole.guitar.rawValue]?.channelMajorSamples == guitar.channelMajorSamples)
+        #expect(output.stems[StemRole.piano.rawValue]?.channelMajorSamples == piano.channelMajorSamples)
+        #expect(output.stems.values.allSatisfy { $0.channelCount == 2 && $0.sampleRate == 44_100 })
     }
 
     @Test
@@ -52,12 +49,12 @@ struct BSRoformerStemSeparationBackendTests {
         #expect(
             throws: BSRoformerStemSeparationBackendError.missingStem("piano")
         ) {
-            _ = try BSRoformerStemOutputMapper.makeFourStemOutput(from: separation)
+            _ = try BSRoformerStemOutputMapper.makeSixStemOutput(from: separation)
         }
     }
 
     @Test
-    func rejectsIncompatibleStemBeforeAddingOther() throws {
+    func preservesAnIncompatibleStemForContractValidationWithoutMergingIt() throws {
         let stereo = try audio([0.1, 0.2, 0.3, 0.4])
         let monoPiano = try audio([0.1, 0.2], channels: 1)
         let separation = BSRoformerSeparation(stems: [
@@ -69,11 +66,11 @@ struct BSRoformerStemSeparationBackendTests {
             .piano: monoPiano,
         ])
 
-        #expect(
-            throws: BSRoformerStemSeparationBackendError.incompatibleOtherStem("piano")
-        ) {
-            _ = try BSRoformerStemOutputMapper.makeFourStemOutput(from: separation)
-        }
+        let output = try BSRoformerStemOutputMapper.makeSixStemOutput(from: separation)
+
+        #expect(output.stems[StemRole.other.rawValue]?.channelMajorSamples == stereo.channelMajorSamples)
+        #expect(output.stems[StemRole.piano.rawValue]?.channelMajorSamples == monoPiano.channelMajorSamples)
+        #expect(output.stems[StemRole.piano.rawValue]?.channelCount == 1)
     }
 
     private func audio(

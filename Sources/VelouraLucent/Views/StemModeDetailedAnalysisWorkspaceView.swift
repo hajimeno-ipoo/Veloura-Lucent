@@ -15,7 +15,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             if model.inputMetrics != nil {
                 stemAnalysisDisclosureSection(
                     title: "Stem固有解析",
-                    help: "4Stemそれぞれのrawと補正後の測定値、役割別解析、各DSPの最終適用結果、役割別guard、rawへ戻した理由を確認します。route決定の詳しい理由や処理経過は詳細ログで確認します。数値だけで品質を自動判定する画面ではありません。",
+                    help: "\(model.availableStemRoles.count)Stemそれぞれのrawと補正後の測定値、役割別解析、各DSPの最終適用結果、役割別guard、rawへ戻した理由を確認します。route決定の詳しい理由や処理経過は詳細ログで確認します。数値だけで品質を自動判定する画面ではありません。",
                     isExpanded: $showStemSpecificAnalysis
                 ) {
                     stemSpecificAnalysisContent
@@ -23,7 +23,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
 
                 stemAnalysisDisclosureSection(
                     title: "再ミックス固有解析",
-                    help: "raw 4Stem、補正済み純粋加算、実行済み再ミックスを比べ、再合成、残差、位相、相関、帯域、ノイズ、分離アーティファクトの測定結果を確認します。数値だけで完成音を自動選択しません。",
+                    help: "raw \(model.availableStemRoles.count)Stem、補正済み純粋加算、実行済み再ミックスを比べ、再合成、残差、位相、相関、帯域、ノイズ、分離アーティファクトの測定結果を確認します。数値だけで完成音を自動選択しません。",
                     isExpanded: $showRemixSpecificAnalysis
                 ) {
                     remixSpecificAnalysisContent
@@ -60,14 +60,11 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             }
         }
 
-        let correctionSettings = model.remixAnalysisPresentation?.correctionSettings
-            ?? model.correctionSettings
         let noiseReport = model.qualityReports?.noiseCheck
             ?? StemAudioReportAdapter.makeNoiseCheckReport(
                 input: model.inputNoiseMeasurements,
                 remixed: model.correctedRemixNoiseMeasurements,
                 mastered: model.finalNoiseMeasurements,
-                correctionSettings: correctionSettings,
                 masteringSettings: model.masteringSettings
             )
 
@@ -122,7 +119,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
     private var stemSpecificAnalysisContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             if model.stemEvaluations.isEmpty {
-                Text("4Stemの解析完了後に表示します。")
+                Text("\(model.availableStemRoles.count)Stemの解析完了後に表示します。")
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(Array(model.stemEvaluations.enumerated()), id: \.offset) { _, evaluation in
@@ -223,7 +220,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                 }
                 remixEvaluationComparison(presentation)
             } else {
-                Text("補正後4Stemの純粋加算と解析が完了すると表示します。")
+                Text("補正後\(model.availableStemRoles.count)Stemの純粋加算と解析が完了すると表示します。")
                     .foregroundStyle(.secondary)
             }
             validationIssues(model.remixAnalysisPresentation?.validation.analysisIssues)
@@ -520,6 +517,32 @@ private extension StemRoleAnalysisFeature {
         case .otherTransientStrength: "その他のtransient"
         case .otherAmbienceContinuity: "残響・ambience"
         case .otherStereoSpatialBalance: "空間・ステレオ感"
+        case .guitarPickingOnsetEnergy: "ピッキング・onset"
+        case .guitarAttackCrest: "ギターのアタック"
+        case .guitarHarmonicEnergyRatio: "ギターの調波・音色本体"
+        case .guitarInharmonicity: "ギターの非調波性"
+        case .guitarHighBandDetail: "ギターの高域ディテール"
+        case .guitarSpectralCentroid: "ギターのスペクトル重心"
+        case .guitarRolloff85: "ギターのロールオフ"
+        case .guitarLowTailRetention: "ギター低域の余韻"
+        case .guitarMidTailRetention: "ギター中域の余韻"
+        case .guitarHighTailRetention: "ギター高域の余韻"
+        case .guitarStereoSideRatio: "ギターのステレオ幅"
+        case .guitarStereoCorrelation: "ギターの左右相関"
+        case .pianoHammerOnsetEnergy: "ハンマー・onset"
+        case .pianoAttackCrest: "ピアノのアタック"
+        case .pianoPartialEnergyRatio: "ピアノの部分音"
+        case .pianoInharmonicity: "ピアノの非調波性"
+        case .pianoLowTailRetention: "ピアノ低域の余韻"
+        case .pianoMidTailRetention: "ピアノ中域の余韻"
+        case .pianoHighTailRetention: "ピアノ高域の余韻"
+        case .pianoDoubleDecaySlopeDelta: "ピアノの二段減衰"
+        case .pianoLowBandBalance: "ピアノの低域バランス"
+        case .pianoMidBandBalance: "ピアノの中域バランス"
+        case .pianoSpectralCentroid: "ピアノのスペクトル重心"
+        case .pianoRolloff85: "ピアノのロールオフ"
+        case .pianoStereoSideRatio: "ピアノのステレオ幅"
+        case .pianoStereoCorrelation: "ピアノの左右相関"
         }
     }
 }
@@ -530,6 +553,7 @@ private extension StemRoleAnalysisUnit {
         case .ratio, .normalized: ""
         case .hertz: "Hz"
         case .decibels: "dB"
+        case .decibelsPerSecond: "dB/s"
         }
     }
 }
@@ -563,6 +587,24 @@ private extension StemRoleProtectedComponent {
         case .otherAmbience: "アンビエンス"
         case .otherSpace: "空間"
         case .otherStereo: "ステレオ感"
+        case .guitarAttack: "ピッキング・アタック"
+        case .guitarHarmonics: "調波・音色本体"
+        case .guitarInharmonicity: "非調波性"
+        case .guitarHighDetail: "高域ディテール"
+        case .guitarDecay: "帯域別の余韻"
+        case .guitarStereoSide: "ステレオ幅"
+        case .guitarStereoCorrelation: "左右相関"
+        case .pianoAttack: "ハンマー・アタック"
+        case .pianoPartials: "部分音"
+        case .pianoInharmonicity: "非調波性"
+        case .pianoLowDecay: "低域の余韻"
+        case .pianoMidDecay: "中域の余韻"
+        case .pianoHighDecay: "高域の余韻"
+        case .pianoDoubleDecay: "二段減衰"
+        case .pianoLowBandBalance: "低域バランス"
+        case .pianoMidBandBalance: "中域バランス"
+        case .pianoStereoSide: "ステレオ幅"
+        case .pianoStereoCorrelation: "左右相関"
         }
     }
 }

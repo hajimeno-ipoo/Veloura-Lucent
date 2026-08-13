@@ -20,7 +20,7 @@ struct StemModePresentationTextTests {
     }
 
     @Test
-    func exportabilityIncludesCorrectedRemixFourCorrectedStemsAndFinalMaster() {
+    func exportabilityIncludesCorrectedRemixSixCorrectedStemsAndFinalMaster() {
         let exportable = [
             StemArtifactKind.correctedPureSum48000,
             StemArtifactKind.remixed48000,
@@ -28,6 +28,8 @@ struct StemModePresentationTextTests {
             .correctedStem(.bass),
             .correctedStem(.other),
             .correctedStem(.vocals),
+            .correctedStem(.guitar),
+            .correctedStem(.piano),
             .finalMaster,
         ]
         let internalOnly = [
@@ -37,6 +39,13 @@ struct StemModePresentationTextTests {
 
         #expect(exportable.allSatisfy { $0.isStemModeUserExportable })
         #expect(internalOnly.allSatisfy { !$0.isStemModeUserExportable })
+        #expect(StemArtifactKind.correctedStem(.guitar).stemModeExportMenuTitle == "ギター")
+        #expect(StemArtifactKind.correctedStem(.piano).stemModeExportMenuTitle == "ピアノ")
+        #expect(StemArtifactKind.correctedPureSum48000.stemModeExportMenuTitle == "補正済み純粋加算")
+        #expect(StemArtifactKind.remixed48000.stemModeExportMenuTitle == "再ミックス済み")
+        #expect(StemArtifactKind.finalMaster.stemModeExportMenuTitle == "マスタリング済み")
+        #expect(StemArtifactKind.correctedStem(.guitar).isCorrectedStemArtifact)
+        #expect(!StemArtifactKind.finalMaster.isCorrectedStemArtifact)
     }
 
     @Test
@@ -80,5 +89,73 @@ struct StemModePresentationTextTests {
             "共通reverb returnを生成しました",
             "dry／reverb加算を完了しました",
         ])
+    }
+
+    @Test
+    func sidebarKeepsOnlyCompactAdditionalProgressInformation() {
+        #expect(sidebarDetail(
+            step: .inputPreparation,
+            detail: "入力変換・解析中"
+        ) == "入力変換・解析中")
+        #expect(sidebarDetail(
+            step: .separation(stemCount: 6),
+            detail: "HTDemucs Encoder 3/4"
+        ) == "HTDemucs Encoder 3/4")
+        #expect(sidebarDetail(
+            step: .separation(stemCount: 6),
+            detail: "bassを保存・検証済み"
+        ) == "ベース保存済み")
+        #expect(sidebarDetail(
+            step: .roleCorrection(.guitar, stage: .denoise),
+            detail: "ギターのノイズ除去を実行中"
+        ) == nil)
+        #expect(sidebarDetail(
+            step: .roleTransientRecovery(.drums),
+            detail: "raw Stemと補正後のアタックを比較中"
+        ) == "アタック比較中")
+        #expect(sidebarDetail(
+            step: .correctedPureSum,
+            detail: "補正済みStemを純粋加算中"
+        ) == "6Stem加算中")
+
+        let remixDetails: [(StemModeProcessStep, String, String?)] = [
+            (.remixGain, StemRemixRenderStage.gain.stemModeRunningDetail, "相対変化基準"),
+            (.remixMasking, StemRemixRenderStage.masking.stemModeRunningDetail, "衝突区間のみ"),
+            (.remixPan, StemRemixRenderStage.pan.stemModeRunningDetail, "左右変化分のみ"),
+            (.remixReverbSend, StemRemixRenderStage.reverbSend.stemModeRunningDetail, "共通returnへ送信中"),
+            (.remixSharedReverb, StemRemixRenderStage.sharedReverb.stemModeRunningDetail, "共通return生成中"),
+            (.remixDryReturnMix, StemRemixRenderStage.dryReturnMix.stemModeRunningDetail, "dry＋return加算中"),
+        ]
+        for (step, detail, expected) in remixDetails {
+            #expect(sidebarDetail(step: step, detail: detail) == expected)
+        }
+
+        #expect(sidebarDetail(step: .remixSave, detail: "再ミックスを保存中") == nil)
+        #expect(sidebarDetail(
+            step: .mastering(.noiseReturnGuard),
+            detail: "3/8区間"
+        ) == "3/8区間")
+        #expect(sidebarDetail(step: .finalization, detail: "最終版を解析・保存中") == nil)
+
+        let completed = StemModeProcessStepProgress(
+            step: .remixGain,
+            status: .completed,
+            fraction: 1,
+            detail: StemRemixRenderStage.gain.stemModeCompletedDetail
+        )
+        #expect(completed.stemModeSidebarDetail(stemCount: 6) == nil)
+    }
+
+    private func sidebarDetail(
+        step: StemModeProcessStep,
+        detail: String
+    ) -> String? {
+        StemModeProcessStepProgress(
+            step: step,
+            status: .running,
+            fraction: 0.5,
+            detail: detail
+        )
+        .stemModeSidebarDetail(stemCount: 6)
     }
 }

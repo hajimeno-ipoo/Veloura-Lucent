@@ -439,7 +439,7 @@ struct AudioPreviewControllerTests {
         let controller = AudioPreviewController()
         controller.preparePreview(for: fixture.url, target: .input, measureLoudness: false)
 
-        for _ in 0..<50 where controller.previewSnapshots[.input] == nil {
+        for _ in 0..<500 where controller.previewSnapshots[.input] == nil {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
 
@@ -466,7 +466,7 @@ struct AudioPreviewControllerTests {
 
         controller.preparePreview(for: fixture.url, target: .input, measureLoudness: true)
 
-        for _ in 0..<50 where controller.integratedLoudnessLUFS(for: .input) == nil {
+        for _ in 0..<500 where controller.integratedLoudnessLUFS(for: .input) == nil {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
 

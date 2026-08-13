@@ -4,11 +4,20 @@ enum WorkspaceLayoutMetrics {
     static let sidebarMinimumWidth: CGFloat = 220
     static let sidebarIdealWidth: CGFloat = 260
     static let sidebarMaximumWidth: CGFloat = 300
-    static let minimumCenterWidth: CGFloat = 620
-    static let inspectorWidth: CGFloat = 440
-    static let inspectorVisibleMinimumWindowWidth: CGFloat = 1_380
-    static let inspectorHiddenMinimumWindowWidth: CGFloat = 960
+    static let minimumCenterWidth: CGFloat = 680
+    static let inspectorWidth: CGFloat = 480
+    static let inspectorVisibleMinimumWindowWidth: CGFloat = 1_500
+    static let inspectorHiddenMinimumWindowWidth: CGFloat = 1_000
     static let minimumWindowHeight: CGFloat = 720
+    static let recentLogMinimumWidth: CGFloat = 260
+    static let standardWorkflowMinimumWidth: CGFloat = 260
+    static let expandedWorkflowMinimumWidth: CGFloat = 360
+
+    static func workflowMinimumWidth(stageCount: Int) -> CGFloat {
+        stageCount > 4
+            ? expandedWorkflowMinimumWidth
+            : standardWorkflowMinimumWidth
+    }
 }
 
 struct WorkspaceShellView<
@@ -128,6 +137,10 @@ struct WorkspaceFooterLayout: View {
     @Binding var isFullLogPresented: Bool
 
     var body: some View {
+        let workflowMinimumWidth = WorkspaceLayoutMetrics.workflowMinimumWidth(
+            stageCount: stages.count
+        )
+
         HStack(alignment: .top, spacing: 22) {
             RecentProcessingLogView(
                 events: events,
@@ -136,14 +149,18 @@ struct WorkspaceFooterLayout: View {
             )
             .padding(12)
             .velouraAdaptiveGlass(in: .rect(cornerRadius: 14))
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(
+                minWidth: WorkspaceLayoutMetrics.recentLogMinimumWidth,
+                maxWidth: .infinity,
+                alignment: .topLeading
+            )
 
             OverallWorkflowView(stages: stages)
                 .padding(12)
                 .velouraAdaptiveGlass(in: .rect(cornerRadius: 14))
                 .frame(
-                    minWidth: 260,
-                    idealWidth: 320,
+                    minWidth: workflowMinimumWidth,
+                    idealWidth: max(320, workflowMinimumWidth),
                     maxWidth: 360,
                     alignment: .topLeading
                 )

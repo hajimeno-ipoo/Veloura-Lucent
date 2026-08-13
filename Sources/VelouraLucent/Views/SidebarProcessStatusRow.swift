@@ -36,17 +36,20 @@ struct SidebarProcessStatusRow: View {
                 }
             }
 
-            Text(activeStepTitle.map { "\($0)を実行中" } ?? status)
-                .font(.callout)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let activeStepDetail {
-                Text(activeStepDetail)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(currentStatusText)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .layoutPriority(1)
+
+                if let displayedActiveStepDetail {
+                    Text(displayedActiveStepDetail)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
 
             HStack(spacing: 8) {
@@ -91,6 +94,22 @@ struct SidebarProcessStatusRow: View {
             return .red
         }
         return tint
+    }
+
+    private var currentStatusText: String {
+        activeStepTitle.map { "\($0)を実行中" } ?? status
+    }
+
+    private var displayedActiveStepDetail: String? {
+        guard let activeStepDetail else { return nil }
+        let detail = activeStepDetail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !detail.isEmpty,
+              detail != activeStepTitle,
+              detail != currentStatusText
+        else {
+            return nil
+        }
+        return detail
     }
 
     private var elapsedText: String? {

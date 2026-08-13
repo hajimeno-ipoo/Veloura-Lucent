@@ -21,7 +21,7 @@ struct StemWorkflowSessionTests {
         ])
 
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         #expect(session.correctionLogLines.isEmpty)
 
         session.recordInputDisplayAnalysisLog("表示解析/計測: ノイズ測定: 0.03秒")
@@ -51,9 +51,25 @@ struct StemWorkflowSessionTests {
     func correctionCompletionUsesFourValidatedStemsAndCorrectedPureSum() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
 
-        for role in StemRole.allCases {
+        let input = artifact(id: "input", kind: .input44100)
+        try session.updateArtifactState(.init(
+            id: input.id,
+            runID: sessionID,
+            kind: input.kind,
+            artifact: input,
+            status: .valid
+        ))
+        for role in makeStemTestRunContract().activeRoles {
+            let raw = artifact(id: "raw-\(role.rawValue)", kind: .rawStem(role))
+            try session.updateArtifactState(.init(
+                id: raw.id,
+                runID: sessionID,
+                kind: raw.kind,
+                artifact: raw,
+                status: .valid
+            ))
             let value = artifact(id: "corrected-\(role.rawValue)", kind: .correctedStem(role))
             try session.updateArtifactState(.init(
                 id: value.id,
@@ -87,6 +103,189 @@ struct StemWorkflowSessionTests {
     }
 
     @Test
+    func correctionCompletionUsesTheCapturedSixStemRunContract() throws {
+        let session = StemWorkflowSession()
+        let sessionID = UUID()
+        let contract = makeStemTestRunContract(model: .bsRoformerSW)
+        try session.startRun(runID: sessionID, runContract: contract)
+
+        try completeCorrection(in: session, sessionID: sessionID)
+        try session.completeCorrection(runID: sessionID)
+
+        #expect(session.runContract == contract)
+        #expect(session.state == .readyForRemix(runID: sessionID))
+        #expect(session.artifactStates.filter {
+            if case .correctedStem = $0.kind { return true }
+            return false
+        }.count == 6)
+    }
+
+    @Test
+    func runContractDeterminesArtifactCountsAndDetailedProgressDenominator() throws {
+        let htSession = StemWorkflowSession()
+        let bsSession = StemWorkflowSession()
+        let htRunID = UUID()
+        let bsRunID = UUID()
+        try htSession.startRun(
+            runID: htRunID,
+            runContract: makeStemTestRunContract(model: .htdemucs)
+        )
+        try bsSession.startRun(
+            runID: bsRunID,
+            runContract: makeStemTestRunContract(model: .bsRoformerSW)
+        )
+
+        #expect(htSession.expectedCorrectionArtifactCount == 10)
+        #expect(htSession.expectedCompletedArtifactCount == 12)
+        #expect(bsSession.expectedCorrectionArtifactCount == 14)
+        #expect(bsSession.expectedCompletedArtifactCount == 16)
+        #expect(bsSession.correctionDisplayProgress.count > htSession.correctionDisplayProgress.count)
+
+        try bsSession.applyDisplayProgress(.init(
+            runID: bsRunID,
+            step: .inputPreparation,
+            status: .completed,
+            fraction: 1
+        ))
+        #expect(
+            bsSession.displayProgressValue(for: .correction)
+                == 1 / Double(bsSession.correctionDisplayProgress.count)
+        )
+        #expect(
+            bsSession.displayProgress(for: .separation(stemCount: 6)).step.title
+                == "6Stem分離"
+        )
+    }
+
+    @Test
+    func staleRunAndContractExcludedEventsDoNotChangeSessionState() throws {
+        let session = StemWorkflowSession()
+        let runID = UUID()
+        try session.startRun(
+            runID: runID,
+            runContract: makeStemTestRunContract(model: .htdemucs)
+        )
+        let excluded = artifact(id: "raw-guitar", kind: .rawStem(.guitar))
+
+        #expect(throws: StemWorkflowSessionError.artifactOutsideRunContract("ギター（raw）")) {
+            try session.updateArtifactState(.init(
+                id: excluded.id,
+                runID: runID,
+                kind: excluded.kind,
+                artifact: excluded,
+                status: .valid
+            ))
+        }
+        let staleRunID = UUID()
+        #expect(throws: StemWorkflowSessionError.runMismatch(expected: runID, actual: staleRunID)) {
+            try session.appendLog(
+                runID: staleRunID,
+                level: .info,
+                step: .separate,
+                message: "古いevent"
+            )
+        }
+        #expect(throws: StemWorkflowSessionError.progressOutsideRunContract(
+            StemModeProcessStep.roleAnalysis(.guitar).id
+        )) {
+            try session.applyDisplayProgress(.init(
+                runID: runID,
+                step: .roleAnalysis(.guitar),
+                status: .running,
+                fraction: 0.5
+            ))
+        }
+
+        #expect(session.artifactStates.isEmpty)
+        #expect(session.logs.isEmpty)
+        #expect(!session.displayProgress.contains { $0.step == .roleAnalysis(.guitar) })
+    }
+
+    @Test
+    func correctionFailureClearsCurrentRunArtifactsForFourAndSixStemContracts() throws {
+        for model in [StemSeparationModel.htdemucs, .bsRoformerSW] {
+            let session = StemWorkflowSession()
+            let runID = UUID()
+            let contract = makeStemTestRunContract(model: model)
+            try session.startRun(runID: runID, runContract: contract)
+            let input = artifact(id: "input-\(model.rawValue)", kind: .input44100)
+            try session.updateArtifactState(.init(
+                id: input.id,
+                runID: runID,
+                kind: input.kind,
+                artifact: input,
+                status: .valid
+            ))
+
+            try session.fail(runID: runID, step: .separate, message: "分離失敗")
+
+            #expect(session.state == .failed(runID: runID, message: "分離失敗"))
+            #expect(session.artifactStates.isEmpty)
+            #expect(session.validationStates.isEmpty)
+            #expect(session.runContract == contract)
+        }
+    }
+
+    @Test
+    func postCorrectionFailureAndCancellationRetentionUsesFourAndSixStemContracts() throws {
+        for model in [StemSeparationModel.htdemucs, .bsRoformerSW] {
+            let session = StemWorkflowSession()
+            let runID = UUID()
+            let contract = makeStemTestRunContract(model: model)
+            try session.startRun(runID: runID, runContract: contract)
+            try completeCorrection(in: session, sessionID: runID)
+            try session.completeCorrection(runID: runID)
+
+            try session.startRemix(runID: runID)
+            let failedRemix = artifact(id: "failed-remix-\(model.rawValue)", kind: .remixed48000)
+            try session.updateArtifactState(.init(
+                id: failedRemix.id,
+                runID: runID,
+                kind: failedRemix.kind,
+                artifact: failedRemix,
+                status: .valid
+            ))
+            try session.restoreRemixReadyAfterFailure(runID: runID, message: "再ミックス失敗")
+            #expect(session.state == .readyForRemix(runID: runID))
+            #expect(session.artifactStates.filter {
+                if case .correctedStem = $0.kind { return true }
+                return false
+            }.count == contract.stemCount)
+            #expect(session.artifactStates.contains { $0.kind == .correctedPureSum48000 })
+            #expect(!session.artifactStates.contains { $0.kind == .remixed48000 })
+
+            try session.startRemix(runID: runID)
+            try session.restoreRemixReadyAfterCancellation(runID: runID)
+            #expect(session.state == .readyForRemix(runID: runID))
+            #expect(session.lastError == nil)
+
+            try completeRemix(in: session, sessionID: runID)
+            try session.startMastering(runID: runID)
+            let failedFinal = artifact(id: "failed-final-\(model.rawValue)", kind: .finalMaster)
+            try session.updateArtifactState(.init(
+                id: failedFinal.id,
+                runID: runID,
+                kind: failedFinal.kind,
+                artifact: failedFinal,
+                status: .valid
+            ))
+            try session.restoreMasteringReadyAfterFailure(runID: runID, message: "マスタリング失敗")
+            #expect(session.state == .readyForMastering(runID: runID))
+            #expect(session.artifactStates.contains { $0.kind == .remixed48000 })
+            #expect(!session.artifactStates.contains { $0.kind == .finalMaster })
+
+            try session.startMastering(runID: runID)
+            try session.restoreMasteringReadyAfterCancellation(runID: runID)
+            #expect(session.state == .readyForMastering(runID: runID))
+            #expect(session.lastError == nil)
+            #expect(session.artifactStates.filter {
+                if case .correctedStem = $0.kind { return true }
+                return false
+            }.count == contract.stemCount)
+        }
+    }
+
+    @Test
     func processingStateRemainsActiveBetweenDetailedStepsUntilTheDomainFinishes() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
@@ -94,7 +293,7 @@ struct StemWorkflowSessionTests {
         #expect(!session.isCorrectionProcessing)
         #expect(!session.isMasteringProcessing)
 
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         #expect(session.isCorrectionProcessing)
 
         try session.applyDisplayProgress(.init(
@@ -130,7 +329,7 @@ struct StemWorkflowSessionTests {
     func processingStateStopsAfterCorrectionFailure() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
 
         #expect(session.isCorrectionProcessing)
         try session.fail(
@@ -146,7 +345,7 @@ struct StemWorkflowSessionTests {
     func masteringCannotStartUntilRemixArtifactIsComplete() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
 
         #expect(throws: StemWorkflowSessionError.masteringRequiresRemixCompletion) {
             try session.startMastering(runID: sessionID)
@@ -167,7 +366,7 @@ struct StemWorkflowSessionTests {
     func masteringCancellationKeepsCorrectionArtifactsAndRemovesOnlyFinalPresentation() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         try completeCorrection(in: session, sessionID: sessionID)
         try session.completeCorrection(runID: sessionID)
         try completeRemix(in: session, sessionID: sessionID)
@@ -196,7 +395,7 @@ struct StemWorkflowSessionTests {
     func masteringCanRestartAfterCompletionAndKeepsTheValidatedRemix() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         try completeCorrection(in: session, sessionID: sessionID)
         try session.completeCorrection(runID: sessionID)
         try completeRemix(in: session, sessionID: sessionID)
@@ -225,7 +424,7 @@ struct StemWorkflowSessionTests {
     func remixSettingChangeInvalidatesRemixAndFinalButKeepsCorrectionBaseline() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         try completeCorrection(in: session, sessionID: sessionID)
         try session.completeCorrection(runID: sessionID)
         try completeRemix(in: session, sessionID: sessionID)
@@ -254,7 +453,7 @@ struct StemWorkflowSessionTests {
     func correctionCancellationResetsOnlyStemSessionPresentation() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         try session.beginStep(runID: sessionID, step: .validateInput)
         session.resetAfterCorrectionCancellation(runID: sessionID)
 
@@ -270,7 +469,7 @@ struct StemWorkflowSessionTests {
     func displayProgressKeepsActualStemStageAndSkippedState() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         let step = StemModeProcessStep.roleCorrection(.vocals, stage: .denoise)
 
         try session.applyDisplayProgress(.init(
@@ -300,7 +499,7 @@ struct StemWorkflowSessionTests {
     func fullLogKeepsAllCurrentRunLinesBeyondVisibleLimit() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
 
         for index in 0..<510 {
             try session.appendLog(
@@ -319,7 +518,7 @@ struct StemWorkflowSessionTests {
     func recentLogSeparatesCompletionFromCorrectedRemixAnalysis() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         try completeCorrection(in: session, sessionID: sessionID)
 
         try session.completeCorrection(runID: sessionID)
@@ -336,7 +535,7 @@ struct StemWorkflowSessionTests {
     func recentLogSeparatesMasteringCompletionFromFinalAnalysis() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         try completeCorrection(in: session, sessionID: sessionID)
         try session.completeCorrection(runID: sessionID)
         try completeRemix(in: session, sessionID: sessionID)
@@ -363,7 +562,7 @@ struct StemWorkflowSessionTests {
     func detailedLogKeepsOnlyHumanReadableProcessingLinesWithoutFormatting() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
 
         try session.beginStep(runID: sessionID, step: .separate)
         try session.completeStep(runID: sessionID, step: .separate)
@@ -427,7 +626,23 @@ struct StemWorkflowSessionTests {
             try session.beginStep(runID: sessionID, step: step)
             try session.completeStep(runID: sessionID, step: step)
         }
-        for role in StemRole.allCases {
+        let input = artifact(id: "input", kind: .input44100)
+        try session.updateArtifactState(.init(
+            id: input.id,
+            runID: sessionID,
+            kind: input.kind,
+            artifact: input,
+            status: .valid
+        ))
+        for role in try #require(session.runContract).activeRoles {
+            let raw = artifact(id: "raw-\(role.rawValue)", kind: .rawStem(role))
+            try session.updateArtifactState(.init(
+                id: raw.id,
+                runID: sessionID,
+                kind: raw.kind,
+                artifact: raw,
+                status: .valid
+            ))
             let value = artifact(id: "corrected-\(role.rawValue)", kind: .correctedStem(role))
             try session.updateArtifactState(.init(
                 id: value.id,

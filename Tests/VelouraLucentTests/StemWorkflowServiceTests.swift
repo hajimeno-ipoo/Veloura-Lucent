@@ -43,7 +43,7 @@ private struct WorkflowInputPreparer: StemWorkflowInputPreparing {
     }
 }
 
-private struct QuarterStemSeparator: StemSeparating {
+private struct ContractStemSeparator: StemSeparating {
     let sourceSignal: AudioSignal
     var progressFractions: [Double] = [1]
 
@@ -56,11 +56,13 @@ private struct QuarterStemSeparator: StemSeparating {
     ) async throws -> StemSeparationResult {
         let store = StemTemporaryAudioStore()
         var artifacts: [StemAudioArtifact] = []
+        let roles = installation.snapshot.contract.runContract.validationRoles
+        let stemGain = 1 / Float(roles.count)
         let quarter = AudioSignal(
-            channels: sourceSignal.channels.map { channel in channel.map { $0 * 0.25 } },
+            channels: sourceSignal.channels.map { channel in channel.map { $0 * stemGain } },
             sampleRate: sourceSignal.sampleRate
         )
-        for role in StemRole.allCases {
+        for role in roles {
             let artifact = try await store.save(
                 signal: quarter,
                 id: "raw-\(role.rawValue)",
@@ -70,9 +72,21 @@ private struct QuarterStemSeparator: StemSeparating {
             artifacts.append(artifact)
         }
         for fraction in progressFractions {
-            progressHandler(.init(fraction: fraction, detail: "4Stem進捗"))
+            progressHandler(.init(fraction: fraction, detail: "\(roles.count)Stem進捗"))
         }
         return StemSeparationResult(source: inputArtifact, stems: artifacts)
+    }
+}
+
+private actor WorkflowCorrectedRoleRecorder {
+    private var roles: [StemRole] = []
+
+    func record(_ role: StemRole) {
+        roles.append(role)
+    }
+
+    func values() -> [StemRole] {
+        roles
     }
 }
 
@@ -112,6 +126,7 @@ private final class WorkflowStringRecorder: @unchecked Sendable {
 
 private struct PassThroughStemCorrector: StemCorrecting {
     let failingRole: StemRole?
+    var roleRecorder: WorkflowCorrectedRoleRecorder? = nil
 
     func correct(
         runID: UUID,
@@ -122,6 +137,9 @@ private struct PassThroughStemCorrector: StemCorrecting {
         progressHandler: @escaping @Sendable (StemModeProcessProgressEvent) -> Void,
         logHandler: @escaping @Sendable (String) -> Void
     ) async throws -> StemCorrectionSignalResult {
+        if let roleRecorder {
+            await roleRecorder.record(role)
+        }
         if role == failingRole { throw WorkflowServiceTestError.correctionFailed }
         let correctedEvaluation = try await StemAudioEvaluationService.evaluate(
             signal: rawSignal,
@@ -169,6 +187,30 @@ private struct BassRawFallbackSafetyGuard: StemRemixSafetyGuarding {
     }
 }
 
+private final class DropGuitarOnSecondSafetyCheck: StemRemixSafetyGuarding, @unchecked Sendable {
+    private let lock = NSLock()
+    private var invocationCount = 0
+
+    func protect(
+        rawStemsByRole: [StemRole: AudioSignal],
+        correctedStemsByRole: [StemRole: AudioSignal]
+    ) -> StemRemixSafetyGuardResult {
+        lock.lock()
+        invocationCount += 1
+        let shouldDropGuitar = invocationCount == 2
+        lock.unlock()
+
+        var selected = correctedStemsByRole
+        if shouldDropGuitar {
+            selected.removeValue(forKey: .guitar)
+        }
+        return StemRemixSafetyGuardResult(
+            stemsByRole: selected,
+            rawFallbackReasons: [:]
+        )
+    }
+}
+
 private enum WorkflowServiceTestError: Error {
     case correctionFailed
     case masteringFailed
@@ -177,13 +219,17 @@ private enum WorkflowServiceTestError: Error {
 private actor RecordingFailingMasteringService: StemWorkflowMastering {
     private(set) var receivedInputURL: URL?
     private(set) var foundPreviousFinalArtifact = false
+    private(set) var receivedReportContext: StemMasteringReportContext?
+    private(set) var callCount = 0
 
     func process(
         _ request: StemMasteringRequest,
         finalizationProgressHandler: @escaping @Sendable (StemModeProcessStepStatus) -> Void,
         logHandler: @escaping @Sendable (String) -> Void
     ) async throws -> StemMasteringResult {
+        callCount += 1
         receivedInputURL = request.masteringInput.artifact.fileURL
+        receivedReportContext = request.reportContext
         foundPreviousFinalArtifact = FileManager.default.fileExists(
             atPath: request.sessionDirectory.appending(
                 path: StemMasteringService.finalMasterFileName
@@ -194,6 +240,32 @@ private actor RecordingFailingMasteringService: StemWorkflowMastering {
 }
 
 struct StemWorkflowServiceTests {
+    @Test
+    func correctionRejectsRunContractThatDiffersFromValidatedInstallation() async throws {
+        let fixture = try await makeCorrectionFixture(failingRole: nil)
+        defer {
+            try? FileManager.default.removeItem(
+                at: fixture.request.sourceURL.deletingLastPathComponent()
+            )
+        }
+        let request = StemWorkflowRequest(
+            runID: fixture.request.runID,
+            runContract: makeStemTestRunContract(model: .bsRoformerSW),
+            sourceURL: fixture.request.sourceURL,
+            userConfirmedMatrix: fixture.request.userConfirmedMatrix,
+            installation: fixture.request.installation,
+            manifest: fixture.request.manifest,
+            separationSettings: fixture.request.separationSettings,
+            correctionSettings: fixture.request.correctionSettings,
+            masteringSettings: fixture.request.masteringSettings,
+            analysisMode: fixture.request.analysisMode
+        )
+
+        await #expect(throws: StemWorkflowServiceError.runContractMismatch) {
+            _ = try await fixture.service.processCorrection(request)
+        }
+    }
+
     @Test
     func correctionDetailedLogContainsEveryWorkflowStageInProcessingOrder() async throws {
         let fixture = try await makeCorrectionFixture(failingRole: nil)
@@ -206,6 +278,7 @@ struct StemWorkflowServiceTests {
         }
 
         var expected = [
+            "実行契約: HTDemucs / 4Stem / ドラム、ベース、その他、ボーカル",
             "処理用入力音声を準備します",
             "処理用入力音声の準備が完了しました",
             "処理用入力音声を解析・ノイズ測定します",
@@ -250,7 +323,7 @@ struct StemWorkflowServiceTests {
         let recorder = WorkflowStringRecorder()
         let service = StemWorkflowService(
             inputPreparer: WorkflowInputPreparer(signal: fixture.signal),
-            separator: QuarterStemSeparator(sourceSignal: fixture.signal),
+            separator: ContractStemSeparator(sourceSignal: fixture.signal),
             corrector: PassThroughStemCorrector(failingRole: nil),
             remixSafetyGuard: BassRawFallbackSafetyGuard()
         )
@@ -273,7 +346,7 @@ struct StemWorkflowServiceTests {
         let recorder = WorkflowSeparationProgressRecorder()
         let service = StemWorkflowService(
             inputPreparer: WorkflowInputPreparer(signal: fixture.signal),
-            separator: QuarterStemSeparator(
+            separator: ContractStemSeparator(
                 sourceSignal: fixture.signal,
                 progressFractions: [0.1, 0.2, 1]
             ),
@@ -309,6 +382,204 @@ struct StemWorkflowServiceTests {
     }
 
     @Test
+    func bsCorrectionUsesAllSixContractRolesAndWritesSixCorrectedArtifacts() async throws {
+        let fixture = try await makeCorrectionFixture(
+            model: .bsRoformerSW,
+            failingRole: nil
+        )
+        defer { try? StemWorkflowService().discardTemporarySession(runID: fixture.request.runID) }
+        let recorder = WorkflowCorrectedRoleRecorder()
+        let service = StemWorkflowService(
+            inputPreparer: WorkflowInputPreparer(signal: fixture.signal),
+            separator: ContractStemSeparator(sourceSignal: fixture.signal),
+            corrector: PassThroughStemCorrector(failingRole: nil, roleRecorder: recorder)
+        )
+
+        let result = try await service.processCorrection(fixture.request)
+        let roles = fixture.request.runContract.validationRoles
+
+        #expect(await recorder.values() == roles)
+        #expect(result.stemEvaluations.map(\.role) == roles)
+        #expect(result.stemEvaluations.count == 6)
+        #expect(result.stemEvaluations.allSatisfy { evaluation in
+            guard let artifact = evaluation.correctedArtifact else { return false }
+            return artifact.fileURL.lastPathComponent == "corrected-\(evaluation.role.rawValue).wav"
+                && FileManager.default.fileExists(atPath: artifact.fileURL.path)
+        })
+
+        let store = StemTemporaryAudioStore()
+        var correctedInputs: [StemMixInput] = []
+        for role in roles {
+            let artifact = try #require(
+                result.stemEvaluations.first(where: { $0.role == role })?.correctedArtifact
+            )
+            let signal = try await store.load(
+                artifact: artifact,
+                expectedURL: artifact.fileURL,
+                expectedKind: .correctedStem(role)
+            )
+            correctedInputs.append(StemMixInput(role: role, signal: signal))
+        }
+        let expected = try StemMixService().pureSum(
+            stems: correctedInputs,
+            validationRoles: roles,
+            order: fixture.request.runContract.pureSumOrder
+        ).signal
+        let actual = try await store.load(
+            artifact: result.remixArtifacts.correctedPureSum,
+            expectedURL: result.remixArtifacts.correctedPureSum.fileURL,
+            expectedKind: .correctedPureSum48000
+        )
+        #expect(actual.sampleRate == expected.sampleRate)
+        #expect(actual.channels == expected.channels)
+    }
+
+    @Test
+    func bsWorkflowConnectsGuitarAndPianoToDedicatedAnalysisAndRoleGuards() async throws {
+        let fixture = try await makeCorrectionFixture(
+            model: .bsRoformerSW,
+            failingRole: nil
+        )
+        defer { try? StemWorkflowService().discardTemporarySession(runID: fixture.request.runID) }
+        let service = StemWorkflowService(
+            inputPreparer: WorkflowInputPreparer(signal: fixture.signal),
+            separator: ContractStemSeparator(sourceSignal: fixture.signal),
+            corrector: StemCorrectionService()
+        )
+        let recorder = WorkflowStringRecorder()
+
+        let result = try await service.processCorrection(fixture.request) { event in
+            guard case .log(_, _, let message) = event else { return }
+            recorder.append(message)
+        }
+
+        #expect(recorder.values().first == (
+            "実行契約: BS-RoFormer-SW / 6Stem / ベース、ドラム、その他、ボーカル、ギター、ピアノ"
+        ))
+
+        for role in [StemRole.guitar, .piano] {
+            let evaluation = try #require(
+                result.stemEvaluations.first(where: { $0.role == role })
+            )
+            let analysis = try #require(evaluation.roleAnalysisSnapshot)
+            #expect(analysis.role == role)
+            #expect(analysis.activity != nil)
+            #expect(analysis.dedicatedMetrics != nil)
+            #expect(!analysis.features.isEmpty)
+            #expect(evaluation.stageGuards.map(\.stage) == StemCorrectionStage.allCases)
+            #expect(evaluation.stageGuards.flatMap(\.protectedComponents).allSatisfy {
+                $0.role == role
+            })
+            #expect(!analysis.features.contains { feature in
+                feature.feature.rawValue.hasPrefix("other")
+            })
+        }
+    }
+
+    @Test
+    func bsGuitarCorrectionFailureFallsBackOnlyThatStemAndKeepsSixStemResult() async throws {
+        let fixture = try await makeCorrectionFixture(
+            model: .bsRoformerSW,
+            failingRole: .guitar
+        )
+        defer { try? StemWorkflowService().discardTemporarySession(runID: fixture.request.runID) }
+
+        let result = try await fixture.service.processCorrection(fixture.request)
+        let guitar = try #require(result.stemEvaluations.first(where: { $0.role == .guitar }))
+
+        #expect(result.stemEvaluations.count == 6)
+        #expect(guitar.usedRawFallback)
+        #expect(guitar.fallbackReason != nil)
+        #expect(result.stemEvaluations.filter(\.usedRawFallback).map(\.role) == [.guitar])
+        #expect(result.stemEvaluations.allSatisfy { evaluation in
+            guard let artifact = evaluation.correctedArtifact else { return false }
+            return FileManager.default.fileExists(atPath: artifact.fileURL.path)
+        })
+        #expect(FileManager.default.fileExists(
+            atPath: result.remixArtifacts.correctedPureSum.fileURL.path
+        ))
+    }
+
+    @Test
+    func bsRemixConsumesAllSixCorrectedStemsAndLogsTheSharedAccompanimentBus() async throws {
+        let fixture = try await makeCorrectionFixture(
+            model: .bsRoformerSW,
+            failingRole: nil
+        )
+        defer { try? StemWorkflowService().discardTemporarySession(runID: fixture.request.runID) }
+        let correction = try await fixture.service.processCorrection(fixture.request)
+        let logs = WorkflowStringRecorder()
+
+        let remix = try await fixture.service.processRemix(
+            correction: correction,
+            settings: StemRemixSettings()
+        ) { event in
+            guard case .log(_, _, let message) = event else { return }
+            logs.append(message)
+        }
+
+        let store = StemTemporaryAudioStore()
+        let correctedPureSum = try await store.load(
+            artifact: correction.remixArtifacts.correctedPureSum,
+            expectedURL: correction.remixArtifacts.correctedPureSum.fileURL,
+            expectedKind: .correctedPureSum48000
+        )
+        let remixed = try await store.load(
+            artifact: remix.artifact,
+            expectedURL: remix.artifact.fileURL,
+            expectedKind: .remixed48000
+        )
+        let recordedLogs = logs.values()
+
+        #expect(remixed.channels == correctedPureSum.channels)
+        #expect(remix.validation.canContinue)
+        #expect(recordedLogs.contains { $0.hasPrefix("自動判定根拠（ギター）") })
+        #expect(recordedLogs.contains { $0.hasPrefix("自動判定根拠（ピアノ）") })
+        #expect(recordedLogs.contains {
+            $0.hasPrefix("ボーカル→伴奏（その他／ギター／ピアノ）衝突回避")
+        })
+    }
+
+    @Test
+    func bsRemixFailureKeepsAllSixCorrectedStemsAndThePureSum() async throws {
+        let fixture = try await makeCorrectionFixture(
+            model: .bsRoformerSW,
+            failingRole: nil
+        )
+        defer { try? StemWorkflowService().discardTemporarySession(runID: fixture.request.runID) }
+        let guardService = DropGuitarOnSecondSafetyCheck()
+        let service = StemWorkflowService(
+            inputPreparer: WorkflowInputPreparer(signal: fixture.signal),
+            separator: ContractStemSeparator(sourceSignal: fixture.signal),
+            corrector: PassThroughStemCorrector(failingRole: nil),
+            remixSafetyGuard: guardService
+        )
+        let correction = try await service.processCorrection(fixture.request)
+        let remixURL = correction.sessionDirectory.appending(path: "stem-remix-48000.wav")
+        let finalURL = correction.sessionDirectory.appending(
+            path: StemMasteringService.finalMasterFileName
+        )
+
+        await #expect(throws: StemWorkflowServiceError.missingStem(.guitar)) {
+            _ = try await service.processRemix(
+                correction: correction,
+                settings: correction.automaticRemixPlan.settings
+            )
+        }
+
+        #expect(correction.stemEvaluations.count == 6)
+        #expect(correction.stemEvaluations.allSatisfy { evaluation in
+            guard let artifact = evaluation.correctedArtifact else { return false }
+            return FileManager.default.fileExists(atPath: artifact.fileURL.path)
+        })
+        #expect(FileManager.default.fileExists(
+            atPath: correction.remixArtifacts.correctedPureSum.fileURL.path
+        ))
+        #expect(!FileManager.default.fileExists(atPath: remixURL.path))
+        #expect(!FileManager.default.fileExists(atPath: finalURL.path))
+    }
+
+    @Test
     func masteringUsesStemRemixDirectlyAndFailureKeepsCorrectionAndRemixArtifacts() async throws {
         let fixture = try await makeCorrectionFixture(failingRole: nil)
         defer { try? StemWorkflowService().discardTemporarySession(runID: fixture.request.runID) }
@@ -316,8 +587,9 @@ struct StemWorkflowServiceTests {
         let recorder = RecordingFailingMasteringService()
         let masteringWorkflow = StemWorkflowService(
             inputPreparer: WorkflowInputPreparer(signal: fixture.signal),
-            separator: QuarterStemSeparator(sourceSignal: fixture.signal),
+            separator: ContractStemSeparator(sourceSignal: fixture.signal),
             corrector: PassThroughStemCorrector(failingRole: nil),
+            remixSafetyGuard: BassRawFallbackSafetyGuard(),
             masteringService: recorder
         )
         let remix = try await masteringWorkflow.processRemix(
@@ -339,6 +611,12 @@ struct StemWorkflowServiceTests {
         let inputURL = await recorder.receivedInputURL
         #expect(inputURL?.lastPathComponent == "stem-remix-48000.wav")
         #expect(await !recorder.foundPreviousFinalArtifact)
+        let reportContext = try #require(await recorder.receivedReportContext)
+        let bassEvidence = try #require(reportContext.roleEvidence.first { $0.role == .bass })
+        #expect(bassEvidence.usedRawFallback)
+        #expect(bassEvidence.effectiveCorrectionSettings == nil)
+        #expect(bassEvidence.fallbackReason == "再ミックス安全確認: テスト用の安全確認理由")
+        #expect(bassEvidence.stageGuards.count == StemCorrectionStage.allCases.count)
         #expect(!FileManager.default.fileExists(atPath: previousFinalURL.path))
         #expect(!FileManager.default.fileExists(
             atPath: correction.sessionDirectory.appending(path: "mastering-input-48000.wav").path
@@ -351,6 +629,74 @@ struct StemWorkflowServiceTests {
             guard let artifact = evaluation.correctedArtifact else { return false }
             return FileManager.default.fileExists(atPath: artifact.fileURL.path)
         })
+    }
+
+    @Test
+    func bsMasteringAcceptsSixRoleContractAndRejectsUnvalidatedRemixBeforeServiceCall() async throws {
+        let fixture = try await makeCorrectionFixture(
+            model: .bsRoformerSW,
+            failingRole: nil
+        )
+        defer { try? StemWorkflowService().discardTemporarySession(runID: fixture.request.runID) }
+        let correction = try await fixture.service.processCorrection(fixture.request)
+        let recorder = RecordingFailingMasteringService()
+        let workflow = StemWorkflowService(
+            inputPreparer: WorkflowInputPreparer(signal: fixture.signal),
+            separator: ContractStemSeparator(sourceSignal: fixture.signal),
+            corrector: PassThroughStemCorrector(failingRole: nil),
+            masteringService: recorder
+        )
+        let remix = try await workflow.processRemix(
+            correction: correction,
+            settings: correction.automaticRemixPlan.settings
+        )
+
+        await #expect(throws: WorkflowServiceTestError.masteringFailed) {
+            _ = try await workflow.processMastering(.init(
+                remix: remix,
+                masteringSettings: MasteringProfile.streaming.settings
+            ))
+        }
+
+        let context = try #require(await recorder.receivedReportContext)
+        #expect(context.runContract.separationModel == .bsRoformerSW)
+        #expect(context.runContract.stemCount == 6)
+        #expect(context.roleEvidence.count == 6)
+        #expect(Set(context.roleEvidence.map(\.role)) == Set(StemRole.allCases))
+        #expect(context.roleEvidence.allSatisfy {
+            $0.effectiveCorrectionSettings != nil
+                && $0.stageGuards.count == StemCorrectionStage.allCases.count
+                && !$0.usedRawFallback
+        })
+        #expect(await recorder.callCount == 1)
+
+        let invalidValidation = StemValidationResult(
+            phase: .processedRemix,
+            failedChecks: [
+                StemValidationFailure(
+                    check: .finiteSamples,
+                    subject: "Stem再ミックス",
+                    detail: "テスト用の有限値失敗"
+                )
+            ],
+            measurements: []
+        )
+        let invalidRemix = StemWorkflowRemixResult(
+            correction: remix.correction,
+            artifact: remix.artifact,
+            evaluation: remix.evaluation,
+            validation: invalidValidation,
+            appliedSettings: remix.appliedSettings,
+            rawFallbackReasons: remix.rawFallbackReasons
+        )
+
+        await #expect(throws: StemWorkflowServiceError.remixIncomplete) {
+            _ = try await workflow.processMastering(.init(
+                remix: invalidRemix,
+                masteringSettings: MasteringProfile.streaming.settings
+            ))
+        }
+        #expect(await recorder.callCount == 1)
     }
 
     @Test
@@ -423,6 +769,7 @@ struct StemWorkflowServiceTests {
     }
 
     private func makeCorrectionFixture(
+        model: StemSeparationModel = .htdemucs,
         failingRole: StemRole?
     ) async throws -> (
         signal: AudioSignal,
@@ -432,7 +779,7 @@ struct StemWorkflowServiceTests {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "StemWorkflowServiceTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let model = try makeStemTestInstallation(rootURL: root)
+        let modelFixture = try makeStemTestInstallation(rootURL: root, model: model)
         let frameCount = 16_384
         let left = (0..<frameCount).map { index in
             Float(sin(2 * Double.pi * 440 * Double(index) / 44_100)) * 0.1
@@ -440,11 +787,14 @@ struct StemWorkflowServiceTests {
         let signal = AudioSignal(channels: [left, left], sampleRate: 44_100)
         let request = StemWorkflowRequest(
             runID: UUID(),
+            runContract: modelFixture.installation.snapshot.contract.runContract,
             sourceURL: root.appending(path: "source.wav"),
             userConfirmedMatrix: nil,
-            installation: model.installation,
-            manifest: model.manifest,
-            separationSettings: StemSeparationSettings.metaHTDemucsProduction(seed: 42),
+            installation: modelFixture.installation,
+            manifest: modelFixture.manifest,
+            separationSettings: model == .htdemucs
+                ? StemSeparationSettings.metaHTDemucsProduction(seed: 42)
+                : .bsRoformerSWProduction,
             correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
             masteringSettings: MasteringProfile.streaming.settings,
             analysisMode: .cpu
@@ -454,8 +804,11 @@ struct StemWorkflowServiceTests {
             request,
             StemWorkflowService(
                 inputPreparer: WorkflowInputPreparer(signal: signal),
-                separator: QuarterStemSeparator(sourceSignal: signal),
-                corrector: PassThroughStemCorrector(failingRole: failingRole)
+                separator: ContractStemSeparator(sourceSignal: signal),
+                corrector: PassThroughStemCorrector(
+                    failingRole: failingRole,
+                    roleRecorder: nil
+                )
             )
         )
     }

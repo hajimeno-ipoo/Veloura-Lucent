@@ -6,13 +6,13 @@ struct StemModeRemixSettingsView: View {
 
     var body: some View {
         let plan = model.automaticRemixPlan
-        let effective = model.effectiveRemixSettings ?? StemRemixSettings()
+        let effective = model.displayedRemixSettings
 
         VStack(alignment: .leading, spacing: 14) {
             remixAdjustmentModeHeader
             remixResetRow
 
-            ForEach(StemRole.allCases, id: \.self) { role in
+            ForEach(model.availableStemRoles, id: \.self) { role in
                 roleCard(
                     role: role,
                     plan: plan,
@@ -77,19 +77,27 @@ struct StemModeRemixSettingsView: View {
     }
 
     private var remixResetStatus: some View {
-        Text(
-            model.automaticRemixPlan == nil
-                ? "補正後に自動値を算出します。現在は中立値を表示しています。"
-                : model.isRemixManualEditingEnabled && !model.manualRemixOverrides.isEmpty
-                    ? "手動調整中です"
-                    : "自動値を使用しています"
-        )
+        Text(remixAdjustmentStatusText)
         .font(.callout)
         .foregroundStyle(
             model.isRemixManualEditingEnabled && !model.manualRemixOverrides.isEmpty
                 ? VelouraTextColors.orange
                 : Color.secondary
         )
+    }
+
+    private var remixAdjustmentStatusText: String {
+        if model.automaticRemixPlan != nil {
+            return model.isRemixManualEditingEnabled && !model.manualRemixOverrides.isEmpty
+                ? "手動調整中です"
+                : "自動値を使用しています"
+        }
+        if model.isRemixManualEditingEnabled {
+            return model.manualRemixOverrides.isEmpty
+                ? "中立値から手動調整できます。補正後は未変更項目に自動値を使用します。"
+                : "補正前の手動値を保持しています。補正後は未変更項目に自動値を使用します。"
+        }
+        return "補正後に自動値を算出します。現在は中立値を表示しています。"
     }
 
     private var remixResetButton: some View {
@@ -196,7 +204,7 @@ struct StemModeRemixSettingsView: View {
             help: SettingHelp(
                 title: "Stem間の衝突回避",
                 reading: "すてむかんのしょうとつかいひ",
-                description: "ドラムとベース、ボーカルとその他が同じ帯域で同時に強く鳴る区間だけ、後者の対象帯域を一時的に下げます。曲全体へ固定EQはかけません。"
+                description: "ドラムとベース、ボーカルと\(accompanimentTitle)が同じ帯域で同時に強く鳴る区間だけ、後者の対象帯域を一時的に下げます。曲全体へ固定EQはかけません。"
             ),
             initiallyExpanded: false
         ) {
@@ -236,28 +244,31 @@ struct StemModeRemixSettingsView: View {
             }
 
             if let plan {
-                evidenceText("ボーカル／その他衝突", value: plan.vocalsOtherCollision)
+                evidenceText(
+                    "ボーカル／\(accompanimentTitle)衝突",
+                    value: plan.vocalsAccompanimentCollision
+                )
                 automaticDecisionText(
-                    plan.settings.masking.vocalsToOtherEnabled
-                        ? "自動判断: 衝突区間だけその他Stem側を回避"
+                    plan.settings.masking.vocalsToAccompanimentEnabled
+                        ? "自動判断: 衝突区間だけ\(accompanimentTitle)側を回避"
                         : "自動判断: 回避を行う衝突量ではないため無効"
                 )
             }
             collisionAvoidanceControl(
-                title: "ボーカルに対するその他回避",
-                isEnabled: effective.masking.vocalsToOtherEnabled,
+                title: "ボーカルに対する\(accompanimentTitle)回避",
+                isEnabled: effective.masking.vocalsToAccompanimentEnabled,
                 setEnabled: { value in
-                    apply { try model.setVocalsToOtherMaskingEnabled(value) }
+                    apply { try model.setVocalsToAccompanimentMaskingEnabled(value) }
                 }
             ) {
                 remixKnob(
-                    title: "その他回避量",
+                    title: "\(accompanimentTitle)回避量",
                     help: SettingHelp(
-                        title: "その他Stem回避量",
-                        reading: "そのたすてむかいひりょう",
-                        description: "ボーカルの存在帯域と同時に衝突した区間だけ、その他Stem側の対象帯域を下げる量です。曲全体の音量は下げません。"
+                        title: "\(accompanimentTitle)回避量",
+                        reading: "ばんそうかいひりょう",
+                        description: "ボーカルの存在帯域と同時に衝突した区間だけ、\(accompanimentTitle)側へ共通の時間制御を適用して対象帯域を下げます。曲全体の音量は下げません。"
                     ),
-                    value: effective.masking.vocalsToOtherAmount,
+                    value: effective.masking.vocalsToAccompanimentAmount,
                     valueText: percentText,
                     displayValueText: percentNumberText,
                     unitText: "%",
@@ -265,7 +276,7 @@ struct StemModeRemixSettingsView: View {
                     range: 0...0.5,
                     step: 0.01,
                     setValue: { value in
-                        apply { try model.setVocalsToOtherMasking(value) }
+                        apply { try model.setVocalsToAccompanimentMasking(value) }
                     }
                 )
             }
@@ -275,7 +286,7 @@ struct StemModeRemixSettingsView: View {
     private func reverbCard(effective: StemRemixSettings) -> some View {
         SettingsDisclosureCard(
             title: "共通リバーブ",
-            summary: "4Stemで一つの空間を共有し、Stemごとに送る量だけを変えます。",
+            summary: "\(model.availableStemRoles.count)Stemで一つの空間を共有し、Stemごとに送る量だけを変えます。",
             help: SettingHelp(
                 title: "共通リバーブ",
                 reading: "きょうつうりばーぶ",
@@ -325,6 +336,12 @@ struct StemModeRemixSettingsView: View {
             .frame(width: DAWKnobMetrics.twoColumnWidth)
             .frame(maxWidth: .infinity, alignment: .center)
         }
+    }
+
+    private var accompanimentTitle: String {
+        model.availableStemRoles.contains(.guitar)
+            ? "伴奏（その他・ギター・ピアノ）"
+            : "その他"
     }
 
     private func collisionAvoidanceControl<Content: View>(

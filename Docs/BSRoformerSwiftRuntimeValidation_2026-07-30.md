@@ -1,5 +1,7 @@
 # BS-RoFormer-SW MLX Swift単独ランタイム検証結果
 
+> この文書は2026-07-30時点の「BSの6出力を既存4Stemへ統合する互換実装」の検証記録です。記載された4Stem変換は当時の結果として残しています。2026-08-12以降の現在実装はGuitar／Pianoを統合せず6Stemのまま扱います。現在仕様は`README.md`、`FOR[hazimeno_ipoo].md`、`StemSixStemUIExportValidation_2026-08-12.md`および各`StemSixStem*Validation_2026-08-12.md`を参照してください。
+
 ## 結論
 
 `Vendor/bs-roformer-mlx-swift`へ、BS-RoFormer-SW専用の単独MLX Swiftランタイムを追加した。

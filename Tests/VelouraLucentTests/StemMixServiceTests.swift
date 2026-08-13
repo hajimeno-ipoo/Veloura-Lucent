@@ -55,6 +55,32 @@ struct StemMixServiceTests {
     }
 
     @Test
+    func bsPureSumUsesExplicitSixRoleFloat32OrderWithoutGainOrNormalization() throws {
+        let validationRoles = StemProductionModelProfile.profile(for: .bsRoformerSW).sourceOrder
+        let order = StemProductionModelProfile.profile(for: .bsRoformerSW).pureSumOrder
+        let values: [StemRole: Float] = [
+            .bass: 1e20,
+            .drums: -1e20,
+            .other: 3.25,
+            .vocals: 1.5,
+            .guitar: 0.75,
+            .piano: 0.5,
+        ]
+        var expected: Float = 0
+        for role in order { expected += values[role, default: 0] }
+
+        let result = try service.pureSum(
+            stems: Array(makeRoleValueStems(values, roles: validationRoles).reversed()),
+            validationRoles: validationRoles,
+            order: order
+        )
+
+        #expect(result.signal.channels[0][0].bitPattern == expected.bitPattern)
+        #expect(result.signal.channels[1][0].bitPattern == expected.bitPattern)
+        #expect(result.signal.channels[0][0] == 6)
+    }
+
+    @Test
     func finitePureSumIsKeptWhenTruePeakCannotBeRepresented() throws {
         let largest = Float.greatestFiniteMagnitude
         let result = try service.pureSum(stems: makeRoleValueStems(
@@ -82,6 +108,22 @@ struct StemMixServiceTests {
         let missing = makeExactSumStems().filter { $0.role != .other }
         #expect(throws: StemMixError.missingRole(.other)) {
             try service.pureSum(stems: missing)
+        }
+
+        let unexpected = makeExactSumStems() + [StemMixInput(
+            role: .guitar,
+            signal: makeExactSumStems()[0].signal
+        )]
+        #expect(throws: StemMixError.unexpectedRole(.guitar)) {
+            try service.pureSum(stems: unexpected)
+        }
+
+        #expect(throws: StemMixError.invalidRoleContract) {
+            try service.pureSum(
+                stems: makeExactSumStems(),
+                validationRoles: [.drums, .bass, .other, .vocals],
+                order: [.vocals, .drums, .bass, .bass]
+            )
         }
     }
 
@@ -258,7 +300,7 @@ struct StemMixServiceTests {
     }
 
     private func makeConstantStems(left: [Float], right: [Float]) -> [StemMixInput] {
-        StemRole.allCases.map { role in
+        StemProductionModelProfile.profile(for: .htdemucs).sourceOrder.map { role in
             StemMixInput(
                 role: role,
                 signal: AudioSignal(channels: [left, right], sampleRate: 44_100)
@@ -268,9 +310,10 @@ struct StemMixServiceTests {
 
     private func makeRoleValueStems(
         _ values: [StemRole: Float],
+        roles: [StemRole] = StemProductionModelProfile.profile(for: .htdemucs).sourceOrder,
         frameCount: Int = 1
     ) -> [StemMixInput] {
-        StemRole.allCases.map { role in
+        roles.map { role in
             let channel = Array(repeating: values[role, default: 0], count: frameCount)
             return StemMixInput(
                 role: role,

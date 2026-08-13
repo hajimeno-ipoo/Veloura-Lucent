@@ -29,10 +29,12 @@
     "outputTensorLayout": "source-major",
     "channelLayoutWithinSource": "channel-major",
     "sourceOrder": [
-      "drums",
       "bass",
+      "drums",
       "other",
-      "vocals"
+      "vocals",
+      "guitar",
+      "piano"
     ]
   },
   "downloadPolicy": {

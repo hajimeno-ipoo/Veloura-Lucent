@@ -9,15 +9,16 @@ struct StemModeCorrectionSettingsView: View {
             Text("Stem別の独立設定")
                 .font(.callout.bold())
 
-            Text("Vocals、Drums、Bass、Otherごとに補正プリセットと12項目を保持します。")
+            Text("実行モデルの各Stemごとに補正プリセットと12項目を保持します。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
             LiquidGlassSegmentedPicker(
                 title: "設定するStem",
-                options: StemRole.allCases,
+                options: model.availableStemRoles,
                 selection: correctionRoleBinding,
                 label: \.stemModeDisplayTitle,
+                maxWidth: 448,
                 isDisabled: false
             )
             .accessibilityHint("補正設定を表示・変更するStemを選びます")

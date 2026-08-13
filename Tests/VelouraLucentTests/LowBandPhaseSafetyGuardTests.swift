@@ -158,6 +158,13 @@ struct LowBandPhaseSafetyGuardTests {
             context: context
         )
 
+        #expect(logger.values.compactMap(ProcessingProgressEvent.decode).contains { event in
+            guard case let .correction(step, state, detail) = event else { return false }
+            return step == .lowBandPhaseSafety
+                && state == .detail
+                && detail?.hasPrefix("位相補正 ") == true
+                && detail?.hasSuffix("セル") == true
+        })
         #expect(logger.values.contains(
             "低域位相/原因: 入力にも存在し、補正後に一部増加"
         ))

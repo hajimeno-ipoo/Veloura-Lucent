@@ -272,6 +272,7 @@ struct VelouraRootView: View {
 
         return VelouraCommandActions(
             processingMode: .stem,
+            stemCount: model.availableStemRoles.count,
             canSwitchProcessingMode: !runtime.isModeSwitchDisabled,
             canChooseInput: model.canChooseInput,
             canRunCorrection: model.canRunCorrection,
@@ -330,25 +331,19 @@ struct VelouraRootView: View {
 
     private var stemExportCommandActions: [VelouraExportCommandAction] {
         let model = runtime.stemWorkspaceModel
-        let entries: [(kind: StemArtifactKind, title: String, startsSection: Bool)] = [
-            (.remixed48000, "再ミックス済み", false),
-            (.finalMaster, "マスタリング済み", false),
-            (.correctedStem(.drums), "ドラム", true),
-            (.correctedStem(.bass), "ベース", false),
-            (.correctedStem(.other), "その他", false),
-            (.correctedStem(.vocals), "ボーカル", false),
-        ]
-
-        return entries.map { entry in
-            let artifact = model.exportableArtifacts.first { $0.kind == entry.kind }
+        var hasStartedStemSection = false
+        return model.exportableArtifacts.map { artifact in
+            let startsSection = artifact.kind.isCorrectedStemArtifact
+                && !hasStartedStemSection
+            if startsSection {
+                hasStartedStemSection = true
+            }
             return VelouraExportCommandAction(
-                id: entry.kind.stemModeDisplayTitle,
-                title: entry.title,
-                isEnabled: artifact != nil
-                    && artifact.map(model.isExporting) != true,
-                startsSection: entry.startsSection,
+                id: artifact.id,
+                title: artifact.kind.stemModeExportMenuTitle,
+                isEnabled: !model.isExporting(artifact),
+                startsSection: startsSection,
                 perform: { format in
-                    guard let artifact else { return }
                     Task {
                         await model.exportArtifact(artifact, as: format)
                     }

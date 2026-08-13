@@ -19,19 +19,19 @@ struct StemRemixRoleSettings: Equatable, Sendable {
 struct StemRemixMaskingSettings: Equatable, Sendable {
     var drumsToBassEnabled: Bool
     var drumsToBassAmount: Float
-    var vocalsToOtherEnabled: Bool
-    var vocalsToOtherAmount: Float
+    var vocalsToAccompanimentEnabled: Bool
+    var vocalsToAccompanimentAmount: Float
 
     init(
         drumsToBassEnabled: Bool = false,
         drumsToBassAmount: Float = 0,
-        vocalsToOtherEnabled: Bool = false,
-        vocalsToOtherAmount: Float = 0
+        vocalsToAccompanimentEnabled: Bool = false,
+        vocalsToAccompanimentAmount: Float = 0
     ) {
         self.drumsToBassEnabled = drumsToBassEnabled
         self.drumsToBassAmount = Self.clamp(drumsToBassAmount)
-        self.vocalsToOtherEnabled = vocalsToOtherEnabled
-        self.vocalsToOtherAmount = Self.clamp(vocalsToOtherAmount)
+        self.vocalsToAccompanimentEnabled = vocalsToAccompanimentEnabled
+        self.vocalsToAccompanimentAmount = Self.clamp(vocalsToAccompanimentAmount)
     }
 
     private static func clamp(_ value: Float) -> Float {
@@ -90,8 +90,8 @@ struct StemRemixManualOverrides: Equatable, Sendable {
     private var roleValues: [StemRole: StemRemixRoleOverrides] = [:]
     var drumsToBassEnabled: Bool?
     var drumsToBassAmount: Float?
-    var vocalsToOtherEnabled: Bool?
-    var vocalsToOtherAmount: Float?
+    var vocalsToAccompanimentEnabled: Bool?
+    var vocalsToAccompanimentAmount: Float?
     var reverbReturnLevel: Float?
     var reverbDecaySeconds: Float?
 
@@ -99,8 +99,8 @@ struct StemRemixManualOverrides: Equatable, Sendable {
         roleValues.isEmpty
             && drumsToBassEnabled == nil
             && drumsToBassAmount == nil
-            && vocalsToOtherEnabled == nil
-            && vocalsToOtherAmount == nil
+            && vocalsToAccompanimentEnabled == nil
+            && vocalsToAccompanimentAmount == nil
             && reverbReturnLevel == nil
             && reverbDecaySeconds == nil
     }
@@ -140,10 +140,10 @@ struct StemRemixManualOverrides: Equatable, Sendable {
                 ?? automatic.masking.drumsToBassEnabled,
             drumsToBassAmount: drumsToBassAmount
                 ?? automatic.masking.drumsToBassAmount,
-            vocalsToOtherEnabled: vocalsToOtherEnabled
-                ?? automatic.masking.vocalsToOtherEnabled,
-            vocalsToOtherAmount: vocalsToOtherAmount
-                ?? automatic.masking.vocalsToOtherAmount
+            vocalsToAccompanimentEnabled: vocalsToAccompanimentEnabled
+                ?? automatic.masking.vocalsToAccompanimentEnabled,
+            vocalsToAccompanimentAmount: vocalsToAccompanimentAmount
+                ?? automatic.masking.vocalsToAccompanimentAmount
         )
         effective.reverbReturnLevel = min(
             max(reverbReturnLevel ?? automatic.reverbReturnLevel, 0),
@@ -163,7 +163,7 @@ struct StemRemixAutomaticPlan: Equatable, Sendable {
     let panEvidence: [StemRole: Float]
     let reverbLossEvidence: [StemRole: Float]
     let drumsBassCollision: Float
-    let vocalsOtherCollision: Float
+    let vocalsAccompanimentCollision: Float
 }
 
 enum StemRemixRenderStage: CaseIterable, Equatable, Sendable {

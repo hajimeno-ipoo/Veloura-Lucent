@@ -133,7 +133,7 @@ struct StemModelAssetValidator: Sendable {
     static let modelIdentifier = htdemucsProfile.modelIdentifier
 
     private static let expectedSchemaVersion = 2
-    private static let expectedSourceOrder: [StemRole] = [.drums, .bass, .other, .vocals]
+    private static let htdemucsSourceOrder = htdemucsProfile.sourceOrder
     private static let htdemucsRedirectHosts = [
         "huggingface.co",
         "cas-bridge.xethub.hf.co",
@@ -210,9 +210,18 @@ struct StemModelAssetValidator: Sendable {
             try validateProductionManifest(manifest, profile: profile)
         }
 
-        let outputNames = Dictionary(uniqueKeysWithValues: Self.expectedSourceOrder.map { ($0, $0.rawValue) })
+        let sourceOrder = profile.sourceOrder
+        let outputNames = Dictionary(uniqueKeysWithValues: sourceOrder.map { ($0, $0.rawValue) })
         let outputShapes = Dictionary(
-            uniqueKeysWithValues: Self.expectedSourceOrder.map { ($0, [-1, 2, -1]) }
+            uniqueKeysWithValues: sourceOrder.map { ($0, [-1, 2, -1]) }
+        )
+        let runContract = StemModelRunContract(
+            separationModel: profile.model,
+            modelIdentifier: profile.modelIdentifier,
+            modelOutputOrder: sourceOrder,
+            activeRoles: sourceOrder,
+            validationRoles: sourceOrder,
+            pureSumOrder: profile.pureSumOrder
         )
 
         return StemModelContract(
@@ -222,7 +231,7 @@ struct StemModelAssetValidator: Sendable {
             assetSetIdentifier: manifest.assetSetIdentifier,
             inputName: "batchData",
             outputNames: outputNames,
-            sourceOrder: Self.expectedSourceOrder,
+            sourceOrder: sourceOrder,
             sampleRate: Double(manifest.audioContract.sampleRateHz),
             channelCount: manifest.audioContract.channelCount,
             inputShape: [-1, 2, -1],
@@ -232,7 +241,8 @@ struct StemModelAssetValidator: Sendable {
             runtime: .mlx,
             defaultSegmentSeconds: profile.defaultSegmentSeconds,
             downloadableModelAssets: manifest.downloadableModelAssets,
-            bundledRuntimeAssets: manifest.bundledRuntimeAssets
+            bundledRuntimeAssets: manifest.bundledRuntimeAssets,
+            runContract: runContract
         )
     }
 
@@ -383,7 +393,10 @@ struct StemModelAssetValidator: Sendable {
         )
 
         try validateRuntimePins(manifest.runtimePins, expected: profile.runtimePins)
-        try validateAudioContract(manifest.audioContract)
+        try validateAudioContract(
+            manifest.audioContract,
+            expectedSourceOrder: profile.sourceOrder
+        )
         try validateDownloadableAssetDefinitions(
             manifest.downloadableModelAssets,
             expected: profile.downloadableAssets
@@ -683,11 +696,11 @@ struct StemModelAssetValidator: Sendable {
         try requireConfigurationInteger(kwargs["audio_channels"], field: "kwargs.audio_channels", expected: 2, path: fileURL.path)
         try requireConfigurationValue(kwargs["segment"], field: "kwargs.segment", expected: "39/5", path: fileURL.path)
         let sources = kwargs["sources"] as? [String]
-        guard sources == Self.expectedSourceOrder.map(\.rawValue) else {
+        guard sources == Self.htdemucsSourceOrder.map(\.rawValue) else {
             throw StemModelAssetValidationError.modelConfigurationInvalid(
                 path: fileURL.path,
                 field: "kwargs.sources",
-                expected: String(describing: Self.expectedSourceOrder.map(\.rawValue)),
+                expected: String(describing: Self.htdemucsSourceOrder.map(\.rawValue)),
                 actual: description(of: kwargs["sources"])
             )
         }
@@ -903,7 +916,10 @@ struct StemModelAssetValidator: Sendable {
         }
     }
 
-    private func validateAudioContract(_ contract: StemModelAudioContract) throws {
+    private func validateAudioContract(
+        _ contract: StemModelAudioContract,
+        expectedSourceOrder: [StemRole]
+    ) throws {
         try requireEqual(field: "audioContract.sampleRateHz", expected: 44_100, actual: contract.sampleRateHz)
         try requireEqual(field: "audioContract.channelCount", expected: 2, actual: contract.channelCount)
         try requireEqual(field: "audioContract.channelLayout", expected: .stereo, actual: contract.channelLayout)
@@ -915,7 +931,11 @@ struct StemModelAssetValidator: Sendable {
             expected: .channelMajor,
             actual: contract.channelLayoutWithinSource
         )
-        try requireEqual(field: "audioContract.sourceOrder", expected: Self.expectedSourceOrder, actual: contract.sourceOrder)
+        try requireEqual(
+            field: "audioContract.sourceOrder",
+            expected: expectedSourceOrder,
+            actual: contract.sourceOrder
+        )
     }
 
     private func validateDownloadableAssetDefinitions(

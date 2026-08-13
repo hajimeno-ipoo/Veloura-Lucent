@@ -47,13 +47,14 @@ struct StemWorkflowModelsTests {
 
     @Test
     func displayStepsExposeTransientProtectionAndActualRemixOrder() {
+        let roles = StemProductionModelProfile.profile(for: .htdemucs).sourceOrder
         #expect(
-            StemModeProcessStep.correctionSteps.contains(
+            StemModeProcessStep.correctionSteps(for: roles).contains(
                 .roleTransientRecovery(.drums)
             )
         )
         #expect(
-            !StemModeProcessStep.correctionSteps.contains(
+            !StemModeProcessStep.correctionSteps(for: roles).contains(
                 .roleTransientRecovery(.vocals)
             )
         )

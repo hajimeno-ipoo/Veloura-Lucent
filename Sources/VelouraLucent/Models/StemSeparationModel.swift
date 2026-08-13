@@ -63,6 +63,8 @@ struct StemProductionModelProfile: Sendable {
     let runtimePins: [String: StemRuntimePin]
     let downloadableAssets: [StemModelAssetKind: StemDownloadableModelAsset]
     let defaultSegmentSeconds: Double?
+    let sourceOrder: [StemRole]
+    let pureSumOrder: [StemRole]
 
     static func profile(for model: StemSeparationModel) -> Self {
         switch model {
@@ -136,7 +138,9 @@ struct StemProductionModelProfile: Sendable {
                         sha256: "9258499513944fc062fbca0f11be425a446ec5702869a87e225323d7a57d2a01"
                     ),
                 ],
-                defaultSegmentSeconds: 7.8
+                defaultSegmentSeconds: 7.8,
+                sourceOrder: [.drums, .bass, .other, .vocals],
+                pureSumOrder: [.vocals, .drums, .bass, .other]
             )
         case .bsRoformerSW:
             let revision = "13edef2e713151522e4049e92f011e0543c45d53"
@@ -178,7 +182,9 @@ struct StemProductionModelProfile: Sendable {
                         sha256: "ab4ae4369276c2ff12ee86d55ce45c37a88a82f6744c33c0bb6a40c1c2f620f9"
                     ),
                 ],
-                defaultSegmentSeconds: nil
+                defaultSegmentSeconds: nil,
+                sourceOrder: [.bass, .drums, .other, .vocals, .guitar, .piano],
+                pureSumOrder: [.bass, .drums, .other, .vocals, .guitar, .piano]
             )
         }
     }

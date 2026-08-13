@@ -22,7 +22,7 @@ enum StemWorkflowControllerError: LocalizedError {
         case .workflowAlreadyActive:
             "別のStem Mode処理が進行中です。"
         case .remixNotReady:
-            "補正済み4Stemと純粋加算が確定していないため、再ミックスを開始できません。"
+            "契約対象の補正済みStemと純粋加算が確定していないため、再ミックスを開始できません。"
         case .masteringNotReady:
             "検証済みStem再ミックスが確定していないため、マスタリングを開始できません。"
         case .modelOperationInProgress:
@@ -201,6 +201,7 @@ final class StemWorkflowController {
     @ObservationIgnored private var notifiedCompletionStages: Set<StemCompletionNotificationStage> = []
     @ObservationIgnored private var correctionResult: StemWorkflowCorrectionResult?
     @ObservationIgnored private var remixResult: StemWorkflowRemixResult?
+    @ObservationIgnored private var runContract: StemModelRunContract?
 
     init(
         session: StemWorkflowSession,
@@ -333,6 +334,7 @@ final class StemWorkflowController {
         }
         correctionResult = nil
         remixResult = nil
+        runContract = nil
         resetExecutionState()
     }
 
@@ -379,9 +381,15 @@ final class StemWorkflowController {
 
     private func resetForInputChange() async throws {
         try requireNoActiveWorkflow()
+        let isSameSelectedInput = workspaceModel?.selectedInputURL?.standardizedFileURL
+            == inputLease?.URL.standardizedFileURL
         try await discardInactiveSessionRunIfPresent()
         session.resetForInputChange()
-        workspaceModel?.resetRunPresentationAfterCorrectionCancellation()
+        if isSameSelectedInput {
+            workspaceModel?.resetRunPresentationAfterCorrectionCancellation()
+        } else {
+            workspaceModel?.resetRunPresentationForInputChange()
+        }
     }
 
     private func beginCorrection(_ startRequest: StemModeStartRequest) async throws {
@@ -397,12 +405,18 @@ final class StemWorkflowController {
             ensureInputLease(for: startRequest.inputURL)
 
             let runID = UUID()
+            let runContract = resources.installation.snapshot.contract.runContract
+            guard resources.bundledRuntime.contract.runContract == runContract else {
+                throw StemWorkflowServiceError.runContractMismatch
+            }
             prepareExecution(kind: .newRun, runID: runID)
             guard let workspaceModel else { throw StemWorkflowControllerError.workspaceUnavailable }
-            workspaceModel.acceptSessionStart()
-            try session.startRun(runID: runID)
+            workspaceModel.acceptSessionStart(runContract: runContract)
+            try session.startRun(runID: runID, runContract: runContract)
+            self.runContract = runContract
             let request = StemWorkflowRequest(
                 runID: runID,
+                runContract: runContract,
                 sourceURL: startRequest.inputURL,
                 userConfirmedMatrix: startRequest.confirmedMixMatrix,
                 installation: resources.installation,
@@ -519,6 +533,7 @@ final class StemWorkflowController {
         }
         correctionResult = nil
         remixResult = nil
+        runContract = nil
         session.resetAfterCorrectionCancellation(runID: runID)
         workspaceModel?.resetRunPresentationAfterCorrectionCancellation()
         workspaceModel?.setFinalCommitLockState(.unlocked)
@@ -631,9 +646,9 @@ final class StemWorkflowController {
                 let result = try await operation { [weak self] event in
                     await self?.receive(event, expectedRunID: runID)
                 }
-                self?.workflowSucceeded(result, runID: runID)
+                await self?.workflowSucceeded(result, runID: runID)
             } catch {
-                self?.workflowFailed(error, runID: runID)
+                await self?.workflowFailed(error, runID: runID)
             }
         }
     }
@@ -658,14 +673,38 @@ final class StemWorkflowController {
     private func apply(_ event: StemWorkflowEvent) throws {
         switch event {
         case .progress(let progress):
+            guard isWorkflowStepAllowed(progress.step, during: executionKind) else {
+                throw StemWorkflowSessionError.progressOutsideRunContract(progress.step.rawValue)
+            }
             try applyProgress(progress)
 
         case .displayProgress(let progress):
+            guard isDisplayDomainAllowed(progress.step.domain, during: executionKind) else {
+                throw StemWorkflowSessionError.progressOutsideRunContract(progress.step.id)
+            }
             try session.applyDisplayProgress(progress)
+            if progress.step == .finalization {
+                switch progress.status {
+                case .running:
+                    workspaceModel?.setFinalCommitLockState(.locked)
+                case .pending, .completed, .skipped, .failed:
+                    break
+                }
+            }
 
-        case .artifactCommitted(let artifact):
+        case .artifactCommitted(_, let artifact):
             guard let runID = activeRunID else {
                 throw StemWorkflowSessionError.noActiveRun
+            }
+            guard let runContract,
+                  isArtifactAllowed(
+                    artifact.kind,
+                    during: executionKind,
+                    runContract: runContract
+                  ) else {
+                throw StemWorkflowSessionError.artifactOutsideRunContract(
+                    artifact.kind.stemModeDisplayTitle
+                )
             }
             try session.updateArtifactState(
                 StemWorkflowArtifactDisplayState(
@@ -678,9 +717,14 @@ final class StemWorkflowController {
             )
             updatePreviewSourcesFromValidatedArtifacts()
 
-        case .validationCompleted(let validation):
+        case .validationCompleted(_, let validation):
             guard let runID = activeRunID else {
                 throw StemWorkflowSessionError.noActiveRun
+            }
+            guard isValidationPhaseAllowed(validation.phase, during: executionKind) else {
+                throw StemWorkflowSessionError.validationOutsideRunContract(
+                    validation.phase.rawValue
+                )
             }
             let subject: StemWorkflowValidationSubject = switch validation.phase {
             case .separatedStems: .separatedStems
@@ -703,9 +747,18 @@ final class StemWorkflowController {
                 )
             )
 
-        case .stemEvaluationCompleted(let evaluation):
+        case .stemEvaluationCompleted(_, let evaluation):
             guard let runID = activeRunID else {
                 throw StemWorkflowSessionError.noActiveRun
+            }
+            guard executionKind == .newRun,
+                  let runContract,
+                  runContract.validationRoles.contains(evaluation.role),
+                  evaluation.rawArtifact.kind == .rawStem(evaluation.role),
+                  evaluation.correctedArtifact?.kind == .correctedStem(evaluation.role) else {
+                throw StemWorkflowSessionError.validationOutsideRunContract(
+                    evaluation.role.rawValue
+                )
             }
             let presentation = try StemModeStemEvaluationPresentation(
                 workflowEvaluation: evaluation
@@ -729,6 +782,9 @@ final class StemWorkflowController {
             )
 
         case let .log(runID, step, message):
+            guard isWorkflowStepAllowed(step, during: executionKind) else {
+                throw StemWorkflowSessionError.progressOutsideRunContract(step.rawValue)
+            }
             if let progressEvent = ProcessingProgressEvent.decode(message) {
                 try applyProcessingProgressEvent(progressEvent, runID: runID)
                 return
@@ -829,21 +885,21 @@ final class StemWorkflowController {
         }
     }
 
-    private func workflowSucceeded(_ result: StemWorkflowExecutionResult, runID: UUID) {
+    private func workflowSucceeded(_ result: StemWorkflowExecutionResult, runID: UUID) async {
         guard activeRunID == runID, !isShuttingDown else { return }
         do {
             try finalizeSuccessfulExecution(result)
         } catch {
-            finishFailedRun(error, runID: runID)
+            await finishFailedRun(error, runID: runID)
         }
     }
 
-    private func workflowFailed(_ error: any Error, runID: UUID) {
+    private func workflowFailed(_ error: any Error, runID: UUID) async {
         guard activeRunID == runID, !isShuttingDown else { return }
         if isExpectedCancellation, error is CancellationError {
             return
         }
-        finishFailedRun(error, runID: runID)
+        await finishFailedRun(error, runID: runID)
     }
 
     private func finalizeSuccessfulExecution(
@@ -867,6 +923,10 @@ final class StemWorkflowController {
                 expected: activeRunID ?? result.runID,
                 actual: result.runID
             )
+        }
+        guard result.runContract == runContract,
+              result.runContract == session.runContract else {
+            throw StemWorkflowServiceError.runContractMismatch
         }
         do {
             workspaceModel?.replaceStemEvaluations(
@@ -919,7 +979,7 @@ final class StemWorkflowController {
         updatePreviewSourcesFromValidatedArtifacts()
         try session.completeCorrection(runID: result.runID)
         session.recordCorrectedRemixAnalysis(result.correctedRemixEvaluation.audioMetrics)
-        notifyCompletionIfNeeded(.correction)
+        notifyCompletionIfNeeded(.correction, runContract: result.runContract)
         finishStoppedRun()
     }
 
@@ -929,6 +989,10 @@ final class StemWorkflowController {
                 expected: activeRunID ?? result.runID,
                 actual: result.runID
             )
+        }
+        guard result.runContract == runContract,
+              result.runContract == session.runContract else {
+            throw StemWorkflowServiceError.runContractMismatch
         }
         try session.updateArtifactState(StemWorkflowArtifactDisplayState(
             id: result.artifact.id,
@@ -950,6 +1014,10 @@ final class StemWorkflowController {
                 expected: activeRunID ?? result.runID,
                 actual: result.runID
             )
+        }
+        guard result.runContract == runContract,
+              result.runContract == session.runContract else {
+            throw StemWorkflowServiceError.runContractMismatch
         }
         do {
             workspaceModel?.setRemixAnalysisPresentation(
@@ -992,11 +1060,11 @@ final class StemWorkflowController {
         updatePreviewSourcesFromValidatedArtifacts()
         try session.completeRun(runID: result.runID)
         session.recordFinalAnalysis(result.mastering.finalEvaluation.audioMetrics)
-        notifyCompletionIfNeeded(.mastering)
+        notifyCompletionIfNeeded(.mastering, runContract: result.runContract)
         finishStoppedRun(keepFinalCommitLocked: true)
     }
 
-    private func finishFailedRun(_ error: any Error, runID: UUID) {
+    private func finishFailedRun(_ error: any Error, runID: UUID) async {
         if executionKind == .remix {
             remixResult = nil
             do {
@@ -1015,7 +1083,7 @@ final class StemWorkflowController {
             }
             workspaceModel?.presentControllerFailure(
                 title: "再ミックスを停止しました",
-                message: "補正済み4Stemと純粋加算は保持しています。\n\(error.localizedDescription)"
+                message: "補正済み\(session.runContract?.stemCount ?? 0)Stemと純粋加算は保持しています。\n\(error.localizedDescription)"
             )
             finishStoppedRun()
             return
@@ -1036,18 +1104,28 @@ final class StemWorkflowController {
             }
             workspaceModel?.presentControllerFailure(
                 title: "マスタリングを停止しました",
-                message: "補正済み4Stemは保持しています。\n\(error.localizedDescription)"
+                message: "補正済み\(session.runContract?.stemCount ?? 0)Stem、純粋加算、Stem再ミックスは保持しています。\n\(error.localizedDescription)"
             )
             finishStoppedRun()
             return
         } else {
+            var failureMessage = error.localizedDescription
+            do {
+                try await workflow.discardSession(runID: runID)
+            } catch {
+                failureMessage += "\n一時成果物の削除にも失敗しました: \(error.localizedDescription)"
+            }
             do {
                 try session.fail(
                     runID: runID,
                     step: session.currentStep,
-                    message: error.localizedDescription,
+                    message: failureMessage,
                     recoverySuggestion: "入力音源と右サイドのStem分離にあるモデル状態を確認してください。"
                 )
+                correctionResult = nil
+                remixResult = nil
+                workspaceModel?.resetRunPresentationAfterCorrectionFailure()
+                updatePreviewSourcesFromValidatedArtifacts()
             } catch let sessionError {
                 workspaceModel?.presentControllerFailure(
                     title: "Stem Mode処理を停止しました",
@@ -1059,7 +1137,7 @@ final class StemWorkflowController {
         }
         workspaceModel?.presentControllerFailure(
             title: "Stem Mode処理を停止しました",
-            message: error.localizedDescription
+            message: session.lastError?.message ?? error.localizedDescription
         )
         finishStoppedRun()
     }
@@ -1092,9 +1170,15 @@ final class StemWorkflowController {
         workspaceModel?.setFinalCommitLockState(.unlocked)
     }
 
-    private func notifyCompletionIfNeeded(_ stage: StemCompletionNotificationStage) {
+    private func notifyCompletionIfNeeded(
+        _ stage: StemCompletionNotificationStage,
+        runContract: StemModelRunContract
+    ) {
         guard notifiedCompletionStages.insert(stage).inserted else { return }
-        notificationReporter.notifyStemCompletion(for: stage)
+        notificationReporter.notifyStemCompletion(
+            for: stage,
+            runContract: runContract
+        )
     }
 
     private func resetExecutionState() {
@@ -1118,8 +1202,10 @@ final class StemWorkflowController {
             try await workflow.discardSession(runID: runID)
             correctionResult = nil
             remixResult = nil
+            runContract = nil
             session.resetForInputChange()
         case .idle:
+            runContract = nil
             session.resetForInputChange()
         case .ready,
              .running:
@@ -1235,12 +1321,82 @@ final class StemWorkflowController {
             progress.runID
         case .displayProgress(let progress):
             progress.runID
-        case .artifactCommitted:
-            activeRunID ?? UUID()
-        case .validationCompleted:
-            activeRunID ?? UUID()
-        case .stemEvaluationCompleted:
-            activeRunID ?? UUID()
+        case .artifactCommitted(let runID, _):
+            runID
+        case .validationCompleted(let runID, _):
+            runID
+        case .stemEvaluationCompleted(let runID, _):
+            runID
+        }
+    }
+
+    private func isArtifactAllowed(
+        _ kind: StemArtifactKind,
+        during executionKind: ExecutionKind?,
+        runContract: StemModelRunContract
+    ) -> Bool {
+        switch (executionKind, kind) {
+        case (.newRun, .input44100),
+             (.newRun, .correctedPureSum48000),
+             (.remix, .remixed48000),
+             (.mastering, .finalMaster):
+            return true
+        case (.newRun, .rawStem(let role)):
+            return runContract.activeRoles.contains(role)
+        case (.newRun, .correctedStem(let role)):
+            return runContract.validationRoles.contains(role)
+        default:
+            return false
+        }
+    }
+
+    private func isWorkflowStepAllowed(
+        _ step: StemWorkflowStep,
+        during executionKind: ExecutionKind?
+    ) -> Bool {
+        switch executionKind {
+        case .newRun:
+            return switch step {
+            case .validateInput, .separate, .validateSeparatedStems,
+                 .evaluateStems, .correctStems, .validateCorrectedStems,
+                 .correctedPureSum, .validateCorrectedPureSum:
+                true
+            case .remix, .validateRemix, .mastering, .finalizeMaster:
+                false
+            }
+        case .remix:
+            return step == .remix || step == .validateRemix
+        case .mastering:
+            return step == .mastering || step == .finalizeMaster
+        case nil:
+            return false
+        }
+    }
+
+    private func isDisplayDomainAllowed(
+        _ domain: StemModeProcessDomain,
+        during executionKind: ExecutionKind?
+    ) -> Bool {
+        switch (executionKind, domain) {
+        case (.newRun, .correction), (.remix, .remix), (.mastering, .mastering):
+            true
+        default:
+            false
+        }
+    }
+
+    private func isValidationPhaseAllowed(
+        _ phase: StemValidationPhase,
+        during executionKind: ExecutionKind?
+    ) -> Bool {
+        switch (executionKind, phase) {
+        case (.newRun, .separatedStems),
+             (.newRun, .remix),
+             (.newRun, .correctedPureSum),
+             (.remix, .processedRemix):
+            true
+        default:
+            false
         }
     }
 

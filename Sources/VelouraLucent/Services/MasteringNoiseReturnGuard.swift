@@ -43,13 +43,13 @@ extension MasteringProcessor {
 
         logger?.log("ノイズ戻り: 一括判定を開始")
         if probePlan.usesRepresentativeWindows {
-            logger?.detail("\(probePlan.selectedWindowCount)/\(probePlan.totalWindowCount) 区間を確認中", for: .noiseReturnGuard)
+            logger?.detail("\(probePlan.selectedWindowCount)/\(probePlan.totalWindowCount)区間", for: .noiseReturnGuard)
             logger?.log("ノイズ戻り/軽量測定: \(probePlan.selectedWindowCount)/\(probePlan.totalWindowCount)区間")
         }
         for _ in 0..<adaptivePasses {
             let currentMeasurements = MasteringNoiseReturnSupport.noiseReturnProbe(signal: currentSignal, plan: probePlan)
             measurementCount += 1
-            logger?.detail("\(measurementCount)/\(adaptivePasses) 回目を確認中", for: .noiseReturnGuard)
+            logger?.detail("\(measurementCount)/\(adaptivePasses)回目", for: .noiseReturnGuard)
             logger?.log("ノイズ戻り/軽量判定: \(measurementCount)/\(adaptivePasses)")
 
             let strongestExcess = rules
@@ -152,4 +152,3 @@ extension MasteringProcessor {
     }
 
 }
-

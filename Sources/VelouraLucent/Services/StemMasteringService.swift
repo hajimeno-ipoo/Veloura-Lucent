@@ -80,7 +80,7 @@ struct StemMasteringService: Sendable {
         sourceDisplayName: String,
         sourceFileInfo: AudioFileInfo?,
         separationModelDisplayName: String,
-        correctionSettings: StemRoleCorrectionSettings,
+        reportContext: StemMasteringReportContext,
         settings: MasteringSettings
     ) throws -> StemMasteringReports {
         guard canonicalInputEvaluation.purpose == .canonicalInput else {
@@ -112,14 +112,20 @@ struct StemMasteringService: Sendable {
         ) else {
             throw StemMasteringError.reportUnavailable(.audioQuality)
         }
+        guard let noiseCheck = StemAudioReportAdapter.makeNoiseCheckReport(
+            input: canonicalInputEvaluation.noiseMeasurements,
+            remixed: masteringInputEvaluation.noiseMeasurements,
+            mastered: finalEvaluation.noiseMeasurements,
+            masteringSettings: settings
+        ) else {
+            throw StemMasteringError.reportUnavailable(.noiseCheck)
+        }
         guard let completion = StemAudioReportAdapter.makeCompletionReport(
             input: canonicalInputEvaluation.audioMetrics,
             remixed: masteringInputEvaluation.audioMetrics,
             mastered: finalEvaluation.audioMetrics,
-            inputNoise: canonicalInputEvaluation.noiseMeasurements,
-            remixedNoise: masteringInputEvaluation.noiseMeasurements,
-            masteredNoise: finalEvaluation.noiseMeasurements,
-            correctionSettings: correctionSettings,
+            noiseReport: noiseCheck,
+            reportContext: reportContext,
             masteringSettings: settings,
             sourceDisplayName: sourceDisplayName,
             separationModelDisplayName: separationModelDisplayName,
@@ -128,15 +134,6 @@ struct StemMasteringService: Sendable {
             masteredFileInfo: audioFileInfo(for: finalArtifact)
         ) else {
             throw StemMasteringError.reportUnavailable(.completion)
-        }
-        guard let noiseCheck = StemAudioReportAdapter.makeNoiseCheckReport(
-            input: canonicalInputEvaluation.noiseMeasurements,
-            remixed: masteringInputEvaluation.noiseMeasurements,
-            mastered: finalEvaluation.noiseMeasurements,
-            correctionSettings: correctionSettings,
-            masteringSettings: settings
-        ) else {
-            throw StemMasteringError.reportUnavailable(.noiseCheck)
         }
         return StemMasteringReports(
             audioQuality: audioQuality,
@@ -254,7 +251,7 @@ struct StemMasteringService: Sendable {
                 sourceDisplayName: request.sourceDisplayName,
                 sourceFileInfo: request.sourceFileInfo,
                 separationModelDisplayName: request.separationModelDisplayName,
-                correctionSettings: request.correctionSettings,
+                reportContext: request.reportContext,
                 settings: request.settings
             )
             try Task.checkCancellation()

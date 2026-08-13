@@ -21,12 +21,12 @@ struct StemModeFooterView: View {
                 id: "correction",
                 title: "補正処理",
                 state: state(
-                    for: model.session.correctionDisplayProgress,
+                    for: model.correctionDisplayProgress,
                     isProcessing: model.session.isCorrectionProcessing,
                     pending: model.selectedInputURL == nil ? "待機" : "実行待ち"
                 ),
                 progress: activeProgress(
-                    for: model.session.correctionDisplayProgress,
+                    for: model.correctionDisplayProgress,
                     isProcessing: model.session.isCorrectionProcessing
                 )
             ),
@@ -81,7 +81,7 @@ struct StemModeFooterView: View {
     }
 
     private var correctionComplete: Bool {
-        model.session.correctionDisplayProgress.allSatisfy {
+        model.correctionDisplayProgress.allSatisfy {
             $0.status == .completed || $0.status == .skipped
         }
     }

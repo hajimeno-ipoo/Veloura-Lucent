@@ -103,10 +103,19 @@ struct StemSeparationSettings: Equatable, Sendable {
                 actual: model
             )
         }
+        let runContract = modelContract.runContract
+        let profile = StemProductionModelProfile.profile(for: model)
+        let expectedSourceOrder = profile.sourceOrder
         guard modelContract.sampleRate == 44_100,
               modelContract.channelCount == 2,
               modelContract.scalarType == .float32,
-              modelContract.sourceOrder == [.drums, .bass, .other, .vocals] else {
+              modelContract.sourceOrder == expectedSourceOrder,
+              runContract.separationModel == model,
+              runContract.modelIdentifier == modelContract.identifier,
+              runContract.modelOutputOrder == expectedSourceOrder,
+              runContract.activeRoles == expectedSourceOrder,
+              runContract.validationRoles == expectedSourceOrder,
+              runContract.pureSumOrder == profile.pureSumOrder else {
             throw StemSeparationSettingsError.unsupportedModelContract
         }
         if model == .bsRoformerSW {
@@ -163,7 +172,7 @@ enum StemSeparationSettingsError: LocalizedError, Equatable, Sendable {
         case let .unverifiedModelContractSegmentLength(expected, actual):
             "Stem分離のモデル契約segment秒数が検証済み値と一致しません（検証済み: \(expected)秒、実際: \(actual)秒）。"
         case .unsupportedModelContract:
-            "検証済みモデル契約が44.1 kHz／stereo／Float32／4ステム順序の要件と一致しません。"
+            "検証済みモデル契約が44.1 kHz／stereo／Float32／モデル別Stem順序の要件と一致しません。"
         }
     }
 }

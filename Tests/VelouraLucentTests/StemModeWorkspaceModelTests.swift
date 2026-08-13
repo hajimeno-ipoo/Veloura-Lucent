@@ -71,7 +71,7 @@ struct StemModeWorkspaceModelTests {
         let evaluation = try #require(model.inputEvaluation)
         let spectrogram = try #require(model.inputSpectrogram)
 
-        model.acceptSessionStart()
+        model.acceptSessionStart(runContract: makeStemTestRunContract())
         model.resetRunPresentationAfterCorrectionCancellation()
 
         #expect(model.selectedInputURL == inputURL)
@@ -257,7 +257,8 @@ struct StemModeWorkspaceModelTests {
         #expect(!model.canRunMastering)
 
         let runID = UUID()
-        try session.startRun(runID: runID)
+        try session.startRun(runID: runID, runContract: makeStemTestRunContract())
+        try addRequiredRawArtifacts(to: session, runID: runID)
         for step in [
             StemWorkflowStep.validateInput,
             .separate,
@@ -271,7 +272,7 @@ struct StemModeWorkspaceModelTests {
             try session.beginStep(runID: runID, step: step)
             try session.completeStep(runID: runID, step: step)
         }
-        for role in StemRole.allCases {
+        for role in try #require(session.runContract).activeRoles {
             let artifact = makeArtifact(
                 id: "corrected-\(role.rawValue)",
                 kind: .correctedStem(role)
@@ -323,13 +324,15 @@ struct StemModeWorkspaceModelTests {
     }
 
     @Test("再ミックスは自動値を保ち、変更した項目だけ手動値で上書きする")
-    func remixManualOverridesPreserveUneditedAutomaticValues() throws {
+    func remixManualOverridesPreserveUneditedAutomaticValues() async throws {
         let recorder = WorkspaceActionRecorder()
         let session = StemWorkflowSession()
         let model = makeModel(session: session, recorder: recorder)
+        await model.inspectInput(URL(fileURLWithPath: "/tmp/remix-overrides.wav"))
         let runID = UUID()
-        try session.startRun(runID: runID)
-        for role in StemRole.allCases {
+        try session.startRun(runID: runID, runContract: makeStemTestRunContract())
+        try addRequiredRawArtifacts(to: session, runID: runID)
+        for role in try #require(session.runContract).activeRoles {
             let artifact = makeArtifact(
                 id: "corrected-\(role.rawValue)",
                 kind: .correctedStem(role)
@@ -363,7 +366,7 @@ struct StemModeWorkspaceModelTests {
             panEvidence: [.vocals: -0.1],
             reverbLossEvidence: [.vocals: 0.4],
             drumsBassCollision: 0.2,
-            vocalsOtherCollision: 0.3
+            vocalsAccompanimentCollision: 0.3
         ))
 
         #expect(!model.isRemixManualEditingEnabled)
@@ -396,7 +399,7 @@ struct StemModeWorkspaceModelTests {
             panEvidence: [.vocals: -0.2],
             reverbLossEvidence: [.vocals: 0.5],
             drumsBassCollision: 0.4,
-            vocalsOtherCollision: 0.1
+            vocalsAccompanimentCollision: 0.1
         ))
 
         let updatedEffective = try #require(model.effectiveRemixSettings)
@@ -417,10 +420,129 @@ struct StemModeWorkspaceModelTests {
         #expect(restoredManual.settings(for: .vocals).pan == 0.35)
         #expect(!restoredManual.masking.drumsToBassEnabled)
 
-        model.acceptSessionStart()
+        model.acceptSessionStart(runContract: makeStemTestRunContract())
         #expect(model.automaticRemixPlan == nil)
+        #expect(model.manualRemixOverrides.overrides(for: .vocals).pan == 0.35)
+        #expect(model.manualRemixOverrides.drumsToBassEnabled == false)
+        #expect(model.isRemixManualEditingEnabled)
+    }
+
+    @Test("入力選択後は補正前から手動値を設定でき、自動値の実行準備とは分離する")
+    func preCorrectionManualRemixDraftUsesNeutralDisplayWithoutEnablingExecution() async throws {
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(recorder: recorder)
+
+        #expect(model.isRemixSettingsDisabled)
+        #expect(throws: StemModeWorkspaceSettingsError.remixInputRequired) {
+            try model.setRemixManualEditingEnabled(true)
+        }
+
+        await model.inspectInput(URL(fileURLWithPath: "/tmp/pre-correction-remix.wav"))
+        #expect(!model.isRemixSettingsDisabled)
+
+        try model.setRemixManualEditingEnabled(true)
+        try model.setRemixPan(0.35, for: .vocals)
+        try model.setRemixReturnLevel(0.2)
+
+        #expect(model.automaticRemixPlan == nil)
+        #expect(model.effectiveRemixSettings == nil)
+        #expect(!model.canRunRemix)
+        #expect(model.displayedRemixSettings.settings(for: .vocals).gainDB == 0)
+        #expect(model.displayedRemixSettings.settings(for: .vocals).pan == 0.35)
+        #expect(model.displayedRemixSettings.reverbReturnLevel == 0.2)
+    }
+
+    @Test("同じ入力の補正開始・失敗・キャンセルでは手動下書きを保持する")
+    func correctionLifecyclePreservesManualRemixDraftForSameInput() async throws {
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(recorder: recorder)
+        await model.inspectInput(URL(fileURLWithPath: "/tmp/preserved-remix-draft.wav"))
+        try model.setRemixManualEditingEnabled(true)
+        try model.setRemixGainDB(-1.25, for: .guitar)
+
+        model.acceptSessionStart(runContract: makeStemTestRunContract(model: .bsRoformerSW))
+        #expect(model.isRemixManualEditingEnabled)
+        #expect(model.manualRemixOverrides.overrides(for: .guitar).gainDB == -1.25)
+        #expect(model.displayedRemixSettings.settings(for: .guitar).gainDB == -1.25)
+
+        model.resetRunPresentationAfterCorrectionFailure()
+        #expect(model.isRemixManualEditingEnabled)
+        #expect(model.manualRemixOverrides.overrides(for: .guitar).gainDB == -1.25)
+
+        model.resetRunPresentationAfterCorrectionCancellation()
+        #expect(model.isRemixManualEditingEnabled)
+        #expect(model.manualRemixOverrides.overrides(for: .guitar).gainDB == -1.25)
+    }
+
+    @Test("補正失敗後も同じ入力の手動下書きを続けて編集できる")
+    func failedCorrectionKeepsManualRemixDraftEditable() async throws {
+        let recorder = WorkspaceActionRecorder()
+        let session = StemWorkflowSession()
+        let model = makeModel(session: session, recorder: recorder)
+        await model.inspectInput(URL(fileURLWithPath: "/tmp/failed-remix-draft.wav"))
+        try model.setRemixManualEditingEnabled(true)
+        try model.setRemixGainDB(-1, for: .vocals)
+
+        let runID = UUID()
+        let contract = makeStemTestRunContract()
+        model.acceptSessionStart(runContract: contract)
+        try session.startRun(runID: runID, runContract: contract)
+        try session.fail(runID: runID, step: nil, message: "fixture failure")
+        model.resetRunPresentationAfterCorrectionFailure()
+
+        #expect(!model.isRemixSettingsDisabled)
+        #expect(model.manualRemixOverrides.overrides(for: .vocals).gainDB == -1)
+        try model.setRemixPan(0.25, for: .vocals)
+        #expect(model.manualRemixOverrides.overrides(for: .vocals).pan == 0.25)
+    }
+
+    @Test("補正後は変更済み項目だけ手動値を保ち、未変更項目へ新しい自動値を使う")
+    func automaticPlanMergesWithPreCorrectionManualDraft() async throws {
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(recorder: recorder)
+        await model.inspectInput(URL(fileURLWithPath: "/tmp/merged-remix-draft.wav"))
+        try model.setRemixManualEditingEnabled(true)
+        try model.setRemixPan(0.4, for: .vocals)
+
+        var automatic = StemRemixSettings(reverbReturnLevel: 0.18)
+        automatic.setSettings(
+            StemRemixRoleSettings(gainDB: 2.25, pan: -0.2, reverbSend: 0.3),
+            for: .vocals
+        )
+        model.setAutomaticRemixPlan(StemRemixAutomaticPlan(
+            settings: automatic,
+            gainEvidenceDB: [.vocals: 2.25],
+            panEvidence: [.vocals: -0.2],
+            reverbLossEvidence: [.vocals: 0.3],
+            drumsBassCollision: 0,
+            vocalsAccompanimentCollision: 0
+        ))
+
+        let effective = try #require(model.effectiveRemixSettings)
+        #expect(effective.settings(for: .vocals).gainDB == 2.25)
+        #expect(effective.settings(for: .vocals).pan == 0.4)
+        #expect(effective.settings(for: .vocals).reverbSend == 0.3)
+        #expect(effective.reverbReturnLevel == 0.18)
+
+        try model.setRemixManualEditingEnabled(false)
+        #expect(model.displayedRemixSettings.settings(for: .vocals).pan == -0.2)
+        try model.setRemixManualEditingEnabled(true)
+        #expect(model.displayedRemixSettings.settings(for: .vocals).pan == 0.4)
+    }
+
+    @Test("別の入力へ切り替える時だけ再ミックス手動下書きを初期化する")
+    func inputChangeResetsManualRemixDraft() async throws {
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(recorder: recorder)
+        await model.inspectInput(URL(fileURLWithPath: "/tmp/first-remix-input.wav"))
+        try model.setRemixManualEditingEnabled(true)
+        try model.setRemixReverbSend(0.3, for: .piano)
+
+        model.resetRunPresentationForInputChange()
+
         #expect(model.manualRemixOverrides == StemRemixManualOverrides())
         #expect(!model.isRemixManualEditingEnabled)
+        #expect(model.displayedRemixSettings == StemRemixSettings())
     }
 
     @Test("完了後も3工程を再実行でき、設定は処理中だけ無効になる")
@@ -434,8 +556,9 @@ struct StemModeWorkspaceModelTests {
         model.setModelPresentation(try makeModelPresentationFixture().presentation)
 
         let runID = UUID()
-        try session.startRun(runID: runID)
-        for role in StemRole.allCases {
+        try session.startRun(runID: runID, runContract: makeStemTestRunContract())
+        try addRequiredRawArtifacts(to: session, runID: runID)
+        for role in try #require(session.runContract).activeRoles {
             let artifact = makeArtifact(
                 id: "rerun-corrected-\(role.rawValue)",
                 kind: .correctedStem(role)
@@ -463,7 +586,7 @@ struct StemModeWorkspaceModelTests {
             panEvidence: [:],
             reverbLossEvidence: [:],
             drumsBassCollision: 0,
-            vocalsOtherCollision: 0
+            vocalsAccompanimentCollision: 0
         ))
 
         #expect(model.canRunCorrection)
@@ -552,7 +675,7 @@ struct StemModeWorkspaceModelTests {
         #expect(!model.isUsingCustomCorrectionSettings)
 
         let runID = UUID()
-        try session.startRun(runID: runID)
+        try session.startRun(runID: runID, runContract: makeStemTestRunContract())
         #expect(model.isCorrectionSettingsDisabled)
         #expect(throws: StemModeWorkspaceSettingsError.settingsCannotChangeDuringRun) {
             try model.applyCorrectionProfile(.strong)
@@ -567,13 +690,77 @@ struct StemModeWorkspaceModelTests {
         #expect(model.selectedRoleCorrectionSettings == DenoiseStrength.gentle.settings)
     }
 
+    @Test("実行前は検証済み選択モデル、実行後は結果run契約の役割を表示する")
+    func availableRolesFollowSelectedModelBeforeRunAndResultContractAfterRun() throws {
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(recorder: recorder)
+        let bsPresentation = try makeModelPresentationFixture(model: .bsRoformerSW).presentation
+        let htPresentation = try makeModelPresentationFixture(model: .htdemucs).presentation
+
+        model.setModelPresentation(bsPresentation)
+        #expect(model.availableStemRoles == [.bass, .drums, .other, .vocals, .guitar, .piano])
+        #expect(
+            model.correctionDisplayProgress.first(where: { $0.step.id == "correction.separation" })?.step.title
+                == "6Stem分離"
+        )
+
+        model.selectCorrectionRole(.guitar)
+        model.selectStemPreviewRole(.piano)
+        model.stemPreviewController.activeTarget = .input
+
+        model.setModelPresentation(htPresentation)
+        #expect(model.availableStemRoles == [.drums, .bass, .other, .vocals])
+        #expect(
+            model.correctionDisplayProgress.first(where: { $0.step.id == "correction.separation" })?.step.title
+                == "4Stem分離"
+        )
+        #expect(model.selectedCorrectionRole == .vocals)
+        #expect(model.selectedStemPreviewRole == .vocals)
+        #expect(model.stemPreviewController.activeTarget == nil)
+
+        model.setModelPresentation(bsPresentation)
+        model.selectCorrectionRole(.guitar)
+        model.selectStemPreviewRole(.piano)
+        let bsContract = makeStemTestRunContract(model: .bsRoformerSW)
+        model.acceptSessionStart(runContract: bsContract)
+        model.setModelPresentation(htPresentation)
+
+        #expect(model.availableStemRoles == bsContract.activeRoles)
+        #expect(
+            model.correctionDisplayProgress.first(where: { $0.step.id == "correction.separation" })?.step.title
+                == "6Stem分離"
+        )
+        #expect(model.selectedCorrectionRole == .guitar)
+        #expect(model.selectedStemPreviewRole == .piano)
+
+        model.stemPreviewController.activeTarget = .input
+        let htContract = makeStemTestRunContract(model: .htdemucs)
+        model.acceptSessionStart(runContract: htContract)
+        #expect(model.availableStemRoles == htContract.activeRoles)
+        #expect(model.selectedCorrectionRole == .vocals)
+        #expect(model.selectedStemPreviewRole == .vocals)
+        #expect(model.stemPreviewController.activeTarget == nil)
+    }
+
+    @Test("契約外役割の直接選択を拒否する")
+    func roleSelectionRejectsRolesOutsideTheCurrentContract() {
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(recorder: recorder)
+
+        model.selectCorrectionRole(.guitar)
+        model.selectStemPreviewRole(.piano)
+
+        #expect(model.selectedCorrectionRole == .vocals)
+        #expect(model.selectedStemPreviewRole == .vocals)
+    }
+
     @Test("Stem試聴対象と補正設定対象は独立し、選択中役割の検証済み音源だけを使用する")
     func stemPreviewUsesOnlyValidatedArtifactsForSelectedRole() throws {
         let session = StemWorkflowSession()
         let recorder = WorkspaceActionRecorder()
         let model = makeModel(session: session, recorder: recorder)
         let runID = UUID()
-        try session.startRun(runID: runID)
+        try session.startRun(runID: runID, runContract: makeStemTestRunContract())
 
         let rawVocals = makeArtifact(id: "raw-vocals", kind: .rawStem(.vocals))
         let correctedVocals = makeArtifact(
@@ -635,6 +822,53 @@ struct StemModeWorkspaceModelTests {
         model.stopPreviewPlayback()
     }
 
+    @Test("BSのGuitarとPianoは検証済みraw／補正後を個別A/Bへ接続する")
+    func bsGuitarAndPianoUseTheirOwnValidatedPreviewPairs() throws {
+        let session = StemWorkflowSession()
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(session: session, recorder: recorder)
+        let runID = UUID()
+        let contract = makeStemTestRunContract(model: .bsRoformerSW)
+        try session.startRun(runID: runID, runContract: contract)
+        model.acceptSessionStart(runContract: contract)
+
+        var artifactsByKind: [StemArtifactKind: StemAudioArtifact] = [:]
+        for role in [StemRole.guitar, .piano] {
+            for kind in [StemArtifactKind.rawStem(role), .correctedStem(role)] {
+                let artifact = makeArtifact(
+                    id: "\(role.rawValue)-\(kind.stemModeDisplayTitle)",
+                    kind: kind
+                )
+                artifactsByKind[kind] = artifact
+                try session.updateArtifactState(.init(
+                    id: artifact.id,
+                    runID: runID,
+                    kind: artifact.kind,
+                    artifact: artifact,
+                    status: .valid
+                ))
+            }
+        }
+
+        model.updatePreviewSources(from: Array(artifactsByKind.values))
+
+        for role in [StemRole.guitar, .piano] {
+            model.stemPreviewController.activeTarget = .input
+            model.selectStemPreviewRole(role)
+
+            let raw = try #require(artifactsByKind[.rawStem(role)])
+            let corrected = try #require(artifactsByKind[.correctedStem(role)])
+            #expect(model.selectedRawStemPreviewURL == raw.fileURL)
+            #expect(model.selectedCorrectedStemPreviewURL == corrected.fileURL)
+            #expect(model.stemPreviewController.cardState(for: .input).sourceURL == raw.fileURL)
+            #expect(
+                model.stemPreviewController.cardState(for: .corrected).sourceURL
+                    == corrected.fileURL
+            )
+            #expect(model.stemPreviewController.activeTarget == nil)
+        }
+    }
+
     @Test("Stem試聴は補正キャンセルと入力変更で一時成果物と一緒に消去する")
     func stemPreviewClearsWithTemporaryArtifacts() throws {
         let session = StemWorkflowSession()
@@ -642,7 +876,7 @@ struct StemModeWorkspaceModelTests {
         let model = makeModel(session: session, recorder: recorder)
 
         let cancelledRunID = UUID()
-        try session.startRun(runID: cancelledRunID)
+        try session.startRun(runID: cancelledRunID, runContract: makeStemTestRunContract())
         let cancelledRaw = makeArtifact(id: "cancelled-raw", kind: .rawStem(.vocals))
         try session.updateArtifactState(.init(
             id: cancelledRaw.id,
@@ -660,7 +894,7 @@ struct StemModeWorkspaceModelTests {
         #expect(model.stemPreviewController.cardState(for: .input).sourceURL == nil)
 
         let replacedRunID = UUID()
-        try session.startRun(runID: replacedRunID)
+        try session.startRun(runID: replacedRunID, runContract: makeStemTestRunContract())
         let replacedCorrected = makeArtifact(
             id: "replaced-corrected",
             kind: .correctedStem(.vocals)
@@ -679,7 +913,7 @@ struct StemModeWorkspaceModelTests {
         )
 
         session.resetForInputChange()
-        model.resetRunPresentationAfterCorrectionCancellation()
+        model.resetRunPresentationForInputChange()
         #expect(model.selectedCorrectedStemPreviewURL == nil)
         #expect(model.stemPreviewController.cardState(for: .corrected).sourceURL == nil)
     }
@@ -712,7 +946,7 @@ struct StemModeWorkspaceModelTests {
         let session = StemWorkflowSession()
         let model = makeModel(session: session, recorder: recorder)
         let runID = UUID()
-        try session.startRun(runID: runID)
+        try session.startRun(runID: runID, runContract: makeStemTestRunContract())
         try session.beginStep(runID: runID, step: .separate)
 
         #expect(model.canCancelProcessing)
@@ -741,7 +975,7 @@ struct StemModeWorkspaceModelTests {
             let session = StemWorkflowSession()
             let model = makeModel(session: session, recorder: recorder)
             let runID = UUID()
-            try session.startRun(runID: runID)
+            try session.startRun(runID: runID, runContract: makeStemTestRunContract())
             try session.beginStep(runID: runID, step: .separate)
 
             let cancellationTask = Task { @MainActor in
@@ -792,7 +1026,7 @@ struct StemModeWorkspaceModelTests {
         let recorder = WorkspaceActionRecorder()
         let model = makeModel(session: session, recorder: recorder)
         let runID = UUID()
-        try session.startRun(runID: runID)
+        try session.startRun(runID: runID, runContract: makeStemTestRunContract())
 
         let rawStem = makeArtifact(id: "raw-drums", kind: .rawStem(.drums))
         let selectedStem = makeArtifact(id: "drums", kind: .correctedStem(.drums))
@@ -834,7 +1068,46 @@ struct StemModeWorkspaceModelTests {
         )
 
         #expect(model.exportableArtifacts.map(\.id) == [
-            "remix", "processed-remix", "drums", "final",
+            "remix", "processed-remix", "final", "drums",
+        ])
+    }
+
+    @Test("BSの補正済みGuitar／Pianoを含む全exportable artifactを契約順メニューへ渡す")
+    func bsExportableArtifactsIncludeGuitarAndPianoWithoutRawStems() throws {
+        let session = StemWorkflowSession()
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(session: session, recorder: recorder)
+        let runID = UUID()
+        let contract = makeStemTestRunContract(model: .bsRoformerSW)
+        try session.startRun(runID: runID, runContract: contract)
+
+        let kinds: [StemArtifactKind] = [
+            .correctedPureSum48000,
+            .remixed48000,
+            .finalMaster,
+        ] + contract.activeRoles.map(StemArtifactKind.correctedStem)
+            + [.rawStem(.guitar), .rawStem(.piano)]
+        for (index, kind) in kinds.enumerated() {
+            let artifact = makeArtifact(id: "bs-export-\(index)", kind: kind)
+            try session.updateArtifactState(.init(
+                id: artifact.id,
+                runID: runID,
+                kind: kind,
+                artifact: artifact,
+                status: .valid
+            ))
+        }
+
+        #expect(model.exportableArtifacts.map(\.kind) == [
+            .correctedPureSum48000,
+            .remixed48000,
+            .finalMaster,
+            .correctedStem(.drums),
+            .correctedStem(.bass),
+            .correctedStem(.other),
+            .correctedStem(.vocals),
+            .correctedStem(.guitar),
+            .correctedStem(.piano),
         ])
     }
 
@@ -963,7 +1236,7 @@ struct StemModeWorkspaceModelTests {
         let recorder = WorkspaceActionRecorder()
         let model = makeModel(session: session, recorder: recorder)
         let runID = UUID()
-        try session.startRun(runID: runID)
+        try session.startRun(runID: runID, runContract: makeStemTestRunContract())
         try session.beginStep(runID: runID, step: .mastering)
         #expect(model.canCancelProcessing)
 
@@ -1022,6 +1295,33 @@ struct StemModeWorkspaceModelTests {
         )
     }
 
+    private func addRequiredRawArtifacts(
+        to session: StemWorkflowSession,
+        runID: UUID
+    ) throws {
+        let input = makeArtifact(id: "input-\(runID.uuidString)", kind: .input44100)
+        try session.updateArtifactState(.init(
+            id: input.id,
+            runID: runID,
+            kind: input.kind,
+            artifact: input,
+            status: .valid
+        ))
+        for role in try #require(session.runContract).activeRoles {
+            let raw = makeArtifact(
+                id: "raw-\(runID.uuidString)-\(role.rawValue)",
+                kind: .rawStem(role)
+            )
+            try session.updateArtifactState(.init(
+                id: raw.id,
+                runID: runID,
+                kind: raw.kind,
+                artifact: raw,
+                status: .valid
+            ))
+        }
+    }
+
     private struct ModelPresentationFixture {
         let manifest: StemModelManifest
         let contract: StemModelContract
@@ -1033,19 +1333,24 @@ struct StemModeWorkspaceModelTests {
         let presentation: StemModeModelPresentation
     }
 
-    private func makeModelPresentationFixture() throws -> ModelPresentationFixture {
+    private func makeModelPresentationFixture(
+        model: StemSeparationModel = .htdemucs
+    ) throws -> ModelPresentationFixture {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+        let manifestFileName = model == .htdemucs
+            ? "stem-model-manifest.json"
+            : "bs-roformer-sw-manifest.json"
         let manifestURL = repositoryRoot.appending(
-            path: "Sources/VelouraLucent/Resources/StemModels/stem-model-manifest.json"
+            path: "Sources/VelouraLucent/Resources/StemModels/\(manifestFileName)"
         )
-        let validator = StemModelAssetValidator()
+        let validator = StemModelAssetValidator(selectedModel: model)
         let manifest = try validator.loadManifest(at: manifestURL)
         let contract = try validator.validateManifest(manifest)
         let generationID = UUID()
-        let modelRoot = URL(fileURLWithPath: "/tmp/model-generation")
+        let modelRoot = URL(fileURLWithPath: "/tmp/model-generation-\(model.rawValue)")
         let modelAssets = manifest.downloadableModelAssets.map { asset in
             ValidatedStemModelAsset(
                 kind: asset.kind,

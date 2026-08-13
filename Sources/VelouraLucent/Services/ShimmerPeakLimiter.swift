@@ -45,13 +45,13 @@ struct ShimmerPeakLimiter: Sendable {
 
         logger?.log("シマー制限: 短時間判定を開始")
         if analysisPlan.usesRepresentativeWindows {
-            logger?.detail("\(analysisPlan.selectedWindowCount)/\(analysisPlan.totalWindowCount) 区間を確認中", for: .shimmerPeakLimit)
+            logger?.detail("\(analysisPlan.selectedWindowCount)/\(analysisPlan.totalWindowCount)区間", for: .shimmerPeakLimit)
             logger?.log("シマー制限/軽量測定: \(analysisPlan.selectedWindowCount)/\(analysisPlan.totalWindowCount)区間")
         }
         for _ in 0..<adaptivePasses {
             let currentMeasurements = shimmerProbe(signal: currentSignal, plan: analysisPlan)
             measurementCount += 1
-            logger?.detail("\(measurementCount)/\(adaptivePasses) 回目を確認中", for: .shimmerPeakLimit)
+            logger?.detail("\(measurementCount)/\(adaptivePasses)回目", for: .shimmerPeakLimit)
             logger?.log("シマー制限/測定: \(measurementCount)/\(adaptivePasses)")
 
             let strongestExcess = rules

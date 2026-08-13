@@ -26,6 +26,65 @@ struct StemValidationServiceTests {
     }
 
     @Test
+    func exactSixStemContractValidatesEveryRoleAndUsesTheExplicitFloat32Order() throws {
+        let profile = StemProductionModelProfile.profile(for: .bsRoformerSW)
+        let stems = profile.sourceOrder.enumerated().map { index, role in
+            let value = Float(index + 1) * 0.01
+            return StemMixInput(
+                role: role,
+                signal: AudioSignal(
+                    channels: [[value, -value], [-value, value]],
+                    sampleRate: 44_100
+                )
+            )
+        }
+        let source = try StemMixService().pureSum(
+            stems: stems,
+            validationRoles: profile.sourceOrder,
+            order: profile.pureSumOrder
+        ).signal
+
+        let result = service.validateSeparatedStems(
+            source: source,
+            stems: Array(stems.reversed()),
+            validationRoles: profile.sourceOrder,
+            pureSumOrder: profile.pureSumOrder,
+            expectedSampleRate: 44_100,
+            expectedChannelCount: 2
+        )
+
+        #expect(result.passed)
+        #expect(result.measurement(id: "stem.guitar.sample-peak") != nil)
+        #expect(result.measurement(id: "stem.piano.sample-peak") != nil)
+        #expect(result.measurement(id: "stem-sum-residual.peak")?.value == 0)
+    }
+
+    @Test
+    func sixStemDuplicateMissingAndNonFiniteRolesFailStructuralValidation() {
+        let profile = StemProductionModelProfile.profile(for: .bsRoformerSW)
+        let signal = AudioSignal(channels: [[0.1, 0.2], [0.1, 0.2]], sampleRate: 44_100)
+        var stems = profile.sourceOrder.map { StemMixInput(role: $0, signal: signal) }
+        stems[5] = StemMixInput(
+            role: .guitar,
+            signal: AudioSignal(channels: [[0.1, .nan], [0.1, 0.2]], sampleRate: 44_100)
+        )
+
+        let result = service.validateSeparatedStems(
+            source: signal,
+            stems: stems,
+            validationRoles: profile.sourceOrder,
+            pureSumOrder: profile.pureSumOrder,
+            expectedSampleRate: 44_100,
+            expectedChannelCount: 2
+        )
+
+        #expect(!result.passed)
+        #expect(result.failedCheckKinds.contains(.roleCoverage))
+        #expect(result.failedCheckKinds.contains(.finiteSamples))
+        #expect(result.failedChecks.contains { $0.subject == StemRole.piano.rawValue })
+    }
+
+    @Test
     func structuralFailuresAreReturnedTogetherInsteadOfHidingTheFirstIssue() {
         var stems = exactStems()
         stems.removeLast()
@@ -326,7 +385,7 @@ struct StemValidationServiceTests {
     }
 
     @Test
-    func remixRecordsEightFixedBandDifferencesWithoutThresholdFailure() throws {
+    func remixRecordsCatalogBandDifferencesWithoutThresholdFailure() throws {
         let reference = stereoSignal(amplitude: 0.20)
         let remix = stereoSignal(amplitude: 0.10)
 
@@ -342,7 +401,7 @@ struct StemValidationServiceTests {
         let bandMeasurements = result.measurements.filter { $0.id.hasPrefix("remix-band-difference.") }
         #expect(result.passed)
         #expect(bandMeasurements.map(\.id) == expectedIDs)
-        #expect(bandMeasurements.count == 8)
+        #expect(bandMeasurements.count == AudioBandCatalog.comparisonBands.count)
         #expect(bandMeasurements.allSatisfy { $0.value.isFinite && $0.unit == "dB" })
         #expect(!result.failedCheckKinds.contains(.bandEnergies))
     }

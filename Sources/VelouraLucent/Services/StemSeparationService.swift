@@ -217,6 +217,8 @@ struct StemSeparationService: StemSeparating, Sendable {
         .bass: "raw-bass.wav",
         .other: "raw-other.wav",
         .vocals: "raw-vocals.wav",
+        .guitar: "raw-guitar.wav",
+        .piano: "raw-piano.wav",
     ]
 
     private let artifactStore: any StemSeparationArtifactStoring
@@ -283,12 +285,17 @@ struct StemSeparationService: StemSeparating, Sendable {
             token.cancel()
         }
         try Task.checkCancellation()
-        let signals = try validatedSignals(backendOutput, expectedFrameCount: inputSignal.frameCount)
+        let outputRoles = installation.snapshot.contract.runContract.modelOutputOrder
+        let signals = try validatedSignals(
+            backendOutput,
+            expectedRoles: outputRoles,
+            expectedFrameCount: inputSignal.frameCount
+        )
 
         var saved: [StemAudioArtifact] = []
         var createdURLs: [URL] = []
         do {
-            for (index, role) in StemRole.allCases.enumerated() {
+            for (index, role) in outputRoles.enumerated() {
                 try Task.checkCancellation()
                 guard let signal = signals[role], let fileName = Self.outputFileNames[role] else {
                     throw StemSeparationServiceError.missingOutputStem(role)
@@ -308,7 +315,7 @@ struct StemSeparationService: StemSeparating, Sendable {
                 )
                 saved.append(artifact)
                 progressHandler(StemSeparationProgress(
-                    fraction: 0.9 + (Double(index + 1) / Double(StemRole.allCases.count)) * 0.1,
+                    fraction: 0.9 + (Double(index + 1) / Double(outputRoles.count)) * 0.1,
                     detail: "\(role.rawValue)を保存・検証済み"
                 ))
             }
@@ -379,20 +386,21 @@ struct StemSeparationService: StemSeparating, Sendable {
 
     private func validatedSignals(
         _ output: StemSeparationBackendOutput,
+        expectedRoles: [StemRole],
         expectedFrameCount: Int
     ) throws -> [StemRole: AudioSignal] {
-        guard output.stems.count == StemRole.allCases.count else {
+        guard output.stems.count == expectedRoles.count else {
             throw StemSeparationServiceError.outputStemCountMismatch(
-                expected: StemRole.allCases.count,
+                expected: expectedRoles.count,
                 actual: output.stems.count
             )
         }
-        let expectedNames = Set(StemRole.allCases.map(\.rawValue))
+        let expectedNames = Set(expectedRoles.map(\.rawValue))
         for name in output.stems.keys where !expectedNames.contains(name) {
             throw StemSeparationServiceError.unexpectedOutputStem(name)
         }
         var result: [StemRole: AudioSignal] = [:]
-        for role in StemRole.allCases {
+        for role in expectedRoles {
             guard let stem = output.stems[role.rawValue] else {
                 throw StemSeparationServiceError.missingOutputStem(role)
             }

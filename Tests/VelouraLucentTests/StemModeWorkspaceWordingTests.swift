@@ -74,10 +74,13 @@ struct StemModeWorkspaceWordingTests {
         #expect(!remix.contains("パンが中央"))
         #expect(remix.contains("let plan = model.automaticRemixPlan"))
         #expect(remix.contains(
-            "let effective = model.effectiveRemixSettings ?? StemRemixSettings()"
+            "let effective = model.displayedRemixSettings"
         ))
         #expect(remix.contains(
             "補正後に自動値を算出します。現在は中立値を表示しています。"
+        ))
+        #expect(remix.contains(
+            "補正前の手動値を保持しています。補正後は未変更項目に自動値を使用します。"
         ))
         #expect(!remix.contains("再ミックス設定は補正後に準備されます"))
         #expect(!remix.contains("if let plan = model.automaticRemixPlan"))
@@ -266,13 +269,16 @@ struct StemModeWorkspaceWordingTests {
             ).count - 1 == 2
         )
         #expect(modelManagement.contains("shifts / overlap"))
-        #expect(!modelManagement.contains("split / segment"))
-        #expect(!modelManagement.contains("batch size / run seed"))
-        #expect(!modelManagement.contains("入力選択後に生成"))
+        #expect(modelManagement.contains("split / segment"))
+        #expect(modelManagement.contains("batch size / run seed"))
+        #expect(modelManagement.contains("入力選択後に生成"))
         #expect(modelManagement.contains("方式　Demucs v4"))
-        #expect(modelManagement.contains("出力　4Stem"))
+        #expect(modelManagement.contains("StemProductionModelProfile.profile(for: selectedModel)"))
+        #expect(modelManagement.contains("modelPresentation?.runContract.activeRoles"))
         #expect(modelManagement.contains("STFT FFT / hop / window"))
-        #expect(modelManagement.contains("6Stem → 既存4Stem"))
+        #expect(modelManagement.contains("roles.map(\\.stemModeDisplayTitle)"))
+        #expect(modelManagement.contains("出力　\\(outputDescription)"))
+        #expect(!modelManagement.contains("6Stem → 既存4Stem"))
         #expect(modelManagement.contains("dim / depth / heads"))
         #expect(!modelManagement.contains("shifts / overlap　0 / 0"))
         #expect(!about.contains("Text(\"AIモデル情報\")"))
@@ -308,8 +314,11 @@ struct StemModeWorkspaceWordingTests {
         #expect(workspaceShell.contains("static let sidebarMinimumWidth: CGFloat = 220"))
         #expect(workspaceShell.contains("static let sidebarIdealWidth: CGFloat = 260"))
         #expect(workspaceShell.contains("static let sidebarMaximumWidth: CGFloat = 300"))
-        #expect(workspaceShell.contains("static let minimumCenterWidth: CGFloat = 620"))
-        #expect(workspaceShell.contains("static let inspectorWidth: CGFloat = 440"))
+        #expect(workspaceShell.contains("static let minimumCenterWidth: CGFloat = 680"))
+        #expect(workspaceShell.contains("static let inspectorWidth: CGFloat = 480"))
+        #expect(workspaceShell.contains("static let recentLogMinimumWidth: CGFloat = 260"))
+        #expect(workspaceShell.contains("static let expandedWorkflowMinimumWidth: CGFloat = 360"))
+        #expect(workspaceShell.contains("stageCount: stages.count"))
         #expect(workspaceShell.contains(
             "NavigationSplitView(columnVisibility: $sidebarVisibility)"
         ))
@@ -347,12 +356,15 @@ struct StemModeWorkspaceWordingTests {
         #expect(sharedToolbarLabel.contains(".liquidGlassCapsuleMorphSurface("))
         #expect(workspaceToolbar.contains(".accessibilityLabel(\"書き出し\")"))
         #expect(workspaceToolbar.contains("ForEach(commandActions.exportActions)"))
-        #expect(root.contains(".correctedPureSum48000"))
-        #expect(root.contains(".correctedStem(.drums)"))
-        #expect(root.contains(".correctedStem(.bass)"))
-        #expect(root.contains(".correctedStem(.other)"))
-        #expect(root.contains(".correctedStem(.vocals)"))
-        #expect(root.contains(".finalMaster"))
+        #expect(!root.contains(".correctedPureSum48000"))
+        #expect(root.contains("return model.exportableArtifacts.map { artifact in"))
+        #expect(root.contains("artifact.kind.stemModeExportMenuTitle"))
+        #expect(root.contains("artifact.kind.isCorrectedStemArtifact"))
+        #expect(!root.contains(".correctedStem(.drums)"))
+        #expect(!root.contains(".correctedStem(.bass)"))
+        #expect(!root.contains(".correctedStem(.other)"))
+        #expect(!root.contains(".correctedStem(.vocals)"))
+        #expect(!root.contains(".finalMaster"))
 
         #expect(stemWorkspace.contains("private var fixedHeader: some View"))
         #expect(stemWorkspace.contains("WorkspaceFixedHeaderView("))
@@ -425,8 +437,14 @@ struct StemModeWorkspaceWordingTests {
         #expect(source.contains("resetToken: resetToken"))
         #expect(source.contains("model.selectedStemPreviewRole.rawValue"))
         #expect(source.contains("model.selectStemPreviewRole($0)"))
+        #expect(source.contains("options: model.availableStemRoles"))
+        #expect(source.contains("maxWidth: 448"))
         #expect(!source.contains("model.selectCorrectionRole($0)"))
         #expect(source.contains("preview.playbackState(for: activeTarget) == .playing"))
+        #expect(source.contains("fileURL: model.selectedRawStemPreviewURL"))
+        #expect(source.contains("fileURL: model.selectedCorrectedStemPreviewURL"))
+        #expect(source.contains("Button(\"Finderに表示\", systemImage: \"folder\")"))
+        #expect(source.contains("NSWorkspace.shared.activateFileViewerSelecting([fileURL])"))
     }
 
     @Test
@@ -445,6 +463,12 @@ struct StemModeWorkspaceWordingTests {
         #expect(!stem.contains("private func timelineCharts("))
         #expect(!stem.contains("private func spectrumComparison("))
         #expect(stem.contains("roleAnalysisSnapshot"))
+        #expect(stem.contains("ForEach(Array(model.stemEvaluations.enumerated())"))
+        #expect(stem.contains("model.availableStemRoles.count"))
+        #expect(!stem.contains("4Stemそれぞれ"))
+        #expect(!stem.contains("raw 4Stem"))
+        #expect(!stem.contains("補正後4Stem"))
+        #expect(!stem.contains("Text(\"4Stemの解析完了後に表示します。\")"))
         #expect(stem.contains("protectionEvidence"))
         #expect(stem.contains("rawRemixEvaluation"))
         #expect(!stem.contains("validation.measurements"))
@@ -598,20 +622,14 @@ struct StemModeWorkspaceWordingTests {
         )
 
         #expect(rootSource.contains("model.exportableArtifacts"))
-        #expect(rootSource.contains("kind.stemModeDisplayTitle"))
-        #expect(!rootSource.contains(".correctedPureSum48000"))
-        #expect(rootSource.contains(".remixed48000"))
-        #expect(rootSource.contains(".correctedStem(.drums)"))
-        #expect(rootSource.contains(".correctedStem(.bass)"))
-        #expect(rootSource.contains(".correctedStem(.other)"))
-        #expect(rootSource.contains(".correctedStem(.vocals)"))
-        #expect(rootSource.contains(".finalMaster"))
-        #expect(rootSource.contains("(.remixed48000, \"再ミックス済み\", false)"))
-        #expect(rootSource.contains("(.finalMaster, \"マスタリング済み\", false)"))
-        #expect(rootSource.contains("(.correctedStem(.drums), \"ドラム\", true)"))
-        #expect(rootSource.contains("(.correctedStem(.bass), \"ベース\", false)"))
-        #expect(rootSource.contains("(.correctedStem(.other), \"その他\", false)"))
-        #expect(rootSource.contains("(.correctedStem(.vocals), \"ボーカル\", false)"))
+        #expect(rootSource.contains("return model.exportableArtifacts.map { artifact in"))
+        #expect(rootSource.contains("artifact.kind.stemModeExportMenuTitle"))
+        #expect(rootSource.contains("artifact.kind.isCorrectedStemArtifact"))
+        #expect(!rootSource.contains("let entries: [(kind: StemArtifactKind"))
+        #expect(!rootSource.contains(".correctedStem(.drums)"))
+        #expect(!rootSource.contains(".correctedStem(.bass)"))
+        #expect(!rootSource.contains(".correctedStem(.other)"))
+        #expect(!rootSource.contains(".correctedStem(.vocals)"))
         #expect(resultsSource.contains("ForEach(commandActions.exportActions)"))
         #expect(resultsSource.contains("if exportAction.startsSection"))
         #expect(resultsSource.contains("再ミックス済み、マスタリング済み、または補正済みStemを書き出します"))
@@ -621,17 +639,7 @@ struct StemModeWorkspaceWordingTests {
         #expect(resultsSource.contains("ForEach(AudioExportFormat.allCases)"))
         #expect(models.contains("exportArtifact: @MainActor (StemAudioArtifact, AudioExportFormat) async throws -> URL"))
 
-        let remixed = try #require(
-            rootSource.range(of: ".remixed48000")
-        )
-        let finalMaster = try #require(
-            rootSource.range(of: ".finalMaster")
-        )
-        let correctedStems = try #require(
-            rootSource.range(of: ".correctedStem(.drums)")
-        )
-        #expect(remixed.lowerBound < finalMaster.lowerBound)
-        #expect(finalMaster.lowerBound < correctedStems.lowerBound)
+        #expect(resultsSource.contains("ForEach(commandActions.exportActions)"))
     }
 
     @Test
@@ -745,8 +753,38 @@ struct StemModeWorkspaceWordingTests {
         #expect(!source.contains("50曲"))
         #expect(!source.contains("最大メモリ"))
         #expect(source.contains("HelpSection(title: \"選択中モデルの詳細情報\")"))
-        #expect(source.contains("6Stem → 既存4Stem"))
+        #expect(source.contains("StemProductionModelProfile.profile(for: selectedModel)"))
+        #expect(source.contains("modelPresentation?.runContract.activeRoles"))
+        #expect(source.contains("roles.map(\\.stemModeDisplayTitle)"))
+        #expect(source.contains("出力　\\(outputDescription)"))
+        #expect(!source.contains("6Stem → 既存4Stem"))
         #expect(source.contains("shifts / overlap"))
+    }
+
+    @Test
+    func currentDocumentationSeparatesHTFourStemFromBSSixStemAndPreservesHistoricalRecord() throws {
+        let readme = try source("README.md")
+        let modelAssetsReadme = try source(
+            "Sources/VelouraLucent/Resources/StemModels/README.md"
+        )
+        let historicalRuntimeValidation = try source(
+            "Docs/BSRoformerSwiftRuntimeValidation_2026-07-30.md"
+        )
+
+        #expect(readme.contains("HTDemucsでは4Stem、BS-RoFormer-SWではGuitar／Pianoを含む6Stemへ分離"))
+        #expect(readme.contains("Stem Modeは補正、再ミックス、マスタリングの三段階"))
+        #expect(readme.contains("BS実行時のギター、ピアノ"))
+        #expect(!readme.contains("6Stem → 既存4Stem"))
+
+        #expect(modelAssetsReadme.contains("HTDemucs keeps its four independent outputs"))
+        #expect(modelAssetsReadme.contains("BS-RoFormer-SW keeps its six independent outputs"))
+        #expect(modelAssetsReadme.contains("does not merge guitar or"))
+        #expect(modelAssetsReadme.contains("piano into other"))
+
+        #expect(historicalRuntimeValidation.contains("2026-07-30時点"))
+        #expect(historicalRuntimeValidation.contains("既存4Stemへ統合する互換実装"))
+        #expect(historicalRuntimeValidation.contains("2026-08-12以降の現在実装"))
+        #expect(historicalRuntimeValidation.contains("Guitar／Pianoを統合せず6Stemのまま扱います"))
     }
 
     @Test

@@ -6,3 +6,4 @@ __pycache__/
 .serena/
 /.stem-model-cache/
 /Sources/VelouraLucent/Resources/StemModels/MLX/mlx.metallib
+.goal-state/

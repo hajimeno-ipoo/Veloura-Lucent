@@ -741,6 +741,10 @@ struct StemCorrectionService: StemCorrecting, Sendable {
             "基音・倍音・50/60 Hz付近の音程成分・低域位相"
         case .other:
             "残響・アンビエンス・空間・ステレオ感"
+        case .guitar:
+            "ピッキング・調波音色・高域ディテール・減衰・ステレオ感"
+        case .piano:
+            "ハンマーアタック・部分音・非調波性・周波数別余韻・ステレオ感"
         }
     }
 
@@ -850,6 +854,24 @@ struct StemCorrectionService: StemCorrecting, Sendable {
             case .otherAmbience: "アンビエンス"
             case .otherSpace: "空間"
             case .otherStereo: "ステレオ感"
+            case .guitarAttack: "ピッキング・アタック"
+            case .guitarHarmonics: "調波・音色本体"
+            case .guitarInharmonicity: "非調波性"
+            case .guitarHighDetail: "高域ディテール"
+            case .guitarDecay: "帯域別の余韻"
+            case .guitarStereoSide: "ステレオ幅"
+            case .guitarStereoCorrelation: "左右相関"
+            case .pianoAttack: "ハンマー・アタック"
+            case .pianoPartials: "部分音"
+            case .pianoInharmonicity: "非調波性"
+            case .pianoLowDecay: "低域の余韻"
+            case .pianoMidDecay: "中域の余韻"
+            case .pianoHighDecay: "高域の余韻"
+            case .pianoDoubleDecay: "二段減衰"
+            case .pianoLowBandBalance: "低域バランス"
+            case .pianoMidBandBalance: "中域バランス"
+            case .pianoStereoSide: "ステレオ幅"
+            case .pianoStereoCorrelation: "左右相関"
             }
         }
         .sorted()

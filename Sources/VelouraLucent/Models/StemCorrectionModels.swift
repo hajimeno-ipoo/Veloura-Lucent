@@ -9,21 +9,34 @@ struct StemRoleCorrectionSettings: Equatable, Sendable {
     let drums: CorrectionSettings
     let bass: CorrectionSettings
     let other: CorrectionSettings
+    let guitar: CorrectionSettings
+    let piano: CorrectionSettings
 
     init(
         vocals: CorrectionSettings,
         drums: CorrectionSettings,
         bass: CorrectionSettings,
-        other: CorrectionSettings
+        other: CorrectionSettings,
+        guitar: CorrectionSettings,
+        piano: CorrectionSettings
     ) {
         self.vocals = vocals
         self.drums = drums
         self.bass = bass
         self.other = other
+        self.guitar = guitar
+        self.piano = piano
     }
 
     init(all settings: CorrectionSettings) {
-        self.init(vocals: settings, drums: settings, bass: settings, other: settings)
+        self.init(
+            vocals: settings,
+            drums: settings,
+            bass: settings,
+            other: settings,
+            guitar: settings,
+            piano: settings
+        )
     }
 
     func settings(for role: StemRole) -> CorrectionSettings {
@@ -32,11 +45,13 @@ struct StemRoleCorrectionSettings: Equatable, Sendable {
         case .drums: drums
         case .bass: bass
         case .other: other
+        case .guitar: guitar
+        case .piano: piano
         }
     }
 
     var allRoleSettings: [CorrectionSettings] {
-        [vocals, drums, bass, other]
+        [vocals, drums, bass, other, guitar, piano]
     }
 
     func replacing(
@@ -49,28 +64,54 @@ struct StemRoleCorrectionSettings: Equatable, Sendable {
                 vocals: settings,
                 drums: drums,
                 bass: bass,
-                other: other
+                other: other,
+                guitar: guitar,
+                piano: piano
             )
         case .drums:
             StemRoleCorrectionSettings(
                 vocals: vocals,
                 drums: settings,
                 bass: bass,
-                other: other
+                other: other,
+                guitar: guitar,
+                piano: piano
             )
         case .bass:
             StemRoleCorrectionSettings(
                 vocals: vocals,
                 drums: drums,
                 bass: settings,
-                other: other
+                other: other,
+                guitar: guitar,
+                piano: piano
             )
         case .other:
             StemRoleCorrectionSettings(
                 vocals: vocals,
                 drums: drums,
                 bass: bass,
-                other: settings
+                other: settings,
+                guitar: guitar,
+                piano: piano
+            )
+        case .guitar:
+            StemRoleCorrectionSettings(
+                vocals: vocals,
+                drums: drums,
+                bass: bass,
+                other: other,
+                guitar: settings,
+                piano: piano
+            )
+        case .piano:
+            StemRoleCorrectionSettings(
+                vocals: vocals,
+                drums: drums,
+                bass: bass,
+                other: other,
+                guitar: guitar,
+                piano: settings
             )
         }
     }

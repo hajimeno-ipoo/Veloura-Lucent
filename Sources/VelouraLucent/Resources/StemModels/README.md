@@ -26,6 +26,15 @@ BS-RoFormer-SW keep independent active pointers, so installing or repairing one
 does not replace the other. A failed, cancelled, or invalid replacement must
 not remove the previously validated installation.
 
+## Runtime output contracts
+
+- HTDemucs keeps its four independent outputs: `drums / bass / other / vocals`.
+- BS-RoFormer-SW keeps its six independent outputs: `bass / drums / other /
+  vocals / guitar / piano`.
+- The app validates the selected model's output names, count, active roles, and
+  pure-sum order before processing. BS-RoFormer-SW does not merge guitar or
+  piano into other, and neither model falls back to the other model's contract.
+
 Every initial download, repair download, and complete re-download starts only
 from the corresponding action in the Stem separation section. Distribution
 details are shown in the app's About window, while the root-owned progress

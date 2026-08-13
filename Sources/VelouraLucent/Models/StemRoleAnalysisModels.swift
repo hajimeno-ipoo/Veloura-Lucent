@@ -20,6 +20,34 @@ enum StemRoleAnalysisFeature: String, CaseIterable, Sendable {
     case otherTransientStrength
     case otherAmbienceContinuity
     case otherStereoSpatialBalance
+
+    case guitarPickingOnsetEnergy
+    case guitarAttackCrest
+    case guitarHarmonicEnergyRatio
+    case guitarInharmonicity
+    case guitarHighBandDetail
+    case guitarSpectralCentroid
+    case guitarRolloff85
+    case guitarLowTailRetention
+    case guitarMidTailRetention
+    case guitarHighTailRetention
+    case guitarStereoSideRatio
+    case guitarStereoCorrelation
+
+    case pianoHammerOnsetEnergy
+    case pianoAttackCrest
+    case pianoPartialEnergyRatio
+    case pianoInharmonicity
+    case pianoLowTailRetention
+    case pianoMidTailRetention
+    case pianoHighTailRetention
+    case pianoDoubleDecaySlopeDelta
+    case pianoLowBandBalance
+    case pianoMidBandBalance
+    case pianoSpectralCentroid
+    case pianoRolloff85
+    case pianoStereoSideRatio
+    case pianoStereoCorrelation
 }
 
 /// 役割別解析の集約表示で、変化方向を説明するメタデータです。
@@ -35,6 +63,7 @@ enum StemRoleAnalysisUnit: String, Sendable {
     case normalized
     case hertz
     case decibels
+    case decibelsPerSecond
 }
 
 struct StemRoleFeatureDistribution: Equatable, Sendable {
@@ -48,6 +77,48 @@ struct StemRoleFeatureDistribution: Equatable, Sendable {
     let interquartileRange: Double
 }
 
+/// Guitar／Piano専用解析が、無音を正規化特徴量として誤判定しないための活動結果です。
+struct StemRoleActivitySummary: Equatable, Sendable {
+    let floorDecibelsFullScale: Double
+    let thresholdDecibelsFullScale: Double
+    let totalFrameCount: Int
+    let activeFrameCount: Int
+
+    var activeFraction: Double {
+        guard totalFrameCount > 0 else { return 0 }
+        return Double(activeFrameCount) / Double(totalFrameCount)
+    }
+
+    var hasActivity: Bool {
+        activeFrameCount > 0
+    }
+}
+
+/// 実Guitar／Pianoと劣化模擬で採用した専用解析量です。
+///
+/// 値は音質の合否点ではなく、同じStemのDSP前後を比べるための観測量です。
+/// Pianoの`highBandRatio`は補助観測に留め、Pianoの保護対象には使用しません。
+struct StemDedicatedRoleMetrics: Equatable, Sendable {
+    let onsetEnergy90thPercentile: Double
+    let attackCrest90thPercentileDecibels: Double
+    let harmonicEnergyRatioMedian: Double
+    let inharmonicityMedian: Double
+    let spectralCentroidMedianHertz: Double
+    let rolloff85MedianHertz: Double
+    let highBandRatioMedian: Double
+    let highBandRatio90thPercentile: Double
+    let lowBandRatioMedian: Double
+    let midBandRatioMedian: Double
+    let tailRMSRatioMedianDecibels: Double
+    let tailLowRatioMedianDecibels: Double
+    let tailMidRatioMedianDecibels: Double
+    let tailHighRatioMedianDecibels: Double
+    let doubleDecaySlopeDeltaMedianDecibelsPerSecond: Double
+    let stereoSideRatio: Double
+    let stereoCorrelation: Double
+    let detectedOnsetCount: Int
+}
+
 struct StemRoleAnalysisSnapshot: Equatable, Sendable {
     let role: StemRole
     let authoritativeSampleRate: Double
@@ -55,6 +126,8 @@ struct StemRoleAnalysisSnapshot: Equatable, Sendable {
     let authoritativeFrameCount: Int
     let analysisFrameCount: Int
     let features: [StemRoleFeatureDistribution]
+    let activity: StemRoleActivitySummary?
+    let dedicatedMetrics: StemDedicatedRoleMetrics?
 
     init(
         role: StemRole,
@@ -62,7 +135,9 @@ struct StemRoleAnalysisSnapshot: Equatable, Sendable {
         analysisSampleRate: Double,
         authoritativeFrameCount: Int,
         analysisFrameCount: Int,
-        features: [StemRoleFeatureDistribution]
+        features: [StemRoleFeatureDistribution],
+        activity: StemRoleActivitySummary? = nil,
+        dedicatedMetrics: StemDedicatedRoleMetrics? = nil
     ) {
         self.role = role
         self.authoritativeSampleRate = authoritativeSampleRate
@@ -70,6 +145,8 @@ struct StemRoleAnalysisSnapshot: Equatable, Sendable {
         self.authoritativeFrameCount = authoritativeFrameCount
         self.analysisFrameCount = analysisFrameCount
         self.features = features
+        self.activity = activity
+        self.dedicatedMetrics = dedicatedMetrics
     }
 }
 
@@ -99,6 +176,26 @@ enum StemRoleProtectedComponent: String, CaseIterable, Hashable, Sendable {
     case otherSpace
     case otherStereo
 
+    case guitarAttack
+    case guitarHarmonics
+    case guitarInharmonicity
+    case guitarHighDetail
+    case guitarDecay
+    case guitarStereoSide
+    case guitarStereoCorrelation
+
+    case pianoAttack
+    case pianoPartials
+    case pianoInharmonicity
+    case pianoLowDecay
+    case pianoMidDecay
+    case pianoHighDecay
+    case pianoDoubleDecay
+    case pianoLowBandBalance
+    case pianoMidBandBalance
+    case pianoStereoSide
+    case pianoStereoCorrelation
+
     var role: StemRole {
         switch self {
         case .vocalsBreath, .vocalsConsonants, .vocalsSibilance, .vocalsFormant,
@@ -110,6 +207,15 @@ enum StemRoleProtectedComponent: String, CaseIterable, Hashable, Sendable {
             .bass
         case .otherReverb, .otherAmbience, .otherSpace, .otherStereo:
             .other
+        case .guitarAttack, .guitarHarmonics, .guitarInharmonicity,
+             .guitarHighDetail, .guitarDecay, .guitarStereoSide,
+             .guitarStereoCorrelation:
+            .guitar
+        case .pianoAttack, .pianoPartials, .pianoInharmonicity,
+             .pianoLowDecay, .pianoMidDecay, .pianoHighDecay,
+             .pianoDoubleDecay, .pianoLowBandBalance, .pianoMidBandBalance,
+             .pianoStereoSide, .pianoStereoCorrelation:
+            .piano
         }
     }
 

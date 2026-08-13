@@ -142,13 +142,13 @@ struct UIWordingPolicyTests {
         #expect(source.contains("comparisonLabel\n                comparisonSummary\n                Spacer(minLength: 0)\n            }\n            comparisonPairPicker"))
         #expect(source.contains("comparisonPairPicker"))
         #expect(!source.contains("comparisonLabel\n                comparisonPairPicker\n                comparisonSummary"))
-        #expect(source.contains("Button(switchButtonTitle)"))
-        #expect(source.contains(".disabled(comparisonFileURL(for: .a) == nil || comparisonFileURL(for: .b) == nil)\n\n                activeComparisonLabel"))
+        #expect(source.contains("WaveformTransportButton(\n                    title: switchButtonTitle"))
+        #expect(source.contains("isDisabled: comparisonFileURL(for: .a) == nil\n                        || comparisonFileURL(for: .b) == nil"))
         #expect(source.contains("Text(\"現在 \\(activeSideTitle)\")"))
         #expect(source.contains(".velouraAdaptiveGlass(in: .capsule, interactive: true)"))
         #expect(source.contains("private var activeComparisonTint: Color"))
         #expect(!source.contains("loudnessComparisonToggle\n                activeComparisonLabel"))
-        #expect(source.contains(".buttonStyle(.plain)"))
+        #expect(source.contains("WaveformTransportButtonStyle("))
         #expect(!source.contains(".buttonStyle(.glassProminent)"))
         #expect(!source.contains(".buttonStyle(.glass)"))
         #expect(source.contains(".glassEffect(.regular.tint(tint.opacity(0.16)), in: .capsule)"))
@@ -226,7 +226,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains("window.isOpaque = true"))
         #expect(source.contains("window.backgroundColor = .windowBackgroundColor"))
         #expect(source.contains("window.displayIfNeeded()"))
-        #expect(source.contains("let baseGlass: Glass = isFullScreen ? .regular : .clear"))
+        #expect(source.contains("let baseGlass: Glass = requestedGlass ?? (isFullScreen ? .regular : .clear)"))
         #expect(source.contains(".environment(\\.velouraIsFullScreen, isWindowFullScreen)"))
         #expect(source.contains("for: .window"))
         #expect(!source.contains("Color(nsColor: .windowBackgroundColor)"))
@@ -447,8 +447,13 @@ struct UIWordingPolicyTests {
         #expect(source.contains("static let sidebarMinimumWidth: CGFloat = 220"))
         #expect(source.contains("static let sidebarIdealWidth: CGFloat = 260"))
         #expect(source.contains("static let sidebarMaximumWidth: CGFloat = 300"))
-        #expect(source.contains("static let minimumCenterWidth: CGFloat = 620"))
-        #expect(source.contains("static let inspectorWidth: CGFloat = 440"))
+        #expect(source.contains("static let minimumCenterWidth: CGFloat = 680"))
+        #expect(source.contains("static let inspectorWidth: CGFloat = 480"))
+        #expect(source.contains("static let inspectorVisibleMinimumWindowWidth: CGFloat = 1_500"))
+        #expect(source.contains("static let inspectorHiddenMinimumWindowWidth: CGFloat = 1_000"))
+        #expect(source.contains("static let recentLogMinimumWidth: CGFloat = 260"))
+        #expect(source.contains("static let expandedWorkflowMinimumWidth: CGFloat = 360"))
+        #expect(source.contains("stageCount: stages.count"))
         #expect(source.contains("sidebarVisibility: $sidebarVisibility"))
         #expect(source.contains("NavigationSplitView(columnVisibility: $sidebarVisibility)"))
     }
@@ -667,6 +672,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains(".glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)"))
         #expect(source.contains(".frame(maxWidth: maxWidth, alignment: .leading)"))
         #expect(source.contains("var maxWidth: CGFloat = 360"))
+        #expect(source.contains(".padding(.horizontal, 12)"))
         #expect(source.contains(".accessibilityLabel(title)"))
         #expect(source.contains(".accessibilityValue(isSelected ? \"選択中\" : \"未選択\")"))
         #expect(!source.contains("LiquidGlassTabBar("))
@@ -747,6 +753,34 @@ struct UIWordingPolicyTests {
         #expect(source.contains("fileInfo.technicalSummary"))
         #expect(source.contains("fileInfo.durationText"))
         #expect(source.contains("progressText"))
+    }
+
+    @Test
+    func sidebarCurrentProgressUsesOneHorizontalLine() throws {
+        let source = try combinedSource(
+            ["Sources/VelouraLucent/Views/SidebarProcessStatusRow.swift"]
+        )
+
+        #expect(source.contains("HStack(alignment: .firstTextBaseline, spacing: 8)"))
+        #expect(source.contains("Text(currentStatusText)"))
+        #expect(source.contains("if let displayedActiveStepDetail"))
+        #expect(!source.contains(".lineLimit(2)"))
+        #expect(!source.contains(".fixedSize(horizontal: false, vertical: true)"))
+    }
+
+    @Test
+    func correctionAndMasteringCountersUseCompactSidebarDetails() throws {
+        let source = try combinedSource(
+            [
+                "Sources/VelouraLucent/Services/ShimmerPeakLimiter.swift",
+                "Sources/VelouraLucent/Services/MasteringNoiseReturnGuard.swift",
+            ]
+        )
+
+        #expect(source.contains("区間\", for:"))
+        #expect(source.contains("回目\", for:"))
+        #expect(!source.contains(" 区間を確認中"))
+        #expect(!source.contains(" 回目を確認中"))
     }
 
     @Test

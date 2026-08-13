@@ -11,7 +11,7 @@ struct AudioProcessingPipelineTests {
         defer { try? FileManager.default.removeItem(at: tempDirectory) }
         let inputBaseName = "ci-\(String(UUID().uuidString.prefix(8)).lowercased())"
         let inputURL = tempDirectory.appending(path: "\(inputBaseName).wav")
-        try makeTestTone(at: inputURL)
+        try makeTestTone(at: inputURL, duration: 0.5)
         let (saveEvents, saveContinuation) = AsyncStream<Void>.makeStream()
         let continueSave = DispatchSemaphore(value: 0)
         let taskFinished = DispatchSemaphore(value: 0)

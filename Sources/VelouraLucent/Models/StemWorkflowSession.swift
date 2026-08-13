@@ -8,6 +8,9 @@ enum StemWorkflowSessionError: LocalizedError, Equatable, Sendable {
     case runIsTerminal
     case artifactIdentifierMismatch(expected: String, actual: String)
     case artifactKindMismatch
+    case artifactOutsideRunContract(String)
+    case progressOutsideRunContract(String)
+    case validationOutsideRunContract(String)
     case completionRequiresCompletedExport
     case correctionCompletionRequiresCorrectedStems
     case remixRequiresCorrectionCompletion
@@ -27,12 +30,18 @@ enum StemWorkflowSessionError: LocalizedError, Equatable, Sendable {
             return "Stem Mode成果物の識別子が一致しません（表示: \(expected)、成果物: \(actual)）。"
         case .artifactKindMismatch:
             return "Stem Mode成果物の種類が表示状態と一致しません。"
+        case .artifactOutsideRunContract(let description):
+            return "現在のモデル契約に含まれないStem Mode成果物は反映しません（\(description)）。"
+        case .progressOutsideRunContract(let identifier):
+            return "現在のモデル契約に含まれない進捗工程は反映しません（\(identifier)）。"
+        case .validationOutsideRunContract(let description):
+            return "現在のモデル契約に含まれない検証結果は反映しません（\(description)）。"
         case .completionRequiresCompletedExport:
             return "Stem Modeの完了には最終版生成工程の完了が必要です。"
         case .correctionCompletionRequiresCorrectedStems:
-            return "Stem Modeの補正完了には補正済み4Stemと補正済み純粋加算の検証・保存完了が必要です。"
+            return "Stem Modeの補正完了には契約対象の補正済みStemと補正済み純粋加算の検証・保存完了が必要です。"
         case .remixRequiresCorrectionCompletion:
-            return "補正済み4Stemと純粋加算が揃った現在セッションだけ再ミックスを開始できます。"
+            return "契約対象の補正済みStemと純粋加算が揃った現在セッションだけ再ミックスを開始できます。"
         case .masteringRequiresRemixCompletion:
             return "検証済みStem再ミックスが揃った現在セッションだけマスタリングを開始できます。"
         }
@@ -144,6 +153,7 @@ final class StemWorkflowSession {
 
     private(set) var state: StemWorkflowState = .idle
     private(set) var runID: UUID?
+    private(set) var runContract: StemModelRunContract?
     private(set) var stepProgress: [StemWorkflowStepProgress] = StemWorkflowSession.pendingSteps()
     private(set) var displayProgress: [StemModeProcessStepProgress] = StemWorkflowSession.pendingDisplaySteps()
     private(set) var logs: [StemWorkflowLogEntry] = []
@@ -191,6 +201,16 @@ final class StemWorkflowSession {
 
     var remixLogLines: [String] {
         logLines(for: Self.remixLogSteps)
+    }
+
+    var expectedCorrectionArtifactCount: Int {
+        guard let runContract else { return 0 }
+        return runContract.activeRoles.count + runContract.validationRoles.count + 2
+    }
+
+    var expectedCompletedArtifactCount: Int {
+        guard runContract != nil else { return 0 }
+        return expectedCorrectionArtifactCount + 2
     }
 
     func progress(for step: StemWorkflowStep) -> StemWorkflowStepProgress {
@@ -311,7 +331,11 @@ final class StemWorkflowSession {
         )
     }
 
-    func startRun(runID: UUID, at timestamp: Date = Date()) throws {
+    func startRun(
+        runID: UUID,
+        runContract: StemModelRunContract,
+        at timestamp: Date = Date()
+    ) throws {
         if let activeRunID = self.runID {
             if case .completed = state {
                 resetRunDisplayState()
@@ -323,9 +347,10 @@ final class StemWorkflowSession {
         }
 
         self.runID = runID
+        self.runContract = runContract
         state = .ready
         stepProgress = Self.pendingSteps()
-        displayProgress = Self.pendingDisplaySteps()
+        displayProgress = Self.pendingDisplaySteps(roles: runContract.activeRoles)
         logs = []
         inputDisplayLogLines = []
         lastError = nil
@@ -353,8 +378,10 @@ final class StemWorkflowSession {
         at timestamp: Date = Date()
     ) throws {
         try requireRun(event.runID)
-        if let existing = displayProgress.first(where: { $0.step == event.step }),
-           existing.status == .completed || existing.status == .skipped || existing.status == .failed {
+        guard let existing = displayProgress.first(where: { $0.step == event.step }) else {
+            throw StemWorkflowSessionError.progressOutsideRunContract(event.step.id)
+        }
+        if existing.status == .completed || existing.status == .skipped || existing.status == .failed {
             return
         }
         let progress = StemModeProcessStepProgress(
@@ -363,11 +390,8 @@ final class StemWorkflowSession {
             fraction: event.status == .completed || event.status == .skipped ? 1 : event.fraction,
             detail: event.detail
         )
-        if let index = displayProgress.firstIndex(where: { $0.step == event.step }) {
-            displayProgress[index] = progress
-        } else {
-            displayProgress.append(progress)
-        }
+        let index = displayProgress.firstIndex(where: { $0.step == event.step })!
+        displayProgress[index] = progress
 
         let activityDomain: RecentActivityDomain = switch event.step.domain {
         case .correction: .correction
@@ -499,6 +523,9 @@ final class StemWorkflowSession {
         at _: Date = Date()
     ) throws {
         try requireRun(displayState.runID)
+        guard let runContract else {
+            throw StemWorkflowSessionError.noActiveRun
+        }
         if let artifact = displayState.artifact, artifact.id != displayState.id {
             throw StemWorkflowSessionError.artifactIdentifierMismatch(
                 expected: displayState.id,
@@ -508,6 +535,11 @@ final class StemWorkflowSession {
         if let artifact = displayState.artifact, artifact.kind != displayState.kind {
             throw StemWorkflowSessionError.artifactKindMismatch
         }
+        guard Self.isAllowed(displayState.kind, by: runContract) else {
+            throw StemWorkflowSessionError.artifactOutsideRunContract(
+                displayState.kind.stemModeDisplayTitle
+            )
+        }
         Self.upsert(displayState, in: &artifactStates)
     }
 
@@ -516,6 +548,15 @@ final class StemWorkflowSession {
         at _: Date = Date()
     ) throws {
         try requireRun(displayState.runID)
+        guard let runContract else {
+            throw StemWorkflowSessionError.noActiveRun
+        }
+        if case .stem(let rawRole) = displayState.subject {
+            guard let role = StemRole(rawValue: rawRole),
+                  runContract.activeRoles.contains(role) else {
+                throw StemWorkflowSessionError.validationOutsideRunContract(rawRole)
+            }
+        }
         Self.upsert(displayState, in: &validationStates)
     }
 
@@ -547,6 +588,8 @@ final class StemWorkflowSession {
             message: message,
             recoverySuggestion: recoverySuggestion
         )
+        artifactStates = []
+        validationStates = []
         state = .failed(runID: runID, message: message)
         correctionFinishedAt = timestamp
         failRunningDisplayStep(domain: .correction, message: message)
@@ -570,16 +613,20 @@ final class StemWorkflowSession {
 
     func completeCorrection(runID: UUID, at timestamp: Date = Date()) throws {
         try requireMutableRun(runID)
-        let hasAllCorrectedStems = Set(artifactStates.compactMap { state -> StemRole? in
-                  guard case .valid = state.status,
-                        case .correctedStem(let role) = state.kind else { return nil }
-                  return role
-              }).count == StemRole.allCases.count
-        let hasCorrectedPureSum = artifactStates.contains { state in
-            guard case .valid = state.status else { return false }
-            return state.kind == .correctedPureSum48000
-        }
-        guard hasAllCorrectedStems, hasCorrectedPureSum else {
+        guard let runContract else { throw StemWorkflowSessionError.noActiveRun }
+        let validKinds = Set(artifactStates.compactMap { state -> StemArtifactKind? in
+            guard case .valid = state.status else { return nil }
+            return state.kind
+        })
+        let correctedRoles = Set(validKinds.compactMap { kind -> StemRole? in
+            guard case .correctedStem(let role) = kind else { return nil }
+            return role
+        })
+        let hasAllCorrectedStems = correctedRoles == Set(runContract.validationRoles)
+        let hasAllCorrectionArtifacts = Self.requiredCorrectionArtifactKinds(
+            for: runContract
+        ).isSubset(of: validKinds)
+        guard hasAllCorrectedStems, hasAllCorrectionArtifacts else {
             throw StemWorkflowSessionError.correctionCompletionRequiresCorrectedStems
         }
         for step in Self.correctionSteps {
@@ -597,7 +644,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             domain: .correction,
             title: "補正処理が完了しました",
-            detail: "補正済み4Stemと純粋加算を保存しました",
+            detail: "補正済み\(runContract.stemCount)Stemと純粋加算を保存しました",
             progress: 1
         )
         appendLogUnchecked(
@@ -605,17 +652,19 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .info,
             step: .validateCorrectedPureSum,
-            message: "補正済み4Stemと純粋加算を一時保存しました。再ミックスは別操作で開始します。"
+            message: "補正済み\(runContract.stemCount)Stemと純粋加算を一時保存しました。再ミックスは別操作で開始します。"
         )
     }
 
     func startRemix(runID: UUID, at timestamp: Date = Date()) throws {
         try requireRun(runID)
-        let hasAllCorrectedStems = Set(artifactStates.compactMap { state -> StemRole? in
+        guard let runContract else { throw StemWorkflowSessionError.noActiveRun }
+        let correctedRoles = Set(artifactStates.compactMap { state -> StemRole? in
             guard case .valid = state.status,
                   case .correctedStem(let role) = state.kind else { return nil }
             return role
-        }).count == StemRole.allCases.count
+        })
+        let hasAllCorrectedStems = correctedRoles == Set(runContract.validationRoles)
         let hasCorrectedPureSum = artifactStates.contains { state in
             guard case .valid = state.status else { return false }
             return state.kind == .correctedPureSum48000
@@ -654,17 +703,20 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .info,
             step: .remix,
-            message: "補正済み4Stemから再ミックス段を開始します。"
+            message: "補正済み\(runContract.stemCount)Stemから再ミックス段を開始します。"
         )
     }
 
     func completeRemix(runID: UUID, at timestamp: Date = Date()) throws {
         try requireMutableRun(runID)
-        let hasRemix = artifactStates.contains { state in
-            guard case .valid = state.status else { return false }
-            return state.kind == .remixed48000
-        }
-        guard hasRemix else {
+        guard let runContract else { throw StemWorkflowSessionError.noActiveRun }
+        let validKinds = Set(artifactStates.compactMap { state -> StemArtifactKind? in
+            guard case .valid = state.status else { return nil }
+            return state.kind
+        })
+        let requiredKinds = Self.requiredCorrectionArtifactKinds(for: runContract)
+            .union([.remixed48000])
+        guard requiredKinds.isSubset(of: validKinds) else {
             throw StemWorkflowSessionError.masteringRequiresRemixCompletion
         }
         for step in Self.remixSteps {
@@ -715,7 +767,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             step: failedStep,
             message: message,
-            recoverySuggestion: "補正済み4Stemと純粋加算は保持されています。設定を確認して再実行してください。"
+            recoverySuggestion: "補正済みStem一式と純粋加算は保持されています。設定を確認して再実行してください。"
         )
         completeRunningActivity(
             timestamp: timestamp,
@@ -730,7 +782,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .error,
             step: .remix,
-            message: "再ミックスを停止しました。補正済み4Stemと純粋加算は保持しています: \(message)"
+            message: "再ミックスを停止しました。補正済みStem一式と純粋加算は保持しています: \(message)"
         )
     }
 
@@ -753,7 +805,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             domain: .remix,
             title: "再ミックスをキャンセルしました",
-            detail: "補正済み4Stemと純粋加算は保持しています",
+            detail: "補正済みStem一式と純粋加算は保持しています",
             progress: cancelledProgress
         )
         appendLogUnchecked(
@@ -761,7 +813,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .info,
             step: .remix,
-            message: "再ミックスをキャンセルしました。補正済み4Stemと純粋加算は保持しています。"
+            message: "再ミックスをキャンセルしました。補正済みStem一式と純粋加算は保持しています。"
         )
     }
 
@@ -947,10 +999,14 @@ final class StemWorkflowSession {
         at timestamp: Date = Date()
     ) throws {
         try requireMutableRun(runID)
-        guard artifactStates.contains(where: { state in
-            guard case .valid = state.status else { return false }
-            return state.kind == .finalMaster
-        }) else {
+        guard let runContract else { throw StemWorkflowSessionError.noActiveRun }
+        let validKinds = Set(artifactStates.compactMap { state -> StemArtifactKind? in
+            guard case .valid = state.status else { return nil }
+            return state.kind
+        })
+        let requiredKinds = Self.requiredCorrectionArtifactKinds(for: runContract)
+            .union([.remixed48000, .finalMaster])
+        guard requiredKinds.isSubset(of: validKinds) else {
             throw StemWorkflowSessionError.completionRequiresCompletedExport
         }
         for step in Self.masteringSteps {
@@ -1069,6 +1125,33 @@ final class StemWorkflowSession {
         }
     }
 
+    private static func isAllowed(
+        _ kind: StemArtifactKind,
+        by runContract: StemModelRunContract
+    ) -> Bool {
+        switch kind {
+        case .rawStem(let role):
+            return runContract.activeRoles.contains(role)
+        case .correctedStem(let role):
+            return runContract.validationRoles.contains(role)
+        case .input44100, .correctedPureSum48000, .remixed48000, .finalMaster:
+            return true
+        }
+    }
+
+    private static func requiredCorrectionArtifactKinds(
+        for runContract: StemModelRunContract
+    ) -> Set<StemArtifactKind> {
+        var kinds: Set<StemArtifactKind> = [.input44100, .correctedPureSum48000]
+        for role in runContract.activeRoles {
+            kinds.insert(.rawStem(role))
+        }
+        for role in runContract.validationRoles {
+            kinds.insert(.correctedStem(role))
+        }
+        return kinds
+    }
+
     private static func upsert(
         _ displayState: StemWorkflowValidationDisplayState,
         in states: inout [StemWorkflowValidationDisplayState]
@@ -1082,6 +1165,7 @@ final class StemWorkflowSession {
 
     private func resetRunDisplayState(clearActivities: Bool = false) {
         runID = nil
+        runContract = nil
         state = .idle
         stepProgress = Self.pendingSteps()
         displayProgress = Self.pendingDisplaySteps()
@@ -1108,9 +1192,11 @@ final class StemWorkflowSession {
         }
     }
 
-    private static func pendingDisplaySteps() -> [StemModeProcessStepProgress] {
+    private static func pendingDisplaySteps(
+        roles: [StemRole] = StemProductionModelProfile.profile(for: .htdemucs).sourceOrder
+    ) -> [StemModeProcessStepProgress] {
         (
-            StemModeProcessStep.correctionSteps
+            StemModeProcessStep.correctionSteps(for: roles)
                 + StemModeProcessStep.remixSteps
                 + StemModeProcessStep.masteringSteps
         ).map {

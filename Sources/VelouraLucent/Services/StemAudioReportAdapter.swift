@@ -36,10 +36,8 @@ enum StemAudioReportAdapter {
         input: AudioMetricSnapshot?,
         remixed: AudioMetricSnapshot?,
         mastered: AudioMetricSnapshot?,
-        inputNoise: NoiseMeasurementSnapshot?,
-        remixedNoise: NoiseMeasurementSnapshot?,
-        masteredNoise: NoiseMeasurementSnapshot?,
-        correctionSettings: StemRoleCorrectionSettings,
+        noiseReport: NoiseCheckReport,
+        reportContext: StemMasteringReportContext,
         masteringSettings: MasteringSettings,
         sourceDisplayName: String,
         separationModelDisplayName: String,
@@ -47,44 +45,38 @@ enum StemAudioReportAdapter {
         remixedFileInfo: AudioFileInfo,
         masteredFileInfo: AudioFileInfo
     ) -> CompletionReport? {
-        let reports = correctionSettings.allRoleSettings.compactMap { roleSettings in
-            CompletionReportService.makeReport(
-                input: input,
-                corrected: remixed,
-                mastered: mastered,
-                inputNoise: inputNoise,
-                correctedNoise: remixedNoise,
-                masteredNoise: masteredNoise,
-                correctionSettings: roleSettings,
-                masteringSettings: masteringSettings,
-                mode: .stem,
-                trackTitle: sourceDisplayName,
-                processingSourceName: separationModelDisplayName,
-                inputFileInfo: inputFileInfo,
-                processedFileInfo: remixedFileInfo,
-                masteredFileInfo: masteredFileInfo
-            )
-        }
-        guard reports.count == StemRole.allCases.count,
-              let first = reports.first,
-              reports.dropFirst().allSatisfy({ $0 == first }) else {
+        guard let base = CompletionReportService.makeStemReport(
+            input: input,
+            remixed: remixed,
+            mastered: mastered,
+            noiseReport: noiseReport,
+            masteringSettings: masteringSettings,
+            trackTitle: sourceDisplayName,
+            processingSourceName: separationModelDisplayName,
+            inputFileInfo: inputFileInfo,
+            remixedFileInfo: remixedFileInfo,
+            masteredFileInfo: masteredFileInfo
+        ) else {
             return nil
         }
 
         return CompletionReport(
-            loudnessRows: first.loudnessRows.map(stemCompletionRow),
-            noiseRows: first.noiseRows.map(stemNoiseCompletionRow),
-            highFrequencyRows: first.highFrequencyRows.map(stemCompletionRow),
-            lowFrequencyRows: first.lowFrequencyRows.map(stemLowCompletionRow),
+            loudnessRows: base.loudnessRows.map(stemCompletionRow),
+            noiseRows: base.noiseRows.map(stemNoiseCompletionRow),
+            highFrequencyRows: base.highFrequencyRows.map(stemCompletionRow),
+            lowFrequencyRows: base.lowFrequencyRows.map(stemLowCompletionRow),
             qualityRows: [],
-            reminder: first.reminder,
+            reminder: base.reminder,
             mode: .stem,
-            summary: first.summary,
-            comparisonRows: first.comparisonRows,
-            comparisonNotes: first.comparisonNotes,
-            sections: first.sections,
-            charts: first.charts,
-            safetyRows: first.safetyRows
+            summary: base.summary,
+            comparisonRows: base.comparisonRows,
+            comparisonNotes: base.comparisonNotes,
+            sections: base.sections + stemRunSections(
+                reportContext: reportContext,
+                separationModelDisplayName: separationModelDisplayName
+            ),
+            charts: base.charts,
+            safetyRows: base.safetyRows
         )
     }
 
@@ -92,28 +84,19 @@ enum StemAudioReportAdapter {
         input: NoiseMeasurementSnapshot?,
         remixed: NoiseMeasurementSnapshot?,
         mastered: NoiseMeasurementSnapshot?,
-        correctionSettings: StemRoleCorrectionSettings,
         masteringSettings: MasteringSettings
     ) -> NoiseCheckReport? {
-        let reports = correctionSettings.allRoleSettings.compactMap { roleSettings in
-            NoiseCheckReportService.makeReport(
-                input: input,
-                corrected: remixed,
-                mastered: mastered,
-                correctionSettings: roleSettings,
-                settings: masteringSettings
-            )
-        }.map(sanitizedStemNoiseReport)
-        guard reports.count == StemRole.allCases.count,
-              let first = reports.first,
-              reports.dropFirst().allSatisfy({
-                  noiseReportsAreEquivalent($0, first)
-              }) else {
+        guard let report = NoiseCheckReportService.makeMasteringOnlyReport(
+            input: input,
+            remixed: remixed,
+            mastered: mastered,
+            settings: masteringSettings
+        ) else {
             return nil
         }
 
         return NoiseCheckReport(
-            rows: first.rows.map { row in
+            rows: report.rows.map { row in
                 NoiseCheckRow(
                     id: row.id,
                     label: row.label,
@@ -133,34 +116,7 @@ enum StemAudioReportAdapter {
                     recommendedActions: masteringActions(from: row.recommendedActions)
                 )
             },
-            recommendedActions: first.recommendedActions
-        )
-    }
-
-    private static func sanitizedStemNoiseReport(_ report: NoiseCheckReport) -> NoiseCheckReport {
-        let rows = report.rows.map { row in
-            NoiseCheckRow(
-                id: row.id,
-                label: row.label,
-                measurementDescription: row.measurementDescription,
-                displayDescription: row.displayDescription,
-                unitLabel: row.unitLabel,
-                displayScale: row.displayScale,
-                input: row.input,
-                corrected: row.corrected,
-                mastered: row.mastered,
-                correctionDeltaDB: row.correctionDeltaDB,
-                masteringDeltaDB: row.masteringDeltaDB,
-                severity: row.severity,
-                summaryText: row.summaryText,
-                correctionEffectText: row.correctionEffectText,
-                masteringEffectText: row.masteringEffectText,
-                recommendedActions: masteringActions(from: row.recommendedActions)
-            )
-        }
-        return NoiseCheckReport(
-            rows: rows,
-            recommendedActions: mergedMasteringActions(from: rows)
+            recommendedActions: masteringActions(from: report.recommendedActions)
         )
     }
 
@@ -206,81 +162,151 @@ enum StemAudioReportAdapter {
         actions.filter { $0.stage == .mastering }
     }
 
-    /// Rebuilds Standard Mode's score ordering after correction-stage actions are removed.
-    /// Otherwise correction actions can occupy the original top-three slots differently for each
-    /// role even though the remixed/mastered measurements and mastering settings are identical.
-    private static func mergedMasteringActions(
-        from rows: [NoiseCheckRow]
-    ) -> [NoiseCheckAction] {
-        var actionsByID: [String: NoiseCheckAction] = [:]
-        var scoresByID: [String: Double] = [:]
-
-        for row in rows {
-            let rowScore = max(row.masteringDeltaDB ?? 0, row.correctionDeltaDB ?? 0, 0)
-                + noiseSeverityScore(row.severity)
-            for action in row.recommendedActions where action.stage == .mastering {
-                let existingScore = scoresByID[action.id] ?? -Double.infinity
-                if rowScore > existingScore {
-                    actionsByID[action.id] = action
-                    scoresByID[action.id] = rowScore
-                }
-            }
-        }
-
-        return actionsByID.values.sorted { lhs, rhs in
-            let lhsScore = scoresByID[lhs.id] ?? 0
-            let rhsScore = scoresByID[rhs.id] ?? 0
-            if lhsScore == rhsScore {
-                return lhs.id < rhs.id
-            }
-            return lhsScore > rhsScore
-        }
-        .prefix(3)
-        .map { $0 }
-    }
-
-    private static func noiseSeverityScore(_ severity: NoiseCheckSeverity) -> Double {
-        switch severity {
-        case .low: 0
-        case .caution: 1
-        case .warning: 2
-        }
-    }
-
-    /// `NoiseCheckReportService` preserves score priority, but actions with the same score can be
-    /// emitted in dictionary iteration order. Role reports therefore compare actions by stable ID
-    /// while the first report's original priority order remains the presentation order.
-    private static func noiseReportsAreEquivalent(
-        _ lhs: NoiseCheckReport,
-        _ rhs: NoiseCheckReport
-    ) -> Bool {
-        canonicalNoiseReport(lhs) == canonicalNoiseReport(rhs)
-    }
-
-    private static func canonicalNoiseReport(_ report: NoiseCheckReport) -> NoiseCheckReport {
-        NoiseCheckReport(
-            rows: report.rows.map { row in
-                NoiseCheckRow(
-                    id: row.id,
-                    label: row.label,
-                    measurementDescription: row.measurementDescription,
-                    displayDescription: row.displayDescription,
-                    unitLabel: row.unitLabel,
-                    displayScale: row.displayScale,
-                    input: row.input,
-                    corrected: row.corrected,
-                    mastered: row.mastered,
-                    correctionDeltaDB: row.correctionDeltaDB,
-                    masteringDeltaDB: row.masteringDeltaDB,
-                    severity: row.severity,
-                    summaryText: row.summaryText,
-                    correctionEffectText: row.correctionEffectText,
-                    masteringEffectText: row.masteringEffectText,
-                    recommendedActions: row.recommendedActions.sorted { $0.id < $1.id }
+    private static func stemRunSections(
+        reportContext: StemMasteringReportContext,
+        separationModelDisplayName: String
+    ) -> [CompletionReportSection] {
+        let contract = reportContext.runContract
+        let remix = reportContext.appliedRemixSettings
+        let roleNames = contract.activeRoles.map(\.stemModeDisplayTitle).joined(separator: " / ")
+        let pureSumNames = contract.pureSumOrder.map(\.stemModeDisplayTitle).joined(separator: " → ")
+        let masking = remix.masking
+        let commonSection = CompletionReportSection(
+            id: "stem-run-contract",
+            title: "Stem実行契約と共通再ミックス",
+            subsections: [
+                CompletionReportSubsection(
+                    id: "stem-run-contract-model",
+                    title: "実行したモデル契約",
+                    paragraphs: [
+                        "モデル: \(contract.separationModel.displayName)（\(contract.stemCount) Stem）",
+                        "有効Stem: \(roleNames)",
+                        "Float32純粋加算順: \(pureSumNames)"
+                    ]
+                ),
+                CompletionReportSubsection(
+                    id: "stem-run-contract-remix",
+                    title: "全Stem共通の再ミックス設定",
+                    paragraphs: [
+                        "ドラム→ベース帯域制御: \(onOff(masking.drumsToBassEnabled)) / 量 \(percent(masking.drumsToBassAmount))",
+                        "ボーカル→伴奏帯域制御: \(onOff(masking.vocalsToAccompanimentEnabled)) / 量 \(percent(masking.vocalsToAccompanimentAmount))",
+                        "共通reverb return: \(percent(remix.reverbReturnLevel)) / decay \(decimal(remix.reverbDecaySeconds, digits: 2))秒"
+                    ]
                 )
-            },
-            recommendedActions: report.recommendedActions.sorted { $0.id < $1.id }
+            ]
         )
+
+        let evidenceByRole = Dictionary(uniqueKeysWithValues: reportContext.roleEvidence.map {
+            ($0.role, $0)
+        })
+        let roleSections = contract.pureSumOrder.compactMap { role -> CompletionReportSection? in
+            guard let evidence = evidenceByRole[role] else { return nil }
+            let remixSettings = remix.settings(for: role)
+            let correctionParagraphs: [String]
+            if evidence.usedRawFallback {
+                correctionParagraphs = [
+                    "選択設定: \(correctionSettingsText(evidence.selectedCorrectionSettings))",
+                    "実際の採用音声: raw Stem（補正済み候補は不採用）",
+                    "fallback理由: \(evidence.fallbackReason ?? "記録なし")"
+                ]
+            } else if let effective = evidence.effectiveCorrectionSettings {
+                correctionParagraphs = [
+                    "選択設定: \(correctionSettingsText(evidence.selectedCorrectionSettings))",
+                    "実効設定: \(correctionSettingsText(effective))",
+                    "実際の採用音声: 補正済みStem"
+                ]
+            } else {
+                return nil
+            }
+
+            let guardSubsections = evidence.stageGuards.map { record in
+                let protected = record.protectedComponents.isEmpty
+                    ? "なし"
+                    : record.protectedComponents.map(\.rawValue).sorted().joined(separator: " / ")
+                let protectionEvidence = record.protectionEvidence.map { evidence in
+                    let summary = evidence.summary
+                    let restoration = summary.restorationReason.map {
+                        " / 復帰理由 \($0.logDescription)"
+                    } ?? ""
+                    return "役割保護実測（\(evidence.label)）: 対象区間 \(percentage(summary.affectedTimeRatio)) / DSP差分保持 平均 \(percentage(summary.averageRetainedDSPDeltaRatio)) / 最小 \(percentage(summary.minimumRetainedDSPDeltaRatio))\(restoration)"
+                }
+                return CompletionReportSubsection(
+                    id: "stem-role-\(role.rawValue)-guard-\(record.stage.rawValue)",
+                    title: record.stage.stemModeDisplayTitle,
+                    paragraphs: [
+                        "実行指示: \(record.action.stemModeDisplayTitle)",
+                        "実行結果: \(record.outcome.stemModeDisplayTitle)",
+                        "根拠: \(record.reason)",
+                        "保護対象: \(protected)"
+                    ] + protectionEvidence
+                )
+            }
+
+            return CompletionReportSection(
+                id: "stem-role-\(role.rawValue)",
+                title: "\(role.stemModeDisplayTitle)の補正・guard・再ミックス",
+                subsections: [
+                    CompletionReportSubsection(
+                        id: "stem-role-\(role.rawValue)-correction",
+                        title: "採用した補正結果",
+                        paragraphs: correctionParagraphs
+                    ),
+                    CompletionReportSubsection(
+                        id: "stem-role-\(role.rawValue)-remix",
+                        title: "役割別再ミックス設定",
+                        paragraphs: [
+                            "gain: \(signedDB(remixSettings.gainDB))",
+                            "pan: \(panText(remixSettings.pan))",
+                            "reverb send: \(percent(remixSettings.reverbSend))"
+                        ]
+                    )
+                ] + guardSubsections
+            )
+        }
+        return [commonSection] + roleSections
+    }
+
+    private static func correctionSettingsText(_ settings: CorrectionSettings) -> String {
+        [
+            "profile \(settings.profile.title)",
+            "補正強度 \(percent(settings.correctionIntensity))",
+            "原音保持 \(percent(settings.originalRetention))",
+            "低域整理 \(percent(settings.lowCleanup))",
+            "低中域整理 \(percent(settings.lowMidCleanup))",
+            "presence修復 \(percent(settings.presenceRepair))",
+            "air修復 \(percent(settings.airRepair))",
+            "高域自然さ \(percent(settings.highNaturalness))",
+            "ノイズ検出感度 \(percent(settings.noiseDetectionSensitivity))",
+            "倍音修復 \(percent(settings.harmonicRepairAmount))",
+            "foldover修復 \(percent(settings.foldoverRepairAmount))",
+            "音の芯保護 \(percent(settings.coreProtection))",
+            "stereo保護 \(percent(settings.stereoProtection))"
+        ].joined(separator: " / ")
+    }
+
+    private static func percent(_ value: Float) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    private static func percentage(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    private static func decimal(_ value: Float, digits: Int) -> String {
+        String(format: "%.*f", digits, Double(value))
+    }
+
+    private static func signedDB(_ value: Float) -> String {
+        String(format: "%+.2f dB", Double(value))
+    }
+
+    private static func panText(_ value: Float) -> String {
+        if abs(value) < 0.000_1 { return "center" }
+        return String(format: "%@ %.0f%%", value < 0 ? "left" : "right", Double(abs(value) * 100))
+    }
+
+    private static func onOff(_ enabled: Bool) -> String {
+        enabled ? "有効" : "無効"
     }
 
     private static func stemRemixEffectText(_ text: String) -> String {

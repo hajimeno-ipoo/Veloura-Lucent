@@ -27,21 +27,22 @@ struct StemModeSettingsTests {
             assetSetIdentifier: profile.assetSetIdentifier,
             inputName: "audio",
             outputNames: Dictionary(
-                uniqueKeysWithValues: StemRole.allCases.map { ($0, $0.rawValue) }
+                uniqueKeysWithValues: profile.sourceOrder.map { ($0, $0.rawValue) }
             ),
-            sourceOrder: [.drums, .bass, .other, .vocals],
+            sourceOrder: profile.sourceOrder,
             sampleRate: 44_100,
             channelCount: 2,
             inputShape: [-1, 2, -1],
             outputShapes: Dictionary(
-                uniqueKeysWithValues: StemRole.allCases.map { ($0, [-1, 2, -1]) }
+                uniqueKeysWithValues: profile.sourceOrder.map { ($0, [-1, 2, -1]) }
             ),
             scalarType: .float32,
             normalization: .modelManagedIdentityBoundary,
             runtime: .mlx,
             defaultSegmentSeconds: nil,
             downloadableModelAssets: Array(profile.downloadableAssets.values),
-            bundledRuntimeAssets: []
+            bundledRuntimeAssets: [],
+            runContract: makeStemTestRunContract(model: .bsRoformerSW)
         )
 
         #expect(settings.model == .bsRoformerSW)
@@ -145,28 +146,30 @@ struct StemModeSettingsTests {
     }
 
     private func makeContract(segmentSeconds: Double = 7.8) -> StemModelContract {
-        StemModelContract(
+        let profile = StemProductionModelProfile.profile(for: .htdemucs)
+        return StemModelContract(
             separationModel: .htdemucs,
-            identifier: "htdemucs",
+            identifier: profile.modelIdentifier,
             version: "d4519e24ddc2dd4a11d56a193092433d852c3961",
             assetSetIdentifier: "htdemucs-mlx-d4519e24",
             inputName: "batchData",
             outputNames: Dictionary(
-                uniqueKeysWithValues: StemRole.allCases.map { ($0, $0.rawValue) }
+                uniqueKeysWithValues: profile.sourceOrder.map { ($0, $0.rawValue) }
             ),
-            sourceOrder: [.drums, .bass, .other, .vocals],
+            sourceOrder: profile.sourceOrder,
             sampleRate: 44_100,
             channelCount: 2,
             inputShape: [-1, 2, -1],
             outputShapes: Dictionary(
-                uniqueKeysWithValues: StemRole.allCases.map { ($0, [-1, 2, -1]) }
+                uniqueKeysWithValues: profile.sourceOrder.map { ($0, [-1, 2, -1]) }
             ),
             scalarType: .float32,
             normalization: .modelManagedIdentityBoundary,
             runtime: .mlx,
             defaultSegmentSeconds: segmentSeconds,
             downloadableModelAssets: [],
-            bundledRuntimeAssets: []
+            bundledRuntimeAssets: [],
+            runContract: makeStemTestRunContract()
         )
     }
 }

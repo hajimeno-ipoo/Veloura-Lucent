@@ -282,7 +282,8 @@ final class ProcessingActions {
         correctionTask?.cancel()
         masteringTask?.cancel()
         displayAnalysis.cancelTasks()
-        PreviewFileStore.removeAllPreviewFiles()
+        PreviewFileStore.removeOwnedPreviewFileIfPresent(job.masteredOutputFile)
+        PreviewFileStore.removeOwnedPreviewFileIfPresent(job.outputFile)
     }
 
     func clearCorrectionOutputPreviews() {

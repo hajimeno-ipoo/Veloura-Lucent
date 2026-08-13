@@ -5,6 +5,19 @@ enum StemRole: String, CaseIterable, Codable, Sendable {
     case bass
     case other
     case vocals
+    case guitar
+    case piano
+}
+
+struct StemModelRunContract: Codable, Equatable, Sendable {
+    let separationModel: StemSeparationModel
+    let modelIdentifier: String
+    let modelOutputOrder: [StemRole]
+    let activeRoles: [StemRole]
+    let validationRoles: [StemRole]
+    let pureSumOrder: [StemRole]
+
+    var stemCount: Int { activeRoles.count }
 }
 
 enum StemModelScalarType: String, Codable, Sendable {
@@ -73,6 +86,7 @@ struct StemModelContract: Codable, Equatable, Sendable {
     let defaultSegmentSeconds: Double?
     let downloadableModelAssets: [StemDownloadableModelAsset]
     let bundledRuntimeAssets: [StemBundledRuntimeAsset]
+    let runContract: StemModelRunContract
 }
 
 struct StemModelManifest: Codable, Equatable, Sendable {

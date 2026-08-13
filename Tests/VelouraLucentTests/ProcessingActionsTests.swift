@@ -71,4 +71,39 @@ struct ProcessingActionsTests {
         #expect(actions.preview.cardState(for: .corrected).sourceURL != nil)
         #expect(actions.preview.cardState(for: .mastered).sourceURL == nil)
     }
+
+    @Test
+    func shutdownRemovesOnlyTheCurrentJobPreviewFiles() throws {
+        let actions = ProcessingActions(
+            notificationReporter: NoOpCompletionNotificationReporter.shared
+        )
+        let corrected = PreviewFileStore.temporaryOutputURL(
+            baseName: "processing-actions-current",
+            suffix: "corrected"
+        )
+        let mastered = PreviewFileStore.temporaryOutputURL(
+            baseName: "processing-actions-current",
+            suffix: "mastered"
+        )
+        let anotherJob = PreviewFileStore.temporaryOutputURL(
+            baseName: "processing-actions-another-job",
+            suffix: "corrected"
+        )
+        defer {
+            try? FileManager.default.removeItem(at: corrected)
+            try? FileManager.default.removeItem(at: mastered)
+            try? FileManager.default.removeItem(at: anotherJob)
+        }
+        try Data("corrected".utf8).write(to: corrected)
+        try Data("mastered".utf8).write(to: mastered)
+        try Data("another-job".utf8).write(to: anotherJob)
+        actions.job.outputFile = corrected
+        actions.job.masteredOutputFile = mastered
+
+        actions.shutdown()
+
+        #expect(!FileManager.default.fileExists(atPath: corrected.path))
+        #expect(!FileManager.default.fileExists(atPath: mastered.path))
+        #expect(FileManager.default.fileExists(atPath: anotherJob.path))
+    }
 }

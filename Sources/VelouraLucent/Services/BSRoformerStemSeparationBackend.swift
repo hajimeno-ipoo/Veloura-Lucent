@@ -3,20 +3,17 @@ import Foundation
 
 enum BSRoformerStemSeparationBackendError: LocalizedError, Equatable, Sendable {
     case missingStem(String)
-    case incompatibleOtherStem(String)
 
     var errorDescription: String? {
         switch self {
         case .missingStem(let name):
             "BS-RoFormer分離結果に\(name)がありません。"
-        case .incompatibleOtherStem(let name):
-            "BS-RoFormerのotherへ加算する\(name)の形式が一致しません。"
         }
     }
 }
 
 enum BSRoformerStemOutputMapper {
-    static func makeFourStemOutput(
+    static func makeSixStemOutput(
         from separation: BSRoformerSeparation
     ) throws -> StemSeparationBackendOutput {
         func required(_ stem: BSRoformerStem) throws -> BSRoformerAudio {
@@ -36,43 +33,11 @@ enum BSRoformerStemOutputMapper {
         return StemSeparationBackendOutput(stems: [
             StemRole.bass.rawValue: pcm(from: bass),
             StemRole.drums.rawValue: pcm(from: drums),
-            StemRole.other.rawValue: try combinedOther(
-                other: other,
-                guitar: guitar,
-                piano: piano
-            ),
+            StemRole.other.rawValue: pcm(from: other),
             StemRole.vocals.rawValue: pcm(from: vocals),
+            StemRole.guitar.rawValue: pcm(from: guitar),
+            StemRole.piano.rawValue: pcm(from: piano),
         ])
-    }
-
-    private static func combinedOther(
-        other: BSRoformerAudio,
-        guitar: BSRoformerAudio,
-        piano: BSRoformerAudio
-    ) throws -> StemSeparationPCM {
-        for (name, audio) in [
-            (BSRoformerStem.guitar.rawValue, guitar),
-            (BSRoformerStem.piano.rawValue, piano),
-        ] {
-            guard
-                audio.channels == other.channels,
-                audio.sampleRate == other.sampleRate,
-                audio.channelMajorSamples.count == other.channelMajorSamples.count
-            else {
-                throw BSRoformerStemSeparationBackendError.incompatibleOtherStem(name)
-            }
-        }
-
-        var samples = other.channelMajorSamples
-        for index in samples.indices {
-            samples[index] += guitar.channelMajorSamples[index]
-            samples[index] += piano.channelMajorSamples[index]
-        }
-        return StemSeparationPCM(
-            channelMajorSamples: samples,
-            channelCount: other.channels,
-            sampleRate: other.sampleRate
-        )
     }
 
     private static func pcm(from audio: BSRoformerAudio) -> StemSeparationPCM {
@@ -130,7 +95,7 @@ private final class BSRoformerStemSeparationBackend: StemSeparationBackend, @unc
                         cancellationToken.isCancelled
                     }
                 )
-                return try BSRoformerStemOutputMapper.makeFourStemOutput(from: separation)
+                return try BSRoformerStemOutputMapper.makeSixStemOutput(from: separation)
             }.value
         } catch BSRoformerError.cancelled {
             throw CancellationError()

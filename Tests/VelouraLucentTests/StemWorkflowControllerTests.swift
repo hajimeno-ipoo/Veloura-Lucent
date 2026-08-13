@@ -50,6 +50,23 @@ private struct EmptyStemDisplayAnalyzer: StemInputDisplayAnalyzing {
     }
 }
 
+@MainActor
+private final class StemCompletionNotificationReporterSpy: StemCompletionNotificationReporting {
+    struct Call: Equatable {
+        let stage: StemCompletionNotificationStage
+        let runContract: StemModelRunContract
+    }
+
+    private(set) var calls: [Call] = []
+
+    func notifyStemCompletion(
+        for stage: StemCompletionNotificationStage,
+        runContract: StemModelRunContract
+    ) {
+        calls.append(Call(stage: stage, runContract: runContract))
+    }
+}
+
 private actor SuspendedCorrectionWorkflow: StemWorkflowExecuting {
     private(set) var correctionStarted = false
     private(set) var discardedSessionIDs: [UUID] = []
@@ -90,10 +107,11 @@ private actor SuspendedCorrectionWorkflow: StemWorkflowExecuting {
                 failedChecks: [],
                 measurements: []
             ),
-            appliedSettings: settings
+            appliedSettings: settings,
+            rawFallbackReasons: [:]
         )
-        await eventHandler(.artifactCommitted(artifact))
-        await eventHandler(.validationCompleted(result.validation))
+        await eventHandler(.artifactCommitted(runID: correction.runID, artifact: artifact))
+        await eventHandler(.validationCompleted(runID: correction.runID, result: result.validation))
         return result
     }
 
@@ -124,16 +142,22 @@ private struct ImmediateCorrectionWorkflow: StemWorkflowExecuting {
                 detail: nil
             ).encodedMessage
         ))
-        await eventHandler(.artifactCommitted(result.input.artifact))
-        for role in StemRole.allCases {
+        await eventHandler(.artifactCommitted(runID: request.runID, artifact: result.input.artifact))
+        for artifact in result.separation.stems {
+            await eventHandler(.artifactCommitted(runID: request.runID, artifact: artifact))
+        }
+        for role in request.runContract.activeRoles {
             let artifact = makeControllerArtifact(
                 id: "corrected-\(role.rawValue)",
                 kind: .correctedStem(role),
                 baseURL: result.sessionDirectory
             )
-            await eventHandler(.artifactCommitted(artifact))
+            await eventHandler(.artifactCommitted(runID: request.runID, artifact: artifact))
         }
-        await eventHandler(.artifactCommitted(result.remixArtifacts.correctedPureSum))
+        await eventHandler(.artifactCommitted(
+            runID: request.runID,
+            artifact: result.remixArtifacts.correctedPureSum
+        ))
         return result
     }
 
@@ -163,11 +187,243 @@ private struct ImmediateCorrectionWorkflow: StemWorkflowExecuting {
                 failedChecks: [],
                 measurements: []
             ),
-            appliedSettings: settings
+            appliedSettings: settings,
+            rawFallbackReasons: [:]
         )
-        await eventHandler(.artifactCommitted(artifact))
-        await eventHandler(.validationCompleted(result.validation))
+        await eventHandler(.artifactCommitted(runID: correction.runID, artifact: artifact))
+        await eventHandler(.validationCompleted(runID: correction.runID, result: result.validation))
         return result
+    }
+
+    func discardSession(runID: UUID) async throws {}
+}
+
+private enum IntentionalStemWorkflowError: LocalizedError {
+    case correctionFailure
+    case remixFailure
+    case masteringFailure
+
+    var errorDescription: String? {
+        switch self {
+        case .correctionFailure: "意図した補正失敗"
+        case .remixFailure: "意図した再ミックス失敗"
+        case .masteringFailure: "意図したマスタリング失敗"
+        }
+    }
+}
+
+private actor RetryAndStaleEventWorkflow: StemWorkflowExecuting {
+    private(set) var runIDs: [UUID] = []
+    private(set) var discardedSessionIDs: [UUID] = []
+    private(set) var secondRunStarted = false
+
+    func processCorrection(
+        _ request: StemWorkflowRequest,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowCorrectionResult {
+        runIDs.append(request.runID)
+        if runIDs.count == 1 {
+            let input = makeControllerArtifact(
+                id: "failed-input",
+                kind: .input44100,
+                baseURL: FileManager.default.temporaryDirectory
+            )
+            await eventHandler(.artifactCommitted(runID: request.runID, artifact: input))
+            let stale = makeControllerArtifact(
+                id: "stale-old-run",
+                kind: .input44100,
+                baseURL: FileManager.default.temporaryDirectory
+            )
+            Task {
+                try? await Task.sleep(for: .milliseconds(120))
+                await eventHandler(.artifactCommitted(runID: request.runID, artifact: stale))
+            }
+            throw IntentionalStemWorkflowError.correctionFailure
+        }
+
+        secondRunStarted = true
+        let excluded = makeControllerArtifact(
+            id: "contract-out-guitar",
+            kind: .rawStem(.guitar),
+            baseURL: FileManager.default.temporaryDirectory
+        )
+        await eventHandler(.artifactCommitted(runID: request.runID, artifact: excluded))
+        while true {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    func processMastering(
+        _ request: StemWorkflowMasteringRequest,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowResult {
+        throw CancellationError()
+    }
+
+    func processRemix(
+        correction: StemWorkflowCorrectionResult,
+        settings: StemRemixSettings,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowRemixResult {
+        throw CancellationError()
+    }
+
+    func discardSession(runID: UUID) async throws {
+        discardedSessionIDs.append(runID)
+    }
+}
+
+private actor FinalizationSuspendingWorkflow: StemWorkflowExecuting {
+    private(set) var finalizationStarted = false
+
+    func processCorrection(
+        _ request: StemWorkflowRequest,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowCorrectionResult {
+        let result = makeImmediateCorrectionResult(request: request)
+        await eventHandler(.artifactCommitted(runID: request.runID, artifact: result.input.artifact))
+        for artifact in result.separation.stems {
+            await eventHandler(.artifactCommitted(runID: request.runID, artifact: artifact))
+        }
+        for role in request.runContract.activeRoles {
+            let artifact = makeControllerArtifact(
+                id: "corrected-\(role.rawValue)",
+                kind: .correctedStem(role),
+                baseURL: result.sessionDirectory
+            )
+            await eventHandler(.artifactCommitted(runID: request.runID, artifact: artifact))
+        }
+        await eventHandler(.artifactCommitted(
+            runID: request.runID,
+            artifact: result.remixArtifacts.correctedPureSum
+        ))
+        return result
+    }
+
+    func processRemix(
+        correction: StemWorkflowCorrectionResult,
+        settings: StemRemixSettings,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowRemixResult {
+        let artifact = makeControllerArtifact(
+            id: "stem-remix",
+            kind: .remixed48000,
+            baseURL: correction.sessionDirectory
+        )
+        let result = StemWorkflowRemixResult(
+            correction: correction,
+            artifact: artifact,
+            evaluation: makeControllerEvaluation(purpose: .remix),
+            validation: StemValidationResult(
+                phase: .processedRemix,
+                failedChecks: [],
+                measurements: []
+            ),
+            appliedSettings: settings,
+            rawFallbackReasons: [:]
+        )
+        await eventHandler(.artifactCommitted(runID: correction.runID, artifact: artifact))
+        return result
+    }
+
+    func processMastering(
+        _ request: StemWorkflowMasteringRequest,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowResult {
+        finalizationStarted = true
+        await eventHandler(.displayProgress(.init(
+            runID: request.runID,
+            step: .finalization,
+            status: .running,
+            fraction: 0,
+            detail: "最終版を保存中"
+        )))
+        while true {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    func discardSession(runID: UUID) async throws {}
+}
+
+private actor PostCorrectionStageWorkflow: StemWorkflowExecuting {
+    private(set) var remixAttemptCount = 0
+    private(set) var masteringAttemptCount = 0
+    private(set) var remixCancellationAttemptStarted = false
+    private(set) var masteringCancellationAttemptStarted = false
+
+    func processCorrection(
+        _ request: StemWorkflowRequest,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowCorrectionResult {
+        let result = makeImmediateCorrectionResult(request: request)
+        await eventHandler(.artifactCommitted(runID: request.runID, artifact: result.input.artifact))
+        for artifact in result.separation.stems {
+            await eventHandler(.artifactCommitted(runID: request.runID, artifact: artifact))
+        }
+        for role in request.runContract.activeRoles {
+            let artifact = makeControllerArtifact(
+                id: "corrected-\(role.rawValue)",
+                kind: .correctedStem(role),
+                baseURL: result.sessionDirectory
+            )
+            await eventHandler(.artifactCommitted(runID: request.runID, artifact: artifact))
+        }
+        await eventHandler(.artifactCommitted(
+            runID: request.runID,
+            artifact: result.remixArtifacts.correctedPureSum
+        ))
+        return result
+    }
+
+    func processRemix(
+        correction: StemWorkflowCorrectionResult,
+        settings: StemRemixSettings,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowRemixResult {
+        remixAttemptCount += 1
+        if remixAttemptCount == 1 {
+            throw IntentionalStemWorkflowError.remixFailure
+        }
+        if remixAttemptCount == 2 {
+            remixCancellationAttemptStarted = true
+            while true {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        let artifact = makeControllerArtifact(
+            id: "stage-remix",
+            kind: .remixed48000,
+            baseURL: correction.sessionDirectory
+        )
+        let result = StemWorkflowRemixResult(
+            correction: correction,
+            artifact: artifact,
+            evaluation: makeControllerEvaluation(purpose: .remix),
+            validation: StemValidationResult(
+                phase: .processedRemix,
+                failedChecks: [],
+                measurements: []
+            ),
+            appliedSettings: settings,
+            rawFallbackReasons: [:]
+        )
+        await eventHandler(.artifactCommitted(runID: correction.runID, artifact: artifact))
+        return result
+    }
+
+    func processMastering(
+        _ request: StemWorkflowMasteringRequest,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowResult {
+        masteringAttemptCount += 1
+        if masteringAttemptCount == 1 {
+            throw IntentionalStemWorkflowError.masteringFailure
+        }
+        masteringCancellationAttemptStarted = true
+        while true {
+            try await Task.sleep(for: .milliseconds(20))
+        }
     }
 
     func discardSession(runID: UUID) async throws {}
@@ -339,16 +595,17 @@ struct StemWorkflowControllerTests {
             installedModel: .ready(fixture.installation),
             bundledRuntime: .ready(runtime)
         )))
-        await manager.inspectLocalResources()
+        await manager.selectModel(.bsRoformerSW)
 
         let session = StemWorkflowSession()
+        let notificationReporter = StemCompletionNotificationReporterSpy()
         let controller = StemWorkflowController(
             session: session,
             modelManager: manager,
             workflow: ImmediateCorrectionWorkflow(),
             inputInspector: AutomaticStemInputInspector(),
             inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
-            notificationReporter: NoOpStemCompletionNotificationReporter.shared,
+            notificationReporter: notificationReporter,
             seedProvider: { 77 },
             revealInFinder: { _ in }
         )
@@ -364,6 +621,28 @@ struct StemWorkflowControllerTests {
         #expect(workspace.separationSettings == .bsRoformerSWProduction)
         #expect(workspace.modelPresentation?.modelName == "BS-RoFormer-SW")
         #expect(workspace.canRunCorrection)
+
+        try await controller.actions.beginCorrection(StemModeStartRequest(
+            inputURL: inputURL,
+            confirmedMixMatrix: nil,
+            separationSettings: .bsRoformerSWProduction,
+            correctionSettings: StemRoleCorrectionSettings(
+                all: DenoiseStrength.balanced.settings
+            ),
+            masteringProfile: .streaming,
+            masteringSettings: MasteringProfile.streaming.settings
+        ))
+        try await waitUntil { workspace.canRunRemix }
+        let capturedContract = try #require(session.runContract)
+
+        await manager.selectModel(.htdemucs)
+
+        #expect(capturedContract.stemCount == 6)
+        #expect(session.runContract == capturedContract)
+        #expect(workspace.runContract == capturedContract)
+        #expect(notificationReporter.calls == [
+            .init(stage: .correction, runContract: capturedContract),
+        ])
     }
 
     @Test
@@ -435,7 +714,7 @@ struct StemWorkflowControllerTests {
         let workflow = SuspendedCorrectionWorkflow()
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         try completeCorrection(in: session, sessionID: sessionID)
         try session.completeCorrection(runID: sessionID)
         let controller = StemWorkflowController(
@@ -453,11 +732,249 @@ struct StemWorkflowControllerTests {
         #expect(session.runID == nil)
     }
 
+    @Test("入力変更のController境界は再ミックス手動下書きも初期化する")
+    func inputChangeResetsWorkspaceManualRemixDraft() async throws {
+        let session = StemWorkflowSession()
+        let controller = StemWorkflowController(
+            session: session,
+            modelManager: StemModelManager(),
+            workflow: SuspendedCorrectionWorkflow(),
+            inputInspector: AutomaticStemInputInspector(),
+            inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
+            notificationReporter: NoOpStemCompletionNotificationReporter.shared,
+            revealInFinder: { _ in }
+        )
+        let workspace = StemModeWorkspaceModel(session: session, actions: controller.actions)
+        controller.attachWorkspaceModel(workspace)
+
+        await workspace.inspectInput(URL(fileURLWithPath: "/tmp/remix-draft-first.wav"))
+        try await waitUntil { workspace.selectedInputURL != nil && !workspace.isInspectingInput }
+        try workspace.setRemixManualEditingEnabled(true)
+        try workspace.setRemixPan(0.45, for: .vocals)
+
+        let replacementURL = URL(fileURLWithPath: "/tmp/remix-draft-second.wav")
+        await workspace.inspectInput(replacementURL)
+        try await waitUntil {
+            workspace.selectedInputURL == replacementURL && !workspace.isInspectingInput
+        }
+
+        #expect(workspace.manualRemixOverrides == StemRemixManualOverrides())
+        #expect(!workspace.isRemixManualEditingEnabled)
+        #expect(workspace.automaticRemixPlan == nil)
+    }
+
+    @Test("同じ入力を選び直しても再ミックス手動下書きを保持する")
+    func sameInputSelectionPreservesWorkspaceManualRemixDraft() async throws {
+        let session = StemWorkflowSession()
+        let controller = StemWorkflowController(
+            session: session,
+            modelManager: StemModelManager(),
+            workflow: SuspendedCorrectionWorkflow(),
+            inputInspector: AutomaticStemInputInspector(),
+            inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
+            notificationReporter: NoOpStemCompletionNotificationReporter.shared,
+            revealInFinder: { _ in }
+        )
+        let workspace = StemModeWorkspaceModel(session: session, actions: controller.actions)
+        controller.attachWorkspaceModel(workspace)
+        let inputURL = URL(fileURLWithPath: "/tmp/remix-draft-same.wav")
+
+        await workspace.inspectInput(inputURL)
+        try await waitUntil { workspace.selectedInputURL == inputURL && !workspace.isInspectingInput }
+        try workspace.setRemixManualEditingEnabled(true)
+        try workspace.setRemixPan(0.45, for: .vocals)
+
+        await workspace.inspectInput(inputURL)
+        try await waitUntil { workspace.selectedInputURL == inputURL && !workspace.isInspectingInput }
+
+        #expect(workspace.isRemixManualEditingEnabled)
+        #expect(workspace.manualRemixOverrides.overrides(for: .vocals).pan == 0.45)
+    }
+
+    @Test
+    func correctionFailureCleanupRetryAndStaleEventsFollowTheCurrentRunContract() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "StemWorkflowControllerRetryTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let manager = try await makeReadyManager(root: root)
+        let workflow = RetryAndStaleEventWorkflow()
+        let session = StemWorkflowSession()
+        let controller = StemWorkflowController(
+            session: session,
+            modelManager: manager,
+            workflow: workflow,
+            inputInspector: AutomaticStemInputInspector(),
+            inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
+            notificationReporter: NoOpStemCompletionNotificationReporter.shared,
+            seedProvider: { 77 },
+            revealInFinder: { _ in }
+        )
+        let workspace = StemModeWorkspaceModel(session: session, actions: controller.actions)
+        controller.attachWorkspaceModel(workspace)
+        controller.synchronizeModelReadiness()
+        let inputURL = root.appending(path: "source.wav")
+        await workspace.inspectInput(inputURL)
+        try await waitUntil { workspace.selectedInputURL == inputURL && !workspace.isInspectingInput }
+        let request = StemModeStartRequest(
+            inputURL: inputURL,
+            confirmedMixMatrix: nil,
+            separationSettings: .metaHTDemucsProduction(seed: 77),
+            correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
+            masteringProfile: .streaming,
+            masteringSettings: MasteringProfile.streaming.settings
+        )
+
+        try await controller.actions.beginCorrection(request)
+        try await waitUntil {
+            if case .failed = session.state { return true }
+            return false
+        }
+        let firstRunID = try #require(await workflow.runIDs.first)
+        #expect(workspace.selectedInputURL == inputURL)
+        #expect(session.artifactStates.isEmpty)
+        #expect(await workflow.discardedSessionIDs.contains(firstRunID))
+
+        try await controller.actions.beginCorrection(request)
+        try await waitUntil { await workflow.secondRunStarted }
+        let secondRunID = try #require(session.runID)
+        #expect(secondRunID != firstRunID)
+        try await Task.sleep(for: .milliseconds(180))
+
+        #expect(!session.artifactStates.contains { $0.id == "stale-old-run" })
+        #expect(!session.artifactStates.contains { $0.id == "contract-out-guitar" })
+        #expect(session.logs.contains { $0.message.contains("画面表示の更新を省略しました") })
+
+        try await controller.actions.cancelCorrection()
+        #expect(session.state == .idle)
+    }
+
+    @Test
+    func finalCommitLocksCancellationFromFinalSaveUntilControllerStops() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "StemWorkflowControllerFinalCommitTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let manager = try await makeReadyManager(root: root)
+        let workflow = FinalizationSuspendingWorkflow()
+        let session = StemWorkflowSession()
+        let controller = StemWorkflowController(
+            session: session,
+            modelManager: manager,
+            workflow: workflow,
+            inputInspector: AutomaticStemInputInspector(),
+            inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
+            notificationReporter: NoOpStemCompletionNotificationReporter.shared,
+            seedProvider: { 77 },
+            revealInFinder: { _ in }
+        )
+        let workspace = StemModeWorkspaceModel(session: session, actions: controller.actions)
+        controller.attachWorkspaceModel(workspace)
+        controller.synchronizeModelReadiness()
+        let inputURL = root.appending(path: "source.wav")
+        await workspace.inspectInput(inputURL)
+        try await waitUntil { workspace.selectedInputURL == inputURL && !workspace.isInspectingInput }
+
+        try await controller.actions.beginCorrection(StemModeStartRequest(
+            inputURL: inputURL,
+            confirmedMixMatrix: nil,
+            separationSettings: .metaHTDemucsProduction(seed: 77),
+            correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
+            masteringProfile: .streaming,
+            masteringSettings: MasteringProfile.streaming.settings
+        ))
+        try await waitUntil { workspace.canRunRemix }
+        await workspace.beginRemix()
+        try await waitUntil { workspace.canRunMastering }
+        await workspace.beginMastering()
+        try await waitUntil {
+            await workflow.finalizationStarted && workspace.finalCommitLockState == .locked
+        }
+
+        #expect(!workspace.canCancelProcessing)
+        await workspace.cancelMastering()
+        #expect(workspace.finalCommitLockState == .locked)
+        controller.shutdown()
+    }
+
+    @Test
+    func remixAndMasteringFailureCancellationAndRetryKeepTheRequiredBaseline() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "StemWorkflowControllerStageTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let manager = try await makeReadyManager(root: root)
+        let workflow = PostCorrectionStageWorkflow()
+        let session = StemWorkflowSession()
+        let controller = StemWorkflowController(
+            session: session,
+            modelManager: manager,
+            workflow: workflow,
+            inputInspector: AutomaticStemInputInspector(),
+            inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
+            notificationReporter: NoOpStemCompletionNotificationReporter.shared,
+            seedProvider: { 77 },
+            revealInFinder: { _ in }
+        )
+        let workspace = StemModeWorkspaceModel(session: session, actions: controller.actions)
+        controller.attachWorkspaceModel(workspace)
+        controller.synchronizeModelReadiness()
+        let inputURL = root.appending(path: "source.wav")
+        await workspace.inspectInput(inputURL)
+        try await waitUntil { workspace.selectedInputURL == inputURL && !workspace.isInspectingInput }
+        try await controller.actions.beginCorrection(StemModeStartRequest(
+            inputURL: inputURL,
+            confirmedMixMatrix: nil,
+            separationSettings: .metaHTDemucsProduction(seed: 77),
+            correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
+            masteringProfile: .streaming,
+            masteringSettings: MasteringProfile.streaming.settings
+        ))
+        try await waitUntil { workspace.canRunRemix }
+        let runID = try #require(session.runID)
+
+        await workspace.beginRemix()
+        try await waitUntil {
+            session.state == .readyForRemix(runID: runID) && session.lastError != nil
+        }
+        #expect(session.artifactStates.filter {
+            if case .correctedStem = $0.kind { return true }
+            return false
+        }.count == 4)
+        #expect(session.artifactStates.contains { $0.kind == .correctedPureSum48000 })
+        #expect(!session.artifactStates.contains { $0.kind == .remixed48000 })
+
+        await workspace.beginRemix()
+        try await waitUntil { await workflow.remixCancellationAttemptStarted }
+        await workspace.cancelRemix()
+        #expect(session.state == .readyForRemix(runID: runID))
+        #expect(session.lastError == nil)
+
+        await workspace.beginRemix()
+        try await waitUntil { workspace.canRunMastering }
+        let remixedArtifact = try #require(workspace.remixedPreviewArtifact)
+
+        await workspace.beginMastering()
+        try await waitUntil {
+            session.state == .readyForMastering(runID: runID) && session.lastError != nil
+        }
+        #expect(workspace.remixedPreviewArtifact == remixedArtifact)
+        #expect(workspace.finalPreviewArtifact == nil)
+
+        await workspace.beginMastering()
+        try await waitUntil { await workflow.masteringCancellationAttemptStarted }
+        await workspace.cancelMastering()
+        #expect(session.state == .readyForMastering(runID: runID))
+        #expect(session.lastError == nil)
+        #expect(workspace.remixedPreviewArtifact == remixedArtifact)
+        #expect(workspace.finalPreviewArtifact == nil)
+    }
+
     @Test
     func shutdownRemovesCurrentSessionTemporaryAudio() throws {
         let session = StemWorkflowSession()
         let sessionID = UUID()
-        try session.startRun(runID: sessionID)
+        try session.startRun(runID: sessionID, runContract: makeStemTestRunContract())
         let sessionDirectory = StemWorkflowService.temporaryRootURL.appending(
             path: sessionID.uuidString.lowercased(),
             directoryHint: .isDirectory
@@ -496,7 +1013,39 @@ struct StemWorkflowControllerTests {
             try session.beginStep(runID: sessionID, step: step)
             try session.completeStep(runID: sessionID, step: step)
         }
-        for role in StemRole.allCases {
+        let input = StemAudioArtifact(
+            id: "input",
+            kind: .input44100,
+            fileURL: FileManager.default.temporaryDirectory.appending(path: "input.wav"),
+            sampleRate: 44_100,
+            channelCount: 2,
+            frameCount: 32
+        )
+        try session.updateArtifactState(.init(
+            id: input.id,
+            runID: sessionID,
+            kind: input.kind,
+            artifact: input,
+            status: .valid
+        ))
+        for role in try #require(session.runContract).activeRoles {
+            let raw = StemAudioArtifact(
+                id: "raw-\(role.rawValue)",
+                kind: .rawStem(role),
+                fileURL: FileManager.default.temporaryDirectory.appending(
+                    path: "raw-\(role.rawValue).wav"
+                ),
+                sampleRate: 44_100,
+                channelCount: 2,
+                frameCount: 32
+            )
+            try session.updateArtifactState(.init(
+                id: raw.id,
+                runID: sessionID,
+                kind: raw.kind,
+                artifact: raw,
+                status: .valid
+            ))
             let artifact = StemAudioArtifact(
                 id: "corrected-\(role.rawValue)",
                 kind: .correctedStem(role),
@@ -583,7 +1132,7 @@ private func makeImmediateCorrectionResult(
         kind: .input44100,
         baseURL: directory
     )
-    let rawStems = StemRole.allCases.map { role in
+    let rawStems = request.runContract.activeRoles.map { role in
         makeControllerArtifact(id: "raw-\(role.rawValue)", kind: .rawStem(role), baseURL: directory)
     }
     let correctedRemix = makeControllerArtifact(
@@ -593,6 +1142,7 @@ private func makeImmediateCorrectionResult(
     )
     return StemWorkflowCorrectionResult(
         runID: request.runID,
+        runContract: request.runContract,
         sessionDirectory: directory,
         sourceDisplayName: request.sourceURL.deletingPathExtension().lastPathComponent,
         sourceFileInfo: try? AudioFileService.fileInfo(for: request.sourceURL),
@@ -641,7 +1191,7 @@ private func makeImmediateCorrectionResult(
             panEvidence: [:],
             reverbLossEvidence: [:],
             drumsBassCollision: 0,
-            vocalsOtherCollision: 0
+            vocalsAccompanimentCollision: 0
         )
     )
 }

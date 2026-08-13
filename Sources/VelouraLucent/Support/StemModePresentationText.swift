@@ -17,6 +17,8 @@ extension StemRole {
         case .bass: "ベース"
         case .other: "その他"
         case .vocals: "ボーカル"
+        case .guitar: "ギター"
+        case .piano: "ピアノ"
         }
     }
 }
@@ -40,6 +42,8 @@ extension StemArtifactKind {
         case .rawStem(.drums), .correctedStem(.drums): "metronome"
         case .rawStem(.bass), .correctedStem(.bass): "guitars"
         case .rawStem(.other), .correctedStem(.other): "waveform.path"
+        case .rawStem(.guitar), .correctedStem(.guitar): "guitars"
+        case .rawStem(.piano), .correctedStem(.piano): "pianokeys"
         case .correctedPureSum48000: "waveform"
         case .remixed48000: "slider.horizontal.3"
         case .finalMaster: "checkmark.seal"
@@ -57,6 +61,23 @@ extension StemArtifactKind {
              .rawStem:
             false
         }
+    }
+
+    var stemModeExportMenuTitle: String {
+        switch self {
+        case .correctedPureSum48000: "補正済み純粋加算"
+        case .remixed48000: "再ミックス済み"
+        case .finalMaster: "マスタリング済み"
+        case .correctedStem(let role): role.stemModeDisplayTitle
+        case .input44100,
+             .rawStem:
+            stemModeDisplayTitle
+        }
+    }
+
+    var isCorrectedStemArtifact: Bool {
+        if case .correctedStem = self { return true }
+        return false
     }
 
     /// 通常モードの入力・処理後・最終版に、純粋加算／再ミックスA/B用の
@@ -78,11 +99,13 @@ extension StemArtifactKind {
         switch self {
         case .correctedPureSum48000: 0
         case .remixed48000: 1
+        case .finalMaster: 2
         case .correctedStem(.drums): 10
         case .correctedStem(.bass): 11
         case .correctedStem(.other): 12
         case .correctedStem(.vocals): 13
-        case .finalMaster: 20
+        case .correctedStem(.guitar): 14
+        case .correctedStem(.piano): 15
         case .input44100: 100
         case .rawStem: 110
         }
@@ -221,5 +244,78 @@ extension StemMasteringSource {
         switch self {
         case .remix: "Stem再ミックス"
         }
+    }
+}
+
+extension StemModeProcessStepProgress {
+    func stemModeSidebarDetail(stemCount: Int) -> String? {
+        guard status == .running,
+              let detail,
+              !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return nil
+        }
+
+        if step == .inputPreparation {
+            return detail
+        }
+
+        if step.id == StemModeProcessStep.separation(stemCount: stemCount).id {
+            if let role = StemRole.allCases.first(where: {
+                detail == "\($0.rawValue)を保存・検証済み"
+            }) {
+                return "\(role.stemModeDisplayTitle)保存済み"
+            }
+            return detail
+        }
+
+        if step == .separatedValidation
+            || step == .correctedPureSumValidation
+            || step == .automaticRemixPlan
+            || step == .remixSave
+            || step == .finalization
+        {
+            return nil
+        }
+
+        if step.domain == .correction {
+            if step.id.hasSuffix(".analysis")
+                || step.id.contains(".stage.")
+                || step.id.hasSuffix(".save")
+            {
+                return nil
+            }
+            if step.id.hasSuffix(".transientRecovery") {
+                return "アタック比較中"
+            }
+        }
+
+        if step == .correctedPureSum {
+            return stemCount > 0 ? "\(stemCount)Stem加算中" : "Stem加算中"
+        }
+
+        if step == .remixGain {
+            return "相対変化基準"
+        }
+        if step == .remixMasking {
+            return "衝突区間のみ"
+        }
+        if step == .remixPan {
+            return "左右変化分のみ"
+        }
+        if step == .remixReverbSend {
+            return "共通returnへ送信中"
+        }
+        if step == .remixSharedReverb {
+            return "共通return生成中"
+        }
+        if step == .remixDryReturnMix {
+            return "dry＋return加算中"
+        }
+        if step == .remixValidation {
+            return "構造・有限値・ピーク確認中"
+        }
+
+        return detail
     }
 }

@@ -12,7 +12,7 @@ struct StemWaveformComparisonView: View {
     var body: some View {
         AudioWaveformWorkspaceView(
             preview: preview,
-            workspaceTitle: "4 Stem 波形",
+            workspaceTitle: "\(model.availableStemRoles.count) Stem 波形",
             playbackStatusText: playbackStatusText,
             tracks: [
                 AudioWaveformTrackPresentation(
@@ -60,12 +60,13 @@ struct StemWaveformComparisonView: View {
 
             LiquidGlassSegmentedPicker(
                 title: "表示するStem",
-                options: StemRole.allCases,
+                options: model.availableStemRoles,
                 selection: mainActorBinding(
                     get: { model.selectedStemPreviewRole },
                     set: { model.selectStemPreviewRole($0) }
                 ),
-                label: \.stemModeDisplayTitle
+                label: \.stemModeDisplayTitle,
+                maxWidth: 448
             )
         }
     }

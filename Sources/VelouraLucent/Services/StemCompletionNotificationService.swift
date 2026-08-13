@@ -15,19 +15,23 @@ enum StemCompletionNotificationStage: String, CaseIterable, Equatable, Sendable 
         }
     }
 
-    var body: String {
-        switch self {
+    func body(runContract: StemModelRunContract) -> String {
+        let modelName = runContract.separationModel.displayName
+        return switch self {
         case .correction:
-            "補正済み4Stemを確認できます。マスタリングは別操作で開始してください。"
+            "\(modelName)の補正済み\(runContract.stemCount)Stemを確認できます。再ミックスは別操作で開始してください。"
         case .mastering:
-            "Veloura LucentでStem Modeの最終版を確認できます。"
+            "\(modelName)・\(runContract.stemCount)StemのStem Mode最終版を確認できます。"
         }
     }
 }
 
 @MainActor
 protocol StemCompletionNotificationReporting: AnyObject {
-    func notifyStemCompletion(for stage: StemCompletionNotificationStage)
+    func notifyStemCompletion(
+        for stage: StemCompletionNotificationStage,
+        runContract: StemModelRunContract
+    )
 }
 
 @MainActor
@@ -36,7 +40,10 @@ final class NoOpStemCompletionNotificationReporter: StemCompletionNotificationRe
 
     private init() {}
 
-    func notifyStemCompletion(for stage: StemCompletionNotificationStage) {}
+    func notifyStemCompletion(
+        for stage: StemCompletionNotificationStage,
+        runContract: StemModelRunContract
+    ) {}
 }
 
 /// Stem-only completion notification boundary.
@@ -74,12 +81,15 @@ final class StemCompletionNotificationService: StemCompletionNotificationReporti
         self.logger = logger
     }
 
-    func notifyStemCompletion(for stage: StemCompletionNotificationStage) {
+    func notifyStemCompletion(
+        for stage: StemCompletionNotificationStage,
+        runContract: StemModelRunContract
+    ) {
         guard preferences.completionNotificationsEnabled else { return }
 
         let content = UNMutableNotificationContent()
         content.title = stage.title
-        content.body = stage.body
+        content.body = stage.body(runContract: runContract)
         content.sound = .default
 
         let request = UNNotificationRequest(

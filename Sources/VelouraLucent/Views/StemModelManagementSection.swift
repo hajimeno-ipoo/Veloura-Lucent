@@ -207,19 +207,24 @@ struct StemModelManagementSection: View {
 
     private var separationInformation: String {
         let manifest = modelManager.localInspection?.validatedManifest
+        let selectedModel = settings?.model ?? modelManager.selectedModel
         let modelName = manifest?.model.name
             ?? modelPresentation?.modelName
-            ?? modelManager.selectedModel.displayName
+            ?? selectedModel.displayName
         let revision = manifest?.model.revision
             ?? modelPresentation?.revision
             ?? "--"
-        if settings?.model == .bsRoformerSW
-            || modelManager.selectedModel == .bsRoformerSW {
+        let profile = StemProductionModelProfile.profile(for: selectedModel)
+        let roles = modelPresentation?.runContract.separationModel == selectedModel
+            ? modelPresentation?.runContract.activeRoles ?? profile.sourceOrder
+            : profile.sourceOrder
+        let outputDescription = "\(roles.count)Stem（\(roles.map(\.stemModeDisplayTitle).joined(separator: "、"))）"
+        if selectedModel == .bsRoformerSW {
             return """
             モデル　\(modelName)
             revision　\(revision)
             方式　STFT／62帯域分割／時間・周波数RoFormer
-            出力　6Stem → 既存4Stem
+            出力　\(outputDescription)
             設定（固定）　STFT FFT / hop / window　2048 / 512 / 2048
             　　　　　　帯域 / 周波数ビン　　　 62 / 1025
             　　　　　　推論チャンク　　　　　 801フレーム
@@ -247,7 +252,7 @@ struct StemModelManagementSection: View {
         モデル　\(modelName)
         revision　\(revision)
         方式　Demucs v4
-        出力　4Stem
+        出力　\(outputDescription)
         設定　shifts / overlap　\(shiftsAndOverlap)
         　　　split / segment　\(splitAndSegment)
         　　　batch size / run seed　\(batchSizeAndSeed)

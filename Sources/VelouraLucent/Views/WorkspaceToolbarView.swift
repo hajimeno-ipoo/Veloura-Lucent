@@ -70,7 +70,7 @@ struct WorkspaceToolbarView: View {
                     .help(
                         commandActions.isRemixRunning
                             ? "Stem再ミックスをキャンセルします"
-                            : "補正済み4Stemを自動値と手動上書きで再ミックスします"
+                            : commandActions.remixHelp
                     )
                     .disabled(
                         commandActions.isRemixRunning

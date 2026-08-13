@@ -45,6 +45,8 @@ struct StemPureSumResult: Sendable {
 enum StemMixError: LocalizedError, Equatable, Sendable {
     case duplicateRole(StemRole)
     case missingRole(StemRole)
+    case unexpectedRole(StemRole)
+    case invalidRoleContract
     case invalidSampleRate(role: StemRole)
     case missingChannels(role: StemRole)
     case emptyFrames(role: StemRole)
@@ -62,6 +64,10 @@ enum StemMixError: LocalizedError, Equatable, Sendable {
             return "Stem Modeの再ミックス入力に\(role.rawValue)が重複しています。"
         case .missingRole(let role):
             return "Stem Modeの再ミックス入力に\(role.rawValue)がありません。"
+        case .unexpectedRole(let role):
+            return "Stem Modeの再ミックス入力に契約外の\(role.rawValue)があります。"
+        case .invalidRoleContract:
+            return "Stem Modeの検証役割と純粋加算順が一致しません。"
         case .invalidSampleRate(let role):
             return "Stem Modeの\(role.rawValue)に有効なサンプルレートがありません。"
         case .missingChannels(let role):
@@ -87,16 +93,27 @@ enum StemMixError: LocalizedError, Equatable, Sendable {
 }
 
 struct StemMixService: Sendable {
-    // モデル契約のsource orderで入力検証結果を一定にする。
-    private static let validationOrder: [StemRole] = [.drums, .bass, .other, .vocals]
+    private static let defaultValidationRoles: [StemRole] = [.drums, .bass, .other, .vocals]
+    private static let defaultPureSumOrder: [StemRole] = [.vocals, .drums, .bass, .other]
 
-    /// Adds the four role signals in the canonical Float32 order without applying
+    /// Adds the contracted role signals in the explicit Float32 order without applying
     /// gain, pan, normalization, dynamics, or limiting.
-    func pureSum(stems: [StemMixInput]) throws -> StemPureSumResult {
-        let signals = try validatedSignals(stems)
-        let reference = try requiredSignal(for: .drums, in: signals)
+    func pureSum(
+        stems: [StemMixInput],
+        validationRoles: [StemRole] = Self.defaultValidationRoles,
+        order: [StemRole] = Self.defaultPureSumOrder
+    ) throws -> StemPureSumResult {
+        guard !validationRoles.isEmpty,
+              Set(validationRoles).count == validationRoles.count,
+              Set(order).count == order.count,
+              Set(validationRoles) == Set(order) else {
+            throw StemMixError.invalidRoleContract
+        }
+        let signals = try validatedSignals(stems, roles: validationRoles)
+        let reference = try requiredSignal(for: validationRoles[0], in: signals)
         let signal = try sum(
             signals,
+            order: order,
             sampleRate: reference.sampleRate,
             channelCount: reference.channels.count,
             frameCount: reference.frameCount
@@ -107,7 +124,10 @@ struct StemMixService: Sendable {
         )
     }
 
-    private func validatedSignals(_ stems: [StemMixInput]) throws -> [StemRole: AudioSignal] {
+    private func validatedSignals(
+        _ stems: [StemMixInput],
+        roles: [StemRole]
+    ) throws -> [StemRole: AudioSignal] {
         var signals: [StemRole: AudioSignal] = [:]
         for stem in stems {
             guard signals[stem.role] == nil else {
@@ -116,16 +136,20 @@ struct StemMixService: Sendable {
             signals[stem.role] = stem.signal
         }
 
-        for role in Self.validationOrder where signals[role] == nil {
+        let expectedRoles = Set(roles)
+        for role in signals.keys where !expectedRoles.contains(role) {
+            throw StemMixError.unexpectedRole(role)
+        }
+        for role in roles where signals[role] == nil {
             throw StemMixError.missingRole(role)
         }
 
-        for role in Self.validationOrder {
+        for role in roles {
             try validateSignalStructure(try requiredSignal(for: role, in: signals), role: role)
         }
 
-        let reference = try requiredSignal(for: .drums, in: signals)
-        for role in Self.validationOrder.dropFirst() {
+        let reference = try requiredSignal(for: roles[0], in: signals)
+        for role in roles.dropFirst() {
             let signal = try requiredSignal(for: role, in: signals)
             guard signal.sampleRate == reference.sampleRate else {
                 throw StemMixError.sampleRateMismatch(
@@ -195,12 +219,13 @@ struct StemMixService: Sendable {
 
     private func sum(
         _ signals: [StemRole: AudioSignal],
+        order: [StemRole],
         sampleRate: Double,
         channelCount: Int,
         frameCount: Int
     ) throws -> AudioSignal {
         try sum(
-            roles: [.vocals, .drums, .bass, .other],
+            roles: order,
             signals: signals,
             sampleRate: sampleRate,
             channelCount: channelCount,

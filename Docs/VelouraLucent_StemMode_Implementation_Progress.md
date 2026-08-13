@@ -1,8 +1,24 @@
 # Veloura Lucent — Stem Mode 実装進捗
 
-最終更新：2026-07-28
+最終更新：2026-08-13
 
-この文書は、現在の承認済み仕様と現行コードだけを根拠にする。廃止した永続run、checkpoint、schema、作業再開の過去記録は完了根拠に使用せず、本文から削除した。
+この文書はStem Mode実装の累積記録です。2026-07時点の4Stemチェック項目と、当時未実施だった実画面項目は履歴として残し、現在の完全6Stem化の完了判定には使用しません。現在仕様と検証結果は、直下の「2026-08-13時点の現在状態」と、個別の6Stem検証文書を根拠にします。廃止した永続run、checkpoint、schema、作業再開の過去記録は現在の完了根拠に使用しません。
+
+## 2026-08-13時点の現在状態
+
+- [x] HTDemucsは既存4Stem、BS-RoFormer-SWは`bass / drums / other / vocals / guitar / piano`の6Stemを、モデル別run契約に従って最終工程まで維持する
+- [x] BSのGuitar／PianoをOtherへ統合せず、raw保存、専用解析、役割別guard、補正、純粋加算、再ミックス、波形、個別A/B、書き出し、報告へ接続する
+- [x] 6本すべてに自動・手動gain、pan、reverb sendを持たせ、Vocals対`other + guitar + piano`は1つの共有伴奏判定を3本へ適用する
+- [x] 検証済み再ミックスだけを既存マスタリングへ渡し、通常モードの音質処理経路を変更しない
+- [x] HT／BS実モデルの補正、再ミックス、マスタリング全工程を完走し、BSのGuitar／Pianoをproduction exporterで各4形式へ書き出した
+- [x] 署名済みReleaseアプリのStem Modeで、BS 6役割、Guitar／Pianoのraw／補正後A/B再生、画面とコマンドメニューの書き出し、処理後モデル切替で結果契約が変わらないことを確認した
+- [x] 署名済みReleaseアプリの通常モードで、通常補正の選択、補正→マスタリングの2段階、入力／補正後／最終版比較、通常工程一覧、右設定、基本表示→詳細解析→基本表示の切替を確認した
+- [x] 現行差分の全805 tests／87 suitesを非並列で完走し、Debug／Release build、署名済みRelease app検証、最終差分監査を完了した
+- [x] 6.8秒音源と246.2秒代表実曲でHT／BSの処理時間、最大RSS、一時容量、artifact数、cleanupを変更前後比較した
+- [x] 原音、raw 6本、補正後6本、純粋加算、再ミックス、最終版の16 WAVをA/B用に保存し、SHA-256と全件decodeを確認した
+- [ ] A/B一式に対する利用者本人の主観評価。この項目は音質の最終判断として残し、実装・構造・安全性の自動合否へ置き換えない
+
+現在の詳細な根拠は、`StemGuitarPianoRoleAnalysisValidation_2026-08-12.md`、`StemSixStemRemixValidation_2026-08-12.md`、`StemSixStemMasteringReportValidation_2026-08-12.md`、`StemSixStemSessionStateValidation_2026-08-12.md`、`StemSixStemUIExportValidation_2026-08-12.md`、`StemSixStemLogsNotificationsDocumentationValidation_2026-08-12.md`、`StemSixStemBaselinePerformance_2026-08-12.md`に記録しています。
 
 ## チェック規約
 
@@ -11,7 +27,7 @@
 - 数値の変化だけで音質合否を決めない
 - サンプル音源の値を本番用閾値や固定mappingにしない
 
-## 現在の状態
+## 2026-07-28時点の状態（履歴）
 
 - [x] Stem Modeは通常モードと別画面で動作する
 - [x] Stem Mode画面の工程表示、直近ログ、全体進捗、詳細ログを通常モードの表示契約へ揃える

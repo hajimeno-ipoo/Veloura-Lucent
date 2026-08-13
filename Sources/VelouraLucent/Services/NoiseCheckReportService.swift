@@ -8,6 +8,41 @@ enum NoiseCheckReportService {
         correctionSettings: CorrectionSettings,
         settings: MasteringSettings
     ) -> NoiseCheckReport? {
+        makeReport(
+            input: input,
+            corrected: corrected,
+            mastered: mastered,
+            correctionSettings: Optional(correctionSettings),
+            settings: settings
+        )
+    }
+
+    /// Stem Modeの全体2mix用Noise Reportです。
+    ///
+    /// Stemごとの補正設定を架空の共通設定へまとめず、入力・再ミックス・最終版の
+    /// 測定値と実際のマスタリング設定だけから、全体の行とmastering候補を作ります。
+    static func makeMasteringOnlyReport(
+        input: NoiseMeasurementSnapshot?,
+        remixed: NoiseMeasurementSnapshot?,
+        mastered: NoiseMeasurementSnapshot?,
+        settings: MasteringSettings
+    ) -> NoiseCheckReport? {
+        makeReport(
+            input: input,
+            corrected: remixed,
+            mastered: mastered,
+            correctionSettings: nil,
+            settings: settings
+        )
+    }
+
+    private static func makeReport(
+        input: NoiseMeasurementSnapshot?,
+        corrected: NoiseMeasurementSnapshot?,
+        mastered: NoiseMeasurementSnapshot?,
+        correctionSettings: CorrectionSettings?,
+        settings: MasteringSettings
+    ) -> NoiseCheckReport? {
         guard input != nil || corrected != nil || mastered != nil else { return nil }
 
         let definitions = noiseDefinitions(correctionSettings: correctionSettings, masteringSettings: settings)
@@ -201,7 +236,9 @@ enum NoiseCheckReportService {
             appendIfUseful(definition.masteringAction(masteringDelta, mastered), to: &actions)
         }
         if actions.count < 2 && (correctionWorse || correctionWeak || (corrected == nil && inputWasHigh)) {
-            appendIfUseful(definition.correctionAction(correctionDelta, corrected ?? input), to: &actions)
+            if let correctionAction = definition.correctionAction {
+                appendIfUseful(correctionAction(correctionDelta, corrected ?? input), to: &actions)
+            }
         }
         return Array(actions.prefix(2))
     }
@@ -242,7 +279,10 @@ enum NoiseCheckReportService {
         }
     }
 
-    private static func noiseDefinitions(correctionSettings: CorrectionSettings, masteringSettings: MasteringSettings) -> [NoiseDefinition] {
+    private static func noiseDefinitions(
+        correctionSettings: CorrectionSettings?,
+        masteringSettings: MasteringSettings
+    ) -> [NoiseDefinition] {
         [
             NoiseDefinition(
                 id: "hiss",
@@ -257,7 +297,7 @@ enum NoiseCheckReportService {
                 correctionAction: correctionAction(
                     id: "hiss-correction",
                     title: "補正: 高域の自然さ / ノイズ検出しきい値",
-                    current: correctionSettings.noiseDetectionSensitivity,
+                    current: correctionSettings?.noiseDetectionSensitivity,
                     maximum: 1.0,
                     sensitivity: 6.0,
                     fallbackDB: 1.0,
@@ -290,7 +330,7 @@ enum NoiseCheckReportService {
                 correctionAction: correctionAction(
                     id: "sibilance-correction",
                     title: "補正: 高域の自然さ / エアー補完",
-                    current: correctionSettings.highNaturalness,
+                    current: correctionSettings?.highNaturalness,
                     maximum: 1.0,
                     sensitivity: 7.0,
                     fallbackDB: 1.0,
@@ -298,7 +338,7 @@ enum NoiseCheckReportService {
                     expectedEffect: "サ行の刺さりを抑えます",
                     caution: "声の息感まで丸くなる場合があります"
                 ),
-                masteringAction: correctionAction(
+                masteringAction: adjustmentAction(
                     id: "sibilance-mastering",
                     title: "マスタリング: ハーシュネス抑制",
                     current: masteringSettings.deEsserAmount,
@@ -324,7 +364,7 @@ enum NoiseCheckReportService {
                 correctionAction: correctionAction(
                     id: "shimmer-correction",
                     title: "補正: 高域の自然さ / エアー補完",
-                    current: correctionSettings.highNaturalness,
+                    current: correctionSettings?.highNaturalness,
                     maximum: 1.0,
                     sensitivity: 7.0,
                     fallbackDB: 1.0,
@@ -357,7 +397,7 @@ enum NoiseCheckReportService {
                 correctionAction: correctionAction(
                     id: "mud-correction",
                     title: "補正: 中低域整理",
-                    current: correctionSettings.lowMidCleanup,
+                    current: correctionSettings?.lowMidCleanup,
                     maximum: 1.0,
                     sensitivity: 6.0,
                     fallbackDB: 1.0,
@@ -390,7 +430,7 @@ enum NoiseCheckReportService {
                 correctionAction: correctionAction(
                     id: "hum-correction",
                     title: "補正: ノイズ検出しきい値 / 低域整理",
-                    current: correctionSettings.noiseDetectionSensitivity,
+                    current: correctionSettings?.noiseDetectionSensitivity,
                     maximum: 1.0,
                     sensitivity: 6.0,
                     fallbackDB: 1.0,
@@ -423,7 +463,7 @@ enum NoiseCheckReportService {
                 correctionAction: correctionAction(
                     id: "rumble-correction",
                     title: "補正: 低域整理",
-                    current: correctionSettings.lowCleanup,
+                    current: correctionSettings?.lowCleanup,
                     maximum: 1.0,
                     sensitivity: 6.0,
                     fallbackDB: 1.0,
@@ -456,7 +496,7 @@ enum NoiseCheckReportService {
                 correctionAction: correctionAction(
                     id: "room-correction",
                     title: "補正: 補正の強さ / 原音保持",
-                    current: correctionSettings.correctionIntensity,
+                    current: correctionSettings?.correctionIntensity,
                     maximum: 1.0,
                     sensitivity: 5.0,
                     fallbackDB: 1.0,
@@ -464,7 +504,7 @@ enum NoiseCheckReportService {
                     expectedEffect: "環境音と部屋鳴りを抑えます",
                     caution: "上げすぎると原音の自然さが下がります"
                 ),
-                masteringAction: correctionAction(
+                masteringAction: adjustmentAction(
                     id: "room-mastering",
                     title: "マスタリング: ダイナミクス保持",
                     current: masteringSettings.dynamicsRetention,
@@ -481,6 +521,33 @@ enum NoiseCheckReportService {
     }
 
     private static func correctionAction(
+        id: String,
+        title: String,
+        current: Float?,
+        maximum: Float,
+        sensitivity: Double,
+        fallbackDB: Double,
+        reasonPrefix: String,
+        expectedEffect: String,
+        caution: String,
+        stage: NoiseCheckAction.Stage = .correction
+    ) -> ((Double?, NoiseCheckValue?) -> NoiseCheckAction)? {
+        guard let current else { return nil }
+        return adjustmentAction(
+            id: id,
+            title: title,
+            current: current,
+            maximum: maximum,
+            sensitivity: sensitivity,
+            fallbackDB: fallbackDB,
+            reasonPrefix: reasonPrefix,
+            expectedEffect: expectedEffect,
+            caution: caution,
+            stage: stage
+        )
+    }
+
+    private static func adjustmentAction(
         id: String,
         title: String,
         current: Float,
@@ -597,6 +664,6 @@ private struct NoiseDefinition {
     let cautionDB: Double
     let warningDB: Double
     let masteringWorseningCautionDB: Double
-    let correctionAction: (Double?, NoiseCheckValue?) -> NoiseCheckAction
+    let correctionAction: ((Double?, NoiseCheckValue?) -> NoiseCheckAction)?
     let masteringAction: (Double?, NoiseCheckValue?) -> NoiseCheckAction
 }

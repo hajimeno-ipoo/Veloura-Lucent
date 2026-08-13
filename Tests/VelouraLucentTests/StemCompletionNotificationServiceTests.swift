@@ -42,29 +42,40 @@ struct StemCompletionNotificationServiceTests {
             preferences: PreferencesStub(completionNotificationsEnabled: false)
         )
 
-        service.notifyStemCompletion(for: .correction)
+        service.notifyStemCompletion(
+            for: .correction,
+            runContract: makeStemTestRunContract()
+        )
 
         #expect(notificationCenter.addedRequests.isEmpty)
     }
 
-    @Test("補正完了とマスタリング完了を別のStem専用通知として登録する", arguments: StemCompletionNotificationStage.allCases)
-    func enabledPreferenceRegistersDedicatedStemNotification(
-        stage: StemCompletionNotificationStage
-    ) throws {
-        let notificationCenter = NotificationCenterSpy()
-        let service = StemCompletionNotificationService(
-            notificationCenter: notificationCenter,
-            preferences: PreferencesStub(completionNotificationsEnabled: true)
-        )
+    @Test("補正完了とマスタリング完了をHT4／BS6の実行契約で別々に通知する")
+    func enabledPreferenceRegistersRunContractSpecificStemNotifications() throws {
+        for model in StemSeparationModel.allCases {
+            let runContract = makeStemTestRunContract(model: model)
+            for stage in StemCompletionNotificationStage.allCases {
+                let notificationCenter = NotificationCenterSpy()
+                let service = StemCompletionNotificationService(
+                    notificationCenter: notificationCenter,
+                    preferences: PreferencesStub(completionNotificationsEnabled: true)
+                )
 
-        service.notifyStemCompletion(for: stage)
+                service.notifyStemCompletion(
+                    for: stage,
+                    runContract: runContract
+                )
 
-        let request = try #require(notificationCenter.addedRequests.first)
-        #expect(notificationCenter.addedRequests.count == 1)
-        #expect(notificationCenter.addCompletionHandlerWasProvided)
-        #expect(request.identifier.hasPrefix("veloura-lucent-stem-\(stage.rawValue)-"))
-        #expect(request.content.title == stage.title)
-        #expect(request.content.body == stage.body)
-        #expect(request.content.sound != nil)
+                let request = try #require(notificationCenter.addedRequests.first)
+                #expect(notificationCenter.addedRequests.count == 1)
+                #expect(notificationCenter.addCompletionHandlerWasProvided)
+                #expect(request.identifier.hasPrefix("veloura-lucent-stem-\(stage.rawValue)-"))
+                #expect(request.content.title == stage.title)
+                #expect(request.content.body == stage.body(runContract: runContract))
+                #expect(request.content.body.contains(model.displayName))
+                #expect(request.content.body.contains("\(runContract.stemCount)Stem"))
+                #expect(request.content.sound != nil)
+            }
+        }
     }
 }

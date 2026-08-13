@@ -10,6 +10,7 @@ struct VelouraExportCommandAction: Identifiable {
 
 struct VelouraCommandActions {
     let processingMode: ProcessingMode
+    var stemCount: Int? = nil
     let canSwitchProcessingMode: Bool
     let canChooseInput: Bool
     let canRunCorrection: Bool
@@ -60,6 +61,11 @@ struct VelouraCommandActions {
             return "キャンセル中..."
         }
         return isRemixRunning ? "再ミックスをキャンセル" : "再ミックスを実行"
+    }
+
+    var remixHelp: String {
+        let count = stemCount.map(String.init) ?? "全"
+        return "補正済み\(count)Stemを自動値と手動上書きで再ミックスします"
     }
 
     var playbackCommandTitle: String {

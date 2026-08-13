@@ -28,8 +28,8 @@ struct AudioComparisonServiceTests {
         #expect(metrics.harshnessScore >= 0)
         #expect(metrics.centroidHz > 0)
         #expect(metrics.hf12Ratio >= 0)
-        #expect(metrics.bandEnergies.count == 8)
-        #expect(metrics.bandEnergies.map(\.id) == ["rumble", "warmth", "mud", "core", "presence", "sparkle", "air", "ultraAir"])
+        #expect(metrics.bandEnergies.count == AudioBandCatalog.comparisonBands.count)
+        #expect(metrics.bandEnergies.map(\.id) == AudioBandCatalog.comparisonBands.map(\.id))
         #expect(metrics.masteringBandEnergies.count == 4)
         #expect(metrics.shortTermLoudness.isEmpty == false)
         #expect(metrics.shortTermLoudness.allSatisfy { $0.levelDB.isFinite })
@@ -67,7 +67,7 @@ struct AudioComparisonServiceTests {
         #expect(metrics.averageSpectrum.count > 6_000)
         #expect(metrics.shortTermLoudness.count == 8)
         #expect(metrics.dynamics.count == 4)
-        #expect(metrics.bandEnergies.count == 8)
+        #expect(metrics.bandEnergies.count == AudioBandCatalog.comparisonBands.count)
         #expect(metrics.masteringBandEnergies.count == 4)
     }
 

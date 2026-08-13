@@ -1,6 +1,20 @@
 import Foundation
 @testable import VelouraLucent
 
+func makeStemTestRunContract(
+    model: StemSeparationModel = .htdemucs
+) -> StemModelRunContract {
+    let profile = StemProductionModelProfile.profile(for: model)
+    return StemModelRunContract(
+        separationModel: model,
+        modelIdentifier: profile.modelIdentifier,
+        modelOutputOrder: profile.sourceOrder,
+        activeRoles: profile.sourceOrder,
+        validationRoles: profile.sourceOrder,
+        pureSumOrder: profile.pureSumOrder
+    )
+}
+
 func makeStemTestInstallation(
     rootURL: URL,
     model: StemSeparationModel = .htdemucs

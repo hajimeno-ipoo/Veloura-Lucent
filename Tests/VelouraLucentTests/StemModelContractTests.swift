@@ -16,6 +16,10 @@ struct StemModelContractTests {
         #expect(contract.assetSetIdentifier == StemModelAssetValidator.expectedAssetSetIdentifier)
         #expect(contract.inputName == "batchData")
         #expect(contract.sourceOrder == [.drums, .bass, .other, .vocals])
+        #expect(contract.runContract.activeRoles == contract.sourceOrder)
+        #expect(contract.runContract.validationRoles == contract.sourceOrder)
+        #expect(contract.runContract.pureSumOrder == [.vocals, .drums, .bass, .other])
+        #expect(contract.runContract.stemCount == 4)
         #expect(contract.outputNames == [
             .drums: "drums",
             .bass: "bass",
@@ -52,7 +56,11 @@ struct StemModelContractTests {
 
         #expect(contract.separationModel == .bsRoformerSW)
         #expect(contract.identifier == "MrSimmo/BS_Roformer_SW-MLX:bs-roformer-sw")
-        #expect(contract.sourceOrder == [.drums, .bass, .other, .vocals])
+        #expect(contract.sourceOrder == [.bass, .drums, .other, .vocals, .guitar, .piano])
+        #expect(contract.runContract.activeRoles == contract.sourceOrder)
+        #expect(contract.runContract.validationRoles == contract.sourceOrder)
+        #expect(contract.runContract.pureSumOrder == [.bass, .drums, .other, .vocals, .guitar, .piano])
+        #expect(contract.runContract.stemCount == 6)
         #expect(contract.defaultSegmentSeconds == nil)
         #expect(manifest.model.licenseMetadata == "unknown")
         #expect(manifest.downloadPolicy.allowedRedirectHosts == [
@@ -64,6 +72,30 @@ struct StemModelContractTests {
             1_141,
             349_521_144,
         ])
+    }
+
+    @Test
+    func bsRoformerManifestRejectsLegacyFourStemOrder() throws {
+        let validator = StemModelAssetValidator(selectedModel: .bsRoformerSW)
+        let manifest = try validator.loadManifest(
+            at: repositoryRootURL.appending(
+                path: "Sources/VelouraLucent/Resources/StemModels/bs-roformer-sw-manifest.json"
+            )
+        )
+        let audioContract = StemModelAudioContract(
+            sampleRateHz: manifest.audioContract.sampleRateHz,
+            channelCount: manifest.audioContract.channelCount,
+            channelLayout: manifest.audioContract.channelLayout,
+            scalarType: manifest.audioContract.scalarType,
+            inputTensorLayout: manifest.audioContract.inputTensorLayout,
+            outputTensorLayout: manifest.audioContract.outputTensorLayout,
+            channelLayoutWithinSource: manifest.audioContract.channelLayoutWithinSource,
+            sourceOrder: [.drums, .bass, .other, .vocals]
+        )
+
+        #expect(throws: (any Error).self) {
+            try validator.validateManifest(replacing(manifest, audioContract: audioContract))
+        }
     }
 
     @Test
@@ -479,6 +511,7 @@ struct StemModelContractTests {
     private func replacing(
         _ manifest: StemModelManifest,
         model: StemModelManifestModel? = nil,
+        audioContract: StemModelAudioContract? = nil,
         downloadableModelAssets: [StemDownloadableModelAsset]? = nil
     ) -> StemModelManifest {
         StemModelManifest(
@@ -486,7 +519,7 @@ struct StemModelContractTests {
             assetSetIdentifier: manifest.assetSetIdentifier,
             model: model ?? manifest.model,
             runtimePins: manifest.runtimePins,
-            audioContract: manifest.audioContract,
+            audioContract: audioContract ?? manifest.audioContract,
             downloadPolicy: manifest.downloadPolicy,
             downloadableModelAssets: downloadableModelAssets ?? manifest.downloadableModelAssets,
             bundledRuntimeAssets: manifest.bundledRuntimeAssets,

@@ -3,8 +3,11 @@ import Foundation
 enum StemRemixServiceError: LocalizedError, Equatable, Sendable {
     case missingRole(StemRole)
     case duplicateRole(StemRole)
+    case unexpectedRole(StemRole)
+    case invalidRunContract
     case invalidSignal(StemRole)
     case structuralMismatch(StemRole)
+    case nonFiniteOutput
 
     var errorDescription: String? {
         switch self {
@@ -12,10 +15,16 @@ enum StemRemixServiceError: LocalizedError, Equatable, Sendable {
             "再ミックスに\(role.stemModeDisplayTitle)がありません。"
         case .duplicateRole(let role):
             "再ミックスに\(role.stemModeDisplayTitle)が重複しています。"
+        case .unexpectedRole(let role):
+            "再ミックスにrun契約外の\(role.stemModeDisplayTitle)があります。"
+        case .invalidRunContract:
+            "再ミックスの有効Stemと純粋加算順が一致しません。"
         case .invalidSignal(let role):
             "\(role.stemModeDisplayTitle)の音声構造またはサンプル値が不正です。"
         case .structuralMismatch(let role):
             "\(role.stemModeDisplayTitle)のsample rate、channel数、または長さが一致しません。"
+        case .nonFiniteOutput:
+            "再ミックス結果にNaNまたはInfinityが発生しました。"
         }
     }
 }
@@ -31,17 +40,19 @@ struct StemRemixSignal: Sendable {
 /// 自動設定は今回のraw／補正済みStemからだけ算出し、固定ジャンル値や候補順位付けを
 /// 使用しません。normalization、saturation、limitingは既存マスタリングへ委ねます。
 struct StemRemixService: Sendable {
-    // Pure-sum A/B contractと同じFloat32加算順を維持する。
-    private static let roleOrder: [StemRole] = [.vocals, .drums, .bass, .other]
-
-    func makeAutomaticPlan(stems: [StemRemixSignal]) throws -> StemRemixAutomaticPlan {
-        let signals = try validated(stems)
+    func makeAutomaticPlan(
+        stems: [StemRemixSignal],
+        runContract: StemModelRunContract
+    ) throws -> StemRemixAutomaticPlan {
+        let roleOrder = try validatedRoleOrder(for: runContract)
+        let accompanimentRoles = try accompanimentRoles(for: runContract)
+        let signals = try validated(stems, roles: runContract.validationRoles)
         var settingsByRole: [StemRole: StemRemixRoleSettings] = [:]
         var gainEvidence: [StemRole: Float] = [:]
         var panEvidence: [StemRole: Float] = [:]
         var reverbEvidence: [StemRole: Float] = [:]
 
-        for role in Self.roleOrder {
+        for role in roleOrder {
             let pair = try required(role, in: signals)
             let rawLevel = activeProgramRMSDB(pair.raw)
             let correctedLevel = activeProgramRMSDB(pair.corrected)
@@ -80,25 +91,32 @@ struct StemRemixService: Sendable {
             lower: 35,
             upper: 180
         )
-        let vocalsOtherCollision = try collisionScore(
+        let accompanimentBus = try combinedSignal(
+            roles: accompanimentRoles,
+            signals: signals.mapValues(\.corrected)
+        )
+        let vocalsAccompanimentCollision = try collisionScore(
             trigger: required(.vocals, in: signals).corrected,
-            target: required(.other, in: signals).corrected,
+            target: accompanimentBus,
             lower: 1_500,
-            upper: 5_500
+            upper: 5_500,
+            mismatchRole: .other
         )
 
         let maximumReverbLoss = reverbEvidence.values.max() ?? 0
-        let rawSignals = try Self.roleOrder.map { try required($0, in: signals).raw }
+        let rawSignals = try roleOrder.map { try required($0, in: signals).raw }
         let estimatedDecay = estimatedDecaySeconds(signals: rawSignals)
         let drumsToBassAmount = maskingAmount(from: drumsBassCollision)
-        let vocalsToOtherAmount = maskingAmount(from: vocalsOtherCollision)
+        let vocalsToAccompanimentAmount = maskingAmount(
+            from: vocalsAccompanimentCollision
+        )
         let settings = StemRemixSettings(
             roleValues: settingsByRole,
             masking: StemRemixMaskingSettings(
                 drumsToBassEnabled: drumsToBassAmount > 0,
                 drumsToBassAmount: drumsToBassAmount,
-                vocalsToOtherEnabled: vocalsToOtherAmount > 0,
-                vocalsToOtherAmount: vocalsToOtherAmount
+                vocalsToAccompanimentEnabled: vocalsToAccompanimentAmount > 0,
+                vocalsToAccompanimentAmount: vocalsToAccompanimentAmount
             ),
             reverbReturnLevel: clamp(maximumReverbLoss * 0.4, to: 0...0.3),
             reverbDecaySeconds: estimatedDecay
@@ -109,23 +127,26 @@ struct StemRemixService: Sendable {
             panEvidence: panEvidence,
             reverbLossEvidence: reverbEvidence,
             drumsBassCollision: drumsBassCollision,
-            vocalsOtherCollision: vocalsOtherCollision
+            vocalsAccompanimentCollision: vocalsAccompanimentCollision
         )
     }
 
     func render(
         stems: [StemRemixSignal],
         settings: StemRemixSettings,
+        runContract: StemModelRunContract,
         progressHandler: @escaping @Sendable (
             StemRemixRenderStage,
             StemRemixRenderStageState
         ) -> Void = { _, _ in }
     ) throws -> StemRemixRenderResult {
-        let signals = try validated(stems)
+        let roleOrder = try validatedRoleOrder(for: runContract)
+        let accompanimentRoles = try accompanimentRoles(for: runContract)
+        let signals = try validated(stems, roles: runContract.validationRoles)
         var gainedByRole: [StemRole: AudioSignal] = [:]
 
         progressHandler(.gain, .running)
-        for role in Self.roleOrder {
+        for role in roleOrder {
             let signal = try required(role, in: signals).corrected
             let roleSettings = settings.settings(for: role)
             gainedByRole[role] = applyGain(signal, gainDB: roleSettings.gainDB)
@@ -143,21 +164,34 @@ struct StemRemixService: Sendable {
                 amount: settings.masking.drumsToBassAmount
             )
         }
-        if settings.masking.vocalsToOtherEnabled,
-           settings.masking.vocalsToOtherAmount > 0 {
-            gainedByRole[.other] = try applyDynamicMasking(
+        if settings.masking.vocalsToAccompanimentEnabled,
+           settings.masking.vocalsToAccompanimentAmount > 0 {
+            let accompanimentBus = try combinedSignal(
+                roles: accompanimentRoles,
+                signals: gainedByRole
+            )
+            let sharedEnvelope = try dynamicMaskingEnvelope(
                 trigger: requiredProcessed(.vocals, in: gainedByRole),
-                target: requiredProcessed(.other, in: gainedByRole),
+                target: accompanimentBus,
                 lower: 1_500,
                 upper: 5_500,
-                amount: settings.masking.vocalsToOtherAmount
+                mismatchRole: .other
             )
+            for role in accompanimentRoles {
+                gainedByRole[role] = applyMaskingEnvelope(
+                    try requiredProcessed(role, in: gainedByRole),
+                    lower: 1_500,
+                    upper: 5_500,
+                    amount: settings.masking.vocalsToAccompanimentAmount,
+                    envelope: sharedEnvelope
+                )
+            }
         }
         progressHandler(.masking, .completed)
 
         progressHandler(.pan, .running)
         var processed: [StemRole: AudioSignal] = [:]
-        for role in Self.roleOrder {
+        for role in roleOrder {
             let gained = try requiredProcessed(role, in: gainedByRole)
             processed[role] = applyPan(
                 gained,
@@ -167,7 +201,7 @@ struct StemRemixService: Sendable {
         progressHandler(.pan, .completed)
 
         progressHandler(.reverbSend, .running)
-        let send = try sum(Self.roleOrder.map { role in
+        let send = try sum(roleOrder.map { role in
             let signal = try requiredProcessed(role, in: processed)
             return applyLinearGain(
                 signal,
@@ -188,8 +222,11 @@ struct StemRemixService: Sendable {
         progressHandler(.sharedReverb, .completed)
 
         progressHandler(.dryReturnMix, .running)
-        let dry = try sum(Self.roleOrder.map { try requiredProcessed($0, in: processed) })
+        let dry = try sum(roleOrder.map { try requiredProcessed($0, in: processed) })
         let remixed = try add(dry, scaledReturn)
+        guard remixed.channels.allSatisfy({ $0.allSatisfy(\.isFinite) }) else {
+            throw StemRemixServiceError.nonFiniteOutput
+        }
         progressHandler(.dryReturnMix, .completed)
         return StemRemixRenderResult(
             signal: remixed,
@@ -200,10 +237,15 @@ struct StemRemixService: Sendable {
     }
 
     private func validated(
-        _ stems: [StemRemixSignal]
+        _ stems: [StemRemixSignal],
+        roles: [StemRole]
     ) throws -> [StemRole: StemRemixSignal] {
         var values: [StemRole: StemRemixSignal] = [:]
+        let expectedRoles = Set(roles)
         for stem in stems {
+            guard expectedRoles.contains(stem.role) else {
+                throw StemRemixServiceError.unexpectedRole(stem.role)
+            }
             guard values[stem.role] == nil else {
                 throw StemRemixServiceError.duplicateRole(stem.role)
             }
@@ -214,16 +256,69 @@ struct StemRemixService: Sendable {
             }
             values[stem.role] = stem
         }
-        for role in Self.roleOrder where values[role] == nil {
+        for role in roles where values[role] == nil {
             throw StemRemixServiceError.missingRole(role)
         }
-        let reference = try required(.drums, in: values).corrected
-        for role in Self.roleOrder {
+        guard let referenceRole = roles.first else {
+            throw StemRemixServiceError.invalidRunContract
+        }
+        let reference = try required(referenceRole, in: values).corrected
+        for role in roles {
             guard structuresMatch(reference, try required(role, in: values).corrected) else {
                 throw StemRemixServiceError.structuralMismatch(role)
             }
         }
         return values
+    }
+
+    private func validatedRoleOrder(
+        for runContract: StemModelRunContract
+    ) throws -> [StemRole] {
+        let roles = runContract.validationRoles
+        let order = runContract.pureSumOrder
+        guard !roles.isEmpty,
+              Set(roles).count == roles.count,
+              Set(order).count == order.count,
+              Set(runContract.activeRoles) == Set(roles),
+              Set(order) == Set(roles),
+              roles.contains(.drums),
+              roles.contains(.bass),
+              roles.contains(.vocals) else {
+            throw StemRemixServiceError.invalidRunContract
+        }
+        return order
+    }
+
+    private func accompanimentRoles(
+        for runContract: StemModelRunContract
+    ) throws -> [StemRole] {
+        let accompaniment = runContract.pureSumOrder.filter {
+            $0 != .drums && $0 != .bass && $0 != .vocals
+        }
+        let expected: Set<StemRole> = switch runContract.separationModel {
+        case .htdemucs:
+            [.other]
+        case .bsRoformerSW:
+            [.other, .guitar, .piano]
+        }
+        guard Set(accompaniment) == expected else {
+            throw StemRemixServiceError.invalidRunContract
+        }
+        return accompaniment
+    }
+
+    private func combinedSignal(
+        roles: [StemRole],
+        signals: [StemRole: AudioSignal]
+    ) throws -> AudioSignal {
+        let ordered = try roles.map { try requiredProcessed($0, in: signals) }
+        guard ordered.count > 1 else {
+            guard let only = ordered.first else {
+                throw StemRemixServiceError.invalidRunContract
+            }
+            return only
+        }
+        return try sum(ordered)
     }
 
     private func validate(_ signal: AudioSignal, role: StemRole) throws {
@@ -449,10 +544,11 @@ struct StemRemixService: Sendable {
         trigger: AudioSignal,
         target: AudioSignal,
         lower: Double,
-        upper: Double
+        upper: Double,
+        mismatchRole: StemRole = .drums
     ) throws -> Float {
         guard structuresMatch(trigger, target) else {
-            throw StemRemixServiceError.structuralMismatch(.drums)
+            throw StemRemixServiceError.structuralMismatch(mismatchRole)
         }
         let triggerBand = bandPass(trigger.monoMixdown(), lower: lower, upper: upper, sampleRate: trigger.sampleRate)
         let targetBand = bandPass(target.monoMixdown(), lower: lower, upper: upper, sampleRate: target.sampleRate)
@@ -511,8 +607,31 @@ struct StemRemixService: Sendable {
         upper: Double,
         amount: Float
     ) throws -> AudioSignal {
+        let envelope = try dynamicMaskingEnvelope(
+            trigger: trigger,
+            target: target,
+            lower: lower,
+            upper: upper,
+            mismatchRole: .bass
+        )
+        return applyMaskingEnvelope(
+            target,
+            lower: lower,
+            upper: upper,
+            amount: amount,
+            envelope: envelope
+        )
+    }
+
+    private func dynamicMaskingEnvelope(
+        trigger: AudioSignal,
+        target: AudioSignal,
+        lower: Double,
+        upper: Double,
+        mismatchRole: StemRole
+    ) throws -> [Float] {
         guard structuresMatch(trigger, target) else {
-            throw StemRemixServiceError.structuralMismatch(.bass)
+            throw StemRemixServiceError.structuralMismatch(mismatchRole)
         }
         let triggerBand = bandPass(
             trigger.monoMixdown(),
@@ -531,6 +650,31 @@ struct StemRemixService: Sendable {
         let triggerFloor = Float(percentile(triggerEnvelope.map(Double.init), 55))
         let targetFloor = Float(percentile(targetEnvelope.map(Double.init), 45))
         let maximumTrigger = max(Float(percentile(triggerEnvelope.map(Double.init), 95)), triggerFloor + 1e-9)
+
+        return triggerEnvelope.indices.map { index in
+            guard triggerEnvelope[index] > triggerFloor,
+                  targetEnvelope[index] > targetFloor else {
+                return 0
+            }
+            return min(
+                max(
+                    (triggerEnvelope[index] - triggerFloor)
+                        / max(maximumTrigger - triggerFloor, 1e-9),
+                    0
+                ),
+                1
+            )
+        }
+    }
+
+    private func applyMaskingEnvelope(
+        _ target: AudioSignal,
+        lower: Double,
+        upper: Double,
+        amount: Float,
+        envelope: [Float]
+    ) -> AudioSignal {
+        guard envelope.count == target.frameCount else { return target }
         let safeAmount = clamp(amount, to: 0...0.5)
 
         let channels = target.channels.map { channel in
@@ -541,19 +685,7 @@ struct StemRemixService: Sendable {
                 sampleRate: target.sampleRate
             )
             return channel.indices.map { index in
-                guard triggerEnvelope[index] > triggerFloor,
-                      targetEnvelope[index] > targetFloor else {
-                    return channel[index]
-                }
-                let normalized = min(
-                    max(
-                        (triggerEnvelope[index] - triggerFloor)
-                            / max(maximumTrigger - triggerFloor, 1e-9),
-                        0
-                    ),
-                    1
-                )
-                return channel[index] - targetBand[index] * safeAmount * normalized
+                channel[index] - targetBand[index] * safeAmount * envelope[index]
             }
         }
         return AudioSignal(channels: channels, sampleRate: target.sampleRate)

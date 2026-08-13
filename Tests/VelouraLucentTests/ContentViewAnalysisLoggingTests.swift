@@ -9,16 +9,31 @@ struct ContentViewAnalysisLoggingTests {
         #expect(WorkspaceLayoutMetrics.sidebarMinimumWidth == 220)
         #expect(WorkspaceLayoutMetrics.sidebarIdealWidth == 260)
         #expect(WorkspaceLayoutMetrics.sidebarMaximumWidth == 300)
-        #expect(WorkspaceLayoutMetrics.minimumCenterWidth == 620)
-        #expect(WorkspaceLayoutMetrics.inspectorWidth == 440)
-        #expect(WorkspaceLayoutMetrics.inspectorVisibleMinimumWindowWidth == 1_380)
-        #expect(WorkspaceLayoutMetrics.inspectorHiddenMinimumWindowWidth == 960)
+        #expect(WorkspaceLayoutMetrics.minimumCenterWidth == 680)
+        #expect(WorkspaceLayoutMetrics.inspectorWidth == 480)
+        #expect(WorkspaceLayoutMetrics.inspectorVisibleMinimumWindowWidth == 1_500)
+        #expect(WorkspaceLayoutMetrics.inspectorHiddenMinimumWindowWidth == 1_000)
         #expect(WorkspaceLayoutMetrics.minimumWindowHeight == 720)
+        #expect(WorkspaceLayoutMetrics.recentLogMinimumWidth == 260)
+        #expect(WorkspaceLayoutMetrics.workflowMinimumWidth(stageCount: 4) == 260)
+        #expect(WorkspaceLayoutMetrics.workflowMinimumWidth(stageCount: 5) == 360)
+        #expect(
+            WorkspaceLayoutMetrics.recentLogMinimumWidth
+                + 22
+                + WorkspaceLayoutMetrics.workflowMinimumWidth(stageCount: 5)
+                + 36
+                <= WorkspaceLayoutMetrics.minimumCenterWidth
+        )
         #expect(
             WorkspaceLayoutMetrics.sidebarMaximumWidth
                 + WorkspaceLayoutMetrics.minimumCenterWidth
                 + WorkspaceLayoutMetrics.inspectorWidth
                 < WorkspaceLayoutMetrics.inspectorVisibleMinimumWindowWidth
+        )
+        #expect(
+            WorkspaceLayoutMetrics.sidebarMaximumWidth
+                + WorkspaceLayoutMetrics.minimumCenterWidth
+                < WorkspaceLayoutMetrics.inspectorHiddenMinimumWindowWidth
         )
     }
 

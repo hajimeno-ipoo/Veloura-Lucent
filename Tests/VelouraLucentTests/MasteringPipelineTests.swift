@@ -11,7 +11,7 @@ struct MasteringPipelineTests {
         defer { try? FileManager.default.removeItem(at: tempDirectory) }
         let inputBaseName = "cm-\(String(UUID().uuidString.prefix(8)).lowercased())"
         let inputURL = tempDirectory.appending(path: "\(inputBaseName).wav")
-        try makeTestTone(at: inputURL)
+        try makeTestTone(at: inputURL, duration: 0.5)
         let (saveEvents, saveContinuation) = AsyncStream<Void>.makeStream()
         let continueSave = DispatchSemaphore(value: 0)
         let taskFinished = DispatchSemaphore(value: 0)
@@ -782,9 +782,9 @@ struct MasteringPipelineTests {
         #expect(temporaryOutput.pathExtension == AudioFileService.outputFileExtension)
     }
 
-    private func makeTestTone(at url: URL) throws {
+    private func makeTestTone(at url: URL, duration: Double = 3) throws {
         let sampleRate = 48_000.0
-        let frameCount = Int(sampleRate * 3)
+        let frameCount = Int(sampleRate * duration)
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
         buffer.frameLength = AVAudioFrameCount(frameCount)

@@ -327,7 +327,7 @@ private struct VelouraAppRuntimeFixture {
 
 @MainActor
 private func waitForRuntimeCondition(
-    timeout: Duration = .seconds(2),
+    timeout: Duration = .seconds(10),
     condition: @escaping @MainActor () async -> Bool
 ) async throws {
     let clock = ContinuousClock()

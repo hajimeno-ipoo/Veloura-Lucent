@@ -23,6 +23,12 @@ struct StemRoleAnalysisService: Sendable {
         processingSignal48000: AudioSignal
     ) throws -> StemRoleAnalysisResult {
         let frameCount = try validateProcessingSignal(processingSignal48000)
+        if role == .guitar || role == .piano {
+            return try StemDedicatedInstrumentAnalysisService().analyze(
+                role: role,
+                processingSignal48000: processingSignal48000
+            )
+        }
         let analyzed = try Self.makeAnalysisFrames(analysisSignal: processingSignal48000)
         let distributions = try Self.makeFeatureDistributions(role: role, frames: analyzed.frames)
         let protectionProfile = try Self.makeProtectionProfile(
@@ -506,6 +512,8 @@ private extension StemRoleAnalysisService {
                 .otherAmbienceContinuity: ambience,
                 .otherStereoSpatialBalance: frames.map(\.stereoSpatialBalance)
             ]
+        case .guitar, .piano:
+            preconditionFailure("Guitar／Pianoは専用解析経路だけを使用します")
         }
     }
 
@@ -609,6 +617,8 @@ private extension StemRoleAnalysisService {
                 .otherSpace: space,
                 .otherStereo: stereo,
             ]
+        case .guitar, .piano:
+            preconditionFailure("Guitar／Pianoは専用保護解析経路だけを使用します")
         }
     }
 
@@ -642,6 +652,8 @@ private extension StemRoleAnalysisService {
                 .init(feature: .otherAmbienceContinuity, rule: .preserveMinimum, unit: .normalized),
                 .init(feature: .otherStereoSpatialBalance, rule: .preserveStability, unit: .normalized)
             ]
+        case .guitar, .piano:
+            preconditionFailure("Guitar／Pianoは専用特徴定義だけを使用します")
         }
     }
 

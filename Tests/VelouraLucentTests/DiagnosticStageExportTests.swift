@@ -79,7 +79,7 @@ struct DiagnosticStageExportTests {
         #expect(report.contains("## 補正工程 前stage差分"))
         #expect(report.contains("## マスタリング工程 前stage差分"))
         #expect(report.contains("Δ16-20kHz"))
-        #expect(try diagnosticWAVs(in: correctionDiagnostics).count == 11)
+        #expect(try diagnosticWAVs(in: correctionDiagnostics).count == 12)
         #expect(try diagnosticWAVs(in: masteringDiagnostics).count == 17)
     }
 
@@ -125,7 +125,7 @@ struct DiagnosticStageExportTests {
             durationSeconds: 1.2
         )
 
-        #expect(correctionFiles.count == 11)
+        #expect(correctionFiles.count == 12)
         #expect(masteringFiles.count == 17)
         #expect(correctionFiles.contains { $0.lastPathComponent.contains("02_correction_denoise") })
         #expect(correctionFiles.contains { $0.lastPathComponent.contains("08_correction_correctionHighPreserve") })

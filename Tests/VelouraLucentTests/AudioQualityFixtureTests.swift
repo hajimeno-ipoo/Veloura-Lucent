@@ -19,7 +19,7 @@ struct AudioQualityFixtureTests {
             #expect(signal.frameCount > 0)
             #expect(metrics.integratedLoudnessLUFS.isFinite)
             #expect(metrics.truePeakDBFS.isFinite)
-            #expect(metrics.bandEnergies.count == 8)
+            #expect(metrics.bandEnergies.count == AudioBandCatalog.comparisonBands.count)
         }
     }
 

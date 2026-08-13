@@ -2,7 +2,7 @@
 
 Veloura Lucentは、音声ファイルの解析、ノイズ除去、補正、マスタリング、試聴比較、品質確認、書き出しを行うmacOSネイティブアプリです。
 
-アプリには、2mixをそのまま補正する`通常補正`と、2mixを4Stemへ分離してStemごとに補正する`Stem Mode`があります。どちらも、補正とマスタリングを別々のユーザー操作で実行する二段階構成です。
+アプリには、2mixをそのまま補正する`通常補正`と、選択モデルの契約に従って2mixを4Stemまたは6Stemへ分離し、Stemごとに補正する`Stem Mode`があります。通常補正は補正とマスタリングの二段階、Stem Modeは補正、再ミックス、マスタリングの三段階を別々のユーザー操作で実行します。
 
 アプリ本体はSwiftとSwiftUIで動作し、実行時にPythonやGradioを必要としません。
 
@@ -11,12 +11,13 @@ Veloura Lucentは、音声ファイルの解析、ノイズ除去、補正、マ
 | 項目 | 通常補正 | Stem Mode |
 | --- | --- | --- |
 | 入力 | 2mix | 2mix |
-| 補正前処理 | 入力音源を解析 | 入力2mixを解析し、ドラム、ベース、その他、ボーカルへ分離 |
+| 補正前処理 | 入力音源を解析 | 入力2mixを解析し、HTDemucsでは4Stem、BS-RoFormer-SWではGuitar／Pianoを含む6Stemへ分離 |
 | 補正 | 2mixへノイズ除去と補正を実行 | Stemごとに解析し、役割に応じてノイズ除去と補正を実行 |
-| 補正後 | 補正済み2mixを一時保存 | 補正済み4Stemと純粋加算した補正後2mixを一時保存 |
-| マスタリング | 補正済み2mixへ実行 | 補正後2mixへ既存マスタリングを実行 |
+| 補正後 | 補正済み2mixを一時保存 | 補正済み4／6Stemと、係数・正規化・pan・dynamics・limiterなしの純粋加算を一時保存 |
+| 再ミックス | なし | 全有効Stemのgain、pan、reverb send、自動値と手動上書きを適用し、検証済み再ミックスを一時保存 |
+| マスタリング | 補正済み2mixへ実行 | 検証済みStem再ミックスへ既存マスタリングを実行 |
 | 最終成果物 | 通常モード最終版 | Stem Mode最終版 |
-| 書き出し | 補正後、最終版 | 補正後2mix、補正済み4Stem、Stem Mode最終版 |
+| 書き出し | 補正後、最終版 | 補正済み純粋加算、Stem再ミックス、補正済み4／6Stem、Stem Mode最終版 |
 
 通常補正とStem Modeは、ツールバーまたはメニューバーの`表示 > モード`から切り替えられます。処理中はモードを切り替えません。
 
@@ -26,9 +27,10 @@ Veloura Lucentは、音声ファイルの解析、ノイズ除去、補正、マ
 | --- | --- |
 | 入力 | ツールバーの`音声を選ぶ`、または中央画面へのドラッグ＆ドロップで音声ファイルを読み込みます |
 | 補正 | `弱い`、`標準`、`強い`の補正プリセットと、補正の強さ、原音保持、低域整理、芯保護などの詳細設定があります |
-| Stem別補正 | ドラム、ベース、その他、ボーカルごとに補正プリセットと設定を保持します |
+| Stem別補正 | HTDemucsのドラム、ベース、その他、ボーカル、またはBS-RoFormer-SWのベース、ドラム、その他、ボーカル、ギター、ピアノごとに補正プリセットと設定を保持します |
+| Stem再ミックス | 全有効Stemに個別gain、pan、reverb sendを持ち、自動値とユーザーが変更した項目だけの手動値を使います |
 | マスタリング | `自然`、`聴きやすく整える`、`押し出し強め`、`安全AI配信`、`YouTube / Spotify向け`、`リリース音圧重視`の仕上がりプロファイルがあります |
-| 試聴比較 | 入力、補正後、最終版をA/B再生で聴き比べます。Stem Modeでは、選択中Stemの分離直後と補正後も独立した操作欄で確認できます |
+| 試聴比較 | 入力、処理後、最終版をA/B再生で聴き比べます。Stem Modeでは、選択中Stemの分離直後と補正後、補正済み純粋加算とStem再ミックスも、それぞれ独立した操作欄で確認できます |
 | 解析表示 | 波形、平均スペクトル、ベクトルスコープ、ラウドネスメーター、スペクトログラム、詳細解析を表示します |
 | Stem固有解析 | Stemごとの測定値、役割別解析、DSPの最終適用結果、役割別guard、rawへ戻した理由を表示します |
 | 再ミックス固有解析 | 再合成、残差、位相、相関、帯域、ノイズ、分離アーティファクトを確認します |
@@ -41,10 +43,10 @@ Veloura Lucentは、音声ファイルの解析、ノイズ除去、補正、マ
 
 ```mermaid
 flowchart LR
-    Toolbar["上部ツールバー<br/>モード / 入力 / 補正 / マスタリング / 書き出し"]
+    Toolbar["上部ツールバー<br/>モード / 入力 / 補正 / Stem時のみ再ミックス / マスタリング / 書き出し"]
     Sidebar["左サイドバー<br/>音源 / Stem / 工程"]
     Workspace["中央画面<br/>基本表示 / 詳細解析"]
-    Inspector["右サイド<br/>補正 / マスタリング / アプリ"]
+    Inspector["右サイド<br/>補正 / Stem時のみ再ミックス / マスタリング / アプリ"]
     Footer["下部<br/>直近ログ / 全体進捗"]
 
     Toolbar --> Workspace
@@ -53,13 +55,13 @@ flowchart LR
     Workspace --> Footer
 ```
 
-外側の画面構成と操作方法は両モードで共通です。Stem Modeでは、通常モードの画面へStem処理に必要な表示と設定だけを追加します。
+外側の画面構成とツールバーは両モードで共通です。左サイドバー、中央画面、右サイド、下部はモード別の専用画面へ切り替わります。
 
 ### 左サイドバー
 
-- 入力音源、補正後、最終版を表示します。
-- 補正工程とマスタリング工程を、現在の状態、進捗率、工程一覧とともに表示します。
-- Stem Modeでは、4Stemの分離状態、補正状態、rawへ戻した状態も表示します。
+- 通常補正では、入力音源、補正後、最終版を表示します。
+- Stem Modeでは、入力2mix、補正済み純粋加算、Stem再ミックス、Stem Mode最終版を表示します。
+- 各モードの工程を、現在の状態、進捗率、工程一覧とともに表示します。Stem Modeでは、選択モデルに対応する4／6Stemの分離状態、補正状態、rawへ戻した状態も表示します。
 
 ### 中央画面
 
@@ -72,32 +74,35 @@ flowchart LR
 
 Stem Modeの基本表示には、選択したStemの`分離直後`と`補正後`を上下に表示する独立した波形・再生操作があります。この2段も初期高さは96 ptで、それぞれ下端から個別に高さを変えられます。共通の時間目盛り、カーソル位置、再生位置を中心にした拡大率を使い、通常モードの波形拡大状態とは別に管理され、Stemを切り替えると全体表示へ戻ります。
 
-Stem Modeの詳細解析は、入力2mix、補正後再ミックス、Stem Mode最終版の共通比較を中核にし、次の開閉式表示を追加します。
+補正済み純粋加算とStem再ミックスにも、2段の波形と専用のA/B再生操作があります。試聴時だけ音量差を揃え、保存した音声は変更しません。
 
-- `Stem固有解析`: 4Stemそれぞれのrawと補正後の測定値、役割別解析、各DSPの最終適用結果、役割別guard、raw使用理由
-- `再ミックス固有解析`: raw 4Stemと補正後4Stemの純粋加算に対する再合成、残差、位相、相関、帯域、ノイズ、分離アーティファクト
+Stem Modeの詳細解析は、入力2mix、現在の処理後音源（補正済み純粋加算または実行済みStem再ミックス）、Stem Mode最終版の共通比較を中核にし、次の開閉式表示を追加します。
+
+- `Stem固有解析`: 実行契約の4／6Stemそれぞれのrawと補正後の測定値、役割別解析、各DSPの最終適用結果、役割別guard、raw使用理由
+- `再ミックス固有解析`: raw 4／6Stem、補正済み純粋加算、実行済み再ミックスに対する再合成、残差、位相、相関、帯域、ノイズ、分離アーティファクト
 
 これらの解析値だけで完成音を自動選択することはありません。
 
 ### 右サイド
 
-右サイドは`補正`、`マスタリング`、`アプリ`に分かれています。
+通常補正の右サイドは`補正`、`マスタリング`、`アプリ`に分かれています。Stem Modeでは、その間に`再ミックス`が加わります。
 
 - `補正`: 補正プリセット、基本、掃除と修復、上級
+- `再ミックス`（Stem Modeのみ）: Stem別の音量、パン、共通リバーブへの送信量、Stem間の衝突回避、共通リバーブの戻り量
 - `マスタリング`: 仕上がりプロファイル、基本設定、音色設定、詳細設定
 - `アプリ`: 背景の透明感、背景ぼかしの5段階調整、完了通知、解析モード
 
-Stem Modeの補正タブでは、ドラム、ベース、その他、ボーカルを選び、それぞれの補正設定を調整します。設定値は処理量の上限であり、解析とguardにより不要な処理は行いません。
+Stem Modeの補正タブでは、HTDemucsなら4役割、BS-RoFormer-SWならGuitar／Pianoを含む6役割から選び、それぞれの補正設定を調整します。設定値は処理量の上限であり、解析とguardにより不要な処理は行いません。
 
 Stem Modeのアプリタブには`Stem分離`があります。モデル状態、再検証、取得・修復、現在使用するモデルと分離条件を確認できます。
 
-3つの設定タブの下には独立した`解析結果と品質確認`があり、入力、補正後、最終版の主要測定値、品質確認、再ミックス固有の確認事項、完了後レポートを表示します。
+設定タブの下には独立した`解析結果と品質確認`があり、入力、処理後、最終版の主要測定値、品質確認、Stem Modeでは再ミックス固有の確認事項、完了後レポートを表示します。
 
 ### 下部
 
 - `直近ログ`: 最近の処理内容を最大4件表示します。
-- `詳細ログ`: 補正ログとマスタリングログを分け、入力解析から完了までを工程順に表示します。
-- `全体進捗`: 入力解析、補正処理、マスタリング、書き出しの状態を表示します。
+- `詳細ログ`: 補正、再ミックス、マスタリングのログを分け、入力解析から完了までを工程順に表示します。
+- `全体進捗`: 入力解析、補正処理、再ミックス、マスタリング、書き出しの状態を表示します。
 
 ## 通常補正の処理
 
@@ -132,8 +137,9 @@ flowchart TB
 12. シマー制限
 13. 高域保持
 14. 低中域確認
-15. ピーク保護
-16. 書き出し
+15. 低域位相確認
+16. ピーク保護
+17. 書き出し
 
 補正設定には、補正の強さ、原音保持、低域整理、中低域整理、プレゼンス修復、エアー修復、高域の自然さ、ノイズ検出しきい値、高域補完量、foldover補完量、芯保護、ステレオ保護があります。
 
@@ -163,7 +169,7 @@ flowchart TB
 
 ## Stem Modeの処理
 
-Stem Modeも、補正とマスタリングを一度に実行しません。
+Stem Modeは、補正、再ミックス、マスタリングを一度に実行しません。
 
 ### 補正段
 
@@ -173,28 +179,30 @@ flowchart TB
     B["入力2mixを表示用に解析"]
     C["ユーザーが補正を実行"]
     D["処理用入力を準備・解析"]
-    E["Demucsで4Stem分離"]
+    E["選択モデルで4／6Stem分離"]
     F["分離結果を検証"]
     G["各Stemを解析"]
     H["各Stemをノイズ除去・補正"]
-    I["補正済み4Stemを保存・検証"]
-    J["raw 4Stemと補正済み4Stemを純粋加算"]
-    K["再ミックスを解析・検証"]
-    L["補正完了<br/>マスタリング待ち"]
+    I["補正済み4／6Stemを保存・検証"]
+    J["raw 4／6Stemと補正済み4／6Stemを純粋加算"]
+    K["純粋加算を解析・検証"]
+    L["補正完了<br/>再ミックス待ち"]
 
     A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K --> L
 ```
 
-AIモデルの役割は4Stem分離までです。分離後は、通常モードで使用している解析、NoiseMeasurement、route、下位DSP、DSP内部guardを中核にし、Stemの役割別解析と保護guardを追加します。
+AIモデルの役割は、HTDemucsでは4Stem、BS-RoFormer-SWでは6Stemの分離までです。分離後は、通常モードで使用している解析、NoiseMeasurement、route、下位DSP、DSP内部guardを中核にし、Stemの役割別解析と保護guardを追加します。
 
-入力2mixの表示用解析は、通常モードと同じく音源を選択した時点で開始します。補正開始後の処理用解析は、Demucsへ渡す44.1 kHz音源とその後の検証に使用します。
+入力2mixの表示用解析は、通常モードと同じく音源を選択した時点で開始します。補正開始後の処理用解析は、選択モデルへ渡す44.1 kHz音源とその後の検証に使用します。
 
-4Stemは次の役割で処理します。
+Stemは次の役割で処理します。GuitarとPianoはBS-RoFormer-SWの6Stem実行時だけ有効です。
 
 - `ドラム`: アタック、トランジェント、シンバルの余韻を保護
 - `ベース`: 基音、倍音、50/60 Hz付近の音程成分、低域位相を保護
 - `その他`: 残響、アンビエンス、空間、ステレオ感を保護
 - `ボーカル`: 息、子音、サ行、フォルマント、倍音、声の芯を保護
+- `ギター`: ピッキング／アタック、調波・音色本体、高域ディテール、周波数別減衰、ステレオを専用解析して保護
+- `ピアノ`: ハンマーアタック、部分音・非調波性、周波数別余韻・二段減衰、広帯域バランス、ステレオを専用解析して保護
 
 処理は複数の完成候補を生成して選ぶ方式ではありません。各Stemの解析結果と設定から、一本道で`実行`、`弱めて実行`、`省略`を決めます。
 
@@ -204,13 +212,30 @@ Stem役割別guardで問題を検出した場合は、次の順で安全側へ�
 2. 問題のあるDSPだけを省略する
 3. そのDSPの処理直前音声を維持する
 4. 必要な場合だけ該当Stemをrawへ戻す
-5. 4Stemを再ミックスして再検証する
+5. 全有効Stemを契約順に純粋加算して再検証する
+
+### 再ミックス段
+
+```mermaid
+flowchart TB
+    A["検証済みの補正済み4／6Stem"]
+    B["ユーザーが再ミックスを実行"]
+    C["自動gain・pan・reverb sendを計算"]
+    D["ユーザーが変更した項目だけ手動値で上書き"]
+    E["共有伴奏マスキングと1基の共有reverbを適用"]
+    F["Stem再ミックスを解析・検証・一時保存"]
+    G["マスタリング待ち"]
+
+    A --> B --> C --> D --> E --> F --> G
+```
+
+HTDemucsは従来のDrums→BassとVocals→Otherを維持します。BS-RoFormer-SWでは、Other／Guitar／Pianoの伴奏バスからVocalsとの衝突を1回判定し、同じ制御を3本へ適用して相対バランスを維持します。全Stemのreverb sendは1基の共有reverbへ入り、returnは1本だけdry合計へ戻します。
 
 ### マスタリング段
 
 ```mermaid
 flowchart TB
-    A["保存済みの補正後再ミックス"]
+    A["検証済みのStem再ミックス"]
     B["ユーザーがマスタリングを実行"]
     C["既存マスタリング"]
     D["Stem Mode最終版を解析・一時保存"]
@@ -219,23 +244,22 @@ flowchart TB
     A --> B --> C --> D --> E
 ```
 
-Stem Mode専用の簡易マスタリングには置き換えず、通常モードと同じ既存マスタリングを使用します。Stem単体ではピークを一律に制限せず、純粋加算した補正後2mixをマスタリングする段階でピークとラウドネスを制御します。
+Stem Mode専用の簡易マスタリングには置き換えず、通常モードと同じ既存マスタリングを使用します。Stem単体ではピークを一律に制限せず、検証済みStem再ミックスをマスタリングする段階でピークとラウドネスを制御します。
 
 ## Stem分離モデル
 
-Stem ModeはApple Silicon上のMLXで`Demucs v4 htdemucs`を実行します。通常補正はStemモデルを必要としません。
+Stem ModeはApple Silicon上のMLXで`HTDemucs`または`BS-RoFormer-SW`を実行します。通常補正はStemモデルを必要としません。
 
-| 項目 | 現在の仕様 |
-| --- | --- |
-| モデル | Demucs v4 htdemucs |
-| モデル取得元 | Hugging Faceの固定Revision |
-| ダウンロード資産 | `htdemucs.safetensors`、`htdemucs_config.json` |
-| MLX実行資産 | `mlx.metallib`をアプリへ同梱 |
-| 分離結果 | ドラム、ベース、その他、ボーカル |
-| shifts / overlap | `1 / 0.25` |
-| split / segment | `true / 7.8秒` |
-| batch size | `1` |
-| seed | 入力選択時に生成し、同じ処理内で保持 |
+| 項目 | HTDemucs | BS-RoFormer-SW |
+| --- | --- | --- |
+| モデル取得元 | Hugging Faceの固定Revision | Hugging Faceの固定Revision |
+| ダウンロード資産 | `htdemucs.safetensors`、`htdemucs_config.json` | `bs_roformer_sw.safetensors`、`bs_roformer_sw_config.json` |
+| MLX実行資産 | `mlx.metallib`をアプリへ同梱 | `mlx.metallib`をアプリへ同梱 |
+| 分離結果 | ドラム、ベース、その他、ボーカル | ベース、ドラム、その他、ボーカル、ギター、ピアノ |
+| 分離方式 | Demucs v4 | STFT／62帯域分割／時間・周波数RoFormer |
+| 本番設定 | `shifts=2`、`overlap=0.25`、`split=true`、`segment=7.8秒`、`batch size=1` | STFT FFT／hop／window=`2048 / 512 / 2048`、62帯域／1025周波数ビン |
+| チャンク | 7.8秒単位で分割 | 通常801フレーム、10秒未満は256フレーム、ステップ8秒 |
+| seed | 入力選択後に生成し、同じ処理内で保持 | 使用しない |
 
 モデル管理は右サイドの`アプリ > Stem分離`で行います。
 
@@ -284,8 +308,9 @@ Stem ModeはApple Silicon上のMLXで`Demucs v4 htdemucs`を実行します。�
 ### Stem Mode
 
 - 現在のセッションで必要なWAVだけを`VelouraLucentStemPreview`以下へ保存します。
-- 補正をキャンセルすると、その補正セッションの分離・補正・再ミックス成果物を破棄し、選択中の入力2mixは維持します。
-- マスタリングをキャンセルすると、補正済み4Stemと補正後再ミックスを保持し、再びマスタリングを実行できる状態へ戻します。
+- 補正をキャンセルすると、その補正セッションの分離・補正成果物を破棄し、選択中の入力2mixは維持します。
+- 再ミックスをキャンセルすると、補正済み4／6Stemと純粋加算を保持し、再び再ミックスを実行できる状態へ戻します。
+- マスタリングをキャンセルすると、補正済み4／6Stem、純粋加算、検証済みStem再ミックスを保持し、再びマスタリングを実行できる状態へ戻します。
 - 新しい入力を選んだ時とアプリ終了時に、現在のStemセッションを破棄します。
 - 履歴、run再開、checkpoint、複数候補の保存は行いません。
 
@@ -305,7 +330,7 @@ Stem ModeはApple Silicon上のMLXで`Demucs v4 htdemucs`を実行します。�
 | モード | 成果物 |
 | --- | --- |
 | 通常補正 | 補正後、最終版 |
-| Stem Mode | 補正後再ミックス、補正済みドラム、補正済みベース、補正済みその他、補正済みボーカル、最終マスター |
+| Stem Mode | 補正済み純粋加算、Stem再ミックス、最終マスター、補正済みドラム、ベース、その他、ボーカル、BS実行時のギター、ピアノ |
 
 内部処理用の入力変換音源、raw Stem、raw再ミックス、検証用成果物は書き出しメニューへ表示しません。
 
@@ -325,12 +350,12 @@ Stem ModeはApple Silicon上のMLXで`Demucs v4 htdemucs`を実行します。�
 | 通知 | UserNotifications |
 | ログ | OSLog |
 | 通常解析 | CPU、対応Macでは`実験Metal`を選択可能 |
-| Stem分離 | Demucs v4 htdemucs、MLX Swift、Metal |
-| Demucs実装 | `Vendor/demucs-mlx-swift`の`DemucsMLX` |
-| SwiftPM依存 | `swift-collections 1.4.0` |
+| Stem分離 | HTDemucs、BS-RoFormer-SW、MLX Swift、Metal |
+| Stem分離実装 | `Vendor/demucs-mlx-swift`の`DemucsMLX`、`Vendor/bs-roformer-mlx-swift`の`BSRoformerMLX` |
+| 直接のSwiftPM依存 | 2つのローカルStem分離パッケージ、`swift-collections 1.4.0` |
 | Stem資産 | モデル契約とMLX実行資産を`Resources/StemModels`へ同梱 |
 
-通常モードの`実験Metal`解析と、Stem ModeのMLXによるDemucs分離は別の処理です。
+通常モードの`実験Metal`解析と、Stem ModeのMLXによるStem分離は別の処理です。
 
 ## Liquid Glass UI
 
@@ -370,49 +395,4 @@ swift test
 - `実験Metal`は対応Macで使う通常解析方式です。使えない場合はCPU側の解析に戻ります。
 - Stem ModeはApple SiliconのMLX実行環境を使用します。Stem Modeを利用できない場合でも、通常補正は利用できます。
 - Stemモデルの取得、再取得、修復にはネットワーク接続が必要です。ローカルのモデル検証にはネットワーク接続を使いません。
-- 補正後、補正済みStem、最終版は、ユーザーが書き出すまで一時ファイルです。
-
-## 根拠にした主なコード
-
-### アプリと共通画面
-
-- `Package.swift`
-- `Sources/VelouraLucent/App/VelouraLucentApp.swift`
-- `Sources/VelouraLucent/App/VelouraAppRuntime.swift`
-- `Sources/VelouraLucent/App/VelouraCommands.swift`
-- `Sources/VelouraLucent/Views/VelouraRootView.swift`
-- `Sources/VelouraLucent/Views/WorkspaceToolbarView.swift`
-- `Sources/VelouraLucent/Views/WorkspaceShellView.swift`
-- `Sources/VelouraLucent/Services/AudioFileService.swift`
-
-### 通常補正
-
-- `Sources/VelouraLucent/Models/ProcessingJob.swift`
-- `Sources/VelouraLucent/Models/ProcessingProgressModels.swift`
-- `Sources/VelouraLucent/Models/AudioProcessingModels.swift`
-- `Sources/VelouraLucent/Models/MasteringModels.swift`
-- `Sources/VelouraLucent/Services/NativeAudioProcessor.swift`
-- `Sources/VelouraLucent/Services/MasteringService.swift`
-- `Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift`
-- `Sources/VelouraLucent/Views/InspectorSettingsPanel.swift`
-- `Sources/VelouraLucent/Views/InspectorAnalysisPanel.swift`
-
-### Stem Mode
-
-- `Sources/VelouraLucent/Models/StemWorkflowController.swift`
-- `Sources/VelouraLucent/Models/StemWorkflowModels.swift`
-- `Sources/VelouraLucent/Models/StemModeWorkspaceModel.swift`
-- `Sources/VelouraLucent/Services/StemWorkflowService.swift`
-- `Sources/VelouraLucent/Services/StemSeparationService.swift`
-- `Sources/VelouraLucent/Services/StemCorrectionService.swift`
-- `Sources/VelouraLucent/Services/StemRoleAnalysisService.swift`
-- `Sources/VelouraLucent/Services/StemRoleProtectionGuardService.swift`
-- `Sources/VelouraLucent/Services/StemRemixSafetyGuardService.swift`
-- `Sources/VelouraLucent/Services/StemValidationService.swift`
-- `Sources/VelouraLucent/Services/StemMasteringService.swift`
-- `Sources/VelouraLucent/Views/StemModeWorkspaceView.swift`
-- `Sources/VelouraLucent/Views/StemModeSidebarView.swift`
-- `Sources/VelouraLucent/Views/StemModeInspectorView.swift`
-- `Sources/VelouraLucent/Views/StemModeDetailedAnalysisWorkspaceView.swift`
-- `Sources/VelouraLucent/Views/StemWaveformComparisonView.swift`
-- `Sources/VelouraLucent/Views/StemModelManagementSection.swift`
+- 補正後、補正済みStem、補正済み純粋加算、Stem再ミックス、最終版は、ユーザーが書き出すまで一時ファイルです。

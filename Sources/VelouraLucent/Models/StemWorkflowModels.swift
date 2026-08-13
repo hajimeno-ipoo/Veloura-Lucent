@@ -35,7 +35,7 @@ enum StemWorkflowStep: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .validateInput: "入力検証"
-        case .separate: "4ステム分離"
+        case .separate: "Stem分離"
         case .validateSeparatedStems: "分離結果検証"
         case .evaluateStems: "Stem別解析"
         case .correctStems: "Stem別補正"
@@ -62,7 +62,9 @@ struct StemModeProcessStep: Hashable, Identifiable, Sendable {
     let domain: StemModeProcessDomain
 
     static let inputPreparation = correction(id: "inputPreparation", title: "処理用入力準備")
-    static let separation = correction(id: "separation", title: "4ステム分離")
+    static func separation(stemCount: Int) -> StemModeProcessStep {
+        correction(id: "separation", title: "\(stemCount)Stem分離")
+    }
     static let separatedValidation = correction(id: "separatedValidation", title: "分離結果検証")
     static let correctedPureSum = correction(id: "correctedPureSum", title: "補正済み純粋加算")
     static let correctedPureSumValidation = correction(id: "correctedPureSumValidation", title: "純粋加算検証")
@@ -109,13 +111,13 @@ struct StemModeProcessStep: Hashable, Identifiable, Sendable {
         mastering(id: "existing.\(step.eventID)", title: step.title)
     }
 
-    static var correctionSteps: [StemModeProcessStep] {
+    static func correctionSteps(for roles: [StemRole]) -> [StemModeProcessStep] {
         var steps: [StemModeProcessStep] = [
             .inputPreparation,
-            .separation,
+            .separation(stemCount: roles.count),
             .separatedValidation,
         ]
-        for role in StemRole.allCases {
+        for role in roles {
             steps.append(.roleAnalysis(role))
             steps.append(contentsOf: StemCorrectionStage.allCases.map {
                 .roleCorrection(role, stage: $0)

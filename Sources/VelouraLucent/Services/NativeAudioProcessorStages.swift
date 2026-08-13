@@ -352,10 +352,11 @@ extension NativeAudioProcessor {
             case .inputAndProcessing:
                 "入力にも存在し、補正後に一部増加"
             }
-            let repairDescription = "\(originDescription)・"
-                + "\(formatLowBandPhaseCellCount(result.affectedTimeFrequencyCells))セルを補正"
+            let repairedCellCount = formatLowBandPhaseCellCount(
+                result.affectedTimeFrequencyCells
+            )
             context.logger?.detail(
-                repairDescription,
+                "位相補正 \(repairedCellCount)セル",
                 for: .lowBandPhaseSafety
             )
             logLowBandPhaseRepairResult(

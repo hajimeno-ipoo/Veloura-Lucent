@@ -45,10 +45,10 @@ struct StemModeSidebarView: View {
                     Divider()
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("4 Stem")
+                        Text("\(model.availableStemRoles.count) Stem")
                             .font(.callout.bold())
                             .foregroundStyle(.secondary)
-                        ForEach(StemRole.allCases, id: \.self) { role in
+                        ForEach(model.availableStemRoles, id: \.self) { role in
                             StemModeSidebarStemRow(
                                 role: role,
                                 rawArtifact: artifact(kind: .rawStem(role)),
@@ -61,7 +61,10 @@ struct StemModeSidebarView: View {
                 }
 
                 sidebarSection(title: "工程") {
-                    StemModeSidebarProcessingStatusView(session: model.session)
+                    StemModeSidebarProcessingStatusView(
+                        session: model.session,
+                        correctionProgresses: model.correctionDisplayProgress
+                    )
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -154,6 +157,7 @@ private struct StemModeSidebarStemRow: View {
 @MainActor
 private struct StemModeSidebarProcessingStatusView: View {
     let session: StemWorkflowSession
+    let correctionProgresses: [StemModeProcessStepProgress]
 
     var body: some View {
         SidebarProcessingStatusListView(sections: sections)
@@ -164,7 +168,7 @@ private struct StemModeSidebarProcessingStatusView: View {
             statusSection(
                 id: "correction",
                 title: "補正",
-                progresses: session.correctionDisplayProgress,
+                progresses: correctionProgresses,
                 startedAt: session.correctionStartedAt,
                 finishedAt: session.correctionFinishedAt,
                 isProcessing: session.isCorrectionProcessing
@@ -218,7 +222,9 @@ private struct StemModeSidebarProcessingStatusView: View {
             title: title,
             status: failed ? "失敗" : (isProcessing ? "処理中" : (complete ? "完了" : "待機")),
             activeStepTitle: isProcessing ? active?.step.title : nil,
-            activeStepDetail: isProcessing ? active?.detail : nil,
+            activeStepDetail: isProcessing
+                ? active?.stemModeSidebarDetail(stemCount: session.runContract?.stemCount ?? 0)
+                : nil,
             startedAt: startedAt,
             finishedAt: finishedAt,
             isRunning: isProcessing,

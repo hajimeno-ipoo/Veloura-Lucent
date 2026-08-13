@@ -57,7 +57,10 @@ struct StemCorrectionServiceTests {
         }
     }
 
-    @Test("各Stemは既存資産由来の全工程を一度の一本道として通す", arguments: StemRole.allCases)
+    @Test(
+        "既存4Stemは既存資産由来の全工程を一度の一本道として通す",
+        arguments: StemProductionModelProfile.profile(for: .htdemucs).sourceOrder
+    )
     func returnsOneCorrectedSignalWithCompleteStageEvidence(role: StemRole) async throws {
         let signal = makeCorrectionSignal()
         let result = try await makeCorrectionService().correct(

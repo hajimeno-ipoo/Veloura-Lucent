@@ -50,6 +50,8 @@ struct StemModeModelPresentation: Equatable, Sendable {
     let revision: String
     let license: String
     let assetSetIdentifier: String
+    /// 入力選択前のUIも、検証済み選択モデルの4／6Stem契約を表示するための正本です。
+    let runContract: StemModelRunContract
     let generationIdentifier: UUID
     let activatedAt: Date
     let downloadableAssets: [Asset]
@@ -143,6 +145,7 @@ struct StemModeModelPresentation: Equatable, Sendable {
         revision = manifest.model.revision
         license = manifest.model.licenseMetadata
         assetSetIdentifier = manifest.assetSetIdentifier
+        runContract = installation.snapshot.contract.runContract
         generationIdentifier = installation.receipt.generationIdentifier
         activatedAt = installation.receipt.activatedAt
         self.downloadableAssets = downloadableAssets
@@ -227,6 +230,7 @@ struct StemModeInputDisplayAnalysisResult: Sendable {
 
 enum StemModeWorkspaceSettingsError: LocalizedError, Equatable, Sendable {
     case settingsCannotChangeDuringRun
+    case remixInputRequired
     case remixManualModeRequired
     case unapprovedProductionSettings
 
@@ -234,6 +238,8 @@ enum StemModeWorkspaceSettingsError: LocalizedError, Equatable, Sendable {
         switch self {
         case .settingsCannotChangeDuringRun:
             "Stem Mode処理の実行中は設定を変更できません。"
+        case .remixInputRequired:
+            "入力音源を選んでから再ミックス設定を変更してください。"
         case .remixManualModeRequired:
             "再ミックスを手動へ切り替えてから設定を変更してください。"
         case .unapprovedProductionSettings:
