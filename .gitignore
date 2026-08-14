@@ -7,3 +7,29 @@ __pycache__/
 /.stem-model-cache/
 /Sources/VelouraLucent/Resources/StemModels/MLX/mlx.metallib
 .goal-state/
+
+# Explicitly excluded from the public GitHub target
+LandingPage/
+Docs/
+Tests/Fixtures/Sample_audio/
+Tests/Fixtures/AudioQuality/
+Vendor/bs-roformer-mlx-swift/
+Sources/VelouraLucent/Services/BSRoformerStemSeparationBackend.swift
+Tests/VelouraLucentTests/BSRoformerStemSeparationBackendTests.swift
+Sources/VelouraLucent/Resources/StemModels/bs-roformer-sw-manifest.json
+Sources/VelouraLucent/Resources/ThirdPartyNotices/BS-RoFormer-SW/
+
+# Image files are not part of the public upload scope
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.gif
+*.webp
+
+# Local analysis output and machine-specific project settings
+graphify-out/
+output/
+.codex/
+.swiftpm/xcode/xcuserdata/
+.vscode/
