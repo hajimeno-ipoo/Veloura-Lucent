@@ -33,3 +33,10 @@ output/
 .codex/
 .swiftpm/xcode/xcuserdata/
 .vscode/
+
+# Local working documents are not part of the public GitHub target
+/COMPARISON_REPORT_2026-04-17.md
+/ICON_SETUP_GUIDE.md
+/NOISE_PROCESSING_REVIEW.md
+/SPECTRAL_LIFTER_COMPARISON.md
+/FOR[[]hazimeno_ipoo].md
