@@ -49,7 +49,12 @@ enum LoudnessMeasurementService {
 
         let sampleCount = channels.map(\.count).min() ?? 0
         let energyPrefixes = channels.map {
-            officialKWeightedEnergyPrefix(for: $0, sampleCount: sampleCount, trailingSilenceCount: 0)
+            officialKWeightedEnergyPrefix(
+                for: $0,
+                sampleCount: sampleCount,
+                trailingSilenceCount: 0,
+                sampleRate: signal.sampleRate
+            )
         }
         let gatedBlocks = officialGatedBlockLoudness(forEnergyPrefixes: energyPrefixes, sampleRate: signal.sampleRate)
         return Float(integratedLoudness(from: gatedBlocks))
@@ -71,7 +76,12 @@ enum LoudnessMeasurementService {
         guard sampleCount > 0 else { return -70 }
 
         let prefixes = channels.map {
-            officialKWeightedEnergyPrefix(for: $0, sampleCount: sampleCount, trailingSilenceCount: 0)
+            officialKWeightedEnergyPrefix(
+                for: $0,
+                sampleCount: sampleCount,
+                trailingSilenceCount: 0,
+                sampleRate: sampleRate
+            )
         }
         let meanEnergy = prefixes.reduce(0.0) {
             $0 + meanSquare(in: $1, start: 0, end: sampleCount)
@@ -134,7 +144,8 @@ enum LoudnessMeasurementService {
                 for: $0,
                 sampleCount: sampleCount,
                 trailingSilenceCount: trailingSilenceCount,
-                requiredIndices: requiredIndices
+                requiredIndices: requiredIndices,
+                sampleRate: signal.sampleRate
             )
         }
         let loudnessValues = windows.map { window in
@@ -155,16 +166,16 @@ enum LoudnessMeasurementService {
     private static func officialKWeightedEnergyPrefix(
         for channel: [Float],
         sampleCount: Int,
-        trailingSilenceCount: Int
+        trailingSilenceCount: Int,
+        sampleRate: Double
     ) -> [Double] {
-        var preFilter = BiquadFilter(coefficients: officialPreFilterCoefficients)
-        var rlbFilter = BiquadFilter(coefficients: officialRLBFilterCoefficients)
+        var filter = KWeightingFilter(sampleRate: sampleRate)
         let totalSampleCount = sampleCount + trailingSilenceCount
         var prefix = Array(repeating: 0.0, count: totalSampleCount + 1)
 
         for index in 0..<totalSampleCount {
             let sample = index < sampleCount ? Double(channel[index]) : 0
-            let weighted = rlbFilter.process(preFilter.process(sample))
+            let weighted = filter.process(sample)
             prefix[index + 1] = prefix[index] + weighted * weighted
         }
         return prefix
@@ -191,7 +202,8 @@ enum LoudnessMeasurementService {
                 for: $0,
                 sampleCount: sampleCount,
                 trailingSilenceCount: 0,
-                requiredIndices: requiredIndices
+                requiredIndices: requiredIndices,
+                sampleRate: sampleRate
             )
         }
         let blockLoudness = windows.map { window in
@@ -213,10 +225,10 @@ enum LoudnessMeasurementService {
         for channel: [Float],
         sampleCount: Int,
         trailingSilenceCount: Int,
-        requiredIndices: [Int]
+        requiredIndices: [Int],
+        sampleRate: Double
     ) -> [Int: Double] {
-        var preFilter = BiquadFilter(coefficients: officialPreFilterCoefficients)
-        var rlbFilter = BiquadFilter(coefficients: officialRLBFilterCoefficients)
+        var filter = KWeightingFilter(sampleRate: sampleRate)
         let totalSampleCount = sampleCount + trailingSilenceCount
         var prefix: [Int: Double] = [:]
         prefix.reserveCapacity(requiredIndices.count)
@@ -229,7 +241,7 @@ enum LoudnessMeasurementService {
         }
         for index in 0..<totalSampleCount {
             let sample = index < sampleCount ? Double(channel[index]) : 0
-            let weighted = rlbFilter.process(preFilter.process(sample))
+            let weighted = filter.process(sample)
             cumulativeEnergy += weighted * weighted
             let prefixIndex = index + 1
             while requiredIndex < requiredIndices.count, requiredIndices[requiredIndex] == prefixIndex {
@@ -264,7 +276,8 @@ enum LoudnessMeasurementService {
                 for: $0,
                 sampleCount: sampleCount,
                 trailingSilenceCount: 0,
-                requiredIndices: requiredIndices
+                requiredIndices: requiredIndices,
+                sampleRate: sampleRate
             )
         }
 
@@ -320,6 +333,21 @@ enum LoudnessMeasurementService {
         return values[index]
     }
 
+    struct KWeightingFilter {
+        private var preFilter: BiquadFilter
+        private var rlbFilter: BiquadFilter
+
+        init(sampleRate: Double) {
+            let coefficients = LoudnessMeasurementService.kWeightingCoefficients(sampleRate: sampleRate)
+            preFilter = BiquadFilter(coefficients: coefficients.preFilter)
+            rlbFilter = BiquadFilter(coefficients: coefficients.rlbFilter)
+        }
+
+        mutating func process(_ input: Double) -> Double {
+            rlbFilter.process(preFilter.process(input))
+        }
+    }
+
     private struct BiquadCoefficients {
         let b0: Double
         let b1: Double
@@ -364,6 +392,42 @@ enum LoudnessMeasurementService {
         a1: -1.99004745483398,
         a2: 0.99007225036621
     )
+
+    private static func kWeightingCoefficients(
+        sampleRate: Double
+    ) -> (preFilter: BiquadCoefficients, rlbFilter: BiquadCoefficients) {
+        if abs(sampleRate - 48_000) < 0.5 {
+            return (officialPreFilterCoefficients, officialRLBFilterCoefficients)
+        }
+
+        let preFilterFrequency = 1_681.974450955533
+        let preFilterGainDB = 3.999843853973347
+        let preFilterQ = 0.7071752369554196
+        let preFilterK = tan(.pi * preFilterFrequency / sampleRate)
+        let highGain = pow(10, preFilterGainDB / 20)
+        let bandGain = pow(highGain, 0.4996667741545416)
+        let preFilterA0 = 1 + preFilterK / preFilterQ + preFilterK * preFilterK
+        let preFilter = BiquadCoefficients(
+            b0: (highGain + bandGain * preFilterK / preFilterQ + preFilterK * preFilterK) / preFilterA0,
+            b1: 2 * (preFilterK * preFilterK - highGain) / preFilterA0,
+            b2: (highGain - bandGain * preFilterK / preFilterQ + preFilterK * preFilterK) / preFilterA0,
+            a1: 2 * (preFilterK * preFilterK - 1) / preFilterA0,
+            a2: (1 - preFilterK / preFilterQ + preFilterK * preFilterK) / preFilterA0
+        )
+
+        let rlbFrequency = 38.13547087602444
+        let rlbQ = 0.5003270373238773
+        let rlbK = tan(.pi * rlbFrequency / sampleRate)
+        let rlbA0 = 1 + rlbK / rlbQ + rlbK * rlbK
+        let rlbFilter = BiquadCoefficients(
+            b0: 1,
+            b1: -2,
+            b2: 1,
+            a1: 2 * (rlbK * rlbK - 1) / rlbA0,
+            a2: (1 - rlbK / rlbQ + rlbK * rlbK) / rlbA0
+        )
+        return (preFilter, rlbFilter)
+    }
 
     private static func oversampledPeak(_ channel: [Float]) -> Float {
         guard channel.count > 1 else { return channel.map { abs($0) }.max() ?? 0 }

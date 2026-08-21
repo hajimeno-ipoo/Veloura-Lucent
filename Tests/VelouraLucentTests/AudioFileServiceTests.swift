@@ -5,6 +5,23 @@ import Testing
 
 struct AudioFileServiceTests {
     @Test
+    func loadAudioPreservesMonoInputAsMono() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let sourceURL = directory.appending(path: "mono.wav")
+        let source = AudioSignal(
+            channels: [[Float](repeating: 0.25, count: 4_800)],
+            sampleRate: 48_000
+        )
+        try AudioFileService.saveAudio(source, to: sourceURL)
+
+        let loaded = try AudioFileService.loadAudio(from: sourceURL)
+
+        #expect(loaded.channels.count == 1)
+        #expect(loaded.channels[0] == source.channels[0])
+    }
+
+    @Test
     func fileInfoReadsStoredPCMMetadataWithoutUsingProcessingFormat() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

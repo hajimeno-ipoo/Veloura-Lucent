@@ -20,7 +20,6 @@ enum StemInputChannelMatrixSource: String, Equatable, Sendable {
     case monoDuplication
     case stereoIdentity
     case coreAudioStandardLayout
-    case userConfirmed
 }
 
 struct StemInputChannelMatrix: Equatable, Sendable {
@@ -35,16 +34,9 @@ struct StemInputChannelMatrix: Equatable, Sendable {
     var outputChannelCount: Int { Self.outputChannelCount }
 }
 
-struct StemUserConfirmedMixMatrix: Equatable, Sendable {
-    let inputLayout: StemInputLayoutIdentity
-    /// Input-major coefficients: input channel rows, stereo output columns.
-    let coefficients: [Float]
-    let confirmedAt: Date
-}
-
 enum StemInputMatrixResolution: Equatable, Sendable {
     case automatic(StemInputChannelMatrix)
-    case userConfirmationRequired(StemInputLayoutIdentity)
+    case unsupported(StemInputLayoutIdentity)
 }
 
 struct StemInputInspection: Equatable, Sendable {
@@ -69,8 +61,7 @@ enum StemInputConversionError: LocalizedError, Equatable, Sendable {
     case sourceFrameCountOverflow
     case unsupportedProcessingFormat
     case channelLayoutCountMismatch(expected: Int, actual: Int)
-    case userMixMatrixRequired(StemInputLayoutIdentity)
-    case userMixMatrixLayoutMismatch
+    case unsupportedChannelLayout(StemInputLayoutIdentity)
     case resolvedMixMatrixLayoutMismatch
     case resolvedMixMatrixSourceMismatch(
         expected: StemInputChannelMatrixSource,
@@ -101,10 +92,8 @@ enum StemInputConversionError: LocalizedError, Equatable, Sendable {
             "入力音声を32-bit floatの非インターリーブ形式として読み取れません。"
         case let .channelLayoutCountMismatch(expected, actual):
             "チャンネルレイアウトのチャンネル数が一致しません（音声: \(expected)、レイアウト: \(actual)）。"
-        case .userMixMatrixRequired:
-            "このチャンネルレイアウトには、ユーザー確認済みのステレオ変換行列が必要です。"
-        case .userMixMatrixLayoutMismatch:
-            "確認済み変換行列が現在の入力チャンネルレイアウトと一致しません。"
+        case .unsupportedChannelLayout:
+            "この音源はチャンネル構成を確認できないため読み込めません。標準的なチャンネル構成で書き出した音源を使用してください。"
         case .resolvedMixMatrixLayoutMismatch:
             "保存済み変換行列が現在の入力チャンネルレイアウトと一致しません。"
         case let .resolvedMixMatrixSourceMismatch(expected, actual):
@@ -133,7 +122,7 @@ enum StemInputConversionError: LocalizedError, Equatable, Sendable {
     }
 }
 
-struct StemInputConversionService: Sendable {
+struct AudioInputConversionService: Sendable {
     static let targetSampleRate = 44_100.0
 
     private let processingChunkFrameCount: AVAudioFrameCount
@@ -148,15 +137,9 @@ struct StemInputConversionService: Sendable {
     }
 
     /// Resolves the exact matrix that must be persisted before a run starts.
-    func resolveChannelMatrix(
-        inputURL: URL,
-        userConfirmedMatrix: StemUserConfirmedMixMatrix?
-    ) throws -> StemInputChannelMatrix {
+    func resolveChannelMatrix(inputURL: URL) throws -> StemInputChannelMatrix {
         let inspection = try inspect(inputURL: inputURL)
-        return try Self.selectChannelMatrix(
-            resolution: inspection.matrixResolution,
-            userConfirmedMatrix: userConfirmedMatrix
-        )
+        return try Self.selectChannelMatrix(resolution: inspection.matrixResolution)
     }
 
     private func inspection(inputURL: URL, file: AVAudioFile) throws -> StemInputInspection {
@@ -177,7 +160,7 @@ struct StemInputConversionService: Sendable {
         switch resolution {
         case let .automatic(matrix):
             identity = matrix.inputLayout
-        case let .userConfirmationRequired(requiredIdentity):
+        case let .unsupported(requiredIdentity):
             identity = requiredIdentity
         }
 
@@ -194,16 +177,12 @@ struct StemInputConversionService: Sendable {
     func prepare(
         inputURL: URL,
         outputURL: URL,
-        userConfirmedMatrix: StemUserConfirmedMixMatrix? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> StemInputPreparedResult {
         try Task.checkCancellation()
         let sourceFile = try AVAudioFile(forReading: inputURL)
         let inspection = try inspection(inputURL: inputURL, file: sourceFile)
-        let matrix = try Self.selectChannelMatrix(
-            resolution: inspection.matrixResolution,
-            userConfirmedMatrix: userConfirmedMatrix
-        )
+        let matrix = try Self.selectChannelMatrix(resolution: inspection.matrixResolution)
 
         return try await prepare(
             sourceFile: sourceFile,
@@ -332,9 +311,9 @@ struct StemInputConversionService: Sendable {
         // An explicit unknown/discrete layout does not become a known mono or
         // stereo layout merely because it happens to contain one or two
         // channels. The channel roles still have no defined meaning, so the
-        // user must confirm the exact input-row/stereo-column matrix.
+        // app must reject the source instead of guessing or asking for expert input.
         if let channelLayout, isUnknownOrDiscrete(channelLayout: channelLayout) {
-            return .userConfirmationRequired(
+            return .unsupported(
                 layoutIdentity(
                     channelCount: channelCount,
                     channelLayout: channelLayout,
@@ -379,7 +358,7 @@ struct StemInputConversionService: Sendable {
             fallbackTag: kAudioChannelLayoutTag_Unknown | UInt32(channelCount)
         )
         guard let channelLayout else {
-            return .userConfirmationRequired(identity)
+            return .unsupported(identity)
         }
         guard Int(channelLayout.channelCount) == channelCount else {
             throw StemInputConversionError.channelLayoutCountMismatch(
@@ -388,13 +367,13 @@ struct StemInputConversionService: Sendable {
             )
         }
         guard !isUnknownOrDiscrete(channelLayout: channelLayout) else {
-            return .userConfirmationRequired(identity)
+            return .unsupported(identity)
         }
         guard let coefficients = coreAudioStereoMatrix(
             inputLayout: channelLayout,
             inputChannelCount: channelCount
         ) else {
-            return .userConfirmationRequired(identity)
+            return .unsupported(identity)
         }
 
         return .automatic(
@@ -407,8 +386,7 @@ struct StemInputConversionService: Sendable {
     }
 
     static func selectChannelMatrix(
-        resolution: StemInputMatrixResolution,
-        userConfirmedMatrix: StemUserConfirmedMixMatrix?
+        resolution: StemInputMatrixResolution
     ) throws -> StemInputChannelMatrix {
         switch resolution {
         case let .automatic(matrix):
@@ -417,22 +395,8 @@ struct StemInputConversionService: Sendable {
                 inputChannelCount: matrix.inputChannelCount
             )
             return matrix
-        case let .userConfirmationRequired(identity):
-            guard let userConfirmedMatrix else {
-                throw StemInputConversionError.userMixMatrixRequired(identity)
-            }
-            guard userConfirmedMatrix.inputLayout == identity else {
-                throw StemInputConversionError.userMixMatrixLayoutMismatch
-            }
-            try validateMatrixCoefficients(
-                userConfirmedMatrix.coefficients,
-                inputChannelCount: identity.channelCount
-            )
-            return StemInputChannelMatrix(
-                source: .userConfirmed,
-                inputLayout: identity,
-                coefficients: userConfirmedMatrix.coefficients
-            )
+        case let .unsupported(identity):
+            throw StemInputConversionError.unsupportedChannelLayout(identity)
         }
     }
 
@@ -448,8 +412,8 @@ struct StemInputConversionService: Sendable {
         switch inspection.matrixResolution {
         case .automatic(let automatic):
             expectedSource = automatic.source
-        case .userConfirmationRequired:
-            expectedSource = .userConfirmed
+        case let .unsupported(identity):
+            throw StemInputConversionError.unsupportedChannelLayout(identity)
         }
         guard matrix.source == expectedSource else {
             throw StemInputConversionError.resolvedMixMatrixSourceMismatch(
@@ -951,7 +915,7 @@ private final class StemInputConverterInputState: @unchecked Sendable {
                 status.pointee = .endOfStream
                 return nil
             }
-            let mixed = try StemInputConversionService.apply(
+            let mixed = try AudioInputConversionService.apply(
                 matrix: matrix,
                 to: sourceBuffer,
                 sourceFrameOffset: sourceFramesRead

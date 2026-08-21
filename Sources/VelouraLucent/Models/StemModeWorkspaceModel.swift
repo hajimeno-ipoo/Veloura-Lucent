@@ -14,8 +14,6 @@ final class StemModeWorkspaceModel {
 
     private(set) var selectedInputURL: URL?
     private(set) var selectedInputFileInfo: AudioFileInfo?
-    private(set) var confirmedMixMatrix: StemUserConfirmedMixMatrix?
-    var pendingMatrixConfirmation: StemModePendingMatrixConfirmation?
     private(set) var isInspectingInput = false
     private(set) var isStartingRun = false
     private(set) var exportingArtifactIDs: Set<String> = []
@@ -193,7 +191,6 @@ final class StemModeWorkspaceModel {
         selectedInputURL != nil
             && separationSettings != nil
             && modelPresentation != nil
-            && pendingMatrixConfirmation == nil
             && !isRunActive
             && !isStartingRun
             && !isInspectingInput
@@ -356,18 +353,10 @@ final class StemModeWorkspaceModel {
         }
 
         do {
-            let outcome = try await actions.inspectInput(inputURL)
+            try await actions.inspectInput(inputURL)
             guard inputInspectionIdentifier == identifier else { return }
-            switch outcome {
-            case .ready:
-                try await actions.resetForInputChange()
-                acceptSelectedInput(inputURL, confirmedMatrix: nil)
-            case .matrixConfirmationRequired(let inputLayout):
-                pendingMatrixConfirmation = StemModePendingMatrixConfirmation(
-                    inputURL: inputURL,
-                    inputLayout: inputLayout
-                )
-            }
+            try await actions.resetForInputChange()
+            acceptSelectedInput(inputURL)
         } catch is CancellationError {
             return
         } catch {
@@ -379,48 +368,6 @@ final class StemModeWorkspaceModel {
         }
 
     }
-
-    func confirmMixMatrix(_ confirmation: StemUserConfirmedMixMatrix) async {
-        guard let pendingMatrixConfirmation else {
-            presentError(
-                title: "変換設定を確定できません",
-                message: "確認待ちの入力レイアウトがありません。"
-            )
-            return
-        }
-        guard confirmation.inputLayout == pendingMatrixConfirmation.inputLayout else {
-            presentError(
-                title: "変換設定を確定できません",
-                message: "入力レイアウトが選択中の音源と一致しません。音源を選び直してください。"
-            )
-            return
-        }
-
-        do {
-            try await actions.resetForInputChange()
-            acceptSelectedInput(
-                pendingMatrixConfirmation.inputURL,
-                confirmedMatrix: confirmation
-            )
-            self.pendingMatrixConfirmation = nil
-        } catch is CancellationError {
-            return
-        } catch {
-            presentError(
-                title: "入力音源を切り替えられません",
-                message: error.localizedDescription
-            )
-        }
-    }
-
-    func cancelMixMatrixConfirmation() {
-        let cancelledInputURL = pendingMatrixConfirmation?.inputURL
-        pendingMatrixConfirmation = nil
-        if let cancelledInputURL, selectedInputURL != cancelledInputURL {
-            actions.releaseInspectedInput(cancelledInputURL)
-        }
-    }
-
     func resetMasteringSettingsToProfile() {
         isApplyingMasteringProfile = true
         masteringSettings = selectedMasteringProfile.settings
@@ -543,7 +490,6 @@ final class StemModeWorkspaceModel {
         let previousPreviewArtifacts = previewArtifacts
         let request = StemModeStartRequest(
             inputURL: selectedInputURL,
-            confirmedMixMatrix: confirmedMixMatrix,
             separationSettings: separationSettings,
             correctionSettings: correctionSettings,
             masteringProfile: selectedMasteringProfile,
@@ -1120,16 +1066,11 @@ final class StemModeWorkspaceModel {
         }
     }
 
-    private func acceptSelectedInput(
-        _ inputURL: URL,
-        confirmedMatrix: StemUserConfirmedMixMatrix?
-    ) {
+    private func acceptSelectedInput(_ inputURL: URL) {
         clearSelectedInputPresentation()
         selectedInputURL = inputURL
         selectedInputFileInfo = try? AudioFileService.fileInfo(for: inputURL)
         session.recordInputSelection(URL: inputURL, fileInfo: selectedInputFileInfo)
-        confirmedMixMatrix = confirmedMatrix
-        pendingMatrixConfirmation = nil
 
         previewController.stopPlayback()
         previewController.setComparisonPair(.inputVsCorrected)

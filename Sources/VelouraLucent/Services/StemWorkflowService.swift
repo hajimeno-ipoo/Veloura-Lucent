@@ -4,7 +4,6 @@ struct StemWorkflowRequest: Sendable {
     let runID: UUID
     let runContract: StemModelRunContract
     let sourceURL: URL
-    let userConfirmedMatrix: StemUserConfirmedMixMatrix?
     let installation: ValidatedStemModelInstallation
     let manifest: StemModelManifest
     let separationSettings: StemSeparationSettings
@@ -16,7 +15,6 @@ struct StemWorkflowRequest: Sendable {
         runID: UUID,
         runContract: StemModelRunContract,
         sourceURL: URL,
-        userConfirmedMatrix: StemUserConfirmedMixMatrix?,
         installation: ValidatedStemModelInstallation,
         manifest: StemModelManifest,
         separationSettings: StemSeparationSettings,
@@ -27,7 +25,6 @@ struct StemWorkflowRequest: Sendable {
         self.runID = runID
         self.runContract = runContract
         self.sourceURL = sourceURL
-        self.userConfirmedMatrix = userConfirmedMatrix
         self.installation = installation
         self.manifest = manifest
         self.separationSettings = separationSettings
@@ -162,10 +159,7 @@ enum StemWorkflowServiceError: LocalizedError, Equatable, Sendable {
 }
 
 protocol StemWorkflowInputPreparing: Sendable {
-    func resolveChannelMatrix(
-        inputURL: URL,
-        userConfirmedMatrix: StemUserConfirmedMixMatrix?
-    ) throws -> StemInputChannelMatrix
+    func resolveChannelMatrix(inputURL: URL) throws -> StemInputChannelMatrix
     func prepare(
         inputURL: URL,
         outputURL: URL,
@@ -174,7 +168,7 @@ protocol StemWorkflowInputPreparing: Sendable {
     ) async throws -> StemInputPreparedResult
 }
 
-extension StemInputConversionService: StemWorkflowInputPreparing {}
+extension AudioInputConversionService: StemWorkflowInputPreparing {}
 
 protocol StemCorrecting: Sendable {
     func correct(
@@ -283,7 +277,7 @@ struct StemWorkflowService: Sendable {
     private let masteringService: any StemWorkflowMastering
 
     init(
-        inputPreparer: any StemWorkflowInputPreparing = StemInputConversionService(),
+        inputPreparer: any StemWorkflowInputPreparing = AudioInputConversionService(),
         separator: any StemSeparating = StemSeparationService(),
         store: StemTemporaryAudioStore = StemTemporaryAudioStore(),
         corrector: any StemCorrecting = StemCorrectionService(),
@@ -341,10 +335,7 @@ struct StemWorkflowService: Sendable {
             )))
             try store.removeDirectoryIfPresent(directory)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let matrix = try inputPreparer.resolveChannelMatrix(
-                inputURL: request.sourceURL,
-                userConfirmedMatrix: request.userConfirmedMatrix
-            )
+            let matrix = try inputPreparer.resolveChannelMatrix(inputURL: request.sourceURL)
             let inputURL = directory.appending(path: "canonical-input-44100.wav")
             let prepared = try await inputPreparer.prepare(
                 inputURL: request.sourceURL,

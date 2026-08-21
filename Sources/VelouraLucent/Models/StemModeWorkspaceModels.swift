@@ -1,10 +1,5 @@
 import Foundation
 
-enum StemModeInputSelectionOutcome: Equatable, Sendable {
-    case ready
-    case matrixConfirmationRequired(StemInputLayoutIdentity)
-}
-
 enum StemModeModelPresentationError: LocalizedError, Equatable, Sendable {
     case manifestInstallationMismatch
     case downloadableAssetSetIncomplete
@@ -153,16 +148,8 @@ struct StemModeModelPresentation: Equatable, Sendable {
     }
 }
 
-struct StemModePendingMatrixConfirmation: Identifiable, Equatable, Sendable {
-    let inputURL: URL
-    let inputLayout: StemInputLayoutIdentity
-
-    var id: URL { inputURL }
-}
-
 struct StemModeStartRequest: Sendable {
     let inputURL: URL
-    let confirmedMixMatrix: StemUserConfirmedMixMatrix?
     let separationSettings: StemSeparationSettings
     let correctionSettings: StemRoleCorrectionSettings
     let masteringProfile: MasteringProfile
@@ -171,7 +158,6 @@ struct StemModeStartRequest: Sendable {
 
     init(
         inputURL: URL,
-        confirmedMixMatrix: StemUserConfirmedMixMatrix?,
         separationSettings: StemSeparationSettings,
         correctionSettings: StemRoleCorrectionSettings,
         masteringProfile: MasteringProfile,
@@ -179,7 +165,6 @@ struct StemModeStartRequest: Sendable {
         analysisMode: StemAudioAnalysisMode = .auto
     ) {
         self.inputURL = inputURL
-        self.confirmedMixMatrix = confirmedMixMatrix
         self.separationSettings = separationSettings
         self.correctionSettings = correctionSettings
         self.masteringProfile = masteringProfile
@@ -253,7 +238,7 @@ enum StemModeWorkspaceSettingsError: LocalizedError, Equatable, Sendable {
 /// 補正段・再ミックス段・マスタリング段の開始要求は処理Taskを開始した時点で戻し、長時間の処理状態は
 /// `StemWorkflowSession` へ通知してください。View側は実処理の具象型を所有しません。
 struct StemModeWorkspaceActions {
-    let inspectInput: @MainActor (URL) async throws -> StemModeInputSelectionOutcome
+    let inspectInput: @MainActor (URL) async throws -> Void
     let analyzeInputForDisplay: @MainActor (
         URL,
         StemAudioAnalysisMode,
@@ -272,7 +257,7 @@ struct StemModeWorkspaceActions {
     let revealArtifact: @MainActor (URL) -> Void
 
     init(
-        inspectInput: @escaping @MainActor (URL) async throws -> StemModeInputSelectionOutcome,
+        inspectInput: @escaping @MainActor (URL) async throws -> Void,
         analyzeInputForDisplay: @escaping @MainActor (
             URL,
             StemAudioAnalysisMode,

@@ -69,7 +69,7 @@ protocol StemWorkflowInputInspecting: Sendable {
 }
 
 struct ProductionStemWorkflowInputInspector: StemWorkflowInputInspecting {
-    private let service = StemInputConversionService()
+    private let service = AudioInputConversionService()
 
     func inspect(inputURL: URL) async throws -> StemInputInspection {
         try await Task.detached(priority: .userInitiated) { [service] in
@@ -237,7 +237,7 @@ final class StemWorkflowController {
         StemModeWorkspaceActions(
             inspectInput: { [weak self] inputURL in
                 guard let self else { throw CancellationError() }
-                return try await self.inspectInput(inputURL)
+                try await self.inspectInput(inputURL)
             },
             analyzeInputForDisplay: { [weak self] inputURL, analysisMode, logHandler in
                 guard let self else { throw CancellationError() }
@@ -338,7 +338,7 @@ final class StemWorkflowController {
         resetExecutionState()
     }
 
-    private func inspectInput(_ inputURL: URL) async throws -> StemModeInputSelectionOutcome {
+    private func inspectInput(_ inputURL: URL) async throws {
         guard !isProcessingRun else {
             throw StemWorkflowControllerError.workflowAlreadyActive
         }
@@ -358,14 +358,11 @@ final class StemWorkflowController {
                     .validated(modelContract: resources.installation.snapshot.contract)
                 try workspaceModel.setProductionSeparationSettings(settings)
             }
+            _ = try AudioInputConversionService.selectChannelMatrix(
+                resolution: inspection.matrixResolution
+            )
             replaceInputLease(with: newLease)
             workspaceModel.setFinalCommitLockState(.unlocked)
-            switch inspection.matrixResolution {
-            case .automatic:
-                return .ready
-            case .userConfirmationRequired(let layout):
-                return .matrixConfirmationRequired(layout)
-            }
         } catch {
             endSecurityScopedLease(newLease)
             throw error
@@ -418,7 +415,6 @@ final class StemWorkflowController {
                 runID: runID,
                 runContract: runContract,
                 sourceURL: startRequest.inputURL,
-                userConfirmedMatrix: startRequest.confirmedMixMatrix,
                 installation: resources.installation,
                 manifest: resources.manifest,
                 separationSettings: startRequest.separationSettings,

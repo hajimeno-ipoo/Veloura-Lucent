@@ -131,15 +131,47 @@ enum AudioFileService {
 
     static func loadAudio(from url: URL) throws -> AudioSignal {
         let file = try AVAudioFile(forReading: url)
-        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: file.processingFormat.sampleRate, channels: file.processingFormat.channelCount, interleaved: false)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(file.length))!
+        let channelCount = Int(file.processingFormat.channelCount)
+        let channelLayout = file.fileFormat.channelLayout ?? file.processingFormat.channelLayout
+        let matrixResolution = try AudioInputConversionService.resolveChannelMatrix(
+            channelCount: channelCount,
+            channelLayout: channelLayout
+        )
+        let channelMatrix = try AudioInputConversionService.selectChannelMatrix(
+            resolution: matrixResolution
+        )
+        let format = file.processingFormat
+        guard
+            format.commonFormat == .pcmFormatFloat32,
+            !format.isInterleaved,
+            let buffer = AVAudioPCMBuffer(
+                pcmFormat: format,
+                frameCapacity: AVAudioFrameCount(file.length)
+            )
+        else {
+            throw AppError.audioReadFailed
+        }
         try file.read(into: buffer)
 
-        let signal = signal(from: buffer)
+        let processingBuffer: AVAudioPCMBuffer
+        if channelCount > 2 {
+            processingBuffer = try AudioInputConversionService.apply(
+                matrix: channelMatrix,
+                to: buffer
+            )
+        } else {
+            processingBuffer = buffer
+        }
+
+        let signal = signal(from: processingBuffer)
         if abs(signal.sampleRate - targetSampleRate) < 0.5 {
             return signal
         }
         return try convertedSampleRate(signal: signal, to: targetSampleRate)
+    }
+
+    static func validateSupportedInput(from url: URL) throws {
+        _ = try AudioInputConversionService().resolveChannelMatrix(inputURL: url)
     }
 
     static func saveAudio(_ signal: AudioSignal, to url: URL) throws {

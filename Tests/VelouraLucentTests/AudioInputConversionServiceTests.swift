@@ -5,11 +5,11 @@ import Foundation
 import Testing
 @testable import VelouraLucent
 
-struct StemInputConversionServiceTests {
+struct AudioInputConversionServiceTests {
     @Test
     func monoMatrixDuplicatesEverySampleWithoutGainChange() throws {
         let matrix = try #require(
-            try StemInputConversionService.resolveChannelMatrix(
+            try AudioInputConversionService.resolveChannelMatrix(
                 channelCount: 1,
                 channelLayout: nil
             ).automaticMatrix
@@ -19,7 +19,7 @@ struct StemInputConversionServiceTests {
             channels: [[-0.75, -0.125, 0, 0.25, 0.9]]
         )
 
-        let output = try StemInputConversionService.apply(matrix: matrix, to: input)
+        let output = try AudioInputConversionService.apply(matrix: matrix, to: input)
         let samples = try samples(from: output)
 
         #expect(matrix.source == .monoDuplication)
@@ -31,7 +31,7 @@ struct StemInputConversionServiceTests {
     @Test
     func stereoMatrixPreservesLeftAndRightWithoutCrossfeed() throws {
         let matrix = try #require(
-            try StemInputConversionService.resolveChannelMatrix(
+            try AudioInputConversionService.resolveChannelMatrix(
                 channelCount: 2,
                 channelLayout: nil
             ).automaticMatrix
@@ -40,7 +40,7 @@ struct StemInputConversionServiceTests {
         let right: [Float] = [0.6, 0.3, -0.4, -0.9]
         let input = try makeBuffer(sampleRate: 44_100, channels: [left, right])
 
-        let output = try StemInputConversionService.apply(matrix: matrix, to: input)
+        let output = try AudioInputConversionService.apply(matrix: matrix, to: input)
         let outputSamples = try samples(from: output)
 
         #expect(matrix.source == .stereoIdentity)
@@ -55,7 +55,7 @@ struct StemInputConversionServiceTests {
             AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_MPEG_5_1_A)
         )
         let matrix = try #require(
-            try StemInputConversionService.resolveChannelMatrix(
+            try AudioInputConversionService.resolveChannelMatrix(
                 channelCount: 6,
                 channelLayout: layout
             ).automaticMatrix
@@ -79,7 +79,7 @@ struct StemInputConversionServiceTests {
     }
 
     @Test
-    func unknownAndDiscreteMultichannelLayoutsRequireUserConfirmation() throws {
+    func unknownAndDiscreteMultichannelLayoutsAreRejectedWithoutManualConfiguration() throws {
         let tags: [AudioChannelLayoutTag] = [
             kAudioChannelLayoutTag_Unknown | 6,
             kAudioChannelLayoutTag_DiscreteInOrder | 6
@@ -87,25 +87,22 @@ struct StemInputConversionServiceTests {
 
         for tag in tags {
             let layout = try #require(AVAudioChannelLayout(layoutTag: tag))
-            let resolution = try StemInputConversionService.resolveChannelMatrix(
+            let resolution = try AudioInputConversionService.resolveChannelMatrix(
                 channelCount: 6,
                 channelLayout: layout
             )
-            let identity = try #require(resolution.requiredUserIdentity)
+            let identity = try #require(resolution.unsupportedIdentity)
 
             #expect(identity.channelCount == 6)
             #expect(identity.layoutTag == tag)
-            #expect(throws: StemInputConversionError.userMixMatrixRequired(identity)) {
-                try StemInputConversionService.selectChannelMatrix(
-                    resolution: resolution,
-                    userConfirmedMatrix: nil
-                )
+            #expect(throws: StemInputConversionError.unsupportedChannelLayout(identity)) {
+                try AudioInputConversionService.selectChannelMatrix(resolution: resolution)
             }
         }
     }
 
     @Test
-    func explicitUnknownOrDiscreteOneAndTwoChannelLayoutsStillRequireUserConfirmation() throws {
+    func explicitUnknownOrDiscreteOneAndTwoChannelLayoutsAreRejected() throws {
         let cases: [(channelCount: Int, tag: AudioChannelLayoutTag)] = [
             (1, kAudioChannelLayoutTag_Unknown | 1),
             (2, kAudioChannelLayoutTag_Unknown | 2),
@@ -115,91 +112,17 @@ struct StemInputConversionServiceTests {
 
         for item in cases {
             let layout = try #require(AVAudioChannelLayout(layoutTag: item.tag))
-            let resolution = try StemInputConversionService.resolveChannelMatrix(
+            let resolution = try AudioInputConversionService.resolveChannelMatrix(
                 channelCount: item.channelCount,
                 channelLayout: layout
             )
-            let identity = try #require(resolution.requiredUserIdentity)
+            let identity = try #require(resolution.unsupportedIdentity)
 
             #expect(identity.channelCount == item.channelCount)
             #expect(identity.layoutTag == item.tag)
-            #expect(throws: StemInputConversionError.userMixMatrixRequired(identity)) {
-                try StemInputConversionService.selectChannelMatrix(
-                    resolution: resolution,
-                    userConfirmedMatrix: nil
-                )
+            #expect(throws: StemInputConversionError.unsupportedChannelLayout(identity)) {
+                try AudioInputConversionService.selectChannelMatrix(resolution: resolution)
             }
-        }
-    }
-
-    @Test
-    func userMatrixMustBeBoundToTheExactInspectedLayout() throws {
-        let layout = try #require(
-            AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | 4)
-        )
-        let resolution = try StemInputConversionService.resolveChannelMatrix(
-            channelCount: 4,
-            channelLayout: layout
-        )
-        let identity = try #require(resolution.requiredUserIdentity)
-        let otherIdentity = StemInputLayoutIdentity(
-            channelCount: identity.channelCount,
-            layoutTag: identity.layoutTag,
-            channelBitmap: identity.channelBitmap ^ 1,
-            channelDescriptions: identity.channelDescriptions
-        )
-        let confirmation = StemUserConfirmedMixMatrix(
-            inputLayout: otherIdentity,
-            coefficients: [1, 0, 0, 1, 0.5, 0.5, 0.5, 0.5],
-            confirmedAt: Date(timeIntervalSince1970: 0)
-        )
-
-        #expect(throws: StemInputConversionError.userMixMatrixLayoutMismatch) {
-            try StemInputConversionService.selectChannelMatrix(
-                resolution: resolution,
-                userConfirmedMatrix: confirmation
-            )
-        }
-    }
-
-    @Test
-    func userMatrixRejectsWrongCoefficientCountAndNonFiniteValues() throws {
-        let layout = try #require(
-            AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_Unknown | 3)
-        )
-        let resolution = try StemInputConversionService.resolveChannelMatrix(
-            channelCount: 3,
-            channelLayout: layout
-        )
-        let identity = try #require(resolution.requiredUserIdentity)
-
-        let wrongCount = StemUserConfirmedMixMatrix(
-            inputLayout: identity,
-            coefficients: [1, 0, 0, 1, 0.5],
-            confirmedAt: Date(timeIntervalSince1970: 0)
-        )
-        #expect(
-            throws: StemInputConversionError.invalidMatrixCoefficientCount(
-                expected: 6,
-                actual: 5
-            )
-        ) {
-            try StemInputConversionService.selectChannelMatrix(
-                resolution: resolution,
-                userConfirmedMatrix: wrongCount
-            )
-        }
-
-        let nonFinite = StemUserConfirmedMixMatrix(
-            inputLayout: identity,
-            coefficients: [1, 0, 0, .infinity, 0.5, 0.5],
-            confirmedAt: Date(timeIntervalSince1970: 0)
-        )
-        #expect(throws: StemInputConversionError.nonFiniteMatrixCoefficient(index: 3)) {
-            try StemInputConversionService.selectChannelMatrix(
-                resolution: resolution,
-                userConfirmedMatrix: nonFinite
-            )
         }
     }
 
@@ -221,7 +144,7 @@ struct StemInputConversionServiceTests {
             channels: [left, right]
         )
 
-        let result = try await StemInputConversionService(
+        let result = try await AudioInputConversionService(
             processingChunkFrameCount: 5
         ).prepare(inputURL: inputURL, outputURL: outputURL)
         let outputFile = try AVAudioFile(forReading: outputURL)
@@ -250,7 +173,7 @@ struct StemInputConversionServiceTests {
         let right: [Float] = [-0.5, -0.6, -0.7, -0.8]
         try writeFloatWAV(at: inputURL, sampleRate: 44_100, channels: [left, right])
 
-        let service = StemInputConversionService(processingChunkFrameCount: 2)
+        let service = AudioInputConversionService(processingChunkFrameCount: 2)
         let inspection = try service.inspect(inputURL: inputURL)
         let automatic = try #require(inspection.matrixResolution.automaticMatrix)
         let persistedExactMatrix = StemInputChannelMatrix(
@@ -304,24 +227,24 @@ struct StemInputConversionServiceTests {
             coefficients: automatic.coefficients
         )
         #expect(throws: StemInputConversionError.resolvedMixMatrixLayoutMismatch) {
-            try StemInputConversionService.validateResolvedChannelMatrix(
+            try AudioInputConversionService.validateResolvedChannelMatrix(
                 changedLayout,
                 against: inspection
             )
         }
 
         let changedSource = StemInputChannelMatrix(
-            source: .userConfirmed,
+            source: .monoDuplication,
             inputLayout: automatic.inputLayout,
             coefficients: automatic.coefficients
         )
         #expect(
             throws: StemInputConversionError.resolvedMixMatrixSourceMismatch(
                 expected: .stereoIdentity,
-                actual: .userConfirmed
+                actual: .monoDuplication
             )
         ) {
-            try StemInputConversionService.validateResolvedChannelMatrix(
+            try AudioInputConversionService.validateResolvedChannelMatrix(
                 changedSource,
                 against: inspection
             )
@@ -338,7 +261,7 @@ struct StemInputConversionServiceTests {
                 actual: 3
             )
         ) {
-            try StemInputConversionService.validateResolvedChannelMatrix(
+            try AudioInputConversionService.validateResolvedChannelMatrix(
                 wrongDimensions,
                 against: inspection
             )
@@ -350,7 +273,7 @@ struct StemInputConversionServiceTests {
             coefficients: [1, 0, .infinity, 1]
         )
         #expect(throws: StemInputConversionError.nonFiniteMatrixCoefficient(index: 2)) {
-            try StemInputConversionService.validateResolvedChannelMatrix(
+            try AudioInputConversionService.validateResolvedChannelMatrix(
                 nonFinite,
                 against: inspection
             )
@@ -376,7 +299,7 @@ struct StemInputConversionServiceTests {
             channels: [left, right]
         )
 
-        let result = try await StemInputConversionService(
+        let result = try await AudioInputConversionService(
             processingChunkFrameCount: 127
         ).prepare(inputURL: inputURL, outputURL: outputURL)
         let outputFile = try AVAudioFile(forReading: outputURL)
@@ -416,7 +339,7 @@ struct StemInputConversionServiceTests {
         try existingData.write(to: outputURL)
 
         do {
-            _ = try await StemInputConversionService(
+            _ = try await AudioInputConversionService(
                 processingChunkFrameCount: 4
             ).prepare(inputURL: inputURL, outputURL: outputURL)
             Issue.record("NaNを含む入力が拒否されませんでした")
@@ -455,7 +378,7 @@ struct StemInputConversionServiceTests {
         try existingData.write(to: outputURL)
 
         await #expect(throws: StemInputConversionError.outputAlreadyExists(outputURL.path)) {
-            _ = try await StemInputConversionService(
+            _ = try await AudioInputConversionService(
                 processingChunkFrameCount: 2
             ).prepare(inputURL: inputURL, outputURL: outputURL)
         }
@@ -567,8 +490,8 @@ private extension StemInputMatrixResolution {
         return matrix
     }
 
-    var requiredUserIdentity: StemInputLayoutIdentity? {
-        guard case let .userConfirmationRequired(identity) = self else { return nil }
+    var unsupportedIdentity: StemInputLayoutIdentity? {
+        guard case let .unsupported(identity) = self else { return nil }
         return identity
     }
 }

@@ -55,14 +55,27 @@ final class ProcessingActions {
     func chooseInputAudio() {
         FilePanelService.chooseAudioFile { [weak self] url in
             guard let self, let url else { return }
-            let selectionID = displayAnalysis.beginInputSelection(for: url)
-            displayAnalysis.analyzeMetrics(for: url, target: .input, selectionID: selectionID)
+            _ = acceptInputAudio(url)
         }
     }
 
     func acceptDroppedInputAudio(_ urls: [URL]) -> Bool {
         guard canAcceptInputAudioDrop else { return false }
         guard case let .accepted(url) = InputAudioDropSupport.validate(urls) else {
+            return false
+        }
+
+        return acceptInputAudio(url)
+    }
+
+    private func acceptInputAudio(_ url: URL) -> Bool {
+        do {
+            try AudioFileService.validateSupportedInput(from: url)
+        } catch {
+            presentedError = UserFacingErrorPresentation.make(for: error, operation: .inputAnalysis)
+            AccessibilityAnnouncementService.post(
+                "音声ファイルを選択できませんでした。画面のエラー内容を確認してください"
+            )
             return false
         }
 

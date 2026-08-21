@@ -35,19 +35,6 @@ struct StemModeWorkspaceView: View {
                     .allowsHitTesting(false)
             }
         }
-        .sheet(
-            item: $model.pendingMatrixConfirmation,
-            onDismiss: model.cancelMixMatrixConfirmation
-        ) { pending in
-            StemInputMatrixConfirmationView(
-                inputLayout: pending.inputLayout,
-                onConfirm: { confirmation in
-                    Task { await model.confirmMixMatrix(confirmation) }
-                },
-                onCancel: model.cancelMixMatrixConfirmation
-            )
-            .interactiveDismissDisabled()
-        }
         .alert(item: $model.presentedError) { error in
             Alert(
                 title: Text(error.title),

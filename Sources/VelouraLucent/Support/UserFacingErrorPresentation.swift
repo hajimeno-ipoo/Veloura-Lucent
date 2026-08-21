@@ -43,6 +43,16 @@ struct UserFacingErrorPresentation: Identifiable {
             }
         }
 
+        if let inputError = error as? StemInputConversionError,
+           case .unsupportedChannelLayout = inputError {
+            return Self(
+                title: "チャンネル構成を確認できません",
+                message: "選択した音源の各チャンネルの役割を確認できませんでした。",
+                recoverySuggestion: "標準的なチャンネル構成で書き出した音源を使用してください。",
+                technicalDetails: technicalDetails
+            )
+        }
+
         switch operation {
         case .inputAnalysis:
             return Self(

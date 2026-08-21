@@ -39,6 +39,22 @@ struct LoudnessMeasurementServiceTests {
     }
 
     @Test
+    func kWeightingKeepsReferenceToneLoudnessAcrossSupportedSampleRates() {
+        for sampleRate in [44_100.0, 48_000.0, 96_000.0] {
+            let channel = sineSamples(
+                amplitude: Float(pow(10, -23.0 / 20.0)),
+                duration: 2.0,
+                sampleRate: sampleRate,
+                frequency: 1_000
+            )
+            let signal = AudioSignal(channels: [channel, channel], sampleRate: sampleRate)
+            let actual = Double(LoudnessMeasurementService.integratedLoudness(signal: signal))
+
+            expectClose(actual, -23.0, tolerance: 0.1)
+        }
+    }
+
+    @Test
     func shortTermLoudnessUsesOfficialLUFSScale() throws {
         let signal = sineSignal(amplitude: 0.1, duration: 4.0)
 

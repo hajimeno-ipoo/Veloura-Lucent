@@ -9,6 +9,7 @@ __pycache__/
 .goal-state/
 
 # Explicitly excluded from the public GitHub target
+/ebu-loudness-test-setv05/
 LandingPage/
 Docs/
 Tests/Fixtures/Sample_audio/

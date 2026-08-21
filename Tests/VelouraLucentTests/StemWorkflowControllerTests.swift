@@ -519,7 +519,6 @@ struct StemWorkflowControllerTests {
 
         try await controller.actions.beginCorrection(StemModeStartRequest(
             inputURL: inputURL,
-            confirmedMixMatrix: nil,
             separationSettings: .metaHTDemucsProduction(seed: 77),
             correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
             masteringProfile: .streaming,
@@ -624,7 +623,6 @@ struct StemWorkflowControllerTests {
 
         try await controller.actions.beginCorrection(StemModeStartRequest(
             inputURL: inputURL,
-            confirmedMixMatrix: nil,
             separationSettings: .bsRoformerSWProduction,
             correctionSettings: StemRoleCorrectionSettings(
                 all: DenoiseStrength.balanced.settings
@@ -693,7 +691,6 @@ struct StemWorkflowControllerTests {
         let settings = StemSeparationSettings.metaHTDemucsProduction(seed: 77)
         try await controller.actions.beginCorrection(StemModeStartRequest(
             inputURL: inputURL,
-            confirmedMixMatrix: nil,
             separationSettings: settings,
             correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
             masteringProfile: .streaming,
@@ -818,7 +815,6 @@ struct StemWorkflowControllerTests {
         try await waitUntil { workspace.selectedInputURL == inputURL && !workspace.isInspectingInput }
         let request = StemModeStartRequest(
             inputURL: inputURL,
-            confirmedMixMatrix: nil,
             separationSettings: .metaHTDemucsProduction(seed: 77),
             correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
             masteringProfile: .streaming,
@@ -877,7 +873,6 @@ struct StemWorkflowControllerTests {
 
         try await controller.actions.beginCorrection(StemModeStartRequest(
             inputURL: inputURL,
-            confirmedMixMatrix: nil,
             separationSettings: .metaHTDemucsProduction(seed: 77),
             correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
             masteringProfile: .streaming,
@@ -924,7 +919,6 @@ struct StemWorkflowControllerTests {
         try await waitUntil { workspace.selectedInputURL == inputURL && !workspace.isInspectingInput }
         try await controller.actions.beginCorrection(StemModeStartRequest(
             inputURL: inputURL,
-            confirmedMixMatrix: nil,
             separationSettings: .metaHTDemucsProduction(seed: 77),
             correctionSettings: StemRoleCorrectionSettings(all: DenoiseStrength.balanced.settings),
             masteringProfile: .streaming,

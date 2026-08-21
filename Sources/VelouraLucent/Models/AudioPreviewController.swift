@@ -953,17 +953,18 @@ private enum RealtimeSpectrumTapInstaller {
     }
 }
 
-fileprivate struct RealtimeSpectrumSampleBuffer: Sendable {
+struct RealtimeSpectrumSampleBuffer: Sendable {
     let channelSamples: [[Float]]
     let sampleRate: Double
 }
 
-fileprivate final class LiveLoudnessAnalyzer: @unchecked Sendable {
+final class LiveLoudnessAnalyzer: @unchecked Sendable {
+    private let sampleRate: Double
     private let momentaryWindowSize: Int
     private let shortTermWindowSize: Int
     private let integratedBlockSize: Int
     private let integratedHopSize: Int
-    private var filters: [LiveKWeightingFilter] = []
+    private var filters: [LoudnessMeasurementService.KWeightingFilter] = []
     private var momentaryEnergyWindow: [Double] = []
     private var shortTermEnergyWindow: [Double] = []
     private var integratedEnergyWindow: [Double] = []
@@ -973,6 +974,7 @@ fileprivate final class LiveLoudnessAnalyzer: @unchecked Sendable {
     private var truePeakTailSamples: [[Float]] = []
 
     init(sampleRate: Double) {
+        self.sampleRate = sampleRate
         momentaryWindowSize = max(1, Int(sampleRate * 0.4))
         shortTermWindowSize = max(1, Int(sampleRate * 3.0))
         integratedBlockSize = max(1, Int(sampleRate * 0.4))
@@ -986,7 +988,10 @@ fileprivate final class LiveLoudnessAnalyzer: @unchecked Sendable {
         }
 
         if filters.count != channels.count {
-            filters = Array(repeating: LiveKWeightingFilter(), count: channels.count)
+            filters = Array(
+                repeating: LoudnessMeasurementService.KWeightingFilter(sampleRate: sampleRate),
+                count: channels.count
+            )
             momentaryEnergyWindow.removeAll()
             shortTermEnergyWindow.removeAll()
             integratedEnergyWindow.removeAll()
@@ -1066,60 +1071,6 @@ fileprivate final class LiveLoudnessAnalyzer: @unchecked Sendable {
         let meanEnergy = loudnessValues.map { pow(10, $0 / 10) }.reduce(0, +) / Double(max(loudnessValues.count, 1))
         return 10 * log10(max(meanEnergy, 1e-9))
     }
-}
-
-fileprivate struct LiveKWeightingFilter {
-    private var preFilter = LiveBiquadFilter(coefficients: .officialPreFilter)
-    private var rlbFilter = LiveBiquadFilter(coefficients: .officialRLBFilter)
-
-    mutating func process(_ input: Double) -> Double {
-        rlbFilter.process(preFilter.process(input))
-    }
-}
-
-fileprivate struct LiveBiquadFilter {
-    let coefficients: LiveBiquadCoefficients
-    var x1 = 0.0
-    var x2 = 0.0
-    var y1 = 0.0
-    var y2 = 0.0
-
-    mutating func process(_ input: Double) -> Double {
-        let output = coefficients.b0 * input
-            + coefficients.b1 * x1
-            + coefficients.b2 * x2
-            - coefficients.a1 * y1
-            - coefficients.a2 * y2
-        x2 = x1
-        x1 = input
-        y2 = y1
-        y1 = output
-        return output
-    }
-}
-
-fileprivate struct LiveBiquadCoefficients {
-    let b0: Double
-    let b1: Double
-    let b2: Double
-    let a1: Double
-    let a2: Double
-
-    static let officialPreFilter = LiveBiquadCoefficients(
-        b0: 1.53512485958697,
-        b1: -2.69169618940638,
-        b2: 1.19839281085285,
-        a1: -1.69065929318241,
-        a2: 0.73248077421585
-    )
-
-    static let officialRLBFilter = LiveBiquadCoefficients(
-        b0: 1,
-        b1: -2,
-        b2: 1,
-        a1: -1.99004745483398,
-        a2: 0.99007225036621
-    )
 }
 
 enum RealtimeSpectrumAnalyzer {

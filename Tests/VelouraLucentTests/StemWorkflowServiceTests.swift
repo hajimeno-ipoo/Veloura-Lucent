@@ -5,10 +5,7 @@ import Testing
 private struct WorkflowInputPreparer: StemWorkflowInputPreparing {
     let signal: AudioSignal
 
-    func resolveChannelMatrix(
-        inputURL: URL,
-        userConfirmedMatrix: StemUserConfirmedMixMatrix?
-    ) throws -> StemInputChannelMatrix {
+    func resolveChannelMatrix(inputURL: URL) throws -> StemInputChannelMatrix {
         let layout = StemInputLayoutIdentity(
             channelCount: 2,
             layoutTag: 0,
@@ -252,7 +249,6 @@ struct StemWorkflowServiceTests {
             runID: fixture.request.runID,
             runContract: makeStemTestRunContract(model: .bsRoformerSW),
             sourceURL: fixture.request.sourceURL,
-            userConfirmedMatrix: fixture.request.userConfirmedMatrix,
             installation: fixture.request.installation,
             manifest: fixture.request.manifest,
             separationSettings: fixture.request.separationSettings,
@@ -789,7 +785,6 @@ struct StemWorkflowServiceTests {
             runID: UUID(),
             runContract: modelFixture.installation.snapshot.contract.runContract,
             sourceURL: root.appending(path: "source.wav"),
-            userConfirmedMatrix: nil,
             installation: modelFixture.installation,
             manifest: modelFixture.manifest,
             separationSettings: model == .htdemucs

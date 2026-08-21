@@ -158,7 +158,6 @@ struct StemModeWorkspaceModelTests {
 
         let request = try #require(recorder.beginRequests.first)
         #expect(request.inputURL == inputURL)
-        #expect(request.confirmedMixMatrix == nil)
         #expect(request.separationSettings == settings)
         #expect(request.separationSettings.seed == 987_654)
         #expect(request.correctionSettings == expectedCorrectionSettings)
@@ -206,29 +205,18 @@ struct StemModeWorkspaceModelTests {
     }
 
     @Test
-    func unknownLayoutRequiresExactUserConfirmationBeforeSelection() async throws {
+    func unknownLayoutIsRejectedWithoutManualConfiguration() async throws {
         let layout = makeLayout(channelCount: 3)
         let recorder = WorkspaceActionRecorder()
-        recorder.inspectionOutcome = .matrixConfirmationRequired(layout)
+        recorder.inspectionError = StemInputConversionError.unsupportedChannelLayout(layout)
         let model = makeModel(recorder: recorder)
         let inputURL = URL(fileURLWithPath: "/tmp/discrete.wav")
 
         await model.inspectInput(inputURL)
 
         #expect(model.selectedInputURL == nil)
-        #expect(model.pendingMatrixConfirmation?.inputURL == inputURL)
-        #expect(model.pendingMatrixConfirmation?.inputLayout == layout)
-
-        let confirmation = StemUserConfirmedMixMatrix(
-            inputLayout: layout,
-            coefficients: [1, 0, 0, 1, 0.5, 0.5],
-            confirmedAt: Date(timeIntervalSince1970: 100)
-        )
-        await model.confirmMixMatrix(confirmation)
-
-        #expect(model.selectedInputURL == inputURL)
-        #expect(model.confirmedMixMatrix == confirmation)
-        #expect(model.pendingMatrixConfirmation == nil)
+        #expect(model.presentedError?.title == "入力音源を確認できません")
+        #expect(model.presentedError?.message.contains("標準的なチャンネル構成") == true)
     }
 
     @Test
@@ -1434,7 +1422,7 @@ private final class WorkspaceActionRecorder {
         let format: AudioExportFormat
     }
 
-    var inspectionOutcome: StemModeInputSelectionOutcome = .ready
+    var inspectionError: (any Error)?
     var inputDisplayAnalysisResult = makeInputDisplayAnalysisResult(duration: 1)
     var inputDisplayAnalysisHandler: (@MainActor (
         URL,
@@ -1469,7 +1457,9 @@ private final class WorkspaceActionRecorder {
     var actions: StemModeWorkspaceActions {
         StemModeWorkspaceActions(
             inspectInput: { [weak self] _ in
-                self?.inspectionOutcome ?? .ready
+                if let error = self?.inspectionError {
+                    throw error
+                }
             },
             analyzeInputForDisplay: { [weak self] URL, mode, logHandler in
                 self?.inputDisplayLogMessages.forEach(logHandler)
