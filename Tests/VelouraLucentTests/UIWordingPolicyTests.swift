@@ -562,12 +562,50 @@ struct UIWordingPolicyTests {
         #expect(commands.contains("title: processedAudioTitle"))
         #expect(!commands.contains("title: \"入力と補正後\""))
         #expect(shortcutManager.contains("action.title(processedAudioTitle: processedAudioTitle)"))
-        #expect(shortcutManager.contains("isEditing ? \"xmark\" : \"pencil\""))
+        #expect(shortcutManager.contains("Image(systemName: \"square.and.pencil\")"))
+        #expect(shortcutManager.contains(".font(.system(size: 20, weight: .regular))"))
+        #expect(!shortcutManager.contains("Text(\"変更\")"))
+        #expect(shortcutManager.contains("Text(\"キャンセル\")"))
+        #expect(shortcutManager.contains("Text(\"キーを押してください\")"))
+        #expect(shortcutManager.contains("HStack(spacing: 14)"))
+        #expect(shortcutManager.contains(
+            "if isEditing {\n                Color.clear.frame(width: 164, height: 1)"
+        ))
+        #expect(shortcutManager.contains(
+            "Text(actionTitle)\n                .font(.system(size: 16, weight: .regular))"
+        ))
+        #expect(shortcutManager.contains(
+            "Text(operation.operation)\n                                        .font(.system(size: 16, weight: .regular))"
+        ))
+        #expect(!shortcutManager.contains(".weight(.bold)"))
+        #expect(!shortcutManager.contains(".weight(.semibold)"))
+        #expect(!shortcutManager.contains(".fontWeight(.medium)"))
+        #expect(shortcutManager.contains(
+            "Text(shortcut.displayText)\n                .font(.system(size: 20, weight: .regular))"
+        ))
+        #expect(shortcutManager.contains(
+            "Text(operation.keys)\n                                        .font(.system(size: 20, weight: .regular))"
+        ))
+        #expect(!shortcutManager.contains("\"xmark\""))
         #expect(shortcutManager.contains("変更をキャンセル"))
         #expect(shortcutManager.contains("selectNextKeyView(nil)"))
         #expect(shortcutManager.contains("selectPreviousKeyView(nil)"))
-        #expect(shortcutManager.contains("keys: \"Tab  /  Space\""))
-        #expect(shortcutManager.contains("detail: \"Tabで移動し、Spaceで実行\""))
+        #expect(shortcutManager.contains("operation: \"次の操作へ移動\""))
+        #expect(shortcutManager.contains("keys: \"Tab\""))
+        #expect(shortcutManager.contains("operation: \"選択中の操作を実行\""))
+        #expect(shortcutManager.contains("keys: \"Space\""))
+        #expect(shortcutManager.contains("operation: \"確認画面で決定\""))
+        #expect(shortcutManager.contains("keys: \"Return\""))
+        #expect(shortcutManager.contains("operation: \"確認画面をキャンセル\""))
+        #expect(shortcutManager.contains("keys: \"Esc\""))
+        #expect(shortcutManager.contains("struct FixedKeyboardOperationGroup"))
+        #expect(shortcutManager.contains("systemFixedOperations.map"))
+        #expect(shortcutManager.contains("ForEach(fixedOperationGroups)"))
+        #expect(shortcutManager.contains("ForEach(group.operations)"))
+        #expect(shortcutManager.contains("sectionHeader(group.title)"))
+        #expect(shortcutManager.contains("operation: shortcut.conflictTitle"))
+        #expect(!shortcutManager.contains("Text(operation.detail)"))
+        #expect(!shortcutManager.contains("の固定操作"))
         #expect(!shortcutManager.contains("Space  /  Return"))
         #expect(toolbar.contains("ForEach(commandActions.exportActions)"))
         #expect(toolbar.contains("if exportAction.startsSection"))

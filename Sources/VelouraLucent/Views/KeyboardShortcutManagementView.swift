@@ -12,7 +12,12 @@ private struct FixedKeyboardOperation: Identifiable {
     let id: String
     let operation: String
     let keys: String
-    let detail: String
+}
+
+private struct FixedKeyboardOperationGroup: Identifiable {
+    let id: String
+    let title: String
+    let operations: [FixedKeyboardOperation]
 }
 
 @MainActor
@@ -31,54 +36,99 @@ struct KeyboardShortcutManagementView: View {
         blue: 208 / 255
     )
 
-    private let componentFixedOperations = [
-        FixedKeyboardOperation(
+    private let componentFixedOperationGroups = [
+        FixedKeyboardOperationGroup(
             id: "knob",
-            operation: "ロータリーノブ",
-            keys: "↑  ↓  ←  →",
-            detail: "ノブを選択して値を1段階ずつ調整"
+            title: "ロータリーノブ",
+            operations: [
+                FixedKeyboardOperation(
+                    id: "knob-step",
+                    operation: "値を1段階ずつ調整",
+                    keys: "↑  ↓  ←  →"
+                ),
+            ]
         ),
-        FixedKeyboardOperation(
+        FixedKeyboardOperationGroup(
             id: "waveform-pan",
-            operation: "拡大中の波形",
-            keys: "←  →",
-            detail: "波形を選択して表示範囲を左右へ移動"
+            title: "拡大中の波形",
+            operations: [
+                FixedKeyboardOperation(
+                    id: "waveform-pan-horizontal",
+                    operation: "表示範囲を左右へ移動",
+                    keys: "←  →"
+                ),
+            ]
         ),
-        FixedKeyboardOperation(
+        FixedKeyboardOperationGroup(
             id: "slider",
-            operation: "スライダー",
-            keys: "↑  ↓  ←  →",
-            detail: "選択中の値を増減"
+            title: "スライダー",
+            operations: [
+                FixedKeyboardOperation(
+                    id: "slider-step",
+                    operation: "選択中の値を増減",
+                    keys: "↑  ↓  ←  →"
+                ),
+            ]
         ),
-        FixedKeyboardOperation(
+        FixedKeyboardOperationGroup(
             id: "focus",
-            operation: "ボタン・タブ・開閉項目",
-            keys: "Tab  /  Space",
-            detail: "Tabで移動し、Spaceで実行"
+            title: "ボタン・タブ・開閉項目",
+            operations: [
+                FixedKeyboardOperation(
+                    id: "focus-move",
+                    operation: "次の操作へ移動",
+                    keys: "Tab"
+                ),
+                FixedKeyboardOperation(
+                    id: "focus-activate",
+                    operation: "選択中の操作を実行",
+                    keys: "Space"
+                ),
+            ]
         ),
-        FixedKeyboardOperation(
+        FixedKeyboardOperationGroup(
             id: "dialog",
-            operation: "確認画面",
-            keys: "Return  /  Esc",
-            detail: "決定またはキャンセル"
+            title: "確認画面",
+            operations: [
+                FixedKeyboardOperation(
+                    id: "dialog-confirm",
+                    operation: "確認画面で決定",
+                    keys: "Return"
+                ),
+                FixedKeyboardOperation(
+                    id: "dialog-cancel",
+                    operation: "確認画面をキャンセル",
+                    keys: "Esc"
+                ),
+            ]
         ),
-        FixedKeyboardOperation(
-            id: "voiceover-waveform",
-            operation: "波形位置・波形の高さ",
-            keys: "VoiceOverの増減操作",
-            detail: "アクセシビリティ操作で位置や高さを調整"
+        FixedKeyboardOperationGroup(
+            id: "voiceover",
+            title: "VoiceOver",
+            operations: [
+                FixedKeyboardOperation(
+                    id: "voiceover-waveform",
+                    operation: "波形位置・波形の高さを調整",
+                    keys: "VoiceOverの増減操作"
+                ),
+            ]
         ),
     ]
 
-    private var fixedOperations: [FixedKeyboardOperation] {
-        KeyboardShortcutSettings.systemFixedOperations.map { operation in
-            FixedKeyboardOperation(
-                id: operation.id,
-                operation: operation.operation,
-                keys: operation.keys,
-                detail: operation.detail
+    private var fixedOperationGroups: [FixedKeyboardOperationGroup] {
+        KeyboardShortcutSettings.systemFixedOperations.map { group in
+            FixedKeyboardOperationGroup(
+                id: group.id,
+                title: group.operation,
+                operations: group.shortcuts.map { shortcut in
+                    FixedKeyboardOperation(
+                        id: "\(group.id)-\(shortcut.conflictTitle)",
+                        operation: shortcut.conflictTitle,
+                        keys: shortcut.configuration.displayText
+                    )
+                }
             )
-        } + componentFixedOperations
+        } + componentFixedOperationGroups
     }
 
     var body: some View {
@@ -100,7 +150,7 @@ struct KeyboardShortcutManagementView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("キーボード操作")
-                .font(.title.bold())
+                .font(.title)
             Text("ショートカットの変更と、固定操作キーの確認ができます")
                 .foregroundStyle(.secondary)
         }
@@ -173,10 +223,10 @@ struct KeyboardShortcutManagementView: View {
             Text("操作")
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("ショートカット")
-                .frame(width: 190, alignment: .leading)
-            Color.clear.frame(width: 112, height: 1)
+                .frame(width: 220, alignment: .leading)
+            Color.clear.frame(width: 164, height: 1)
         }
-        .font(.callout.weight(.semibold))
+        .font(.callout)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 18)
         .padding(.vertical, 9)
@@ -188,99 +238,110 @@ struct KeyboardShortcutManagementView: View {
 
         return HStack(spacing: 12) {
             Text(actionTitle)
+                .font(.system(size: 16, weight: .regular))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(1)
 
             shortcutCell(action)
-                .frame(width: 190, alignment: .leading)
+                .frame(width: 220, alignment: .leading)
 
-            HStack(spacing: 8) {
-                Button {
-                    editingAction = isEditing ? nil : action
-                    validationMessage = nil
-                } label: {
-                    Image(systemName: isEditing ? "xmark" : "pencil")
-                        .frame(width: 28, height: 28)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .velouraAdaptiveGlass(in: Circle(), interactive: true)
-                .accessibilityLabel(
-                    isEditing
-                        ? "\(actionTitle)の変更をキャンセル"
-                        : "\(actionTitle)のショートカットを変更"
-                )
-                .help(
-                    isEditing
-                        ? "ショートカットの変更をキャンセル"
-                        : "ショートカットを設定・変更"
-                )
+            if isEditing {
+                Color.clear.frame(width: 164, height: 1)
+            } else {
+                HStack(spacing: 8) {
+                    Button {
+                        editingAction = action
+                        validationMessage = nil
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 20, weight: .regular))
+                            .frame(width: 36, height: 36)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .velouraAdaptiveGlass(in: Circle(), interactive: true)
+                    .accessibilityLabel("\(actionTitle)のショートカットを変更")
+                    .help("ショートカットを設定・変更")
 
-                Button {
-                    settings.removeShortcut(for: action)
-                    if editingAction == action {
-                        editingAction = nil
+                    Button {
+                        settings.removeShortcut(for: action)
+                        validationMessage = nil
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 18, weight: .regular))
+                            .frame(width: 28, height: 28)
+                            .contentShape(Circle())
                     }
-                    validationMessage = nil
-                } label: {
-                    Image(systemName: "trash")
-                        .frame(width: 28, height: 28)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .velouraAdaptiveGlass(in: Circle(), interactive: true)
-                .disabled(settings.shortcut(for: action) == nil)
-                .accessibilityLabel("\(actionTitle)のショートカットを削除")
-                .help("ショートカットを削除")
+                    .buttonStyle(.plain)
+                    .velouraAdaptiveGlass(in: Circle(), interactive: true)
+                    .disabled(settings.shortcut(for: action) == nil)
+                    .accessibilityLabel("\(actionTitle)のショートカットを削除")
+                    .help("ショートカットを削除")
 
-                Button {
-                    if let conflict = settings.reset(action) {
-                        let shortcutText = action.defaultShortcut?.displayText
-                            ?? "初期ショートカット"
-                        validationMessage = "\(shortcutText)は「\(title(for: conflict))」で使用されています。"
-                        return
+                    Button {
+                        if let conflict = settings.reset(action) {
+                            let shortcutText = action.defaultShortcut?.displayText
+                                ?? "初期ショートカット"
+                            validationMessage = "\(shortcutText)は「\(title(for: conflict))」で使用されています。"
+                            return
+                        }
+                        validationMessage = nil
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 18, weight: .regular))
+                            .frame(width: 28, height: 28)
+                            .contentShape(Circle())
                     }
-                    if editingAction == action {
-                        editingAction = nil
-                    }
-                    validationMessage = nil
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .frame(width: 28, height: 28)
-                        .contentShape(Circle())
+                    .buttonStyle(.plain)
+                    .velouraAdaptiveGlass(in: Circle(), interactive: true)
+                    .disabled(settings.isUsingDefaultShortcut(for: action))
+                    .accessibilityLabel("\(actionTitle)のショートカットを初期設定へ戻す")
+                    .help("この操作だけ初期設定へ戻す")
                 }
-                .buttonStyle(.plain)
-                .velouraAdaptiveGlass(in: Circle(), interactive: true)
-                .disabled(settings.isUsingDefaultShortcut(for: action))
-                .accessibilityLabel("\(actionTitle)のショートカットを初期設定へ戻す")
-                .help("この操作だけ初期設定へ戻す")
+                .frame(width: 164)
             }
-            .frame(width: 112)
         }
         .padding(.horizontal, 18)
-        .frame(minHeight: 48)
+        .frame(minHeight: 52)
     }
 
     @ViewBuilder
     private func shortcutCell(_ action: VelouraShortcutAction) -> some View {
         if editingAction == action {
-            ZStack(alignment: .leading) {
-                Text("キーを入力…")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.purple)
-                ShortcutKeyCaptureView { shortcut in
-                    accept(shortcut, for: action)
+            HStack(spacing: 14) {
+                ZStack(alignment: .leading) {
+                    Text("キーを押してください")
+                        .font(.callout)
+                        .foregroundStyle(.purple)
+                    ShortcutKeyCaptureView { shortcut in
+                        accept(shortcut, for: action)
+                    }
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
                 }
-                .frame(width: 1, height: 1)
-                .opacity(0.01)
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(Color.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+                .accessibilityLabel("\(title(for: action))のショートカット入力待ち")
+
+                Button {
+                    editingAction = nil
+                    validationMessage = nil
+                } label: {
+                    Text("キャンセル")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                        .frame(height: 34)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(title(for: action))の変更をキャンセル")
+                .help("ショートカットの変更をキャンセル")
             }
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background(Color.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
-            .accessibilityLabel("\(title(for: action))のショートカット入力待ち")
         } else if let shortcut = settings.shortcut(for: action) {
             Text(shortcut.displayText)
-                .font(.body.monospaced().weight(.semibold))
+                .font(.system(size: 20, weight: .regular))
         } else {
             Text("未設定")
                 .foregroundStyle(.tertiary)
@@ -293,33 +354,34 @@ struct KeyboardShortcutManagementView: View {
                 Text("操作")
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text("キー")
-                    .frame(width: 230, alignment: .leading)
+                    .frame(width: 260, alignment: .leading)
             }
-            .font(.callout.weight(.semibold))
+            .font(.callout)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 18)
             .padding(.vertical, 9)
 
             ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(fixedOperations) { operation in
-                        HStack(alignment: .top, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(operation.operation)
-                                    .fontWeight(.medium)
-                                Text(operation.detail)
-                                    .font(.callout)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    ForEach(fixedOperationGroups) { group in
+                        Section {
+                            ForEach(group.operations) { operation in
+                                HStack(spacing: 12) {
+                                    Text(operation.operation)
+                                        .font(.system(size: 16, weight: .regular))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                            Text(operation.keys)
-                                .font(.body.monospaced().weight(.semibold))
-                                .frame(width: 230, alignment: .leading)
+                                    Text(operation.keys)
+                                        .font(.system(size: 20, weight: .regular))
+                                        .frame(width: 260, alignment: .leading)
+                                }
+                                .padding(.horizontal, 18)
+                                .frame(minHeight: 52)
+                                Divider().padding(.leading, 18)
+                            }
+                        } header: {
+                            sectionHeader(group.title)
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 12)
-                        Divider().padding(.leading, 18)
                     }
                 }
             }
@@ -336,7 +398,7 @@ struct KeyboardShortcutManagementView: View {
                 validationMessage = nil
             } label: {
                 Text("すべて初期設定へ戻す")
-                    .font(.callout.weight(.medium))
+                    .font(.callout)
                     .frame(width: 128)
             }
             .buttonStyle(.bordered)
@@ -347,7 +409,7 @@ struct KeyboardShortcutManagementView: View {
 
             Button(action: onDismiss) {
                 Text("完了")
-                    .font(.callout.weight(.semibold))
+                    .font(.callout)
                     .foregroundStyle(.white)
                     .frame(width: 84)
             }
@@ -369,7 +431,7 @@ struct KeyboardShortcutManagementView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.callout.weight(.semibold))
+            .font(.callout)
             .padding(.horizontal, 18)
             .padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
