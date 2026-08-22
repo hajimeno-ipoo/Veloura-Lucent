@@ -51,6 +51,12 @@ struct MasteringProfileTests {
         #expect(safeAIProfile.title == "安全AI配信")
         #expect(youtubeSpotifyProfile.title == "YouTube / Spotify向け")
         #expect(releaseLoudProfile.title == "リリース音圧重視")
+        #expect(naturalProfile.menuTitle == "自然 — 原音の雰囲気を残したい時")
+        #expect(streamingProfile.menuTitle == "聴きやすく整える — 聞きやすさを優先したい時")
+        #expect(forwardProfile.menuTitle == "押し出し強め — 密度と存在感を強めたい時")
+        #expect(safeAIProfile.menuTitle == "安全AI配信 — AI生成音源を安全寄りに配信したい時")
+        #expect(youtubeSpotifyProfile.menuTitle == "YouTube / Spotify向け — YouTubeやSpotifyで公開する時")
+        #expect(releaseLoudProfile.menuTitle == "リリース音圧重視 — 音圧を強くして前に出したい時")
         #expect(MasteringProfile.allCases == [
             .natural,
             .streaming,
@@ -88,6 +94,7 @@ struct MasteringProfileTests {
         #expect(MasteringProfile.youtubeSpotify.presetHelpText == "YouTubeやSpotify向けに、扱いやすい音量を狙います。")
         #expect(MasteringProfile.releaseLoud.presetHelpText == "音圧を重視します。強弱が少なくなる場合があります。")
         #expect(MasteringProfile.allCases.allSatisfy { !$0.presetHelpText.contains("必ず") })
+        #expect(MasteringProfile.allCases.allSatisfy { !$0.recommendedUseText.isEmpty })
     }
 
     @Test

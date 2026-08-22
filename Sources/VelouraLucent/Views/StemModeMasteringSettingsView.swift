@@ -75,9 +75,9 @@ private struct StemModeMasteringProfileSection: View {
                         model.selectedMasteringProfile = profile
                     } label: {
                         if profile == model.selectedMasteringProfile {
-                            Label(profile.title, systemImage: "checkmark")
+                            Label(profile.menuTitle, systemImage: "checkmark")
                         } else {
-                            Text(profile.title)
+                            Text(profile.menuTitle)
                         }
                     }
                 }
@@ -106,13 +106,13 @@ private struct StemModeMasteringProfileSection: View {
             .accessibilityValue(model.selectedMasteringProfile.title)
 
             Text(model.selectedMasteringProfile.summary)
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
             Text(model.selectedMasteringProfile.presetTargetText)
-                .font(.callout.monospacedDigit())
+                .font(.body.monospacedDigit())
                 .foregroundStyle(.secondary)
             Text("目標値に必ず合わせるものではなく、仕上げ意図を確認する目安です。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
 
             ViewThatFits(in: .horizontal) {

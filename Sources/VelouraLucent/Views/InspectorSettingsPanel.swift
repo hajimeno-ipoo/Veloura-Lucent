@@ -228,9 +228,9 @@ struct InspectorSettingsPanel: View {
                             job.selectedMasteringProfile = profile
                         } label: {
                             if profile == job.selectedMasteringProfile {
-                                Label(profile.title, systemImage: "checkmark")
+                                Label(profile.menuTitle, systemImage: "checkmark")
                             } else {
-                                Text(profile.title)
+                                Text(profile.menuTitle)
                             }
                         }
                     }
@@ -259,13 +259,13 @@ struct InspectorSettingsPanel: View {
                 .accessibilityValue(job.selectedMasteringProfile.title)
 
                 Text(job.selectedMasteringProfile.summary)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                 Text(job.selectedMasteringProfile.presetTargetText)
-                    .font(.callout.monospacedDigit())
+                    .font(.body.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Text("目標値に必ず合わせるものではなく、仕上げ意図を確認する目安です。")
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
 
                 resetRow(

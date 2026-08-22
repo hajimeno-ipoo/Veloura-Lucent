@@ -67,6 +67,20 @@ struct StemModeCorrectionSettingsViewTests {
         #expect(mastering.contains("DAWKnobControl("))
         #expect(mastering.contains("initiallyExpanded: true"))
         #expect(mastering.contains("model.selectedMasteringProfile.presetTargetText"))
+        #expect(mastering.contains("profile.menuTitle"))
+        #expect(standard.contains("profile.menuTitle"))
+        #expect(mastering.contains(
+            "Text(model.selectedMasteringProfile.summary)\n                .font(.body)"
+        ))
+        #expect(mastering.contains(
+            "Text(model.selectedMasteringProfile.presetTargetText)\n                .font(.body.monospacedDigit())"
+        ))
+        #expect(standard.contains(
+            "Text(job.selectedMasteringProfile.summary)\n                    .font(.body)"
+        ))
+        #expect(standard.contains(
+            "Text(job.selectedMasteringProfile.presetTargetText)\n                    .font(.body.monospacedDigit())"
+        ))
         #expect(mastering.contains("LiquidGlassActionButton("))
         #expect(!mastering.contains("StemModeSettingSlider("))
         #expect(!mastering.contains("DisclosureGroup("))

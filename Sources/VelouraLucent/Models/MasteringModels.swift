@@ -27,6 +27,27 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var menuTitle: String {
+        "\(title) — \(recommendedUseText)"
+    }
+
+    var recommendedUseText: String {
+        switch self {
+        case .natural:
+            return "原音の雰囲気を残したい時"
+        case .streaming:
+            return "聞きやすさを優先したい時"
+        case .forward:
+            return "密度と存在感を強めたい時"
+        case .safeAIStreaming:
+            return "AI生成音源を安全寄りに配信したい時"
+        case .youtubeSpotify:
+            return "YouTubeやSpotifyで公開する時"
+        case .releaseLoud:
+            return "音圧を強くして前に出したい時"
+        }
+    }
+
     var summary: String {
         switch self {
         case .natural:
