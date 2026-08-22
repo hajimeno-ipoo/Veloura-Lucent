@@ -29,7 +29,7 @@ extension StemArtifactKind {
         case .input44100: "変換済み入力"
         case .rawStem(let role): "\(role.stemModeDisplayTitle)（raw）"
         case .correctedStem(let role): "\(role.stemModeDisplayTitle)（補正済み）"
-        case .correctedPureSum48000: "補正済み純粋加算"
+        case .correctedPureSum48000: "補正後"
         case .remixed48000: "Stem再ミックス"
         case .finalMaster: "最終マスター"
         }
@@ -65,7 +65,7 @@ extension StemArtifactKind {
 
     var stemModeExportMenuTitle: String {
         switch self {
-        case .correctedPureSum48000: "補正済み純粋加算"
+        case .correctedPureSum48000: "補正後"
         case .remixed48000: "再ミックス済み"
         case .finalMaster: "マスタリング済み"
         case .correctedStem(let role): role.stemModeDisplayTitle
@@ -157,7 +157,7 @@ extension StemWorkflowValidationSubject {
         case .separatedStems: "分離Stem一式"
         case .stem(let name): "Stem: \(name)"
         case .rawRemix: "raw再ミックス"
-        case .correctedPureSum: "補正済み純粋加算"
+        case .correctedPureSum: "補正後"
         case .remix: "Stem再ミックス"
         case .finalMaster: "最終マスター"
         }

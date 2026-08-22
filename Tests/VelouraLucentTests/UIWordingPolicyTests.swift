@@ -10,6 +10,9 @@ struct UIWordingPolicyTests {
         let stemInspector = try combinedSource([
             "Sources/VelouraLucent/Views/StemModeInspectorView.swift"
         ])
+        let root = try combinedSource([
+            "Sources/VelouraLucent/Views/VelouraRootView.swift"
+        ])
 
         #expect(standardInspector.contains(
             "struct InspectorAnalysisPanelContent<AdditionalContent: View>: View"
@@ -22,6 +25,12 @@ struct UIWordingPolicyTests {
         #expect(standardInspector.contains(".accessibilityElement(children: .combine)"))
         #expect(standardInspector.contains("InspectorAnalysisPanelContent("))
         #expect(stemInspector.contains("InspectorAnalysisPanelContent("))
+        #expect(!standardInspector.contains(
+            "\\.velouraInspectorAnalysisPresentationState"
+        ))
+        #expect(root.contains("\\.velouraInspectorAnalysisPresentationState"))
+        #expect(root.contains("selection: currentAnalysisSelectionBinding"))
+        #expect(root.contains("isInspectorPresented: $isInspectorPresented"))
         #expect(stemInspector.contains("Text(\"再ミックス解析の確認事項\")"))
         #expect(stemInspector.contains("Text(\"確認事項はありません。\")"))
         #expect(!stemInspector.contains("addingValidationIssues"))
@@ -318,6 +327,7 @@ struct UIWordingPolicyTests {
     @Test
     func inspectorSettingsUsesUnifiedGlassInsteadOfLavenderCards() throws {
         let source = try combinedSource([
+            "Sources/VelouraLucent/Views/VelouraRootView.swift",
             "Sources/VelouraLucent/Views/InspectorSettingsPanel.swift",
             "Sources/VelouraLucent/Views/AppSettingsPanel.swift",
             "Sources/VelouraLucent/Views/SettingsDisclosureCard.swift",
@@ -328,6 +338,8 @@ struct UIWordingPolicyTests {
         #expect(!source.contains("右側では、1項目ずつ縦に並べて調整します。"))
         #expect(source.contains("Text(\"詳細設定\")"))
         #expect(source.contains("@SceneStorage(\"inspectorSettingsSelectedSection\")"))
+        #expect(source.contains("@Binding var selectedSectionRawValue: String"))
+        #expect(source.contains("isInspectorPresented = true"))
         #expect(!source.contains("@State private var selectedSection: InspectorSettingsSection"))
         #expect(source.contains("@Binding var windowBackgroundMaterialAmount: Double"))
         #expect(source.contains("@Binding var isWindowBackgroundBlurEnabled: Bool"))
@@ -404,6 +416,11 @@ struct UIWordingPolicyTests {
         #expect(combined.contains("windowBackgroundBlurLevel: $windowBackgroundBlurLevel"))
         #expect(combined.contains("TitlebarInspectorToggleConfigurator("))
         #expect(combined.contains("isPresented: $isInspectorPresented"))
+        #expect(combined.contains(
+            "\\.velouraInspectorAnalysisPresentationState"
+        ))
+        #expect(combined.contains("selection: currentAnalysisSelectionBinding"))
+        #expect(combined.contains("isInspectorPresented: $isInspectorPresented"))
         #expect(combined.contains("TitlebarInspectorToggleButton"))
         #expect(combined.contains("Image(systemName: \"sidebar.right\")"))
         #expect(combined.contains(".font(.system(size: 18, weight: .regular))"))
@@ -472,6 +489,17 @@ struct UIWordingPolicyTests {
         #expect(source.contains("phases: .all"))
         #expect(source.contains(".buttonRepeatBehavior(.enabled)"))
         #expect(source.contains("PressTrackingPlainButtonStyle"))
+        #expect(source.contains("DAWKnobValueRing(value: value, range: range"))
+        #expect(source.contains("private var valueAndUnitLabel: some View"))
+        #expect(source.contains("HStack(alignment: .firstTextBaseline, spacing: DAWKnobMetrics.valueUnitSpacing)"))
+        #expect(source.contains("DAWKnobStepRail("))
+        #expect(source.contains("width: DAWKnobMetrics.stepRailHitSize.width"))
+        #expect(source.contains("height: DAWKnobMetrics.stepRailHitSize.height"))
+        #expect(source.contains("label: \"\\(title)を下げる\""))
+        #expect(source.contains("label: \"\\(title)を上げる\""))
+        #expect(source.contains("TermHelpButton(title: help.title"))
+        #expect(!source.contains("fixedArtworkImage"))
+        #expect(!source.contains("transparentStepButton"))
         #expect(source.contains("NSEvent.keyRepeatDelay"))
         #expect(source.contains("NSEvent.keyRepeatInterval"))
         #expect(source.contains("keyRepeatTask?.cancel()"))
@@ -487,6 +515,9 @@ struct UIWordingPolicyTests {
         let toolbar = try combinedSource(["Sources/VelouraLucent/Views/WorkspaceToolbarView.swift"])
         let preview = try combinedSource(["Sources/VelouraLucent/Models/AudioPreviewController.swift"])
         let waveform = try combinedSource(["Sources/VelouraLucent/Views/AudioWaveformWorkspaceView.swift"])
+        let shortcutManager = try combinedSource([
+            "Sources/VelouraLucent/Views/KeyboardShortcutManagementView.swift",
+        ])
 
         #expect(commands.contains("CommandMenu(\"再生\")"))
         #expect(commands.contains("Menu(\"モード\")"))
@@ -495,19 +526,49 @@ struct UIWordingPolicyTests {
         #expect(commands.contains("actions?.selectProcessingMode(mode)"))
         #expect(commands.contains("ForEach(actions?.exportActions ?? [])"))
         #expect(commands.contains("if exportAction.startsSection"))
-        #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: .command)"))
+        #expect(commands.contains("shortcutSettings.keyboardShortcut(for: .runCorrection)"))
         #expect(commands.contains("if actions?.processingMode == .stem"))
-        #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: [.command, .option])"))
-        #expect(commands.contains(".keyboardShortcut(\"r\", modifiers: [.command, .shift])"))
-        #expect(commands.contains(".keyboardShortcut(.space, modifiers: [])"))
-        #expect(commands.contains(".keyboardShortcut(.cancelAction)"))
-        #expect(commands.contains(".keyboardShortcut(\"b\", modifiers: .command)"))
-        #expect(commands.contains(".keyboardShortcut(\"i\", modifiers: [.command, .option])"))
+        #expect(commands.contains("shortcutSettings.keyboardShortcut(for: .runRemix)"))
+        #expect(commands.contains("shortcutSettings.keyboardShortcut(for: .runMastering)"))
+        #expect(commands.contains("shortcutSettings.keyboardShortcut(for: .togglePlayback)"))
+        #expect(commands.contains("shortcutSettings.keyboardShortcut(for: .stopPlayback)"))
+        #expect(commands.contains("shortcutSettings.keyboardShortcut(for: .toggleComparisonSide)"))
+        #expect(commands.contains("shortcutSettings.keyboardShortcut(for: .toggleInspector)"))
+        #expect(commands.contains("playbackState?.sideACommandTitle"))
+        #expect(commands.contains("playbackState?.sideBCommandTitle"))
+        #expect(commands.contains("playbackState?.comparisonSwitchCommandTitle"))
+        #expect(commands.contains("if playbackState?.allowsComparisonPairSelection == true"))
+        #expect(commands.contains("@FocusedValue(\\.velouraStemPlaybackPresentationState)"))
+        #expect(commands.contains("Menu(\"入力／\\(processedAudioTitle)／最終版\")"))
+        #expect(commands.contains("Menu(\"\\(stemPlaybackState.selectedStemTitle)：raw／補正後\")"))
+        #expect(commands.contains("Menu(\"補正後／再ミックス\")"))
+        #expect(commands.contains("fixedComparisonPlaybackCommands(stemPlaybackState.stemComparison)"))
+        #expect(commands.contains("fixedComparisonPlaybackCommands(stemPlaybackState.remixComparison)"))
+        #expect(commands.contains("Menu(\"再生するStem\")"))
+        #expect(commands.contains("stemSelectionState?.selectPreviewStem(role)"))
+        #expect(commands.contains("stemSelectionState?.isPreviewStemSelected(role)"))
+        #expect(!commands.contains("CommandMenu(\"Stem\")"))
+        #expect(!commands.contains("設定Stem"))
         #expect(root.contains("\\.velouraCommandActions"))
         #expect(root.contains("selectProcessingMode: selectProcessingMode"))
         #expect(root.contains("_ = runtime.selectMode(mode)"))
-        #expect(root.contains("model.stopAuxiliaryPreviewPlayback()"))
+        #expect(root.contains("playbackInterlocks:"))
         #expect(root.contains("exportActions: stemExportCommandActions"))
+        #expect(root.contains("\\.velouraCommandsSuspended"))
+        #expect(root.contains("isKeyboardShortcutManagerPresented"))
+        #expect(root.contains("processedAudioTitle: commandActions.processedAudioTitle"))
+        #expect(commands.contains("title: \"入力と\\(processedAudioTitle)\""))
+        #expect(commands.contains("title: \"\\(processedAudioTitle)と最終版\""))
+        #expect(commands.contains("title: processedAudioTitle"))
+        #expect(!commands.contains("title: \"入力と補正後\""))
+        #expect(shortcutManager.contains("action.title(processedAudioTitle: processedAudioTitle)"))
+        #expect(shortcutManager.contains("isEditing ? \"xmark\" : \"pencil\""))
+        #expect(shortcutManager.contains("変更をキャンセル"))
+        #expect(shortcutManager.contains("selectNextKeyView(nil)"))
+        #expect(shortcutManager.contains("selectPreviousKeyView(nil)"))
+        #expect(shortcutManager.contains("keys: \"Tab  /  Space\""))
+        #expect(shortcutManager.contains("detail: \"Tabで移動し、Spaceで実行\""))
+        #expect(!shortcutManager.contains("Space  /  Return"))
         #expect(toolbar.contains("ForEach(commandActions.exportActions)"))
         #expect(toolbar.contains("if exportAction.startsSection"))
         #expect(root.contains("title: \"補正済み\""))
@@ -515,8 +576,33 @@ struct UIWordingPolicyTests {
         #expect(toolbar.contains("補正済みまたはマスタリング済みの音源を書き出します"))
         #expect(preview.contains("func toggleComparisonPlayback()"))
         #expect(waveform.contains("preview.toggleComparisonPlayback()"))
+        #expect(commands.contains("@FocusedValue(\\.velouraPlaybackPresentationState)"))
+        for removedClosureCarrier in [
+            "VelouraWorkspacePresentationActions",
+            "VelouraInspectorSettingsPresentationActions",
+            "VelouraInspectorAnalysisPresentationActions",
+            "VelouraWaveformPresentationActions",
+            "VelouraPlaybackPresentationActions",
+        ] {
+            #expect(!commands.contains("struct \(removedClosureCarrier)"))
+        }
+        #expect(commands.contains("Binding<VelouraWorkspaceDisplaySelection>"))
+        #expect(commands.contains("let preview: AudioPreviewController"))
+        #expect(!commands.contains("let togglePlayback: @MainActor"))
+        #expect(commands.contains("commandsSuspended == true"))
+        #expect(commands.contains(".disabled(commandsAreSuspended || workspaceDisplaySelection == nil)"))
+        #expect(commands.contains(".disabled(commandsAreSuspended || actions?.canSwitchProcessingMode != true)"))
+        #expect(commands.contains(".disabled(commandsAreSuspended || isDisabled)"))
+        #expect(commands.contains(".disabled(commandsAreSuspended || waveformState?.canZoomOut != true)"))
+        #expect(root.contains("\\.velouraStemPlaybackPresentationState"))
+        #expect(root.contains("selectedStemTitle: model.selectedStemPreviewRole.stemModeDisplayTitle"))
+        #expect(root.contains("preview: model.stemPreviewController"))
+        #expect(root.contains("preview: model.remixPreviewController"))
+        #expect(!waveform.contains("\\.velouraPlaybackPresentationState"))
+        #expect(waveform.contains("prepareForPlayback()"))
         #expect(!waveform.contains("private func togglePlayback()"))
         #expect(!waveform.contains(".keyboardShortcut(\"b\", modifiers: [.command])"))
+        #expect(!toolbar.contains(".keyboardShortcut("))
     }
 
     @Test

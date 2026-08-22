@@ -41,7 +41,7 @@ struct InspectorSettingsSectionLayout<Selection: Hashable, Content: View>: View 
     }
 }
 
-private enum InspectorSettingsSection: String, CaseIterable, Identifiable {
+enum InspectorSettingsSection: String, CaseIterable, Identifiable {
     case correction
     case mastering
     case app
@@ -62,9 +62,9 @@ struct InspectorSettingsPanel: View {
     @Binding var windowBackgroundMaterialAmount: Double
     @Binding var isWindowBackgroundBlurEnabled: Bool
     @Binding var windowBackgroundBlurLevel: WindowBackgroundBlurLevel
+    @Binding var selectedSectionRawValue: String
     let isWindowFullScreen: Bool
-    @SceneStorage("inspectorSettingsSelectedSection")
-    private var selectedSectionRawValue = InspectorSettingsSection.correction.rawValue
+    let openKeyboardShortcutManager: @MainActor () -> Void
 
     var body: some View {
         InspectorSettingsSectionLayout(
@@ -108,7 +108,8 @@ struct InspectorSettingsPanel: View {
                 windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
                 isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
                 windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
-                isWindowFullScreen: isWindowFullScreen
+                isWindowFullScreen: isWindowFullScreen,
+                openKeyboardShortcutManager: openKeyboardShortcutManager
             )
 
             VStack(alignment: .leading, spacing: 10) {

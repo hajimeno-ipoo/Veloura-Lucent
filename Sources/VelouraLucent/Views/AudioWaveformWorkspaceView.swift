@@ -21,7 +21,7 @@ struct AudioWaveformWorkspaceView: View {
     let inputFileURL: URL?
     let correctedFileURL: URL?
     let masteredFileURL: URL?
-    let onWillStartPlayback: @MainActor () -> Void
+    let playbackInterlocks: [AudioPreviewController]
     let workspaceTitle: String
     let playbackStatusText: String?
     let tracks: [AudioWaveformTrackPresentation]
@@ -46,6 +46,7 @@ struct AudioWaveformWorkspaceView: View {
     @State private var inputWaveformHeight = WaveformTrackResizeHandle.defaultHeight
     @State private var correctedWaveformHeight = WaveformTrackResizeHandle.defaultHeight
     @State private var masteredWaveformHeight = WaveformTrackResizeHandle.defaultHeight
+    @State private var maximumWaveformZoomScale = 1.0
     @FocusState private var isWaveformKeyboardFocused: Bool
 
     private let waveformTrailingColumnWidth: CGFloat = 140
@@ -61,13 +62,13 @@ struct AudioWaveformWorkspaceView: View {
         playbackStatusText: String? = nil,
         comparisonPairLabel: @escaping (AudioComparisonPair) -> String = \.title,
         comparisonPairSummary: @escaping (AudioComparisonPair) -> String = \.summary,
-        onWillStartPlayback: @escaping @MainActor () -> Void = {}
+        playbackInterlocks: [AudioPreviewController] = []
     ) {
         self.preview = preview
         self.inputFileURL = inputFileURL
         self.correctedFileURL = correctedFileURL
         self.masteredFileURL = masteredFileURL
-        self.onWillStartPlayback = onWillStartPlayback
+        self.playbackInterlocks = playbackInterlocks
         self.workspaceTitle = "波形と試聴比較"
         self.playbackStatusText = playbackStatusText
         self.tracks = [
@@ -124,13 +125,13 @@ struct AudioWaveformWorkspaceView: View {
         waveformLabelColumnWidth: CGFloat = 170,
         resetToken: String,
         topAccessory: AnyView? = nil,
-        onWillStartPlayback: @escaping @MainActor () -> Void = {}
+        playbackInterlocks: [AudioPreviewController] = []
     ) {
         self.preview = preview
         self.inputFileURL = tracks.first(where: { $0.target == .input })?.fileURL
         self.correctedFileURL = tracks.first(where: { $0.target == .corrected })?.fileURL
         self.masteredFileURL = tracks.first(where: { $0.target == .mastered })?.fileURL
-        self.onWillStartPlayback = onWillStartPlayback
+        self.playbackInterlocks = playbackInterlocks
         self.workspaceTitle = workspaceTitle
         self.playbackStatusText = playbackStatusText
         self.tracks = tracks
@@ -173,6 +174,10 @@ struct AudioWaveformWorkspaceView: View {
                 .glassCard(cornerRadius: 16)
                 .focusable()
                 .focused($isWaveformKeyboardFocused)
+                .focusedSceneValue(
+                    \.velouraWaveformPresentationState,
+                    waveformPresentationState
+                )
                 .focusEffectDisabled()
                 .onKeyPress(
                     keys: [.leftArrow, .rightArrow],
@@ -300,7 +305,7 @@ struct AudioWaveformWorkspaceView: View {
                     isDisabled: comparisonFileURL(for: .a) == nil,
                     showsSelectedAccessibilityTrait: true
                 ) {
-                    onWillStartPlayback()
+                    prepareForPlayback()
                     preview.playComparisonSide(.a)
                 }
 
@@ -311,7 +316,7 @@ struct AudioWaveformWorkspaceView: View {
                     isSelected: preview.isComparisonPlaybackRunning,
                     isDisabled: activeComparisonFileURL == nil
                 ) {
-                    onWillStartPlayback()
+                    prepareForPlayback()
                     preview.toggleComparisonPlayback()
                 }
 
@@ -331,7 +336,7 @@ struct AudioWaveformWorkspaceView: View {
                     isDisabled: comparisonFileURL(for: .b) == nil,
                     showsSelectedAccessibilityTrait: true
                 ) {
-                    onWillStartPlayback()
+                    prepareForPlayback()
                     preview.playComparisonSide(.b)
                 }
 
@@ -340,7 +345,7 @@ struct AudioWaveformWorkspaceView: View {
                     isDisabled: comparisonFileURL(for: .a) == nil
                         || comparisonFileURL(for: .b) == nil
                 ) {
-                    onWillStartPlayback()
+                    prepareForPlayback()
                     preview.toggleComparisonSide()
                 }
 
@@ -542,6 +547,12 @@ struct AudioWaveformWorkspaceView: View {
                         maximumZoomScale: maximumZoomScale
                     )
                 }
+                .onAppear {
+                    maximumWaveformZoomScale = maximumZoomScale
+                }
+                .onChange(of: maximumZoomScale) { _, newValue in
+                    maximumWaveformZoomScale = newValue
+                }
             }
             .frame(minWidth: 240, maxWidth: .infinity)
             .frame(height: 78)
@@ -557,6 +568,18 @@ struct AudioWaveformWorkspaceView: View {
         tracks.map(\.target)
             .compactMap { preview.cardState(for: $0).snapshot?.duration }
             .max() ?? 0
+    }
+
+    private var waveformPresentationState: VelouraWaveformPresentationState {
+        VelouraWaveformPresentationState(
+            viewport: $waveformViewport,
+            maximumZoomScale: maximumWaveformZoomScale,
+            centerProgress: waveformZoomCenterProgress
+        )
+    }
+
+    private func prepareForPlayback() {
+        playbackInterlocks.forEach { $0.stopPlayback() }
     }
 
     private var waveformSampleCount: Int {

@@ -10,11 +10,9 @@ enum DAWKnobMetrics {
     static let rowSpacing: CGFloat = 8
     static let artworkVerticalOffset: CGFloat = -22
     static let dragSensitivity: CGFloat = 150
-    static let buttonHitExpansion: CGFloat = 8
     static let stepAnimationDuration: Double = 0.12
-    static let defaultUnitTextWidth: CGFloat = 50
-    static let wideUnitTextWidth: CGFloat = 190
-    static let valueTextWidth: CGFloat = 206
+    static let valueTextWidth: CGFloat = 108
+    static let valueUnitSpacing: CGFloat = 4
     static let targetLoudnessDragValueScale: Float = 9
     static let deEsserThresholdDragValueScale: Float = 18
     static let compressorThresholdDragValueScale: Float = 24
@@ -24,15 +22,19 @@ enum DAWKnobMetrics {
     static let rotationAnchor = UnitPoint(x: knobCenter.x / sourceSize.width, y: knobCenter.y / sourceSize.height)
     static let rotationOffsetDegrees = -41.892183586331
 
-    static let valueCenter = CGPoint(x: 505.5, y: 243)
-    static let topLabelCenter = CGPoint(x: 510, y: 350)
-    static let leftLabelCenter = CGPoint(x: 300, y: 690)
-    static let rightLabelCenter = CGPoint(x: 720, y: 690)
-    static let titleCenter = CGPoint(x: 510, y: 842)
-    static let minusButtonCenter = CGPoint(x: 343, y: 743)
-    static let plusButtonCenter = CGPoint(x: 674, y: 743)
-    static let unitCenter = CGPoint(x: 508.5, y: 743)
-    static let stepButtonSize = CGSize(width: 63, height: 65)
+    static let valueCenter = CGPoint(x: 59, y: 20)
+    static let topLabelCenter = CGPoint(x: 59, y: 40)
+    static let leftLabelCenter = CGPoint(x: 21, y: 140)
+    static let rightLabelCenter = CGPoint(x: 97, y: 140)
+    static let titleCenter = CGPoint(x: 59, y: 165)
+    static let decrementRailCenter = CGPoint(x: 7, y: 102)
+    static let incrementRailCenter = CGPoint(x: 111, y: 102)
+    static let stepRailHitSize = CGSize(width: 18, height: 70)
+    static let stepRailVisibleSize = CGSize(width: 8, height: 58)
+    static let ringDiameter: CGFloat = 98
+    static let ringTickCount = 37
+    static let ringStartAngleDegrees = 135.0
+    static let ringSweepAngleDegrees = 270.0
 
     static var artworkScale: CGFloat {
         artworkSize / sourceSize.width
@@ -47,7 +49,7 @@ enum DAWKnobMetrics {
     }
 
     static var knobHitRect: CGRect {
-        let center = scaledPoint(knobCenter)
+        let center = knobDisplayCenter
         let radius = knobHitDiameter / 2
         return CGRect(
             x: center.x - radius,
@@ -57,12 +59,8 @@ enum DAWKnobMetrics {
         )
     }
 
-    static var stepButtonHitSize: CGSize {
-        let visibleSize = scaledSize(stepButtonSize)
-        return CGSize(
-            width: visibleSize.width + buttonHitExpansion * 2,
-            height: visibleSize.height + buttonHitExpansion * 2
-        )
+    static var knobDisplayCenter: CGPoint {
+        scaledPoint(knobCenter)
     }
 
     static var threeColumnWidth: CGFloat {
@@ -81,7 +79,6 @@ enum DAWKnobMetrics {
         controlWidth * 2 + columnSpacing
     }
 
-    static let fixedArtworkImage = loadImage(named: "3")
     static let rotatingArtworkImage = loadImage(named: "2")
 
     static func resourceURL(named name: String) -> URL? {
@@ -104,10 +101,6 @@ enum DAWKnobMetrics {
         scaledPoint(sourceX: point.x, sourceY: point.y)
     }
 
-    static func scaledSize(_ size: CGSize) -> CGSize {
-        CGSize(width: size.width * artworkScale, height: size.height * artworkScale)
-    }
-
     static func normalizedValue(_ value: Float, in range: ClosedRange<Float>) -> Double {
         let span = range.upperBound - range.lowerBound
         guard span != 0 else { return 0 }
@@ -123,13 +116,18 @@ enum DAWKnobMetrics {
         baseAngleDegrees(value: value, range: range) + rotationOffsetDegrees
     }
 
-    static func unitTextWidth(for unitText: String?) -> CGFloat {
-        switch unitText {
-        case "LUFS", "dB":
-            wideUnitTextWidth
-        default:
-            defaultUnitTextWidth
-        }
+    static func ringTickProgress(at index: Int) -> Double {
+        guard ringTickCount > 1 else { return 0 }
+        let clampedIndex = min(max(index, 0), ringTickCount - 1)
+        return Double(clampedIndex) / Double(ringTickCount - 1)
+    }
+
+    static func ringTickAngleDegrees(at index: Int) -> Double {
+        ringStartAngleDegrees + ringTickProgress(at: index) * ringSweepAngleDegrees
+    }
+
+    static func ringTickIsActive(at index: Int, value: Float, range: ClosedRange<Float>) -> Bool {
+        ringTickProgress(at: index) <= normalizedValue(value, in: range)
     }
 
     static func dragValueDelta(forTranslationHeight height: CGFloat, valueScale: Float = 1) -> Float {

@@ -89,12 +89,37 @@ struct StemModeMainWorkspaceView: View {
                 onDismiss: { isFullLogPresented = false }
             )
         }
+        .focusedSceneValue(
+            \.velouraWorkspaceDisplaySelection,
+            workspaceDisplaySelection
+        )
+    }
+
+    private var workspaceDisplaySelection: Binding<VelouraWorkspaceDisplaySelection> {
+        Binding(
+            get: {
+                if isFullLogPresented { return .fullLog }
+                return selectedMode == .basic ? .basic : .detailedAnalysis
+            },
+            set: { selection in
+                switch selection {
+                case .basic:
+                    isFullLogPresented = false
+                    selectedMode = .basic
+                case .detailedAnalysis:
+                    isFullLogPresented = false
+                    selectedMode = .detail
+                case .fullLog:
+                    isFullLogPresented = true
+                }
+            }
+        )
     }
 
     private var fixedHeader: some View {
         WorkspaceFixedHeaderView(
             title: "Veloura Lucent — Stem Mode",
-            summary: "\(model.availableStemRoles.count)Stem分離・Stem別補正・純粋加算を基準に、再ミックスと既存マスタリングを独立して実行します"
+            summary: "\(model.availableStemRoles.count)Stem分離・Stem別補正を基準に、再ミックスと既存マスタリングを独立して実行します"
         ) {
             LiquidGlassSegmentedPicker(
                 title: "中央表示",

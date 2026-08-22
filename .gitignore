@@ -28,6 +28,14 @@ Sources/VelouraLucent/Resources/ThirdPartyNotices/BS-RoFormer-SW/
 *.gif
 *.webp
 
+# Keep only the keyboard shortcut design-QA evidence with its tracked report
+!/Docs/
+/Docs/*
+!/Docs/DesignQA/
+/Docs/DesignQA/*
+!/Docs/DesignQA/keyboard-shortcuts/
+!/Docs/DesignQA/keyboard-shortcuts/*.png
+
 # Local analysis output and machine-specific project settings
 graphify-out/
 output/

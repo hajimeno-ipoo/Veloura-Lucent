@@ -7,7 +7,11 @@ struct StemModeInspectorView: View {
     @Binding var windowBackgroundMaterialAmount: Double
     @Binding var isWindowBackgroundBlurEnabled: Bool
     @Binding var windowBackgroundBlurLevel: WindowBackgroundBlurLevel
+    @Binding var selectedSettingsSectionRawValue: String
+    @Binding var selectedAnalysisAudio: InspectorAudioSelection
+    @Binding var isCompletionReportPresented: Bool
     let isWindowFullScreen: Bool
+    let openKeyboardShortcutManager: @MainActor () -> Void
 
     var body: some View {
         ScrollView {
@@ -18,10 +22,16 @@ struct StemModeInspectorView: View {
                     windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
                     isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
                     windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
-                    isWindowFullScreen: isWindowFullScreen
+                    selectedSectionRawValue: $selectedSettingsSectionRawValue,
+                    isWindowFullScreen: isWindowFullScreen,
+                    openKeyboardShortcutManager: openKeyboardShortcutManager
                 )
                 Divider()
-                StemModeInspectorAudioPanel(model: model)
+                StemModeInspectorAudioPanel(
+                    model: model,
+                    selectedAudio: $selectedAnalysisAudio,
+                    isCompletionReportPresented: $isCompletionReportPresented
+                )
             }
             .padding(14)
             .velouraTransientOverlayScrollIndicators()
@@ -30,7 +40,7 @@ struct StemModeInspectorView: View {
     }
 }
 
-private enum StemModeInspectorSettingsSection: String, CaseIterable, Identifiable {
+enum StemModeInspectorSettingsSection: String, CaseIterable, Identifiable {
     case correction
     case remix
     case mastering
@@ -54,9 +64,9 @@ private struct StemModeInspectorSettingsPanel: View {
     @Binding var windowBackgroundMaterialAmount: Double
     @Binding var isWindowBackgroundBlurEnabled: Bool
     @Binding var windowBackgroundBlurLevel: WindowBackgroundBlurLevel
+    @Binding var selectedSectionRawValue: String
     let isWindowFullScreen: Bool
-    @SceneStorage("stemModeInspectorSettingsSelectedSection")
-    private var selectedSectionRawValue = StemModeInspectorSettingsSection.correction.rawValue
+    let openKeyboardShortcutManager: @MainActor () -> Void
 
     var body: some View {
         InspectorSettingsSectionLayout(
@@ -80,7 +90,8 @@ private struct StemModeInspectorSettingsPanel: View {
                         windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
                         isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
                         windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
-                        isWindowFullScreen: isWindowFullScreen
+                        isWindowFullScreen: isWindowFullScreen,
+                        openKeyboardShortcutManager: openKeyboardShortcutManager
                     )
                     StemModeAnalysisModeSettings(model: model)
                     StemModelManagementSection(
@@ -150,6 +161,8 @@ private struct StemModeAnalysisModeSettings: View {
 @MainActor
 private struct StemModeInspectorAudioPanel: View {
     @Bindable var model: StemModeWorkspaceModel
+    @Binding var selectedAudio: InspectorAudioSelection
+    @Binding var isCompletionReportPresented: Bool
 
     var body: some View {
         InspectorAnalysisPanelContent(
@@ -159,6 +172,8 @@ private struct StemModeInspectorAudioPanel: View {
             masteredMetrics: model.finalMetrics,
             processedTitle: processedTitle,
             completionReport: completionReport,
+            selectedAudio: $selectedAudio,
+            isCompletionReportPresented: $isCompletionReportPresented,
             peakCeilingDB: Double(
                 (model.qualityReports?.masteringSettings ?? model.masteringSettings).peakCeilingDB
             ),
@@ -214,7 +229,7 @@ private struct StemModeInspectorAudioPanel: View {
 
     private var processedTitle: String {
         model.remixedPreviewArtifact == nil
-            ? "補正済み純粋加算"
+            ? "補正後"
             : "Stem再ミックス"
     }
 

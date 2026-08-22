@@ -13,6 +13,20 @@ struct VelouraRootView: View {
     @State private var isInspectorPresented = true
     @State private var isWindowFullScreen = false
     @State private var isModelAcquisitionProgressPresented = false
+    @State private var isKeyboardShortcutManagerPresented = false
+    @SceneStorage("inspectorSettingsSelectedSection")
+    private var inspectorSettingsSelectedSectionRawValue =
+        InspectorSettingsSection.correction.rawValue
+    @SceneStorage("stemModeInspectorSettingsSelectedSection")
+    private var stemModeInspectorSettingsSelectedSectionRawValue =
+        StemModeInspectorSettingsSection.correction.rawValue
+    @SceneStorage("inspectorAnalysisSelectedAudio")
+    private var inspectorAnalysisSelectedAudioRawValue = InspectorAudioSelection.input.rawValue
+    @SceneStorage("stemModeInspectorAnalysisSelectedAudio")
+    private var stemModeInspectorAnalysisSelectedAudioRawValue =
+        InspectorAudioSelection.input.rawValue
+    @State private var isStandardCompletionReportPresented = false
+    @State private var isStemCompletionReportPresented = false
     @State private var windowBackgroundMaterialAmount =
         AppAppearanceSettings.storedWindowBackgroundMaterialAmount()
     @State private var isWindowBackgroundBlurEnabled =
@@ -59,6 +73,34 @@ struct VelouraRootView: View {
             \.velouraCommandActions,
             commandActions
         )
+        .focusedSceneValue(
+            \.velouraInspectorSettingsPresentationState,
+            inspectorSettingsPresentationState
+        )
+        .focusedSceneValue(
+            \.velouraInspectorAnalysisPresentationState,
+            inspectorAnalysisPresentationState
+        )
+        .focusedSceneValue(
+            \.velouraPlaybackPresentationState,
+            playbackPresentationState
+        )
+        .focusedSceneValue(
+            \.velouraStemPlaybackPresentationState,
+            stemPlaybackPresentationState
+        )
+        .focusedSceneValue(
+            \.velouraStemSelectionPresentationState,
+            stemSelectionPresentationState
+        )
+        .focusedSceneValue(
+            \.velouraKeyboardShortcutManagerPresentation,
+            $isKeyboardShortcutManagerPresented
+        )
+        .focusedSceneValue(
+            \.velouraCommandsSuspended,
+            isKeyboardShortcutManagerPresented
+        )
         .toolbar(removing: .title)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -95,7 +137,22 @@ struct VelouraRootView: View {
             synchronizeModelAcquisitionProgress(with: newState)
         }
         .overlay {
-            if isModelAcquisitionProgressPresented {
+            if isKeyboardShortcutManagerPresented {
+                ZStack {
+                    Color.black.opacity(0.20)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+
+                    KeyboardShortcutManagementView(
+                        settings: .shared,
+                        processedAudioTitle: commandActions.processedAudioTitle,
+                        onDismiss: { isKeyboardShortcutManagerPresented = false }
+                    )
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
+                .zIndex(2)
+            } else if isModelAcquisitionProgressPresented {
                 ZStack {
                     Color.black.opacity(0.14)
                         .ignoresSafeArea()
@@ -142,7 +199,11 @@ struct VelouraRootView: View {
                     windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
                     isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
                     windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
-                    isWindowFullScreen: isWindowFullScreen
+                    selectedSettingsSectionRawValue: $inspectorSettingsSelectedSectionRawValue,
+                    selectedAnalysisAudio: standardAnalysisSelectionBinding,
+                    isCompletionReportPresented: $isStandardCompletionReportPresented,
+                    isWindowFullScreen: isWindowFullScreen,
+                    openKeyboardShortcutManager: openKeyboardShortcutManager
                 )
             case .stem:
                 StemModeInspectorView(
@@ -151,7 +212,11 @@ struct VelouraRootView: View {
                     windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
                     isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
                     windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
-                    isWindowFullScreen: isWindowFullScreen
+                    selectedSettingsSectionRawValue: $stemModeInspectorSettingsSelectedSectionRawValue,
+                    selectedAnalysisAudio: stemAnalysisSelectionBinding,
+                    isCompletionReportPresented: $isStemCompletionReportPresented,
+                    isWindowFullScreen: isWindowFullScreen,
+                    openKeyboardShortcutManager: openKeyboardShortcutManager
                 )
             }
         }
@@ -202,6 +267,207 @@ struct VelouraRootView: View {
         )
     }
 
+    private func openKeyboardShortcutManager() {
+        isKeyboardShortcutManagerPresented = true
+    }
+
+    private var inspectorSettingsPresentationState: VelouraInspectorSettingsPresentationState {
+        VelouraInspectorSettingsPresentationState(
+            isStemMode: runtime.processingMode == .stem,
+            selection: inspectorSettingsSelectionBinding,
+            isInspectorPresented: $isInspectorPresented
+        )
+    }
+
+    private var inspectorAnalysisPresentationState: VelouraInspectorAnalysisPresentationState {
+        VelouraInspectorAnalysisPresentationState(
+            canShowCompletionReport: currentCompletionReport != nil,
+            selection: currentAnalysisSelectionBinding,
+            isInspectorPresented: $isInspectorPresented,
+            isCompletionReportPresented: currentCompletionReportPresentationBinding
+        )
+    }
+
+    private var playbackPresentationState: VelouraPlaybackPresentationState {
+        switch runtime.processingMode {
+        case .standard:
+            let preview = runtime.standardActions.preview
+            return VelouraPlaybackPresentationState(
+                preview: preview,
+                playbackInterlocks: [],
+                sideACommandTitle: playbackCommandTitle(for: .a, preview: preview),
+                sideBCommandTitle: playbackCommandTitle(for: .b, preview: preview)
+            )
+        case .stem:
+            let model = runtime.stemWorkspaceModel
+            return VelouraPlaybackPresentationState(
+                preview: model.previewController,
+                playbackInterlocks: [
+                    model.stemPreviewController,
+                    model.remixPreviewController,
+                ],
+                sideACommandTitle: playbackCommandTitle(
+                    for: .a,
+                    preview: model.previewController
+                ),
+                sideBCommandTitle: playbackCommandTitle(
+                    for: .b,
+                    preview: model.previewController
+                )
+            )
+        }
+    }
+
+    private func playbackCommandTitle(
+        for side: AudioComparisonSide,
+        preview: AudioPreviewController
+    ) -> String {
+        let target = preview.comparisonTarget(for: side)
+        let title = switch target {
+        case .input: "入力"
+        case .corrected: commandActions.processedAudioTitle
+        case .mastered: "最終版"
+        }
+        return "\(title)を再生"
+    }
+
+    private var stemPlaybackPresentationState: VelouraStemPlaybackPresentationState? {
+        guard runtime.processingMode == .stem else { return nil }
+        let model = runtime.stemWorkspaceModel
+        return VelouraStemPlaybackPresentationState(
+            selectedStemTitle: model.selectedStemPreviewRole.stemModeDisplayTitle,
+            stemComparison: VelouraPlaybackPresentationState(
+                preview: model.stemPreviewController,
+                playbackInterlocks: [
+                    model.previewController,
+                    model.remixPreviewController,
+                ],
+                sideACommandTitle: "rawを再生",
+                sideBCommandTitle: "補正後を再生",
+                comparisonSwitchCommandTitle: "raw／補正後切替",
+                allowsComparisonPairSelection: false
+            ),
+            remixComparison: VelouraPlaybackPresentationState(
+                preview: model.remixPreviewController,
+                playbackInterlocks: [
+                    model.previewController,
+                    model.stemPreviewController,
+                ],
+                sideACommandTitle: "補正後を再生",
+                sideBCommandTitle: "再ミックスを再生",
+                comparisonSwitchCommandTitle: "補正後／再ミックス切替",
+                allowsComparisonPairSelection: false
+            )
+        )
+    }
+
+    private var stemSelectionPresentationState: VelouraStemSelectionPresentationState? {
+        guard runtime.processingMode == .stem else { return nil }
+        let model = runtime.stemWorkspaceModel
+        return VelouraStemSelectionPresentationState(
+            availableRoles: model.availableStemRoles,
+            previewRole: mainActorBinding(
+                get: { model.selectedStemPreviewRole },
+                set: { model.selectStemPreviewRole($0) }
+            )
+        )
+    }
+
+    private var currentCompletionReport: CompletionReport? {
+        switch runtime.processingMode {
+        case .standard:
+            standardCompletionReport
+        case .stem:
+            runtime.stemWorkspaceModel.qualityReports?.completion
+        }
+    }
+
+    private var standardAnalysisSelectionBinding: Binding<InspectorAudioSelection> {
+        Binding(
+            get: {
+                InspectorAudioSelection(rawValue: inspectorAnalysisSelectedAudioRawValue) ?? .input
+            },
+            set: { inspectorAnalysisSelectedAudioRawValue = $0.rawValue }
+        )
+    }
+
+    private var stemAnalysisSelectionBinding: Binding<InspectorAudioSelection> {
+        Binding(
+            get: {
+                InspectorAudioSelection(
+                    rawValue: stemModeInspectorAnalysisSelectedAudioRawValue
+                ) ?? .input
+            },
+            set: { stemModeInspectorAnalysisSelectedAudioRawValue = $0.rawValue }
+        )
+    }
+
+    private var currentAnalysisSelectionBinding: Binding<InspectorAudioSelection> {
+        switch runtime.processingMode {
+        case .standard:
+            standardAnalysisSelectionBinding
+        case .stem:
+            stemAnalysisSelectionBinding
+        }
+    }
+
+    private var currentCompletionReportPresentationBinding: Binding<Bool> {
+        switch runtime.processingMode {
+        case .standard:
+            $isStandardCompletionReportPresented
+        case .stem:
+            $isStemCompletionReportPresented
+        }
+    }
+
+    private var inspectorSettingsSelectionBinding: Binding<VelouraInspectorSettingsSelection> {
+        Binding(
+            get: {
+                switch runtime.processingMode {
+                case .standard:
+                    switch InspectorSettingsSection(
+                        rawValue: inspectorSettingsSelectedSectionRawValue
+                    ) ?? .correction {
+                    case .correction: .correction
+                    case .mastering: .mastering
+                    case .app: .app
+                    }
+                case .stem:
+                    switch StemModeInspectorSettingsSection(
+                        rawValue: stemModeInspectorSettingsSelectedSectionRawValue
+                    ) ?? .correction {
+                    case .correction: .correction
+                    case .remix: .remix
+                    case .mastering: .mastering
+                    case .app: .app
+                    }
+                }
+            },
+            set: { selection in
+                switch runtime.processingMode {
+                case .standard:
+                    switch selection {
+                    case .correction:
+                        inspectorSettingsSelectedSectionRawValue = InspectorSettingsSection.correction.rawValue
+                    case .mastering:
+                        inspectorSettingsSelectedSectionRawValue = InspectorSettingsSection.mastering.rawValue
+                    case .app:
+                        inspectorSettingsSelectedSectionRawValue = InspectorSettingsSection.app.rawValue
+                    case .remix:
+                        break
+                    }
+                case .stem:
+                    stemModeInspectorSettingsSelectedSectionRawValue = switch selection {
+                    case .correction: StemModeInspectorSettingsSection.correction.rawValue
+                    case .remix: StemModeInspectorSettingsSection.remix.rawValue
+                    case .mastering: StemModeInspectorSettingsSection.mastering.rawValue
+                    case .app: StemModeInspectorSettingsSection.app.rawValue
+                    }
+                }
+            }
+        )
+    }
+
     private var commandActions: VelouraCommandActions {
         switch runtime.processingMode {
         case .standard:
@@ -214,10 +480,10 @@ struct VelouraRootView: View {
     private var standardCommandActions: VelouraCommandActions {
         let actions = runtime.standardActions
         let job = actions.job
-        let preview = actions.preview
 
         return VelouraCommandActions(
             processingMode: .standard,
+            processedAudioTitle: "補正後",
             canSwitchProcessingMode: !runtime.isModeSwitchDisabled,
             canChooseInput: !job.isProcessing && !job.isMastering,
             canRunCorrection: job.inputFile != nil
@@ -246,32 +512,25 @@ struct VelouraRootView: View {
                     perform: actions.exportMasteredAudio
                 ),
             ],
-            canTogglePlayback: preview.canToggleComparisonPlayback,
-            canStopPlayback: preview.activeTarget != nil,
-            canToggleComparisonSide: preview.canToggleComparisonSide,
-            isPlaybackRunning: preview.isComparisonPlaybackRunning,
             selectProcessingMode: selectProcessingMode,
             chooseInputAudio: actions.chooseInputAudio,
             runCorrection: actions.startCorrectionProcessing,
             runMastering: actions.startMasteringProcessing,
             cancelCorrection: actions.cancelCorrectionProcessing,
-            cancelMastering: actions.cancelMasteringProcessing,
-            togglePlayback: preview.toggleComparisonPlayback,
-            stopPlayback: {
-                preview.stopPlayback()
-            },
-            toggleComparisonSide: preview.toggleComparisonSide
+            cancelMastering: actions.cancelMasteringProcessing
         )
     }
 
     private var stemCommandActions: VelouraCommandActions {
         let model = runtime.stemWorkspaceModel
-        let preview = model.previewController
         let isCorrectionRunning = stemCorrectionIsRunning
         let isMasteringRunning = stemMasteringIsRunning
 
         return VelouraCommandActions(
             processingMode: .stem,
+            processedAudioTitle: model.remixedPreviewArtifact == nil
+                ? "補正後"
+                : "Stem再ミックス",
             stemCount: model.availableStemRoles.count,
             canSwitchProcessingMode: !runtime.isModeSwitchDisabled,
             canChooseInput: model.canChooseInput,
@@ -291,10 +550,6 @@ struct VelouraRootView: View {
             canCancelMastering: isMasteringRunning
                 && model.canCancelProcessing,
             exportActions: stemExportCommandActions,
-            canTogglePlayback: preview.canToggleComparisonPlayback,
-            canStopPlayback: preview.activeTarget != nil,
-            canToggleComparisonSide: preview.canToggleComparisonSide,
-            isPlaybackRunning: preview.isComparisonPlaybackRunning,
             selectProcessingMode: selectProcessingMode,
             chooseInputAudio: chooseStemInputAudio,
             runCorrection: {
@@ -314,17 +569,6 @@ struct VelouraRootView: View {
             },
             cancelMastering: {
                 Task { await model.cancelMastering() }
-            },
-            togglePlayback: {
-                model.stopAuxiliaryPreviewPlayback()
-                preview.toggleComparisonPlayback()
-            },
-            stopPlayback: {
-                preview.stopPlayback()
-            },
-            toggleComparisonSide: {
-                model.stopAuxiliaryPreviewPlayback()
-                preview.toggleComparisonSide()
             }
         )
     }

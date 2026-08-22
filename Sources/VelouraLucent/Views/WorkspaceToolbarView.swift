@@ -36,7 +36,6 @@ struct WorkspaceToolbarView: View {
                 .onHover { updateHighlight(.chooseInput, isHovering: $0) }
                 .help("入力音声を選びます")
                 .disabled(isChooseInputDisabled)
-                .keyboardShortcut("o", modifiers: .command)
 
                 Button(action: performCorrectionAction) {
                     actionLabel(
@@ -52,7 +51,6 @@ struct WorkspaceToolbarView: View {
                 .onHover { updateHighlight(.runCorrection, isHovering: $0) }
                 .help(correctionHelp)
                 .disabled(isCorrectionDisabled)
-                .keyboardShortcut("r", modifiers: .command)
 
                 if commandActions.processingMode == .stem {
                     Button(action: performRemixAction) {
@@ -77,7 +75,6 @@ struct WorkspaceToolbarView: View {
                             ? !commandActions.canCancelRemix
                             : !commandActions.canRunRemix
                     )
-                    .keyboardShortcut("r", modifiers: [.command, .option])
                 }
 
                 Button(action: performMasteringAction) {
@@ -94,7 +91,6 @@ struct WorkspaceToolbarView: View {
                 .onHover { updateHighlight(.runMastering, isHovering: $0) }
                 .help(masteringHelp)
                 .disabled(isMasteringDisabled)
-                .keyboardShortcut("r", modifiers: [.command, .shift])
             }
             .padding(4)
             .velouraAdaptiveGlass(in: .capsule, interactive: true)

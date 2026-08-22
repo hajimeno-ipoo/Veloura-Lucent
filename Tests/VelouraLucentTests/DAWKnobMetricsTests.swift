@@ -20,8 +20,8 @@ struct DAWKnobMetricsTests {
         #expect(DAWKnobMetrics.knobHitRect.midY == DAWKnobMetrics.scaledPoint(DAWKnobMetrics.knobCenter).y)
         #expect(DAWKnobMetrics.knobHitRect.width == DAWKnobMetrics.knobHitDiameter)
         #expect(DAWKnobMetrics.knobHitRect.height == DAWKnobMetrics.knobHitDiameter)
-        #expect(abs(DAWKnobMetrics.stepButtonHitSize.width - 29.904296875) < 0.000001)
-        #expect(abs(DAWKnobMetrics.stepButtonHitSize.height - 30.345703125) < 0.000001)
+        #expect(DAWKnobMetrics.stepRailHitSize == CGSize(width: 18, height: 70))
+        #expect(DAWKnobMetrics.stepRailVisibleSize == CGSize(width: 8, height: 58))
         #expect(DAWKnobMetrics.columnSpacing == 7)
         #expect(DAWKnobMetrics.rowSpacing == 8)
         #expect(abs(DAWKnobMetrics.artworkScale - (226.0 / 1024.0)) < 0.000001)
@@ -32,9 +32,7 @@ struct DAWKnobMetricsTests {
     @Test
     func rotaryKnobResourcesAreBundled() {
         #expect(DAWKnobMetrics.resourceURL(named: "2") != nil)
-        #expect(DAWKnobMetrics.resourceURL(named: "3") != nil)
         #expect(DAWKnobMetrics.rotatingArtworkImage != nil)
-        #expect(DAWKnobMetrics.fixedArtworkImage != nil)
     }
 
     @Test
@@ -94,12 +92,16 @@ struct DAWKnobMetricsTests {
     }
 
     @Test
-    func longMasteringUnitsUseWiderTextFrameThanPercent() {
-        #expect(DAWKnobMetrics.unitTextWidth(for: "%") == DAWKnobMetrics.defaultUnitTextWidth)
-        #expect(DAWKnobMetrics.unitTextWidth(for: nil) == DAWKnobMetrics.defaultUnitTextWidth)
-        #expect(DAWKnobMetrics.unitTextWidth(for: "LUFS") == DAWKnobMetrics.wideUnitTextWidth)
-        #expect(DAWKnobMetrics.unitTextWidth(for: "dB") == DAWKnobMetrics.wideUnitTextWidth)
-        #expect(DAWKnobMetrics.wideUnitTextWidth > DAWKnobMetrics.defaultUnitTextWidth)
+    func ringTicksCoverTheSameRotaryRangeAsTheKnob() {
+        #expect(DAWKnobMetrics.ringTickCount == 37)
+        #expect(DAWKnobMetrics.ringTickAngleDegrees(at: 0) == 135)
+        #expect(DAWKnobMetrics.ringTickAngleDegrees(at: 18) == 270)
+        #expect(DAWKnobMetrics.ringTickAngleDegrees(at: 36) == 405)
+        #expect(DAWKnobMetrics.ringTickIsActive(at: 0, value: 0, range: 0 ... 1))
+        #expect(!DAWKnobMetrics.ringTickIsActive(at: 1, value: 0, range: 0 ... 1))
+        #expect(DAWKnobMetrics.ringTickIsActive(at: 18, value: 0.5, range: 0 ... 1))
+        #expect(!DAWKnobMetrics.ringTickIsActive(at: 19, value: 0.5, range: 0 ... 1))
+        #expect(DAWKnobMetrics.ringTickIsActive(at: 36, value: 1, range: 0 ... 1))
     }
 
     @Test
@@ -110,44 +112,30 @@ struct DAWKnobMetricsTests {
     }
 
     @Test
-    func overlayCoordinatesUseSameSourceScaleAsArtwork() {
-        let valueCenter = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.valueCenter)
-        let minusCenter = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.minusButtonCenter)
-        let plusCenter = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.plusButtonCenter)
-        let unitCenter = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.unitCenter)
-
-        #expect(abs(valueCenter.x - 57.5654296875) < 0.000001)
-        #expect(abs(valueCenter.y - 31.630859375) < 0.000001)
-        #expect(abs(minusCenter.x - 21.701171875) < 0.000001)
-        #expect(abs(minusCenter.y - 141.982421875) < 0.000001)
-        #expect(abs(plusCenter.x - 94.75390625) < 0.000001)
-        #expect(abs(plusCenter.y - 141.982421875) < 0.000001)
-        #expect(abs(unitCenter.x - 58.2275390625) < 0.000001)
-        #expect(abs(unitCenter.y - 141.982421875) < 0.000001)
-        #expect(unitCenter.x == (minusCenter.x + plusCenter.x) / 2)
+    func overlayAndRailCoordinatesMatchTheSelectedCompactLayout() {
+        #expect(DAWKnobMetrics.valueCenter == CGPoint(x: 59, y: 20))
+        #expect(DAWKnobMetrics.valueUnitSpacing == 4)
+        #expect(DAWKnobMetrics.topLabelCenter == CGPoint(x: 59, y: 40))
+        #expect(DAWKnobMetrics.decrementRailCenter == CGPoint(x: 7, y: 102))
+        #expect(DAWKnobMetrics.incrementRailCenter == CGPoint(x: 111, y: 102))
+        #expect(DAWKnobMetrics.decrementRailCenter.x + DAWKnobMetrics.incrementRailCenter.x == 118)
+        #expect(DAWKnobMetrics.titleCenter.y > DAWKnobMetrics.leftLabelCenter.y)
     }
 
     @Test
-    func stepButtonHitAreaAddsEightPointsOutsideScaledArtwork() {
-        let visibleSize = DAWKnobMetrics.scaledSize(DAWKnobMetrics.stepButtonSize)
-
-        #expect(DAWKnobMetrics.stepButtonHitSize.width - visibleSize.width == 16)
-        #expect(DAWKnobMetrics.stepButtonHitSize.height - visibleSize.height == 16)
+    func stepRailHitAreaIsWiderAndTallerThanItsVisibleLine() {
+        #expect(DAWKnobMetrics.stepRailHitSize.width > DAWKnobMetrics.stepRailVisibleSize.width)
+        #expect(DAWKnobMetrics.stepRailHitSize.height > DAWKnobMetrics.stepRailVisibleSize.height)
     }
 
     @Test
-    func labelsAndTitleMoveBelowScaleDotsAndButtons() {
-        let topLabel = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.topLabelCenter)
-        let leftLabel = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.leftLabelCenter)
-        let rightLabel = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.rightLabelCenter)
-        let title = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.titleCenter)
-        let minusCenter = DAWKnobMetrics.scaledPoint(DAWKnobMetrics.minusButtonCenter)
+    func labelsAndTitleRemainOutsideTheKnobRing() {
+        let ringTop = DAWKnobMetrics.knobDisplayCenter.y - DAWKnobMetrics.ringDiameter / 2
 
-        #expect(abs(topLabel.y - 55.24609375) < 0.000001)
-        #expect(abs(leftLabel.y - 130.28515625) < 0.000001)
-        #expect(abs(rightLabel.y - 130.28515625) < 0.000001)
-        #expect(abs(title.y - 163.83203125) < 0.000001)
-        #expect(title.y > minusCenter.y)
+        #expect(ringTop - DAWKnobMetrics.topLabelCenter.y >= 8)
+        #expect(DAWKnobMetrics.leftLabelCenter.y > DAWKnobMetrics.knobDisplayCenter.y)
+        #expect(DAWKnobMetrics.rightLabelCenter.y > DAWKnobMetrics.knobDisplayCenter.y)
+        #expect(DAWKnobMetrics.titleCenter.y > DAWKnobMetrics.decrementRailCenter.y)
     }
 
     @Test

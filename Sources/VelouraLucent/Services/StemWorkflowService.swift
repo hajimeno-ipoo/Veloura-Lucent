@@ -733,7 +733,7 @@ struct StemWorkflowService: Sendable {
             await eventHandler(.log(
                 runID: request.runID,
                 step: .validateCorrectedPureSum,
-                message: "補正済み純粋加算の安全確認を行います"
+                message: "補正後の安全確認を行います"
             ))
             let guarded = remixSafetyGuard.protect(
                 rawStemsByRole: raw48,
@@ -776,7 +776,7 @@ struct StemWorkflowService: Sendable {
             await eventHandler(.log(
                 runID: request.runID,
                 step: .correctedPureSum,
-                message: "補正済み純粋加算を保存します"
+                message: "補正後を保存します"
             ))
             let correctedArtifact = try await store.save(
                 signal: correctedPureSum,
@@ -787,7 +787,7 @@ struct StemWorkflowService: Sendable {
             await eventHandler(.log(
                 runID: request.runID,
                 step: .correctedPureSum,
-                message: "補正済み純粋加算を解析・ノイズ測定します"
+                message: "補正後を解析・ノイズ測定します"
             ))
             let correctedEvaluation = try await evaluate(
                 correctedPureSum,
@@ -798,14 +798,14 @@ struct StemWorkflowService: Sendable {
             await eventHandler(.log(
                 runID: request.runID,
                 step: .validateCorrectedPureSum,
-                message: "補正済み純粋加算を検証します"
+                message: "補正後を検証します"
             ))
             await eventHandler(.displayProgress(.init(
                 runID: request.runID,
                 step: .correctedPureSumValidation,
                 status: .running,
                 fraction: 0,
-                detail: "補正済み純粋加算を検証中"
+                detail: "補正後を検証中"
             )))
             let canonical48 = try await convert(canonicalSignal, to: 48_000)
             let rawRemix48 = try await convert(rawRemix, to: 48_000)
@@ -840,7 +840,7 @@ struct StemWorkflowService: Sendable {
             await eventHandler(.log(
                 runID: request.runID,
                 step: .validateCorrectedPureSum,
-                message: "補正済み純粋加算の検証が完了しました"
+                message: "補正後の検証が完了しました"
             ))
             await eventHandler(.artifactCommitted(runID: request.runID, artifact: correctedArtifact))
             await eventHandler(.displayProgress(.init(
@@ -848,23 +848,23 @@ struct StemWorkflowService: Sendable {
                 step: .correctedPureSum,
                 status: .completed,
                 fraction: 1,
-                detail: "補正済み\(request.runContract.stemCount)Stemの純粋加算完了"
+                detail: "補正後の生成完了"
             )))
             await eventHandler(.displayProgress(.init(
                 runID: request.runID,
                 step: .correctedPureSumValidation,
                 status: .completed,
                 fraction: 1,
-                detail: "純粋加算検証完了"
+                detail: "補正後検証完了"
             )))
             try await progress(
                 request.runID,
                 .correctedPureSum,
                 1,
-                "補正済み\(request.runContract.stemCount)Stemの純粋加算完了",
+                "補正後の生成完了",
                 eventHandler
             )
-            try await progress(request.runID, .validateCorrectedPureSum, 1, "純粋加算検証完了", eventHandler)
+            try await progress(request.runID, .validateCorrectedPureSum, 1, "補正後検証完了", eventHandler)
             await eventHandler(.log(
                 runID: request.runID,
                 step: .validateCorrectedPureSum,

@@ -267,10 +267,19 @@ struct StemWorkflowServiceTests {
         let fixture = try await makeCorrectionFixture(failingRole: nil)
         defer { try? StemWorkflowService().discardTemporarySession(runID: fixture.request.runID) }
         let recorder = WorkflowStringRecorder()
+        let completedProgressDetails = WorkflowStringRecorder()
 
         _ = try await fixture.service.processCorrection(fixture.request) { event in
-            guard case .log(_, _, let message) = event else { return }
-            recorder.append(message)
+            switch event {
+            case .log(_, _, let message):
+                recorder.append(message)
+            case .displayProgress(let progress) where progress.status == .completed:
+                if let detail = progress.detail {
+                    completedProgressDetails.append(detail)
+                }
+            default:
+                break
+            }
         }
 
         var expected = [
@@ -299,17 +308,21 @@ struct StemWorkflowServiceTests {
             "raw再ミックスを解析・ノイズ測定します",
             "raw再ミックスを入力2mixと検証します",
             "raw再ミックスの検証が完了しました",
-            "補正済み純粋加算の安全確認を行います",
+            "補正後の安全確認を行います",
             "純粋加算安全確認: raw Stemへの差し替えなし",
             "補正済み4Stemをgain・pan・reverbなしで純粋加算します",
-            "補正済み純粋加算を保存します",
-            "補正済み純粋加算を解析・ノイズ測定します",
-            "補正済み純粋加算を検証します",
-            "補正済み純粋加算の検証が完了しました",
+            "補正後を保存します",
+            "補正後を解析・ノイズ測定します",
+            "補正後を検証します",
+            "補正後の検証が完了しました",
             "補正処理が完了しました",
         ])
 
         #expect(recorder.values() == expected)
+        #expect(completedProgressDetails.values().suffix(2) == [
+            "補正後の生成完了",
+            "補正後検証完了",
+        ])
     }
 
     @Test

@@ -7,6 +7,7 @@ struct AppSettingsPanel: View {
     @Binding private var isWindowBackgroundBlurEnabled: Bool
     @Binding private var windowBackgroundBlurLevel: WindowBackgroundBlurLevel
     private let isWindowFullScreen: Bool
+    private let openKeyboardShortcutManager: @MainActor () -> Void
     @State private var completionNotificationsEnabled: Bool
     @State private var isEditingWindowBackgroundMaterialAmount = false
     @State private var isEditingWindowBackgroundBlurLevel = false
@@ -16,6 +17,7 @@ struct AppSettingsPanel: View {
         isWindowBackgroundBlurEnabled: Binding<Bool>,
         windowBackgroundBlurLevel: Binding<WindowBackgroundBlurLevel>,
         isWindowFullScreen: Bool,
+        openKeyboardShortcutManager: @escaping @MainActor () -> Void,
         preferences: CompletionNotificationPreferenceProviding = UserDefaultsCompletionNotificationPreferences.shared,
         notificationReporter: CompletionNotificationReporting = NotificationService.shared
     ) {
@@ -23,6 +25,7 @@ struct AppSettingsPanel: View {
         _isWindowBackgroundBlurEnabled = isWindowBackgroundBlurEnabled
         _windowBackgroundBlurLevel = windowBackgroundBlurLevel
         self.isWindowFullScreen = isWindowFullScreen
+        self.openKeyboardShortcutManager = openKeyboardShortcutManager
         self.preferences = preferences
         self.notificationReporter = notificationReporter
         _completionNotificationsEnabled = State(initialValue: preferences.completionNotificationsEnabled)
@@ -122,6 +125,26 @@ struct AppSettingsPanel: View {
             Toggle("完了通知", isOn: completionNotificationsBinding)
                 .toggleStyle(.switch)
                 .tint(LiquidGlassSegmentedPickerStyle.switchTint)
+
+            Divider()
+
+            HStack(alignment: .center, spacing: 16) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("キーボード操作")
+                    Text("変更できるショートカットと固定操作を確認します")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                LiquidGlassActionButton(
+                    title: "ショートカットを管理…",
+                    systemImage: "keyboard",
+                    action: openKeyboardShortcutManager
+                )
+                .accessibilityLabel("ショートカットを管理")
+            }
         }
     }
 

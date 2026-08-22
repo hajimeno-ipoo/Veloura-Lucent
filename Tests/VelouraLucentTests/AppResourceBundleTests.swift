@@ -7,7 +7,6 @@ struct AppResourceBundleTests {
     func developmentRunUsesSwiftPackageResources() {
         #expect(AppResourceBundle.bundle != nil)
         #expect(AppResourceBundle.url(forResource: "2", withExtension: "png") != nil)
-        #expect(AppResourceBundle.url(forResource: "3", withExtension: "png") != nil)
         #expect(AppResourceBundle.resourceURL?.lastPathComponent == AppResourceBundle.bundleName)
     }
 

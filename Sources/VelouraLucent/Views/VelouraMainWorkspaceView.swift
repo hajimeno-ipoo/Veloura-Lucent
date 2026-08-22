@@ -29,6 +29,31 @@ struct VelouraMainWorkspaceView: View {
                 onDismiss: { isFullLogPresented = false }
             )
         }
+        .focusedSceneValue(
+            \.velouraWorkspaceDisplaySelection,
+            workspaceDisplaySelection
+        )
+    }
+
+    private var workspaceDisplaySelection: Binding<VelouraWorkspaceDisplaySelection> {
+        Binding(
+            get: {
+                if isFullLogPresented { return .fullLog }
+                return displayMode == .basic ? .basic : .detailedAnalysis
+            },
+            set: { selection in
+                switch selection {
+                case .basic:
+                    isFullLogPresented = false
+                    displayMode = .basic
+                case .detailedAnalysis:
+                    isFullLogPresented = false
+                    displayMode = .detail
+                case .fullLog:
+                    isFullLogPresented = true
+                }
+            }
+        )
     }
 
     private var fixedHeader: some View {

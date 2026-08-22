@@ -40,8 +40,8 @@ enum StemWorkflowStep: String, CaseIterable, Identifiable, Sendable {
         case .evaluateStems: "Stem別解析"
         case .correctStems: "Stem別補正"
         case .validateCorrectedStems: "補正後Stem検証"
-        case .correctedPureSum: "補正済み純粋加算"
-        case .validateCorrectedPureSum: "補正済み純粋加算検証"
+        case .correctedPureSum: "補正後"
+        case .validateCorrectedPureSum: "補正後検証"
         case .remix: "Stem再ミックス"
         case .validateRemix: "Stem再ミックス検証"
         case .mastering: "マスタリング"
@@ -66,8 +66,8 @@ struct StemModeProcessStep: Hashable, Identifiable, Sendable {
         correction(id: "separation", title: "\(stemCount)Stem分離")
     }
     static let separatedValidation = correction(id: "separatedValidation", title: "分離結果検証")
-    static let correctedPureSum = correction(id: "correctedPureSum", title: "補正済み純粋加算")
-    static let correctedPureSumValidation = correction(id: "correctedPureSumValidation", title: "純粋加算検証")
+    static let correctedPureSum = correction(id: "correctedPureSum", title: "補正後")
+    static let correctedPureSumValidation = correction(id: "correctedPureSumValidation", title: "補正後検証")
     static let automaticRemixPlan = remix(id: "automaticPlan", title: "自動再ミックス設定")
     static let remixGain = remix(id: "gain", title: "Stem別gain")
     static let remixMasking = remix(id: "masking", title: "条件付き帯域制御")

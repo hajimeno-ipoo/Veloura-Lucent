@@ -300,7 +300,7 @@ enum StemModeRemixAnalysisPresentationError: LocalizedError, Equatable, Sendable
         case .evaluationPurposeMismatch:
             "再ミックス採用表示へ渡されたrawまたは補正後の解析目的が一致しません。"
         case .validationMismatch:
-            "補正済み純粋加算またはStem再ミックスの構造検証結果が一致しません。"
+            "補正後またはStem再ミックスの構造検証結果が一致しません。"
         }
     }
 }

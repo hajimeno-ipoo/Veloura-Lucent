@@ -22,7 +22,7 @@ enum StemWorkflowControllerError: LocalizedError {
         case .workflowAlreadyActive:
             "別のStem Mode処理が進行中です。"
         case .remixNotReady:
-            "契約対象の補正済みStemと純粋加算が確定していないため、再ミックスを開始できません。"
+            "契約対象の補正済みStemと補正後が確定していないため、再ミックスを開始できません。"
         case .masteringNotReady:
             "検証済みStem再ミックスが確定していないため、マスタリングを開始できません。"
         case .modelOperationInProgress:
@@ -949,7 +949,7 @@ final class StemWorkflowController {
                 runID: result.runID,
                 level: .warning,
                 step: .validateCorrectedPureSum,
-                message: "純粋加算解析の画面表示を省略しました: \(error.localizedDescription)"
+                message: "補正後解析の画面表示を省略しました: \(error.localizedDescription)"
             )
         }
         for evaluation in result.stemEvaluations {
@@ -1079,7 +1079,7 @@ final class StemWorkflowController {
             }
             workspaceModel?.presentControllerFailure(
                 title: "再ミックスを停止しました",
-                message: "補正済み\(session.runContract?.stemCount ?? 0)Stemと純粋加算は保持しています。\n\(error.localizedDescription)"
+                message: "補正済み\(session.runContract?.stemCount ?? 0)Stemと補正後は保持しています。\n\(error.localizedDescription)"
             )
             finishStoppedRun()
             return
@@ -1100,7 +1100,7 @@ final class StemWorkflowController {
             }
             workspaceModel?.presentControllerFailure(
                 title: "マスタリングを停止しました",
-                message: "補正済み\(session.runContract?.stemCount ?? 0)Stem、純粋加算、Stem再ミックスは保持しています。\n\(error.localizedDescription)"
+                message: "補正済み\(session.runContract?.stemCount ?? 0)Stem、補正後、Stem再ミックスは保持しています。\n\(error.localizedDescription)"
             )
             finishStoppedRun()
             return

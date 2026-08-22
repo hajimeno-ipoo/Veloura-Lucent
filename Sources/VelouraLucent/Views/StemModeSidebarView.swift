@@ -18,7 +18,7 @@ struct StemModeSidebarView: View {
                         tint: .blue
                     )
                     SidebarFileRow(
-                        title: "補正済み純粋加算",
+                        title: "補正後",
                         systemImage: "waveform.badge.checkmark",
                         fileURL: model.correctedPureSumPreviewArtifact?.fileURL,
                         fileInfo: fileInfo(for: model.correctedPureSumPreviewArtifact),

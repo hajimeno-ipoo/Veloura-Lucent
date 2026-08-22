@@ -526,7 +526,7 @@ struct StemWorkflowSessionTests {
 
         #expect(session.recentActivityEvents.suffix(2).map(\.title) == [
             "補正処理が完了しました",
-            "補正済み純粋加算を解析しました",
+            "補正後を解析しました",
         ])
         #expect(session.recentActivityEvents.last?.detail == "ラウドネス: -18.0 LUFS / ピーク: -1.0 dBTP")
     }

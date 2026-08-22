@@ -555,7 +555,7 @@ final class StemModeWorkspaceModel {
             let stemCount = runContract?.stemCount ?? availableStemRoles.count
             presentError(
                 title: "再ミックスを開始できません",
-                message: "補正済み\(stemCount)Stemと純粋加算の検証が完了してから再ミックスを実行してください。"
+                message: "補正済み\(stemCount)Stemと補正後の検証が完了してから再ミックスを実行してください。"
             )
             return
         }

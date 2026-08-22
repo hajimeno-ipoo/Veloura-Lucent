@@ -40,7 +40,10 @@ struct StemWaveformComparisonView: View {
             loudnessHelp: "rawと補正後の音量差を試聴時だけ揃えます",
             resetToken: resetToken,
             topAccessory: AnyView(rolePicker),
-            onWillStartPlayback: beginPlayback
+            playbackInterlocks: [
+                model.previewController,
+                model.remixPreviewController,
+            ]
         )
         .accessibilityElement(children: .contain)
         .onAppear(perform: model.refreshSelectedStemPreviewSources)
@@ -89,8 +92,4 @@ struct StemWaveformComparisonView: View {
         ].joined(separator: "|")
     }
 
-    private func beginPlayback() {
-        model.stopTwoMixPreviewPlayback()
-        model.stopRemixPreviewPlayback()
-    }
 }

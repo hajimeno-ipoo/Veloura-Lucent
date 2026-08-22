@@ -4,6 +4,9 @@ import Testing
 struct StemModeWorkspaceWordingTests {
     @Test
     func workspaceKeepsApprovedProductionAndSoundQualityContractsVisible() throws {
+        let remixComparison = try source(
+            "Sources/VelouraLucent/Views/StemRemixComparisonView.swift"
+        )
         let source = try combinedSource([
             "Sources/VelouraLucent/App/VelouraCommands.swift",
             "Sources/VelouraLucent/Views/WorkspaceToolbarView.swift",
@@ -36,7 +39,7 @@ struct StemModeWorkspaceWordingTests {
         #expect(source.contains("raw使用"))
         #expect(source.contains("DSP最終適用結果"))
         #expect(!source.contains("採用したStem"))
-        #expect(source.contains("Button(\"A/B切替\")"))
+        #expect(source.contains("comparisonSwitchCommandTitle ?? \"A/B切替\""))
         #expect(source.contains("sideAButtonTitle: \"rawを再生\""))
         #expect(source.contains("sideBButtonTitle: \"補正後を再生\""))
         #expect(source.contains("switchButtonTitle: \"raw／補正後切替\""))
@@ -44,8 +47,14 @@ struct StemModeWorkspaceWordingTests {
         #expect(source.contains("title: \"補正後Stem\""))
         #expect(source.contains("stemPreviewController"))
         #expect(source.contains("AudioWaveformWorkspaceView("))
-        #expect(source.contains("sideAButtonTitle: \"純粋加算を再生\""))
+        #expect(source.contains("workspaceTitle: \"補正後／再ミックス A/B\""))
+        #expect(source.contains("sideAButtonTitle: \"補正後を再生\""))
         #expect(source.contains("sideBButtonTitle: \"再ミックスを再生\""))
+        #expect(remixComparison.contains("title: \"再ミックス\""))
+        #expect(remixComparison.contains("accessibilityLabel: \"再ミックスの波形\""))
+        #expect(!remixComparison.contains("title: \"Stem再ミックス\""))
+        #expect(!source.contains("補正済み純粋加算"))
+        #expect(!source.contains("workspaceTitle: \"純粋加算／再ミックス A/B\""))
         #expect(source.contains("手動"))
         #expect(source.contains("自動値"))
         #expect(source.contains("補正ログ"))
@@ -70,7 +79,7 @@ struct StemModeWorkspaceWordingTests {
         #expect(remix.contains("TermHelpButton(\n                        title: \"再ミックス調整\""))
         #expect(remix.contains("全Stemの音量が0 dB、パンが0"))
         #expect(remix.contains("Stem間の衝突回避が無効または0"))
-        #expect(remix.contains("再ミックス版は純粋加算版とほぼ同じ音になります"))
+        #expect(remix.contains("再ミックス後は補正後とほぼ同じ音になります"))
         #expect(!remix.contains("パンが中央"))
         #expect(remix.contains("let plan = model.automaticRemixPlan"))
         #expect(remix.contains(
@@ -476,7 +485,7 @@ struct StemModeWorkspaceWordingTests {
         #expect(stem.contains("Text(\"解析上の確認事項\")"))
         #expect(stem.contains("Text(\"確認事項はありません。\")"))
         #expect(stem.contains("Text(\"再ミックス解析が完了すると表示します。\")"))
-        #expect(stem.contains("音声を選ぶと、入力、純粋加算または再ミックス、Stem Mode最終版"))
+        #expect(stem.contains("音声を選ぶと、入力、補正後または再ミックス、Stem Mode最終版"))
         #expect(!stem.contains("補正段の入力解析が完了すると"))
         #expect(stem.contains("@State private var showStemSpecificAnalysis = false"))
         #expect(stem.contains("@State private var showRemixSpecificAnalysis = false"))
@@ -600,7 +609,7 @@ struct StemModeWorkspaceWordingTests {
         #expect(preview.contains("comparisonPairSummary: comparisonPairSummary"))
         #expect(preview.contains("targetTitle: targetTitle"))
         #expect(preview.contains("model.remixedPreviewArtifact == nil"))
-        #expect(preview.contains("\"補正済み純粋加算\""))
+        #expect(preview.contains("\"補正後\""))
         #expect(preview.contains("\"Stem再ミックス\""))
         #expect(model.contains("let previewController = AudioPreviewController()"))
         #expect(model.contains("let remixPreviewController = AudioPreviewController()"))

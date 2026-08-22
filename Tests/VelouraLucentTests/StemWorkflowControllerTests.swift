@@ -552,7 +552,7 @@ struct StemWorkflowControllerTests {
         #expect(workspace.remixAnalysisPresentation?.processedRemixEvaluation?.purpose == .remix)
         #expect(session.recentActivityEvents.filter { $0.domain == .correction }.map(\.title) == [
             "補正処理が完了しました",
-            "補正済み純粋加算を解析しました",
+            "補正後を解析しました",
         ])
         #expect(session.recentActivityEvents.filter { $0.domain == .remix }.map(\.title) == [
             "再ミックスが完了しました",

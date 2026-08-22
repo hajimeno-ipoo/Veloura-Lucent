@@ -6,7 +6,11 @@ struct VelouraInspectorView: View {
     @Binding var windowBackgroundMaterialAmount: Double
     @Binding var isWindowBackgroundBlurEnabled: Bool
     @Binding var windowBackgroundBlurLevel: WindowBackgroundBlurLevel
+    @Binding var selectedSettingsSectionRawValue: String
+    @Binding var selectedAnalysisAudio: InspectorAudioSelection
+    @Binding var isCompletionReportPresented: Bool
     let isWindowFullScreen: Bool
+    let openKeyboardShortcutManager: @MainActor () -> Void
 
     var body: some View {
         ScrollView {
@@ -16,10 +20,17 @@ struct VelouraInspectorView: View {
                     windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
                     isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
                     windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
-                    isWindowFullScreen: isWindowFullScreen
+                    selectedSectionRawValue: $selectedSettingsSectionRawValue,
+                    isWindowFullScreen: isWindowFullScreen,
+                    openKeyboardShortcutManager: openKeyboardShortcutManager
                 )
                 Divider()
-                InspectorAnalysisPanel(job: job, completionReport: completionReport)
+                InspectorAnalysisPanel(
+                    job: job,
+                    completionReport: completionReport,
+                    selectedAudio: $selectedAnalysisAudio,
+                    isCompletionReportPresented: $isCompletionReportPresented
+                )
             }
             .padding(14)
             .velouraTransientOverlayScrollIndicators()

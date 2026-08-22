@@ -39,9 +39,9 @@ enum StemWorkflowSessionError: LocalizedError, Equatable, Sendable {
         case .completionRequiresCompletedExport:
             return "Stem Modeの完了には最終版生成工程の完了が必要です。"
         case .correctionCompletionRequiresCorrectedStems:
-            return "Stem Modeの補正完了には契約対象の補正済みStemと補正済み純粋加算の検証・保存完了が必要です。"
+            return "Stem Modeの補正完了には契約対象の補正済みStemと補正後の検証・保存完了が必要です。"
         case .remixRequiresCorrectionCompletion:
-            return "契約対象の補正済みStemと純粋加算が揃った現在セッションだけ再ミックスを開始できます。"
+            return "契約対象の補正済みStemと補正後が揃った現在セッションだけ再ミックスを開始できます。"
         case .masteringRequiresRemixCompletion:
             return "検証済みStem再ミックスが揃った現在セッションだけマスタリングを開始できます。"
         }
@@ -314,7 +314,7 @@ final class StemWorkflowSession {
         appendMetricActivity(
             timestamp: timestamp,
             domain: .correction,
-            title: "補正済み純粋加算を解析しました",
+            title: "補正後を解析しました",
             metrics: metrics
         )
     }
@@ -644,7 +644,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             domain: .correction,
             title: "補正処理が完了しました",
-            detail: "補正済み\(runContract.stemCount)Stemと純粋加算を保存しました",
+            detail: "補正済み\(runContract.stemCount)Stemと補正後を保存しました",
             progress: 1
         )
         appendLogUnchecked(
@@ -652,7 +652,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .info,
             step: .validateCorrectedPureSum,
-            message: "補正済み\(runContract.stemCount)Stemと純粋加算を一時保存しました。再ミックスは別操作で開始します。"
+            message: "補正済み\(runContract.stemCount)Stemと補正後を一時保存しました。再ミックスは別操作で開始します。"
         )
     }
 
@@ -734,7 +734,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             domain: .remix,
             title: "再ミックスが完了しました",
-            detail: "純粋加算とのA/B試聴とマスタリングが可能です",
+            detail: "補正後とのA/B試聴とマスタリングが可能です",
             progress: 1
         )
         appendLogUnchecked(
@@ -767,7 +767,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             step: failedStep,
             message: message,
-            recoverySuggestion: "補正済みStem一式と純粋加算は保持されています。設定を確認して再実行してください。"
+            recoverySuggestion: "補正済みStem一式と補正後は保持されています。設定を確認して再実行してください。"
         )
         completeRunningActivity(
             timestamp: timestamp,
@@ -782,7 +782,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .error,
             step: .remix,
-            message: "再ミックスを停止しました。補正済みStem一式と純粋加算は保持しています: \(message)"
+            message: "再ミックスを停止しました。補正済みStem一式と補正後は保持しています: \(message)"
         )
     }
 
@@ -805,7 +805,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             domain: .remix,
             title: "再ミックスをキャンセルしました",
-            detail: "補正済みStem一式と純粋加算は保持しています",
+            detail: "補正済みStem一式と補正後は保持しています",
             progress: cancelledProgress
         )
         appendLogUnchecked(
@@ -813,7 +813,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .info,
             step: .remix,
-            message: "再ミックスをキャンセルしました。補正済みStem一式と純粋加算は保持しています。"
+            message: "再ミックスをキャンセルしました。補正済みStem一式と補正後は保持しています。"
         )
     }
 

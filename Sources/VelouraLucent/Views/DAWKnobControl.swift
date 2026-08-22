@@ -19,12 +19,13 @@ struct DAWKnobControl: View {
     @State private var dragStartValue: Float?
     @State private var isActivelyInteracting = false
     @State private var keyRepeatTask: Task<Void, Never>?
+    @State private var activeStepRail: StepRail?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             knobSurface
             overlayLabels
-            stepButtons
+            stepRails
         }
         .frame(width: DAWKnobMetrics.controlWidth, height: DAWKnobMetrics.controlHeight)
     }
@@ -57,7 +58,11 @@ struct DAWKnobControl: View {
 
     private var knobSurface: some View {
         ZStack(alignment: .topLeading) {
-            fullArtworkImage(DAWKnobMetrics.fixedArtworkImage)
+            DAWKnobValueRing(value: value, range: range, isEnabled: isInteractionEnabled)
+                .frame(width: DAWKnobMetrics.ringDiameter, height: DAWKnobMetrics.ringDiameter)
+                .position(DAWKnobMetrics.knobDisplayCenter)
+                .accessibilityHidden(true)
+
             fullArtworkImage(DAWKnobMetrics.rotatingArtworkImage)
                 .rotationEffect(
                     .degrees(DAWKnobMetrics.displayAngleDegrees(value: value, range: range)),
@@ -114,23 +119,7 @@ struct DAWKnobControl: View {
 
     private var overlayLabels: some View {
         ZStack(alignment: .topLeading) {
-            overlayText(
-                displayValueText ?? valueText,
-                font: .system(size: 15, weight: .semibold, design: .rounded).monospacedDigit(),
-                at: DAWKnobMetrics.valueCenter,
-                width: DAWKnobMetrics.valueTextWidth
-            )
-                .foregroundStyle(.primary)
-
-            if let unitText {
-                overlayText(
-                    unitText,
-                    font: .system(size: 11, weight: .semibold, design: .rounded),
-                    at: DAWKnobMetrics.unitCenter,
-                    width: DAWKnobMetrics.unitTextWidth(for: unitText)
-                )
-                    .foregroundStyle(.secondary)
-            }
+            valueAndUnitLabel
 
             if labels.indices.contains(1) {
                 overlayText(labels[1], font: .system(size: 10), at: DAWKnobMetrics.topLabelCenter, width: 120)
@@ -161,22 +150,41 @@ struct DAWKnobControl: View {
                 }
             }
             .frame(width: DAWKnobMetrics.controlWidth - 4)
-            .position(scaled(DAWKnobMetrics.titleCenter))
+            .position(DAWKnobMetrics.titleCenter)
         }
     }
 
-    private var stepButtons: some View {
+    private var valueAndUnitLabel: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DAWKnobMetrics.valueUnitSpacing) {
+            Text(displayValueText ?? valueText)
+                .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(.primary)
+
+            if let unitText {
+                Text(unitText)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.9)
+        .frame(width: DAWKnobMetrics.valueTextWidth)
+        .position(DAWKnobMetrics.valueCenter)
+        .accessibilityHidden(true)
+    }
+
+    private var stepRails: some View {
         ZStack(alignment: .topLeading) {
-            transparentStepButton(
+            stepRailButton(
+                rail: .decrement,
                 label: "\(title)を下げる",
-                center: DAWKnobMetrics.minusButtonCenter,
-                size: DAWKnobMetrics.stepButtonSize,
+                center: DAWKnobMetrics.decrementRailCenter,
                 delta: -step
             )
-            transparentStepButton(
+            stepRailButton(
+                rail: .increment,
                 label: "\(title)を上げる",
-                center: DAWKnobMetrics.plusButtonCenter,
-                size: DAWKnobMetrics.stepButtonSize,
+                center: DAWKnobMetrics.incrementRailCenter,
                 delta: step
             )
         }
@@ -226,33 +234,43 @@ struct DAWKnobControl: View {
             .font(font)
             .lineLimit(1)
             .minimumScaleFactor(0.9)
-            .frame(width: width * DAWKnobMetrics.artworkScale)
-            .position(scaled(point))
+            .frame(width: width)
+            .position(point)
             .accessibilityHidden(true)
     }
 
-    private func transparentStepButton(
+    private func stepRailButton(
+        rail: StepRail,
         label: String,
         center: CGPoint,
-        size: CGSize,
         delta: Float
     ) -> some View {
         Button {
             adjust(by: delta, animated: true)
         } label: {
-            Color.clear
-                .contentShape(Rectangle())
+            ZStack {
+                DAWKnobStepRail(
+                    isActive: activeStepRail == rail && isActivelyInteracting,
+                    isEnabled: isInteractionEnabled
+                )
+                    .frame(
+                        width: DAWKnobMetrics.stepRailVisibleSize.width,
+                        height: DAWKnobMetrics.stepRailVisibleSize.height
+                    )
+            }
+            .frame(
+                width: DAWKnobMetrics.stepRailHitSize.width,
+                height: DAWKnobMetrics.stepRailHitSize.height
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(
             PressTrackingPlainButtonStyle { isPressed in
+                activeStepRail = isPressed ? rail : nil
                 isActivelyInteracting = isPressed
             }
         )
-        .frame(
-            width: DAWKnobMetrics.stepButtonHitSize.width,
-            height: DAWKnobMetrics.stepButtonHitSize.height
-        )
-        .position(scaled(center))
+        .position(center)
         .buttonRepeatBehavior(.enabled)
         .accessibilityLabel(label)
     }
@@ -275,6 +293,7 @@ struct DAWKnobControl: View {
     private func stopKeyRepeat() {
         keyRepeatTask?.cancel()
         keyRepeatTask = nil
+        activeStepRail = nil
         isActivelyInteracting = false
     }
 
@@ -288,9 +307,90 @@ struct DAWKnobControl: View {
             value = nextValue
         }
     }
+}
 
-    private func scaled(_ point: CGPoint) -> CGPoint {
-        DAWKnobMetrics.scaledPoint(point)
+private enum StepRail {
+    case decrement
+    case increment
+}
+
+private struct DAWKnobValueRing: View {
+    let value: Float
+    let range: ClosedRange<Float>
+    let isEnabled: Bool
+
+    var body: some View {
+        Canvas { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let outerRadius = min(size.width, size.height) / 2 - 2
+            let innerRadius = outerRadius - 7
+
+            for index in 0 ..< DAWKnobMetrics.ringTickCount {
+                let progress = DAWKnobMetrics.ringTickProgress(at: index)
+                let angle = DAWKnobMetrics.ringTickAngleDegrees(at: index) * .pi / 180
+                let start = CGPoint(
+                    x: center.x + cos(angle) * innerRadius,
+                    y: center.y + sin(angle) * innerRadius
+                )
+                let end = CGPoint(
+                    x: center.x + cos(angle) * outerRadius,
+                    y: center.y + sin(angle) * outerRadius
+                )
+                var path = Path()
+                path.move(to: start)
+                path.addLine(to: end)
+
+                let isActive = DAWKnobMetrics.ringTickIsActive(
+                    at: index,
+                    value: value,
+                    range: range
+                )
+                let activeColor = Color(
+                    hue: 0.72 - progress * 0.18,
+                    saturation: 0.78,
+                    brightness: 0.98
+                )
+                let color = isActive ? activeColor : Color.secondary.opacity(0.22)
+
+                context.stroke(
+                    path,
+                    with: .color(color.opacity(isEnabled ? 1 : 0.45)),
+                    style: StrokeStyle(
+                        lineWidth: isActive ? 2.1 : 1.25,
+                        lineCap: .round
+                    )
+                )
+            }
+        }
+    }
+}
+
+private struct DAWKnobStepRail: View {
+    let isActive: Bool
+    let isEnabled: Bool
+
+    var body: some View {
+        let color = isActive ? Color.cyan : Color.secondary.opacity(0.55)
+
+        ZStack {
+            Capsule()
+                .fill(color)
+                .frame(width: isActive ? 2 : 1.25)
+                .padding(.vertical, 4)
+
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(isActive ? color : Color.clear)
+                    .stroke(color, lineWidth: 1.25)
+                    .frame(width: 6, height: 6)
+                Spacer(minLength: 0)
+                Circle()
+                    .fill(isActive ? color : Color.clear)
+                    .stroke(color, lineWidth: 1.25)
+                    .frame(width: 6, height: 6)
+            }
+        }
+        .opacity(isEnabled ? 1 : 0.4)
     }
 }
 

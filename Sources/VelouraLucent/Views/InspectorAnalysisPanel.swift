@@ -3,6 +3,8 @@ import SwiftUI
 struct InspectorAnalysisPanel: View {
     @Bindable var job: ProcessingJob
     let completionReport: CompletionReport?
+    @Binding var selectedAudio: InspectorAudioSelection
+    @Binding var isCompletionReportPresented: Bool
 
     var body: some View {
         InspectorAnalysisPanelContent(
@@ -12,6 +14,8 @@ struct InspectorAnalysisPanel: View {
             masteredMetrics: job.masteredMetrics,
             processedTitle: "補正後",
             completionReport: completionReport,
+            selectedAudio: $selectedAudio,
+            isCompletionReportPresented: $isCompletionReportPresented,
             peakCeilingDB: peakCeilingDB,
             analysisState: analysisState,
             selectionTitle: \.title,
@@ -70,14 +74,13 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
     let masteredMetrics: AudioMetricSnapshot?
     let processedTitle: String
     let completionReport: CompletionReport?
+    @Binding var selectedAudio: InspectorAudioSelection
+    @Binding var isCompletionReportPresented: Bool
     let peakCeilingDB: Double
     let analysisState: (InspectorAudioSelection) -> DisplayAnalysisPresentationState
     let selectionTitle: (InspectorAudioSelection) -> String
     let unavailableDescription: (InspectorAudioSelection) -> String
     @ViewBuilder let additionalContent: AdditionalContent
-
-    @State private var selectedAudio: InspectorAudioSelection = .input
-    @State private var isCompletionReportPresented = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

@@ -23,7 +23,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
 
                 stemAnalysisDisclosureSection(
                     title: "再ミックス固有解析",
-                    help: "raw \(model.availableStemRoles.count)Stem、補正済み純粋加算、実行済み再ミックスを比べ、再合成、残差、位相、相関、帯域、ノイズ、分離アーティファクトの測定結果を確認します。数値だけで完成音を自動選択しません。",
+                    help: "raw \(model.availableStemRoles.count)Stem、補正後、実行済み再ミックスを比べ、再合成、残差、位相、相関、帯域、ノイズ、分離アーティファクトの測定結果を確認します。数値だけで完成音を自動選択しません。",
                     isExpanded: $showRemixSpecificAnalysis
                 ) {
                     remixSpecificAnalysisContent
@@ -88,14 +88,14 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                 }
             ),
             emptyTitle: "入力2mixは未解析です",
-            emptyDescription: "音声を選ぶと、入力、純粋加算または再ミックス、Stem Mode最終版の詳細解析を表示します。",
+            emptyDescription: "音声を選ぶと、入力、補正後または再ミックス、Stem Mode最終版の詳細解析を表示します。",
             correctedTitle: processedTitle
         )
     }
 
     private var processedTitle: String {
         model.remixedPreviewArtifact == nil
-            ? "補正済み純粋加算"
+            ? "補正後"
             : "Stem再ミックス"
     }
 
@@ -104,7 +104,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             return "入力2mixを解析しています。"
         }
         if model.isAnalyzingDisplayAudio {
-            return "純粋加算、再ミックス、またはStem Mode最終版を解析しています。"
+            return "補正後、再ミックス、またはStem Mode最終版を解析しています。"
         }
         return nil
     }
@@ -220,7 +220,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                 }
                 remixEvaluationComparison(presentation)
             } else {
-                Text("補正後\(model.availableStemRoles.count)Stemの純粋加算と解析が完了すると表示します。")
+                Text("補正後と解析が完了すると表示します。")
                     .foregroundStyle(.secondary)
             }
             validationIssues(model.remixAnalysisPresentation?.validation.analysisIssues)
@@ -378,7 +378,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                 headerCell("再ミックス解析")
                 headerCell("raw")
                     .analysisTableNumericColumn()
-                headerCell("純粋加算")
+                headerCell("補正後")
                     .analysisTableNumericColumn()
                 if remix != nil {
                     headerCell("再ミックス")

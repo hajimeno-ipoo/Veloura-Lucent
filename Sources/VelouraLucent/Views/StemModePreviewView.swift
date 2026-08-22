@@ -21,7 +21,10 @@ struct StemModePreviewView: View {
                 playbackStatusText: mainPlaybackStatusText,
                 comparisonPairLabel: comparisonPairLabel,
                 comparisonPairSummary: comparisonPairSummary,
-                onWillStartPlayback: model.stopAuxiliaryPreviewPlayback
+                playbackInterlocks: [
+                    model.stemPreviewController,
+                    model.remixPreviewController,
+                ]
             )
 
             StemWaveformComparisonView(model: model)
@@ -61,7 +64,7 @@ struct StemModePreviewView: View {
 
     private var processedTitle: String {
         model.remixedPreviewArtifact == nil
-            ? "補正済み純粋加算"
+            ? "補正後"
             : "Stem再ミックス"
     }
 
