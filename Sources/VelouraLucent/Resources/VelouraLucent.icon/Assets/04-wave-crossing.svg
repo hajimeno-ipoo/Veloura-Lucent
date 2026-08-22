@@ -1,0 +1,47 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="frontBody" x1="130" y1="820" x2="900" y2="240" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FFFFFF" stop-opacity="0.34"/>
+<stop offset="0.30" stop-color="#F8F5FF" stop-opacity="0.22"/>
+<stop offset="0.62" stop-color="#E9E1FF" stop-opacity="0.35"/>
+<stop offset="1" stop-color="#B9A8F0" stop-opacity="0.18"/>
+</linearGradient>
+<linearGradient id="frontUpperFace" x1="110" y1="790" x2="850" y2="250" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FFFFFF" stop-opacity="0.30"/>
+<stop offset="0.36" stop-color="#FFFFFF" stop-opacity="0.10"/>
+<stop offset="0.70" stop-color="#FFFFFF" stop-opacity="0.38"/>
+<stop offset="1" stop-color="#D9CEFF" stop-opacity="0.08"/>
+</linearGradient>
+<linearGradient id="frontLowerFace" x1="160" y1="840" x2="840" y2="280" gradientUnits="userSpaceOnUse">
+<stop stop-color="#C1B0F0" stop-opacity="0.06"/>
+<stop offset="0.50" stop-color="#9C89D5" stop-opacity="0.22"/>
+<stop offset="1" stop-color="#FFFFFF" stop-opacity="0.13"/>
+</linearGradient>
+<linearGradient id="frontSpecular" x1="120" y1="770" x2="860" y2="260" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FFFFFF" stop-opacity="0.10"/>
+<stop offset="0.28" stop-color="#FFFFFF" stop-opacity="0.56"/>
+<stop offset="0.56" stop-color="#FFFFFF" stop-opacity="0.20"/>
+<stop offset="1" stop-color="#FFFFFF" stop-opacity="0.04"/>
+</linearGradient>
+</defs>
+
+<!-- soft shadow makes the front ribbon sit above the rear one -->
+<path d="M70 772C246 825 420 756 550 621C681 485 751 310 937 207C888 290 808 427 716 550C603 700 455 818 296 856C208 877 122 851 82 829C61 817 55 789 70 772Z" transform="translate(0 12)" fill="#7563B6" fill-opacity="0.16"/>
+
+<!-- tapered front glass ribbon -->
+<path d="M70 772C246 825 420 756 550 621C681 485 751 310 937 207C888 290 808 427 716 550C603 700 455 818 296 856C208 877 122 851 82 829C61 817 55 789 70 772Z" fill="url(#frontBody)" fill-opacity="0.94"/>
+
+<!-- upper plane bends with the ribbon and carries the main reflection -->
+<path d="M75 763C247 812 416 744 543 612C666 484 747 311 930 213C879 280 802 402 711 524C601 670 454 786 297 829C213 852 129 829 84 811C70 805 66 779 75 763Z" fill="url(#frontUpperFace)" fill-opacity="0.94"/>
+
+<!-- lower plane gives the front ribbon a soft refracted underside -->
+<path d="M84 811C130 829 214 851 298 829C456 787 602 670 712 523C806 397 882 276 931 213C872 311 803 451 718 573C608 729 462 843 300 873C208 890 123 861 80 836C67 829 68 817 84 811Z" fill="url(#frontLowerFace)" fill-opacity="0.76"/>
+
+<!-- segmented light fields preserve the glass volume instead of a single white centerline -->
+<path d="M91 771C242 812 397 750 522 624C552 594 579 558 605 520C582 563 557 605 530 638C410 782 250 842 101 807C88 804 84 781 91 771Z" fill="url(#frontSpecular)" fill-opacity="0.88"/>
+<path d="M665 466C731 365 788 282 912 218C841 276 785 363 730 455C706 496 684 535 655 573C671 538 687 501 705 467C755 369 809 290 916 215C823 265 758 355 700 450C680 482 661 514 640 545C648 518 655 491 665 466Z" fill="#FFFFFF" fill-opacity="0.22"/>
+
+<!-- narrow boundary glints are offset to the upper and lower edges -->
+<path d="M75 762C247 812 416 744 543 612C666 484 747 311 930 213" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-opacity="0.48"/>
+<path d="M82 828C123 850 208 875 296 856C455 818 603 700 716 550C808 427 888 290 937 207" stroke="#B7A8EB" stroke-width="5" stroke-linecap="round" stroke-opacity="0.26"/>
+</svg>

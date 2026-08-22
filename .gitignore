@@ -1,51 +1,35 @@
 .DS_Store
-.build/
-dist/
 __pycache__/
 *.pyc
-.serena/
+
+# Build products and local tool state
+/.build/
+/.codex/
+/.goal-state/
+/.playwright-cli/
+/.serena/
 /.stem-model-cache/
-/Sources/VelouraLucent/Resources/StemModels/MLX/mlx.metallib
-.goal-state/
+/.swiftpm/
+/.vscode/
+/dist/
+/Vendor/**/.build/
 
-# Explicitly excluded from the public GitHub target
+# Local documents, test audio, and generated output
+/Docs/
+/LandingPage/
 /ebu-loudness-test-setv05/
-LandingPage/
-Docs/
-Tests/Fixtures/Sample_audio/
-Tests/Fixtures/AudioQuality/
-Vendor/bs-roformer-mlx-swift/
-Sources/VelouraLucent/Services/BSRoformerStemSeparationBackend.swift
-Tests/VelouraLucentTests/BSRoformerStemSeparationBackendTests.swift
-Sources/VelouraLucent/Resources/StemModels/bs-roformer-sw-manifest.json
-Sources/VelouraLucent/Resources/ThirdPartyNotices/BS-RoFormer-SW/
+/graphify-out/
+/output/
+/Tests/Fixtures/
 
-# Image files are not part of the public upload scope
-*.png
-*.jpg
-*.jpeg
-*.svg
-*.gif
-*.webp
+# Runtime-generated model support file
+/Sources/VelouraLucent/Resources/StemModels/MLX/mlx.metallib
 
-# Keep only the keyboard shortcut design-QA evidence with its tracked report
-!/Docs/
-/Docs/*
-!/Docs/DesignQA/
-/Docs/DesignQA/*
-!/Docs/DesignQA/keyboard-shortcuts/
-!/Docs/DesignQA/keyboard-shortcuts/*.png
-
-# Local analysis output and machine-specific project settings
-graphify-out/
-output/
-.codex/
-.swiftpm/xcode/xcuserdata/
-.vscode/
-
-# Local working documents are not part of the public GitHub target
+# Local working documents
+/AGENTS.md
 /COMPARISON_REPORT_2026-04-17.md
+/FOR[[]hazimeno_ipoo].md
 /ICON_SETUP_GUIDE.md
 /NOISE_PROCESSING_REVIEW.md
 /SPECTRAL_LIFTER_COMPARISON.md
-/FOR[[]hazimeno_ipoo].md
+/design-qa.md

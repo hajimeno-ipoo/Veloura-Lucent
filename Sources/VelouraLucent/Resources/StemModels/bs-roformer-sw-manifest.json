@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 2,
+  "assetSetIdentifier": "bs-roformer-sw-13edef2e713151522e4049e92f011e0543c45d53",
+  "model": {
+    "name": "BS-RoFormer-SW",
+    "repo": "MrSimmo/BS_Roformer_SW-MLX",
+    "revision": "13edef2e713151522e4049e92f011e0543c45d53",
+    "licenseMetadata": "unknown"
+  },
+  "runtimePins": [
+    {
+      "name": "bs-roformer-mlx-swift",
+      "repo": "local:Vendor/bs-roformer-mlx-swift",
+      "revision": "cee13b8a16bd9b6eb51ac52f94d997e424069673"
+    },
+    {
+      "name": "mlx-swift",
+      "repo": "https://github.com/ml-explore/mlx-swift.git",
+      "version": "0.30.6",
+      "revision": "6ba4827fb82c97d012eec9ab4b2de21f85c3b33d"
+    }
+  ],
+  "audioContract": {
+    "sampleRateHz": 44100,
+    "channelCount": 2,
+    "channelLayout": "stereo",
+    "scalarType": "float32",
+    "inputTensorLayout": "channel-major",
+    "outputTensorLayout": "source-major",
+    "channelLayoutWithinSource": "channel-major",
+    "sourceOrder": [
+      "bass",
+      "drums",
+      "other",
+      "vocals",
+      "guitar",
+      "piano"
+    ]
+  },
+  "downloadPolicy": {
+    "requiresExplicitUserConfirmation": true,
+    "revisionResponseHeader": "X-Repo-Commit",
+    "allowedRedirectHosts": [
+      "huggingface.co",
+      "cas-bridge.xethub.hf.co",
+      "us.aws.cdn.hf.co"
+    ]
+  },
+  "downloadableModelAssets": [
+    {
+      "kind": "modelWeights",
+      "downloadURL": "https://huggingface.co/MrSimmo/BS_Roformer_SW-MLX/resolve/13edef2e713151522e4049e92f011e0543c45d53/bs_roformer_sw.safetensors",
+      "installationRelativePath": "bs-roformer-sw/bs_roformer_sw.safetensors",
+      "byteCount": 349521144,
+      "sha256": "6c8303a829575d03f21562ea185be7b6b23e922052883dec1b9518ca00a920fc"
+    },
+    {
+      "kind": "modelConfiguration",
+      "downloadURL": "https://huggingface.co/MrSimmo/BS_Roformer_SW-MLX/resolve/13edef2e713151522e4049e92f011e0543c45d53/bs_roformer_sw_config.json",
+      "installationRelativePath": "bs-roformer-sw/bs_roformer_sw_config.json",
+      "byteCount": 1141,
+      "sha256": "ab4ae4369276c2ff12ee86d55ce45c37a88a82f6744c33c0bb6a40c1c2f620f9"
+    }
+  ],
+  "bundledRuntimeAssets": [
+    {
+      "kind": "metalLibrary",
+      "resourceRelativePath": "StemModels/MLX/mlx.metallib",
+      "runtimeRelativePath": "mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib",
+      "byteCount": 106957102,
+      "sha256": "82be53f327e9a39cb19a18272187187b7636f31989c44ad7ff474f7fe8171974"
+    }
+  ],
+  "metalLibraryBuildProvenance": {
+    "sourceRepo": "https://github.com/ml-explore/mlx-swift.git",
+    "sourceVersion": "0.30.6",
+    "sourceRevision": "6ba4827fb82c97d012eec9ab4b2de21f85c3b33d",
+    "sourceDirectory": "Source/Cmlx/mlx/mlx/backend/metal/kernels",
+    "sourceSelection": "all *.metal files except *_nax.metal, sorted with LC_ALL=C",
+    "sourceFileCount": 32,
+    "compilerCommand": "xcrun -sdk macosx metal",
+    "linkerCommand": "xcrun -sdk macosx metallib",
+    "compilerFlags": [
+      "-x",
+      "metal",
+      "-Wall",
+      "-Wextra",
+      "-fno-fast-math",
+      "-Wno-c++17-extensions",
+      "-Wno-c++20-extensions"
+    ],
+    "includeDirectories": [
+      "Source/Cmlx/mlx/mlx/backend/metal/kernels",
+      "Source/Cmlx/mlx"
+    ],
+    "verifiedToolchain": {
+      "xcodeVersion": "26.6",
+      "xcodeBuildVersion": "17F113",
+      "macosSdkVersion": "26.5",
+      "metalVersion": "Apple metal version 32023.883 (metalfe-32023.883)",
+      "metallibVersion": "AIR-LLD 32023.883 (metalfe-32023.883) (compatible with legacy metallib linker)"
+    }
+  }
+}
