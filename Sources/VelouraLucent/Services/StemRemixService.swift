@@ -295,7 +295,12 @@ struct StemRemixService: Sendable {
         let accompaniment = runContract.pureSumOrder.filter {
             $0 != .drums && $0 != .bass && $0 != .vocals
         }
-        let expected: Set<StemRole> = [.other]
+        let expected: Set<StemRole> = switch runContract.separationModel {
+        case .htdemucs:
+            [.other]
+        case .bsRoformerSW:
+            [.other, .guitar, .piano]
+        }
         guard Set(accompaniment) == expected else {
             throw StemRemixServiceError.invalidRunContract
         }

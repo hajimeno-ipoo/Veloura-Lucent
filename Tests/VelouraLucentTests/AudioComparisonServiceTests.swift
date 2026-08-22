@@ -1,0 +1,275 @@
+import AVFoundation
+import Foundation
+import Testing
+@testable import VelouraLucent
+
+struct AudioComparisonServiceTests {
+    @Test
+    func comparisonMetricsAreComputed() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let fileURL = tempDirectory.appending(path: "analysis.wav")
+
+        try makeTestTone(at: fileURL)
+
+        let metrics = try AudioComparisonService.analyze(fileURL: fileURL)
+
+        #expect(metrics.peakDBFS.isFinite)
+        #expect(metrics.rmsDBFS.isFinite)
+        #expect(metrics.integratedLoudnessLUFS.isFinite)
+        #expect(metrics.truePeakDBFS.isFinite)
+        #expect(metrics.crestFactorDB.isFinite)
+        #expect(try #require(metrics.loudnessRangeLU).isFinite)
+        #expect(metrics.crestFactorDB >= 0)
+        #expect(try #require(metrics.loudnessRangeLU) >= 0)
+        #expect(metrics.stereoWidth >= 0)
+        #expect(metrics.stereoCorrelation >= -1)
+        #expect(metrics.stereoCorrelation <= 1)
+        #expect(metrics.harshnessScore >= 0)
+        #expect(metrics.centroidHz > 0)
+        #expect(metrics.hf12Ratio >= 0)
+        #expect(metrics.bandEnergies.count == AudioBandCatalog.comparisonBands.count)
+        #expect(metrics.bandEnergies.map(\.id) == AudioBandCatalog.comparisonBands.map(\.id))
+        #expect(metrics.masteringBandEnergies.count == 4)
+        #expect(metrics.shortTermLoudness.isEmpty == false)
+        #expect(metrics.shortTermLoudness.allSatisfy { $0.levelDB.isFinite })
+        #expect(metrics.dynamics.isEmpty == false)
+        #expect(metrics.dynamics.allSatisfy { $0.crestFactorDB.isFinite })
+        #expect(metrics.averageSpectrum.count > 6_000)
+        #expect(try #require(metrics.averageSpectrum.first).frequencyHz >= 80)
+        #expect(try #require(metrics.averageSpectrum.last).frequencyHz <= 20_000)
+        #expect(metrics.averageSpectrum.allSatisfy { $0.levelDB.isFinite })
+    }
+
+    @Test
+    func comparisonMetricsStayWithinRegressionRange() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let fileURL = tempDirectory.appending(path: "metric-regression.wav")
+
+        try makeStereoRegressionTone(at: fileURL)
+
+        let metrics = try AudioComparisonService.analyze(fileURL: fileURL)
+
+        expectClose(metrics.peakDBFS, -17.60, tolerance: 0.20)
+        expectClose(metrics.rmsDBFS, -22.05, tolerance: 0.20)
+        expectClose(metrics.crestFactorDB, 4.45, tolerance: 0.20)
+        expectClose(try #require(metrics.loudnessRangeLU), 0.97, tolerance: 0.05)
+        expectClose(metrics.integratedLoudnessLUFS, -19.40, tolerance: 0.30)
+        expectClose(metrics.truePeakDBFS, -16.77, tolerance: 0.30)
+        expectClose(metrics.stereoWidth, 0.134, tolerance: 0.02)
+        expectClose(metrics.stereoCorrelation, 0.981, tolerance: 0.02)
+        expectClose(metrics.harshnessScore, 1.0, tolerance: 0.02)
+        expectClose(metrics.centroidHz, 551.90, tolerance: 5.0)
+        #expect(metrics.hf12Ratio < 1e-10)
+        #expect(metrics.hf16Ratio < 1e-10)
+        #expect(metrics.hf18Ratio < 1e-10)
+        #expect(metrics.averageSpectrum.count > 6_000)
+        #expect(metrics.shortTermLoudness.count == 8)
+        #expect(metrics.dynamics.count == 4)
+        #expect(metrics.bandEnergies.count == AudioBandCatalog.comparisonBands.count)
+        #expect(metrics.masteringBandEnergies.count == 4)
+    }
+
+    @Test
+    func averageSpectrumKeepsTonePeakFrequency() throws {
+        let signal = makeSignal(frequency: 1_000, amplitude: 0.10)
+
+        let metrics = try AudioComparisonService.analyze(signal: signal)
+        let peak = try #require(metrics.averageSpectrum.max { $0.levelDB < $1.levelDB })
+
+        #expect(abs(peak.frequencyHz - 1_000) < 10)
+        #expect(peak.levelDB > -30)
+    }
+
+    @Test
+    func averageSpectrumKeepsAmplitudeDifferenceInDB() throws {
+        let loud = try AudioComparisonService.analyze(signal: makeSignal(frequency: 1_000, amplitude: 0.10))
+        let quiet = try AudioComparisonService.analyze(signal: makeSignal(frequency: 1_000, amplitude: 0.01))
+        let loudPeak = try #require(loud.averageSpectrum.max { $0.levelDB < $1.levelDB })
+        let quietPeak = try #require(quiet.averageSpectrum.max { $0.levelDB < $1.levelDB })
+
+        expectClose(loudPeak.levelDB - quietPeak.levelDB, 20.0, tolerance: 0.6)
+    }
+
+    @Test
+    func stereoCorrelationTimelineDetectsInPhaseAudio() throws {
+        let metrics = try AudioComparisonService.analyze(signal: makeStereoSignal(rightScale: 1))
+
+        expectClose(metrics.duration, 2.0, tolerance: 0.001)
+        #expect(metrics.stereoCorrelationTimelineStatus == .available)
+        #expect(metrics.stereoCorrelationTimeline.isEmpty == false)
+        #expect(metrics.stereoCorrelationTimeline.allSatisfy { $0.value > 0.99 })
+    }
+
+    @Test
+    func stereoCorrelationTimelineDetectsReversePhaseAudio() throws {
+        let metrics = try AudioComparisonService.analyze(signal: makeStereoSignal(rightScale: -1))
+
+        #expect(metrics.stereoCorrelationTimelineStatus == .available)
+        #expect(metrics.stereoCorrelationTimeline.isEmpty == false)
+        #expect(metrics.stereoCorrelationTimeline.allSatisfy { $0.value < -0.99 })
+    }
+
+    @Test
+    func stereoCorrelationTimelineSkipsSilentStereoAudio() throws {
+        let signal = AudioSignal(channels: [
+            Array(repeating: Float.zero, count: 48_000),
+            Array(repeating: Float.zero, count: 48_000)
+        ], sampleRate: 48_000)
+
+        let metrics = try AudioComparisonService.analyze(signal: signal)
+
+        expectClose(metrics.duration, 1.0, tolerance: 0.001)
+        #expect(metrics.stereoCorrelationTimelineStatus == .silent)
+        #expect(metrics.stereoCorrelationTimeline.isEmpty)
+    }
+
+    @Test
+    func stereoCorrelationTimelineIsNotShownForMonoAudio() throws {
+        let metrics = try AudioComparisonService.analyze(signal: makeSignal(frequency: 440, amplitude: 0.10))
+
+        #expect(metrics.stereoCorrelationTimelineStatus == .mono)
+        #expect(metrics.stereoCorrelationTimeline.isEmpty)
+    }
+
+    @Test
+    func concurrentAnalysisMatchesSynchronousAnalysis() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let fileURL = tempDirectory.appending(path: "metric-concurrent.wav")
+
+        try makeStereoRegressionTone(at: fileURL)
+
+        let signal = try AudioFileService.loadAudio(from: fileURL)
+        let synchronous = try AudioComparisonService.analyze(signal: signal)
+        let concurrent = try await AudioComparisonService.analyzeConcurrently(signal: signal)
+
+        expectClose(concurrent.peakDBFS, synchronous.peakDBFS, tolerance: 0.0001)
+        expectClose(concurrent.rmsDBFS, synchronous.rmsDBFS, tolerance: 0.0001)
+        #expect(concurrent.loudnessRangeLU == synchronous.loudnessRangeLU)
+        expectClose(concurrent.integratedLoudnessLUFS, synchronous.integratedLoudnessLUFS, tolerance: 0.0001)
+        expectClose(concurrent.truePeakDBFS, synchronous.truePeakDBFS, tolerance: 0.0001)
+        expectClose(concurrent.stereoWidth, synchronous.stereoWidth, tolerance: 0.0001)
+        expectClose(concurrent.stereoCorrelation, synchronous.stereoCorrelation, tolerance: 0.0001)
+        expectClose(concurrent.harshnessScore, synchronous.harshnessScore, tolerance: 0.0001)
+        expectClose(concurrent.centroidHz, synchronous.centroidHz, tolerance: 0.0001)
+        #expect(concurrent.averageSpectrum.count == synchronous.averageSpectrum.count)
+        #expect(concurrent.shortTermLoudness.count == synchronous.shortTermLoudness.count)
+        #expect(concurrent.dynamics.count == synchronous.dynamics.count)
+        #expect(concurrent.stereoCorrelationTimelineStatus == synchronous.stereoCorrelationTimelineStatus)
+        #expect(concurrent.stereoCorrelationTimeline.count == synchronous.stereoCorrelationTimeline.count)
+    }
+
+    @Test
+    func completionReportAnalysisIsOptInForSynchronousAndConcurrentAnalysis() async throws {
+        let signal = makeStereoSignal(rightScale: 0.8)
+
+        let defaultSynchronous = try AudioComparisonService.analyze(signal: signal)
+        let reportSynchronous = try AudioComparisonService.analyze(
+            signal: signal,
+            includeCompletionReportAnalysis: true
+        )
+        let defaultConcurrent = try await AudioComparisonService.analyzeConcurrently(signal: signal)
+        let reportConcurrent = try await AudioComparisonService.analyzeConcurrently(
+            signal: signal,
+            includeCompletionReportAnalysis: true
+        )
+
+        #expect(defaultSynchronous.completionReportAnalysis == .unavailable)
+        #expect(defaultConcurrent.completionReportAnalysis == .unavailable)
+        #expect(reportSynchronous.completionReportAnalysis.displayWaveform.isEmpty == false)
+        #expect(reportConcurrent.completionReportAnalysis.displayWaveform.isEmpty == false)
+    }
+
+    @Test
+    func concurrentAnalysisStopsWhenTaskIsCancelled() async {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 10)
+        let channel = (0..<frameCount).map { index in
+            let time = Double(index) / sampleRate
+            let tone = sin(2 * Double.pi * 440 * time) * 0.10
+            let air = sin(2 * Double.pi * 12_000 * time) * 0.01
+            return Float(tone + air)
+        }
+        let signal = AudioSignal(channels: [channel, channel], sampleRate: sampleRate)
+        let task = Task.detached(priority: .utility) {
+            try await AudioComparisonService.analyzeConcurrently(signal: signal)
+        }
+
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            Issue.record("キャンセル済みの比較指標解析は完了せず CancellationError を返す必要があります")
+        } catch is CancellationError {
+            return
+        } catch {
+            Issue.record("Unexpected cancellation error: \(error)")
+        }
+    }
+
+    private func makeTestTone(at url: URL) throws {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 2)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        let channel = buffer.floatChannelData![0]
+        for index in 0..<frameCount {
+            channel[index] = Float(sin(2 * Double.pi * 440 * Double(index) / sampleRate) * 0.1)
+        }
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 1)
+        )
+        try file.write(from: buffer)
+    }
+
+    private func makeStereoRegressionTone(at url: URL) throws {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 2)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))!
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        let left = buffer.floatChannelData![0]
+        let right = buffer.floatChannelData![1]
+
+        for index in 0..<frameCount {
+            let time = Double(index) / sampleRate
+            let tone = sin(2 * Double.pi * 440 * time) * 0.12
+            let overtone = sin(2 * Double.pi * 3_200 * time) * 0.025
+            left[index] = Float(tone + overtone)
+            right[index] = Float(sin(2 * Double.pi * 440 * time + 0.2) * 0.10 + overtone * 0.8)
+        }
+
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: AudioFileService.interleavedFileSettings(sampleRate: sampleRate, channels: 2)
+        )
+        try file.write(from: buffer)
+    }
+
+    private func makeSignal(frequency: Double, amplitude: Double) -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 2)
+        let channel = (0..<frameCount).map { index in
+            Float(sin(2 * Double.pi * frequency * Double(index) / sampleRate) * amplitude)
+        }
+        return AudioSignal(channels: [channel], sampleRate: sampleRate)
+    }
+
+    private func makeStereoSignal(rightScale: Double) -> AudioSignal {
+        let sampleRate = 48_000.0
+        let frameCount = Int(sampleRate * 2)
+        let left = (0..<frameCount).map { index in
+            Float(sin(2 * Double.pi * 440 * Double(index) / sampleRate) * 0.10)
+        }
+        let right = left.map { Float(Double($0) * rightScale) }
+        return AudioSignal(channels: [left, right], sampleRate: sampleRate)
+    }
+
+    private func expectClose(_ actual: Double, _ expected: Double, tolerance: Double) {
+        #expect(abs(actual - expected) <= tolerance)
+    }
+}

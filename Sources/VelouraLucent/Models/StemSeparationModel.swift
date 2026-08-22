@@ -2,26 +2,48 @@ import Foundation
 
 enum StemSeparationModel: String, CaseIterable, Codable, Identifiable, Sendable {
     case htdemucs
+    case bsRoformerSW
 
     var id: String { rawValue }
 
     var displayName: String {
-        "HTDemucs"
+        switch self {
+        case .htdemucs: "HTDemucs"
+        case .bsRoformerSW: "BS-RoFormer-SW"
+        }
     }
 
     var manifestResourceRelativePath: String {
-        "StemModels/stem-model-manifest.json"
+        switch self {
+        case .htdemucs:
+            "StemModels/stem-model-manifest.json"
+        case .bsRoformerSW:
+            "StemModels/bs-roformer-sw-manifest.json"
+        }
     }
 
     var activePointerFileName: String {
-        StemModelStorePaths.activePointerFileName
+        switch self {
+        case .htdemucs:
+            StemModelStorePaths.activePointerFileName
+        case .bsRoformerSW:
+            "active-bs-roformer-sw.json"
+        }
     }
 
     var rightsAndProvenance: StemModelRightsAndProvenance {
-        StemModelRightsAndProvenance(
-            licenseStatus: "取得元のモデルカードはMITを示し、元のDemucsもMITと記載しています。",
-            provenance: "adefossez/demucsの事前学習済みweightを、MLX用のsafetensorsとJSON設定へ直接変換したモデルです。"
-        )
+        switch self {
+        case .htdemucs:
+            StemModelRightsAndProvenance(
+                licenseStatus: "取得元のモデルカードはMITを示し、元のDemucsもMITと記載しています。",
+                provenance: "adefossez/demucsの事前学習済みweightを、MLX用のsafetensorsとJSON設定へ直接変換したモデルです。"
+            )
+        case .bsRoformerSW:
+            StemModelRightsAndProvenance(
+                licenseStatus: "取得元のLicense metadataはunknownで、上流ライセンスは未宣言と記載されています。",
+                provenance: "enerjazzer/BS-ROFO-SW-FixedのBS-Rofo-SW-Fixed.ckptを、FP16のsafetensorsへ変換したモデルです。"
+            )
+        }
     }
 }
 
@@ -87,6 +109,12 @@ struct StemProductionModelProfile: Sendable {
                         version: "1.4.0",
                         revision: "8d9834a6189db730f6264db7556a7ffb751e99ee"
                     ),
+                    "swift-argument-parser": StemRuntimePin(
+                        name: "swift-argument-parser",
+                        repo: "https://github.com/apple/swift-argument-parser",
+                        version: "1.8.2",
+                        revision: "6a52f3251125d74daf04fcbd5e6f08a75d074382"
+                    ),
                     "swift-numerics": StemRuntimePin(
                         name: "swift-numerics",
                         repo: "https://github.com/apple/swift-numerics",
@@ -113,6 +141,50 @@ struct StemProductionModelProfile: Sendable {
                 defaultSegmentSeconds: 7.8,
                 sourceOrder: [.drums, .bass, .other, .vocals],
                 pureSumOrder: [.vocals, .drums, .bass, .other]
+            )
+        case .bsRoformerSW:
+            let revision = "13edef2e713151522e4049e92f011e0543c45d53"
+            return Self(
+                model: model,
+                assetSetIdentifier: "bs-roformer-sw-\(revision)",
+                modelIdentifier: "MrSimmo/BS_Roformer_SW-MLX:bs-roformer-sw",
+                modelName: "BS-RoFormer-SW",
+                repository: "MrSimmo/BS_Roformer_SW-MLX",
+                revision: revision,
+                license: "unknown",
+                runtimePins: [
+                    "bs-roformer-mlx-swift": StemRuntimePin(
+                        name: "bs-roformer-mlx-swift",
+                        repo: "local:Vendor/bs-roformer-mlx-swift",
+                        version: nil,
+                        revision: "cee13b8a16bd9b6eb51ac52f94d997e424069673"
+                    ),
+                    "mlx-swift": StemRuntimePin(
+                        name: "mlx-swift",
+                        repo: "https://github.com/ml-explore/mlx-swift.git",
+                        version: "0.30.6",
+                        revision: "6ba4827fb82c97d012eec9ab4b2de21f85c3b33d"
+                    ),
+                ],
+                downloadableAssets: [
+                    .modelWeights: StemDownloadableModelAsset(
+                        kind: .modelWeights,
+                        downloadURL: "https://huggingface.co/MrSimmo/BS_Roformer_SW-MLX/resolve/\(revision)/bs_roformer_sw.safetensors",
+                        installationRelativePath: "bs-roformer-sw/bs_roformer_sw.safetensors",
+                        byteCount: 349_521_144,
+                        sha256: "6c8303a829575d03f21562ea185be7b6b23e922052883dec1b9518ca00a920fc"
+                    ),
+                    .modelConfiguration: StemDownloadableModelAsset(
+                        kind: .modelConfiguration,
+                        downloadURL: "https://huggingface.co/MrSimmo/BS_Roformer_SW-MLX/resolve/\(revision)/bs_roformer_sw_config.json",
+                        installationRelativePath: "bs-roformer-sw/bs_roformer_sw_config.json",
+                        byteCount: 1_141,
+                        sha256: "ab4ae4369276c2ff12ee86d55ce45c37a88a82f6744c33c0bb6a40c1c2f620f9"
+                    ),
+                ],
+                defaultSegmentSeconds: nil,
+                sourceOrder: [.bass, .drums, .other, .vocals, .guitar, .piano],
+                pureSumOrder: [.bass, .drums, .other, .vocals, .guitar, .piano]
             )
         }
     }

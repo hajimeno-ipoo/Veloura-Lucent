@@ -419,12 +419,18 @@ final class StemModeWorkspaceModel {
     ) throws {
         try requireMutableRunSettings()
         _ = try settings.validatedParameters()
-        let isApproved = settings.shifts == 2
-            && settings.overlap == 0.25
-            && settings.split
-            && settings.segmentLength == .modelContract
-            && settings.batchSize == 1
-            && settings.seed != nil
+        let isApproved: Bool
+        switch settings.model {
+        case .htdemucs:
+            isApproved = settings.shifts == 2
+                && settings.overlap == 0.25
+                && settings.split
+                && settings.segmentLength == .modelContract
+                && settings.batchSize == 1
+                && settings.seed != nil
+        case .bsRoformerSW:
+            isApproved = settings == .bsRoformerSWProduction
+        }
         guard isApproved else {
             throw StemModeWorkspaceSettingsError.unapprovedProductionSettings
         }

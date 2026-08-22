@@ -55,9 +55,23 @@ struct StemSeparationSettings: Equatable, Sendable {
         )
     }
 
+    static let bsRoformerSWProduction = StemSeparationSettings(
+        model: .bsRoformerSW,
+        shifts: 0,
+        overlap: 0,
+        split: false,
+        segmentLength: .modelContract,
+        batchSize: 1,
+        seed: nil
+    )
+
     static func production(for model: StemSeparationModel, seed: Int) -> Self {
-        _ = model
-        return .metaHTDemucsProduction(seed: seed)
+        switch model {
+        case .htdemucs:
+            .metaHTDemucsProduction(seed: seed)
+        case .bsRoformerSW:
+            .bsRoformerSWProduction
+        }
     }
 
     func validatedParameters() throws -> Self {
@@ -103,6 +117,13 @@ struct StemSeparationSettings: Equatable, Sendable {
               runContract.validationRoles == expectedSourceOrder,
               runContract.pureSumOrder == profile.pureSumOrder else {
             throw StemSeparationSettingsError.unsupportedModelContract
+        }
+        if model == .bsRoformerSW {
+            guard modelContract.defaultSegmentSeconds == nil,
+                  self == Self.bsRoformerSWProduction else {
+                throw StemSeparationSettingsError.unsupportedModelContract
+            }
+            return self
         }
         guard let defaultSegmentSeconds = modelContract.defaultSegmentSeconds,
               defaultSegmentSeconds.isFinite,

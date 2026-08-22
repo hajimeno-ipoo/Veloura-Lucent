@@ -1,3 +1,4 @@
+import BSRoformerMLX
 import CryptoKit
 import CoreFoundation
 import Darwin
@@ -134,6 +135,11 @@ struct StemModelAssetValidator: Sendable {
     private static let expectedSchemaVersion = 2
     private static let htdemucsSourceOrder = htdemucsProfile.sourceOrder
     private static let htdemucsRedirectHosts = [
+        "huggingface.co",
+        "cas-bridge.xethub.hf.co",
+        "us.aws.cdn.hf.co",
+    ]
+    private static let bsRoformerSWRedirectHosts = [
         "huggingface.co",
         "cas-bridge.xethub.hf.co",
         "us.aws.cdn.hf.co",
@@ -402,8 +408,12 @@ struct StemModelAssetValidator: Sendable {
     private static func expectedRedirectHosts(
         for model: StemSeparationModel
     ) -> [String] {
-        _ = model
-        return htdemucsRedirectHosts
+        switch model {
+        case .htdemucs:
+            htdemucsRedirectHosts
+        case .bsRoformerSW:
+            bsRoformerSWRedirectHosts
+        }
     }
 
     private func validateManifestSafety(_ manifest: StemModelManifest) throws {
@@ -548,7 +558,8 @@ struct StemModelAssetValidator: Sendable {
             field: "downloadableModelAssets.installationRelativePath"
         )
         try validateModelConfiguration(
-            at: configurationURL
+            at: configurationURL,
+            model: contract.separationModel
         )
 
         let modelDirectoryURL = configurationURL.deletingLastPathComponent().standardizedFileURL
@@ -615,8 +626,23 @@ struct StemModelAssetValidator: Sendable {
     }
 
     private func validateModelConfiguration(
-        at fileURL: URL
+        at fileURL: URL,
+        model: StemSeparationModel
     ) throws {
+        if model == .bsRoformerSW {
+            do {
+                _ = try BSRoformerConfiguration.load(from: fileURL)
+            } catch {
+                throw StemModelAssetValidationError.modelConfigurationInvalid(
+                    path: fileURL.path,
+                    field: "BS-RoFormer-SW",
+                    expected: "検証済み6Stem公開設定",
+                    actual: error.localizedDescription
+                )
+            }
+            return
+        }
+
         let data: Data
         do {
             data = try readRegularFileData(fileURL)
@@ -1130,14 +1156,15 @@ struct StemModelAssetValidator: Sendable {
             )
         }
         for (index, pin) in pins.enumerated() {
-            let expected: Set<String> = pin["name"] as? String == "demucs-mlx-swift"
-                ? ["name", "repo", "revision"]
-                : ["name", "repo", "version", "revision"]
-            try requireKeys(
-                pin,
-                path: "runtimePins[\(index)]",
-                expected: expected
-            )
+            let expected: Set<String>
+            if ["demucs-mlx-swift", "bs-roformer-mlx-swift"].contains(
+                pin["name"] as? String
+            ) {
+                expected = ["name", "repo", "revision"]
+            } else {
+                expected = ["name", "repo", "version", "revision"]
+            }
+            try requireKeys(pin, path: "runtimePins[\(index)]", expected: expected)
         }
     }
 

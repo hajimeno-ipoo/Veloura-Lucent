@@ -152,6 +152,9 @@ struct StemSeparationBackendRouterFactory: StemSeparationBackendCreating {
         case .htdemucs:
             return try await DemucsStemSeparationBackendFactory()
                 .makeBackend(configuration: configuration)
+        case .bsRoformerSW:
+            return try await BSRoformerStemSeparationBackendFactory()
+                .makeBackend(configuration: configuration)
         }
     }
 }
@@ -214,6 +217,8 @@ struct StemSeparationService: StemSeparating, Sendable {
         .bass: "raw-bass.wav",
         .other: "raw-other.wav",
         .vocals: "raw-vocals.wav",
+        .guitar: "raw-guitar.wav",
+        .piano: "raw-piano.wav",
     ]
 
     private let artifactStore: any StemSeparationArtifactStoring

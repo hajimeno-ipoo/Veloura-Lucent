@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "notices": [
+    {
+      "relativePath": "BS-RoFormer-SW/MODEL_NOTICE.md",
+      "byteCount": 1428,
+      "sha256": "be5db8b5512ea71a84b551411b5d24ab697410db742ea68c2d99edbf20b51df5"
+    },
+    {
+      "relativePath": "demucs-mlx-swift/LICENSE",
+      "byteCount": 1069,
+      "sha256": "3271b37c55a37787ad3c5fade17a85fda5e98636f08c9e9c094591280b6a0a2e"
+    },
+    {
+      "relativePath": "demucs/LICENSE",
+      "byteCount": 1088,
+      "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+    },
+    {
+      "relativePath": "fmt/LICENSE",
+      "byteCount": 1431,
+      "sha256": "07580f2a3b35709ce703d523f447b242f6dfec7582a8c0df102c7fa2849375f8"
+    },
+    {
+      "relativePath": "metal-cpp/LICENSE.txt",
+      "byteCount": 11344,
+      "sha256": "f4e92c7fe2aa066e294c0da9d08683dc9fb741ee6e6debbfad99a0c96e07c1f2"
+    },
+    {
+      "relativePath": "mlx-c/ACKNOWLEDGMENTS.md",
+      "byteCount": 291,
+      "sha256": "6b91480a91653156bd97b276e9cb5d2a16c3315b07e997b1ddcfd92ab8f51d0b"
+    },
+    {
+      "relativePath": "mlx-c/LICENSE",
+      "byteCount": 1067,
+      "sha256": "44326a4ea062241ae6fc26ee2ec90bdc81af7eb7b9d3966181b733fa69d42057"
+    },
+    {
+      "relativePath": "mlx-community-demucs-mlx/MODEL_CARD.md",
+      "byteCount": 3971,
+      "sha256": "1f9e7231385b9a8356dbe443c9707e9ada483027277ef0fd4154143f516570ab"
+    },
+    {
+      "relativePath": "mlx-swift/ACKNOWLEDGMENTS.md",
+      "byteCount": 15023,
+      "sha256": "e838112dc077cb9499d138903d05a6843a3bb66d9ad3fba8076ad5cb8332acfb"
+    },
+    {
+      "relativePath": "mlx-swift/LICENSE",
+      "byteCount": 1067,
+      "sha256": "44326a4ea062241ae6fc26ee2ec90bdc81af7eb7b9d3966181b733fa69d42057"
+    },
+    {
+      "relativePath": "mlx-swift/VENDORED_CODE.md",
+      "byteCount": 480,
+      "sha256": "52417172d240e9e3fec29709e994ac8068a8ef2fa7ec83cd0f9856e0d43a82c0"
+    },
+    {
+      "relativePath": "mlx/ACKNOWLEDGMENTS.md",
+      "byteCount": 14546,
+      "sha256": "754321096cf44f1382ba2bb8309f9b445cffa9ea14ac44b9f21fc34619520b99"
+    },
+    {
+      "relativePath": "mlx/LICENSE",
+      "byteCount": 1066,
+      "sha256": "ccfab7ccb2ea306f71531c8ca77bb55507606cd90768b1e32b8b52ab5b48cf01"
+    },
+    {
+      "relativePath": "nlohmann-json/LICENSE.MIT",
+      "byteCount": 1076,
+      "sha256": "86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14"
+    },
+    {
+      "relativePath": "swift-argument-parser/LICENSE.txt",
+      "byteCount": 11751,
+      "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+    },
+    {
+      "relativePath": "swift-collections/LICENSE.txt",
+      "byteCount": 11751,
+      "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+    },
+    {
+      "relativePath": "swift-jinja/LICENSE",
+      "byteCount": 11347,
+      "sha256": "648b81e6c6f9975c3b6cf6d630229b6c8d6f1ddaef55f5770f576adda19f3495"
+    },
+    {
+      "relativePath": "swift-numerics/LICENSE.txt",
+      "byteCount": 11751,
+      "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+    },
+    {
+      "relativePath": "swift-transformers/LICENSE",
+      "byteCount": 11347,
+      "sha256": "648b81e6c6f9975c3b6cf6d630229b6c8d6f1ddaef55f5770f576adda19f3495"
+    }
+  ]
+}

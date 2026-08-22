@@ -38,6 +38,12 @@
       "revision": "8d9834a6189db730f6264db7556a7ffb751e99ee"
     },
     {
+      "name": "swift-argument-parser",
+      "repo": "https://github.com/apple/swift-argument-parser",
+      "version": "1.8.2",
+      "revision": "6a52f3251125d74daf04fcbd5e6f08a75d074382"
+    },
+    {
       "name": "swift-numerics",
       "repo": "https://github.com/apple/swift-numerics",
       "version": "1.1.1",
