@@ -1,6 +1,8 @@
 # Vendored source provenance
 
-This directory is a vendored copy of `demucs-mlx-swift` used by Veloura Lucent.
+This directory contains the public runtime library from `demucs-mlx-swift` used by Veloura Lucent.
+The CLI, tests, documentation, and benchmark scripts remain local development files and are
+not part of the public GitHub tree.
 
 - Upstream repository: <https://github.com/kylehowells/demucs-mlx-swift.git>
 - Upstream commit: `c81c47178828db2d8bc66e64f80c745c64abdc94`
@@ -18,4 +20,3 @@ The upstream `LICENSE` is retained unchanged. Its SHA-256 at import time is
 - Preserve upstream lookup and Hub behavior as the default `.localThenHub` policy.
 - Add `.localOnly`, which accepts only the exact explicit `modelDirectory` and never searches
   environment variables, caches, the current working directory, or Hugging Face.
-- Add focused package tests for the resolution contract.

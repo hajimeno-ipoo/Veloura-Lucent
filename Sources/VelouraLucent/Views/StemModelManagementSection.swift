@@ -43,7 +43,7 @@ struct StemModelManagementSection: View {
                     || modelManager.isAcquiringModels
             )
 
-            StemSeparationChoiceGuide(selectedModel: modelManager.selectedModel)
+            StemSeparationChoiceGuide()
 
             RecoveryStatusCard(presentation: currentPresentation)
                 .alert(
@@ -219,20 +219,6 @@ struct StemModelManagementSection: View {
             ? modelPresentation?.runContract.activeRoles ?? profile.sourceOrder
             : profile.sourceOrder
         let outputDescription = "\(roles.count)Stem（\(roles.map(\.stemModeDisplayTitle).joined(separator: "、"))）"
-        if selectedModel == .bsRoformerSW {
-            return """
-            モデル　\(modelName)
-            revision　\(revision)
-            方式　STFT／62帯域分割／時間・周波数RoFormer
-            出力　\(outputDescription)
-            設定（固定）　STFT FFT / hop / window　2048 / 512 / 2048
-            　　　　　　帯域 / 周波数ビン　　　 62 / 1025
-            　　　　　　推論チャンク　　　　　 801フレーム
-            　　　　　　短音源 / ステップ　　　 10秒未満: 256フレーム / 8秒
-            　　　　　　dim / depth / heads　　 256 / 12 / 8
-            """
-        }
-
         let displayedSettings = settings ?? StemSeparationSettings(
             shifts: 2,
             overlap: 0.25,
@@ -667,26 +653,13 @@ extension StemModelManagementSection {
 
 private extension StemModelManagementSection {
     struct StemSeparationChoiceGuide: View {
-        let selectedModel: StemSeparationModel
-
         var body: some View {
-            Group {
-                if selectedModel == .htdemucs {
-                    ChoiceRow(
-                        title: "HTDemucs",
-                        emphasis: "安定・実績・バランス重視",
-                        detail: "はじめやすさや、全体のバランスを重視する場合に。",
-                        color: .pink
-                    )
-                } else {
-                    ChoiceRow(
-                        title: "BS-RoFormer-SW",
-                        emphasis: "精度・細かさ・分離感重視",
-                        detail: "ボーカルや楽器を、より細かく分けたい場合に。",
-                        color: .blue
-                    )
-                }
-            }
+            ChoiceRow(
+                title: "HTDemucs",
+                emphasis: "安定・実績・バランス重視",
+                detail: "はじめやすさや、全体のバランスを重視する場合に。",
+                color: .pink
+            )
             .padding(12)
             .frame(maxWidth: Layout.cardMaxWidth, alignment: .leading)
             .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
@@ -774,10 +747,6 @@ private extension StemModelManagementSection {
                         HelpBulletList(items: selectedModelFeatures)
                     }
 
-                    HelpSection(title: "違い") {
-                        ComparisonTable()
-                    }
-
                     Text("分離結果は、楽曲、録音状態、音の重なり方によって変わります。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -800,37 +769,19 @@ private extension StemModelManagementSection {
 
         @ViewBuilder
         private var selectedModelDescription: some View {
-            switch selectedModel {
-            case .htdemucs:
-                HelpModelDescription(
-                    title: "HTDemucs",
-                    description: "音の波形と、周波数ごとの音の分布を組み合わせて判断するモデルです。"
-                )
-            case .bsRoformerSW:
-                HelpModelDescription(
-                    title: "BS-RoFormer-SW",
-                    description: "音を周波数帯に分け、時間と周波数の関係を見ながら判断するモデルです。"
-                )
-            }
+            HelpModelDescription(
+                title: "HTDemucs",
+                description: "音の波形と、周波数ごとの音の分布を組み合わせて判断するモデルです。"
+            )
         }
 
         private var selectedModelFeatures: [String] {
-            switch selectedModel {
-            case .htdemucs:
-                [
-                    "定番として使われているモデル",
-                    "関連する情報や実装例が多い",
-                    "全体のバランスを重視した分離",
-                    "比較的扱いやすい",
-                ]
-            case .bsRoformerSW:
-                [
-                    "音を細かく捉えることを重視",
-                    "ボーカルや楽器の分離感を求める場合に向く",
-                    "音のにじみや混ざりを減らすことを狙う",
-                    "音の細部を分けたい場合に有力",
-                ]
-            }
+            [
+                "定番として使われているモデル",
+                "関連する情報や実装例が多い",
+                "全体のバランスを重視した分離",
+                "比較的扱いやすい",
+            ]
         }
     }
 
@@ -880,39 +831,6 @@ private extension StemModelManagementSection {
                     .accessibilityElement(children: .combine)
                 }
             }
-        }
-    }
-
-    struct ComparisonTable: View {
-        private let rows = [
-            ("設計", "波形と周波数情報を組み合わせる方式", "時間と周波数の関係を見る方式"),
-            ("分離の方向性", "全体のバランスを重視", "細かな分離感を重視"),
-            ("情報の多さ", "定番で関連情報が多い", "比較的新しい方式"),
-            ("扱い方", "比較的扱いやすい", "細部まで分けたい場合に使う"),
-        ]
-
-        var body: some View {
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                GridRow {
-                    Text("比較する点")
-                    Text("HTDemucs")
-                    Text("BS-RoFormer-SW")
-                }
-                .font(.caption.bold())
-
-                Divider().gridCellColumns(3)
-
-                ForEach(rows, id: \.0) { row in
-                    GridRow(alignment: .top) {
-                        Text(row.0).fontWeight(.semibold)
-                        Text(row.1)
-                        Text(row.2)
-                    }
-                    .font(.caption)
-                    Divider().gridCellColumns(3)
-                }
-            }
-            .accessibilityElement(children: .contain)
         }
     }
 

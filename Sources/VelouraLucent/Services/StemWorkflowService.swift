@@ -1368,9 +1368,8 @@ struct StemWorkflowService: Sendable {
     }
 
     private static func accompanimentTitle(_ runContract: StemModelRunContract) -> String {
-        runContract.separationModel == .bsRoformerSW
-            ? "伴奏（その他／ギター／ピアノ）"
-            : "その他"
+        _ = runContract
+        return "その他"
     }
 
     private func loadRawStems(

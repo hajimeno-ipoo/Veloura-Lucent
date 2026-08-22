@@ -1,5 +1,17 @@
 // swift-tools-version: 6.2
+import Foundation
 import PackageDescription
+
+let localOnlyExcludedPaths = (FileManager.default.enumerator(atPath: "Sources/VelouraLucent")?
+    .compactMap { $0 as? String }
+    .filter { path in
+        path.hasSuffix("SeparationBackend.swift") ||
+        path.hasSuffix(".png") ||
+        path.hasSuffix(".jpg") ||
+        path.hasSuffix(".jpeg") ||
+        path.hasSuffix(".svg") ||
+        path.hasPrefix("Resources/VelouraLucent.icon")
+    } ?? [])
 
 let package = Package(
     name: "VelouraLucent",
@@ -12,7 +24,6 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "Vendor/demucs-mlx-swift"),
-        .package(path: "Vendor/bs-roformer-mlx-swift"),
         .package(
             url: "https://github.com/apple/swift-collections.git",
             exact: "1.4.0"
@@ -22,25 +33,14 @@ let package = Package(
         .executableTarget(
             name: "VelouraLucent",
             dependencies: [
-                .product(name: "DemucsMLX", package: "demucs-mlx-swift"),
-                .product(name: "BSRoformerMLX", package: "bs-roformer-mlx-swift")
+                .product(name: "DemucsMLX", package: "demucs-mlx-swift")
             ],
             path: "Sources/VelouraLucent",
+            exclude: localOnlyExcludedPaths,
             resources: [
-                .process("Resources/AppIcon-1024.png"),
-                .copy("Resources/VelouraLucent.icon"),
-                .process("Resources/Rotary_Knob"),
                 .copy("Resources/StemModels"),
                 .copy("Resources/ThirdPartyNotices")
             ]
-        ),
-        .testTarget(
-            name: "VelouraLucentTests",
-            dependencies: [
-                "VelouraLucent",
-                .product(name: "BSRoformerMLX", package: "bs-roformer-mlx-swift")
-            ],
-            path: "Tests/VelouraLucentTests"
         )
     ]
 )

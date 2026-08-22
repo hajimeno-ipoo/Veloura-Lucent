@@ -12,13 +12,36 @@ __pycache__/
 /ebu-loudness-test-setv05/
 LandingPage/
 Docs/
+Tests/
+script/
+Resources/
+/.swiftpm/
+/.gitattributes
+/.playwright-cli/
+/AGENTS.md
+/design-qa.md
 Tests/Fixtures/Sample_audio/
 Tests/Fixtures/AudioQuality/
 Vendor/bs-roformer-mlx-swift/
 Sources/VelouraLucent/Services/BSRoformerStemSeparationBackend.swift
 Tests/VelouraLucentTests/BSRoformerStemSeparationBackendTests.swift
+Sources/VelouraLucent/Resources/VelouraLucent.icon/
+Sources/VelouraLucent/Resources/StemModels/README.md
 Sources/VelouraLucent/Resources/StemModels/bs-roformer-sw-manifest.json
 Sources/VelouraLucent/Resources/ThirdPartyNotices/BS-RoFormer-SW/
+Sources/VelouraLucent/Resources/ThirdPartyNotices/third-party-notices-manifest.json
+Sources/VelouraLucent/Resources/ThirdPartyNotices/swift-argument-parser/
+
+# Vendored runtime package: keep only the library sources and legal provenance.
+/Vendor/demucs-mlx-swift/Makefile
+/Vendor/demucs-mlx-swift/README.md
+/Vendor/demucs-mlx-swift/Package.resolved
+/Vendor/demucs-mlx-swift/Tests/
+/Vendor/demucs-mlx-swift/docs/
+/Vendor/demucs-mlx-swift/scripts/
+/Vendor/demucs-mlx-swift/Sources/DemucsCLI/
+/Vendor/demucs-mlx-swift/Sources/DemucsCLILib/
+/Vendor/demucs-mlx-swift/VENDORED_INVENTORY.sha256
 
 # Image files are not part of the public upload scope
 *.png
@@ -27,14 +50,6 @@ Sources/VelouraLucent/Resources/ThirdPartyNotices/BS-RoFormer-SW/
 *.svg
 *.gif
 *.webp
-
-# Keep only the keyboard shortcut design-QA evidence with its tracked report
-!/Docs/
-/Docs/*
-!/Docs/DesignQA/
-/Docs/DesignQA/*
-!/Docs/DesignQA/keyboard-shortcuts/
-!/Docs/DesignQA/keyboard-shortcuts/*.png
 
 # Local analysis output and machine-specific project settings
 graphify-out/
