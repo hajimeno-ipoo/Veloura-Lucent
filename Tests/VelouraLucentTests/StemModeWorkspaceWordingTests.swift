@@ -7,6 +7,9 @@ struct StemModeWorkspaceWordingTests {
         let remixComparison = try source(
             "Sources/VelouraLucent/Views/StemRemixComparisonView.swift"
         )
+        let stemWorkspace = try source(
+            "Sources/VelouraLucent/Views/StemModeWorkspaceView.swift"
+        )
         let source = try combinedSource([
             "Sources/VelouraLucent/App/VelouraCommands.swift",
             "Sources/VelouraLucent/Views/WorkspaceToolbarView.swift",
@@ -36,6 +39,12 @@ struct StemModeWorkspaceWordingTests {
         #expect(!source.contains("Sample Peakから推測して補完していません。"))
         #expect(!source.localizedCaseInsensitiveContains("corpus"))
         #expect(source.contains("再ミックスと既存マスタリングを独立して実行します"))
+        #expect(stemWorkspace.contains(
+            "summary: \"4／6Stem分離・Stem別補正を基準に、再ミックスと既存マスタリングを独立して実行します\""
+        ))
+        #expect(!stemWorkspace.contains(
+            "summary: \"\\(model.availableStemRoles.count)Stem分離"
+        ))
         #expect(source.contains("raw使用"))
         #expect(source.contains("DSP最終適用結果"))
         #expect(!source.contains("採用したStem"))
