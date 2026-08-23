@@ -86,6 +86,7 @@ final class StemCompletionNotificationService: StemCompletionNotificationReporti
         runContract: StemModelRunContract
     ) {
         guard preferences.completionNotificationsEnabled else { return }
+        guard preferences.isEnabled(for: stage.notificationItem) else { return }
 
         let content = UNMutableNotificationContent()
         content.title = stage.title
@@ -103,6 +104,17 @@ final class StemCompletionNotificationService: StemCompletionNotificationReporti
                     "Failed to add Stem completion notification: \(error.localizedDescription, privacy: .public)"
                 )
             }
+        }
+    }
+}
+
+private extension StemCompletionNotificationStage {
+    var notificationItem: CompletionNotificationItem {
+        switch self {
+        case .correction:
+            .stemCorrection
+        case .mastering:
+            .stemMastering
         }
     }
 }

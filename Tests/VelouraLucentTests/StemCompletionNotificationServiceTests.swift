@@ -9,11 +9,12 @@ struct StemCompletionNotificationServiceTests {
         var addedRequests: [UNNotificationRequest] = []
         var addCompletionHandlerWasProvided = false
 
-        func requestAuthorization(
-            options: UNAuthorizationOptions,
-            completionHandler: @escaping @Sendable (Bool, (any Error)?) -> Void
-        ) {
-            completionHandler(true, nil)
+        func authorizationStatus() async -> UNAuthorizationStatus {
+            .authorized
+        }
+
+        func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
+            true
         }
 
         func add(
@@ -28,9 +29,26 @@ struct StemCompletionNotificationServiceTests {
 
     final class PreferencesStub: CompletionNotificationPreferenceProviding {
         var completionNotificationsEnabled: Bool
+        var disabledItems: Set<CompletionNotificationItem>
 
-        init(completionNotificationsEnabled: Bool) {
+        init(
+            completionNotificationsEnabled: Bool,
+            disabledItems: Set<CompletionNotificationItem> = []
+        ) {
             self.completionNotificationsEnabled = completionNotificationsEnabled
+            self.disabledItems = disabledItems
+        }
+
+        func isEnabled(for item: CompletionNotificationItem) -> Bool {
+            !disabledItems.contains(item)
+        }
+
+        func setEnabled(_ isEnabled: Bool, for item: CompletionNotificationItem) {
+            if isEnabled {
+                disabledItems.remove(item)
+            } else {
+                disabledItems.insert(item)
+            }
         }
     }
 
@@ -77,5 +95,24 @@ struct StemCompletionNotificationServiceTests {
                 #expect(request.content.sound != nil)
             }
         }
+    }
+
+    @Test
+    func disabledStemNotificationItemDoesNotRegisterNotification() {
+        let notificationCenter = NotificationCenterSpy()
+        let service = StemCompletionNotificationService(
+            notificationCenter: notificationCenter,
+            preferences: PreferencesStub(
+                completionNotificationsEnabled: true,
+                disabledItems: [.stemCorrection]
+            )
+        )
+
+        service.notifyStemCompletion(
+            for: .correction,
+            runContract: makeStemTestRunContract()
+        )
+
+        #expect(notificationCenter.addedRequests.isEmpty)
     }
 }

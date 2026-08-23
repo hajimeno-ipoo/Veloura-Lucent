@@ -9,8 +9,13 @@ struct ProcessingJobTests {
         var authorizationRequestCount = 0
         var completions: [CompletionNotificationDomain] = []
 
-        func requestAuthorization() {
+        func authorizationStatus() async -> CompletionNotificationAuthorizationStatus {
+            .authorized
+        }
+
+        func requestAuthorization() async -> Bool {
             authorizationRequestCount += 1
+            return true
         }
 
         func notifyCompletion(for domain: CompletionNotificationDomain) {

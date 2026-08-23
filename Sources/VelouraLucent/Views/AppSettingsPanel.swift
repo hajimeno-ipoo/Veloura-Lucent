@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct AppSettingsPanel: View {
@@ -9,6 +10,9 @@ struct AppSettingsPanel: View {
     private let isWindowFullScreen: Bool
     private let openKeyboardShortcutManager: @MainActor () -> Void
     @State private var completionNotificationsEnabled: Bool
+    @State private var completionNotificationItemStates: [CompletionNotificationItem: Bool]
+    @State private var notificationAuthorizationStatus: CompletionNotificationAuthorizationStatus = .unknown
+    @State private var isNotificationPermissionGuidePresented = false
     @State private var isEditingWindowBackgroundMaterialAmount = false
     @State private var isEditingWindowBackgroundBlurLevel = false
 
@@ -29,6 +33,13 @@ struct AppSettingsPanel: View {
         self.preferences = preferences
         self.notificationReporter = notificationReporter
         _completionNotificationsEnabled = State(initialValue: preferences.completionNotificationsEnabled)
+        _completionNotificationItemStates = State(
+            initialValue: Dictionary(
+                uniqueKeysWithValues: CompletionNotificationItem.allCases.map { item in
+                    (item, preferences.isEnabled(for: item))
+                }
+            )
+        )
     }
 
     var body: some View {
@@ -122,9 +133,7 @@ struct AppSettingsPanel: View {
                     .foregroundStyle(.secondary)
             }
 
-            Toggle("完了通知", isOn: completionNotificationsBinding)
-                .toggleStyle(.switch)
-                .tint(LiquidGlassSegmentedPickerStyle.switchTint)
+            notificationSettings
 
             Divider()
 
@@ -145,6 +154,29 @@ struct AppSettingsPanel: View {
                 )
                 .accessibilityLabel("ショートカットを管理")
             }
+        }
+        .task {
+            await refreshNotificationAuthorizationStatus()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSApplication.didBecomeActiveNotification
+            )
+        ) { _ in
+            Task { @MainActor in
+                await refreshNotificationAuthorizationStatus()
+            }
+        }
+        .alert(
+            "macOSの通知が許可されていません",
+            isPresented: $isNotificationPermissionGuidePresented
+        ) {
+            Button("キャンセル", role: .cancel) {}
+            Button("システム設定を開く") {
+                openSystemNotificationSettings()
+            }
+        } message: {
+            Text("通知を受け取るには、システム設定の「通知」でVeloura Lucentを許可してください。")
         }
     }
 
@@ -217,9 +249,82 @@ struct AppSettingsPanel: View {
                 completionNotificationsEnabled = newValue
                 preferences.completionNotificationsEnabled = newValue
                 if newValue {
-                    notificationReporter.requestAuthorization()
+                    Task { @MainActor in
+                        await prepareNotificationsIfNeeded()
+                    }
                 }
             }
         )
+    }
+
+    private var notificationSettings: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("通知")
+                .font(.headline)
+
+            LabeledContent("macOSの通知許可") {
+                Text(notificationAuthorizationStatus.title)
+                    .foregroundStyle(notificationAuthorizationStatus == .authorized ? .primary : .secondary)
+            }
+
+            Toggle("アプリ通知", isOn: completionNotificationsBinding)
+                .toggleStyle(.switch)
+                .tint(LiquidGlassSegmentedPickerStyle.switchTint)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("通知項目")
+                    .font(.callout.weight(.semibold))
+
+                ForEach(CompletionNotificationItem.allCases) { item in
+                    Toggle(item.title, isOn: completionNotificationItemBinding(for: item))
+                        .toggleStyle(.switch)
+                        .tint(LiquidGlassSegmentedPickerStyle.switchTint)
+                }
+            }
+            .disabled(!completionNotificationsEnabled)
+        }
+    }
+
+    private func completionNotificationItemBinding(
+        for item: CompletionNotificationItem
+    ) -> Binding<Bool> {
+        Binding(
+            get: { completionNotificationItemStates[item] ?? true },
+            set: { isEnabled in
+                completionNotificationItemStates[item] = isEnabled
+                preferences.setEnabled(isEnabled, for: item)
+            }
+        )
+    }
+
+    @MainActor
+    private func prepareNotificationsIfNeeded() async {
+        let status = await notificationReporter.authorizationStatus()
+        notificationAuthorizationStatus = status
+
+        switch status {
+        case .authorized:
+            return
+        case .notDetermined:
+            let isAuthorized = await notificationReporter.requestAuthorization()
+            await refreshNotificationAuthorizationStatus()
+            if !isAuthorized {
+                isNotificationPermissionGuidePresented = true
+            }
+        case .denied, .unknown:
+            isNotificationPermissionGuidePresented = true
+        }
+    }
+
+    @MainActor
+    private func refreshNotificationAuthorizationStatus() async {
+        notificationAuthorizationStatus = await notificationReporter.authorizationStatus()
+    }
+
+    private func openSystemNotificationSettings() {
+        guard let settingsURL = URL(
+            string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+        ) else { return }
+        NSWorkspace.shared.open(settingsURL)
     }
 }

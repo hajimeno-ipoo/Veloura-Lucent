@@ -8,17 +8,19 @@ struct NotificationServiceTests {
     final class NotificationCenterSpy: UserNotificationCenterProviding {
         var authorizationRequestCount = 0
         var authorizationOptions: UNAuthorizationOptions?
+        var currentAuthorizationStatus: UNAuthorizationStatus = .authorized
         var addedRequests: [UNNotificationRequest] = []
         var addCompletionHandlerWasProvided = false
         var addError: Error?
 
-        func requestAuthorization(
-            options: UNAuthorizationOptions,
-            completionHandler: @escaping @Sendable (Bool, Error?) -> Void
-        ) {
+        func authorizationStatus() async -> UNAuthorizationStatus {
+            currentAuthorizationStatus
+        }
+
+        func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
             authorizationRequestCount += 1
             authorizationOptions = options
-            completionHandler(true, nil)
+            return true
         }
 
         func add(_ request: UNNotificationRequest, withCompletionHandler completionHandler: (@Sendable (Error?) -> Void)?) {
@@ -30,23 +32,41 @@ struct NotificationServiceTests {
 
     final class PreferencesStub: CompletionNotificationPreferenceProviding {
         var completionNotificationsEnabled: Bool
+        var disabledItems: Set<CompletionNotificationItem>
 
-        init(completionNotificationsEnabled: Bool) {
+        init(
+            completionNotificationsEnabled: Bool,
+            disabledItems: Set<CompletionNotificationItem> = []
+        ) {
             self.completionNotificationsEnabled = completionNotificationsEnabled
+            self.disabledItems = disabledItems
+        }
+
+        func isEnabled(for item: CompletionNotificationItem) -> Bool {
+            !disabledItems.contains(item)
+        }
+
+        func setEnabled(_ isEnabled: Bool, for item: CompletionNotificationItem) {
+            if isEnabled {
+                disabledItems.remove(item)
+            } else {
+                disabledItems.insert(item)
+            }
         }
     }
 
     @Test
-    func disabledCompletionNotificationsDoNotRequestAuthorization() {
+    func authorizationRequestIsIndependentFromAppNotificationPreference() async {
         let notificationCenter = NotificationCenterSpy()
         let service = NotificationService(
             notificationCenter: notificationCenter,
             preferences: PreferencesStub(completionNotificationsEnabled: false)
         )
 
-        service.requestAuthorization()
+        let isAuthorized = await service.requestAuthorization()
 
-        #expect(notificationCenter.authorizationRequestCount == 0)
+        #expect(isAuthorized)
+        #expect(notificationCenter.authorizationRequestCount == 1)
     }
 
     @Test
@@ -57,6 +77,9 @@ struct NotificationServiceTests {
         let preferences = UserDefaultsCompletionNotificationPreferences(defaults: defaults)
 
         #expect(preferences.completionNotificationsEnabled == false)
+        for item in CompletionNotificationItem.allCases {
+            #expect(preferences.isEnabled(for: item))
+        }
     }
 
     @Test
@@ -67,15 +90,16 @@ struct NotificationServiceTests {
     }
 
     @Test
-    func enabledCompletionNotificationsRequestAlertAndSoundAuthorization() {
+    func authorizationRequestUsesAlertAndSound() async {
         let notificationCenter = NotificationCenterSpy()
         let service = NotificationService(
             notificationCenter: notificationCenter,
             preferences: PreferencesStub(completionNotificationsEnabled: true)
         )
 
-        service.requestAuthorization()
+        let isAuthorized = await service.requestAuthorization()
 
+        #expect(isAuthorized)
         #expect(notificationCenter.authorizationRequestCount == 1)
         #expect(notificationCenter.authorizationOptions?.contains(.alert) == true)
         #expect(notificationCenter.authorizationOptions?.contains(.sound) == true)
@@ -109,6 +133,22 @@ struct NotificationServiceTests {
         #expect(notificationCenter.addedRequests.first?.content.title == "マスタリングが完了しました")
         #expect(notificationCenter.addedRequests.first?.content.body == "Veloura Lucentでの処理が完了しました。")
         #expect(notificationCenter.addedRequests.first?.content.sound != nil)
+    }
+
+    @Test
+    func disabledStandardNotificationItemDoesNotRegisterNotification() {
+        let notificationCenter = NotificationCenterSpy()
+        let service = NotificationService(
+            notificationCenter: notificationCenter,
+            preferences: PreferencesStub(
+                completionNotificationsEnabled: true,
+                disabledItems: [.standardMastering]
+            )
+        )
+
+        service.notifyCompletion(for: .mastering)
+
+        #expect(notificationCenter.addedRequests.isEmpty)
     }
 
     @Test
