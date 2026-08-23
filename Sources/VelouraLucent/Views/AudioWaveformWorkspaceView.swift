@@ -28,6 +28,7 @@ struct AudioWaveformWorkspaceView: View {
     let comparisonPresentation: AudioWaveformComparisonPresentation
     let comparisonPairLabel: (AudioComparisonPair) -> String
     let comparisonPairSummary: (AudioComparisonPair) -> String
+    let comparisonPairPickerMaxWidth: CGFloat
     let sideAButtonTitle: String
     let sideBButtonTitle: String
     let switchButtonTitle: String
@@ -62,6 +63,7 @@ struct AudioWaveformWorkspaceView: View {
         playbackStatusText: String? = nil,
         comparisonPairLabel: @escaping (AudioComparisonPair) -> String = \.title,
         comparisonPairSummary: @escaping (AudioComparisonPair) -> String = \.summary,
+        comparisonPairPickerMaxWidth: CGFloat = 360,
         playbackInterlocks: [AudioPreviewController] = []
     ) {
         self.preview = preview
@@ -97,6 +99,7 @@ struct AudioWaveformWorkspaceView: View {
         self.comparisonPresentation = .selectable
         self.comparisonPairLabel = comparisonPairLabel
         self.comparisonPairSummary = comparisonPairSummary
+        self.comparisonPairPickerMaxWidth = comparisonPairPickerMaxWidth
         self.sideAButtonTitle = "Aを再生"
         self.sideBButtonTitle = "Bを再生"
         self.switchButtonTitle = "A/B切替"
@@ -138,6 +141,7 @@ struct AudioWaveformWorkspaceView: View {
         self.comparisonPresentation = .fixed(summary: comparisonSummary)
         self.comparisonPairLabel = \.title
         self.comparisonPairSummary = \.summary
+        self.comparisonPairPickerMaxWidth = 360
         self.sideAButtonTitle = sideAButtonTitle
         self.sideBButtonTitle = sideBButtonTitle
         self.switchButtonTitle = switchButtonTitle
@@ -261,7 +265,8 @@ struct AudioWaveformWorkspaceView: View {
                         get: { preview.comparisonPair },
                         set: { preview.setComparisonPair($0) }
                     ),
-                    label: comparisonPairLabel
+                    label: comparisonPairLabel,
+                    maxWidth: comparisonPairPickerMaxWidth
                 )
             case .fixed:
                 EmptyView()

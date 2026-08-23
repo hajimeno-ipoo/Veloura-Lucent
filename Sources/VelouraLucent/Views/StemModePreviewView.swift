@@ -16,11 +16,12 @@ struct StemModePreviewView: View {
                 inputFileURL: model.inputPreviewURL,
                 correctedFileURL: model.correctedRemixPreviewArtifact?.fileURL,
                 masteredFileURL: model.finalPreviewArtifact?.fileURL,
-                correctedTitle: processedTitle,
-                correctedAccessibilityLabel: "\(processedTitle)の波形",
+                correctedTitle: waveformProcessedTitle,
+                correctedAccessibilityLabel: "\(waveformProcessedTitle)の波形",
                 playbackStatusText: mainPlaybackStatusText,
                 comparisonPairLabel: comparisonPairLabel,
                 comparisonPairSummary: comparisonPairSummary,
+                comparisonPairPickerMaxWidth: 440,
                 playbackInterlocks: [
                     model.stemPreviewController,
                     model.remixPreviewController,
@@ -68,6 +69,10 @@ struct StemModePreviewView: View {
             : "Stem再ミックス"
     }
 
+    private var waveformProcessedTitle: String {
+        "再ミックス"
+    }
+
     private var mainPlaybackStatusText: String {
         guard let activeTarget = model.previewController.activeTarget else {
             return "未再生"
@@ -101,7 +106,7 @@ struct StemModePreviewView: View {
         case .inputVsMastered:
             "入力 vs 最終版"
         case .correctedVsMastered:
-            "\(processedTitle) vs 最終版"
+            "再ミックスvs最終版"
         }
     }
 

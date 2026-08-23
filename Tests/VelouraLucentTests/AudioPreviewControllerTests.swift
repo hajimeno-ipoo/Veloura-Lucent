@@ -177,6 +177,387 @@ struct AudioPreviewControllerTests {
     }
 
     @Test
+    func pausingPlaybackSynchronizesAllAvailableTargetsAtTheFinalPlaybackTime() async throws {
+        let fixture = try makePreviewFixture(duration: 1)
+        defer {
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let controller = AudioPreviewController()
+        let snapshot = previewSnapshot(duration: 1)
+        for target in AudioPreviewTarget.allCases {
+            controller.setPreviewSnapshot(snapshot, for: target, sourceURL: fixture.url)
+        }
+
+        controller.startPlayback(for: fixture.url, target: .input)
+        try await Task.sleep(nanoseconds: 135_000_000)
+        controller.pausePlayback(target: .input)
+
+        let pausedPosition = controller.cardState(for: .input).playbackPosition
+        #expect(pausedPosition > 0.05)
+        #expect(controller.cardState(for: .input).playbackState == .paused)
+        for target in AudioPreviewTarget.allCases {
+            #expect(abs(controller.cardState(for: target).playbackPosition - pausedPosition) < 0.001)
+            #expect(abs(controller.cardState(for: target).playbackProgress - pausedPosition) < 0.001)
+        }
+    }
+
+    @Test
+    func switchingComparisonSideDuringPlaybackKeepsPreparedPlayersAndSynchronizesAllCardsImmediately() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 2)
+        defer {
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+        defer {
+            controller.stopPlayback()
+        }
+
+        controller.startPlayback(for: fixture.inputURL, target: .input)
+        try await Task.sleep(for: .milliseconds(150))
+
+        let before = controller.playbackDiagnosticState()
+        let engineBefore = try #require(before.engineIdentifier)
+        let inputPlayerBefore = try #require(before.playerNodeIdentifiers[.input])
+        let correctedPlayerBefore = try #require(before.playerNodeIdentifiers[.corrected])
+        let positionBefore = controller.cardState(for: .input).playbackPosition
+        #expect(before.playerNodeIsPlaying[.input] == true)
+        #expect(before.playerNodeIsPlaying[.corrected] == true)
+        #expect((before.playerNodeVolumes[.input] ?? 0) > 0)
+        #expect(before.playerNodeVolumes[.corrected] == 0)
+        #expect(before.analysisTarget == .input)
+
+        controller.toggleComparisonSide()
+
+        let after = controller.playbackDiagnosticState()
+        let engineAfter = try #require(after.engineIdentifier)
+        let inputPlayerAfter = try #require(after.playerNodeIdentifiers[.input])
+        let correctedPlayerAfter = try #require(after.playerNodeIdentifiers[.corrected])
+        #expect(engineBefore == engineAfter)
+        #expect(inputPlayerBefore == inputPlayerAfter)
+        #expect(correctedPlayerBefore == correctedPlayerAfter)
+        #expect(after.playerNodeIsPlaying[.input] == true)
+        #expect(after.playerNodeIsPlaying[.corrected] == true)
+        #expect(after.playerNodeVolumes[.input] == 0)
+        #expect((after.playerNodeVolumes[.corrected] ?? 0) > 0)
+        #expect(after.analysisTarget == .corrected)
+        #expect(after.analysisID != before.analysisID)
+        #expect(controller.activeTarget == .corrected)
+        #expect(controller.activeComparisonSide == .b)
+        #expect(controller.playbackState(for: .input) == .paused)
+        #expect(controller.playbackState(for: .corrected) == .playing)
+
+        let switchedPositions = AudioPreviewTarget.allCases.map {
+            controller.cardState(for: $0).playbackPosition
+        }
+        #expect((switchedPositions.max() ?? 0) - (switchedPositions.min() ?? 0) < 0.001)
+        #expect((switchedPositions.first ?? 0) >= positionBefore)
+
+        let switchedPosition = controller.cardState(for: .corrected).playbackPosition
+        let didAdvance = await waitUntil {
+            controller.cardState(for: .corrected).playbackPosition > switchedPosition + 0.03
+        }
+        #expect(didAdvance)
+        let advancedPositions = AudioPreviewTarget.allCases.map {
+            controller.cardState(for: $0).playbackPosition
+        }
+        #expect((advancedPositions.max() ?? 0) - (advancedPositions.min() ?? 0) < 0.001)
+    }
+
+    @Test
+    func switchingToComparisonSideThatAlreadyEndedStopsWithoutRebuildingOrRewinding() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 1, correctedDuration: 0.12)
+        defer {
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+        defer {
+            controller.stopPlayback()
+        }
+
+        controller.startPlayback(for: fixture.inputURL, target: .input)
+        let didFinishInactiveSide = await waitUntil {
+            controller.playbackDiagnosticState().completedTargets.contains(.corrected)
+        }
+        #expect(didFinishInactiveSide)
+
+        let before = controller.playbackDiagnosticState()
+        _ = try #require(before.engineIdentifier)
+        #expect(before.completedTargets.contains(.corrected))
+        #expect(controller.playbackState(for: .input) == .playing)
+        #expect(controller.cardState(for: .input).playbackPosition >= fixture.correctedDuration)
+
+        controller.toggleComparisonSide()
+
+        #expect(controller.playbackDiagnosticState().engineIdentifier == nil)
+        #expect(controller.activeTarget == nil)
+        for target in AudioPreviewTarget.allCases {
+            #expect(controller.playbackState(for: target) == .stopped)
+            #expect(controller.cardState(for: target).playbackPosition == 0)
+        }
+    }
+
+    @Test
+    func seekingLongerComparisonSidePastShorterDurationDoesNotRewindPlayback() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 1, correctedDuration: 0.4)
+        defer {
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+        defer {
+            controller.stopPlayback()
+        }
+
+        controller.startPlayback(for: fixture.inputURL, target: .input)
+        controller.seek(to: 0.8, target: .input)
+
+        #expect(abs(controller.cardState(for: .input).playbackPosition - 0.8) < 0.01)
+        #expect(abs(controller.cardState(for: .corrected).playbackPosition - 0.4) < 0.001)
+        #expect(abs(controller.cardState(for: .mastered).playbackPosition - 0.8) < 0.01)
+        #expect(controller.playbackDiagnosticState().completedTargets.contains(.corrected))
+        #expect(controller.playbackState(for: .input) == .playing)
+    }
+
+    @Test
+    func switchingComparisonSideRoutesRealtimeAnalysisToTheAudiblePlayer() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 3)
+        defer {
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+        defer {
+            controller.stopPlayback()
+        }
+
+        controller.startPlayback(for: fixture.inputURL, target: .input)
+        let inputCorrelation = try await waitForCorrelation(
+            controller: controller,
+            target: .input,
+            satisfying: { $0 > 0.9 }
+        )
+        #expect(inputCorrelation > 0.9)
+        let inputAnalysisID = controller.playbackDiagnosticState().analysisID
+
+        controller.toggleComparisonSide()
+
+        let correctedAnalysisState = controller.playbackDiagnosticState()
+        #expect(correctedAnalysisState.analysisTarget == .corrected)
+        #expect(correctedAnalysisState.analysisID != inputAnalysisID)
+        #expect(controller.cardState(for: .input).vectorScopeSnapshot == .unavailable)
+        let correctedCorrelation = try await waitForCorrelation(
+            controller: controller,
+            target: .corrected,
+            satisfying: { $0 < -0.9 }
+        )
+        #expect(correctedCorrelation < -0.9)
+        #expect(controller.cardState(for: .input).vectorScopeSnapshot == .unavailable)
+
+        let correctedAnalysisID = controller.playbackDiagnosticState().analysisID
+        controller.toggleComparisonSide()
+
+        let returnedAnalysisState = controller.playbackDiagnosticState()
+        #expect(returnedAnalysisState.analysisTarget == .input)
+        #expect(returnedAnalysisState.analysisID != correctedAnalysisID)
+        #expect(controller.acceptsRealtimeAnalysis(for: .input, analysisID: inputAnalysisID) == false)
+        #expect(controller.acceptsRealtimeAnalysis(for: .corrected, analysisID: correctedAnalysisID) == false)
+        #expect(controller.acceptsRealtimeAnalysis(for: .input, analysisID: returnedAnalysisState.analysisID))
+        #expect(controller.cardState(for: .corrected).vectorScopeSnapshot == .unavailable)
+        let returnedInputCorrelation = try await waitForCorrelation(
+            controller: controller,
+            target: .input,
+            satisfying: { $0 > 0.9 }
+        )
+        #expect(returnedInputCorrelation > 0.9)
+        #expect(controller.cardState(for: .corrected).vectorScopeSnapshot == .unavailable)
+    }
+
+    @Test
+    func comparisonAnalysisKeepsEachSourcesNativeFormatAcrossSwitches() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 2, inputChannelCount: 1)
+        defer {
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+        defer {
+            controller.stopPlayback()
+        }
+
+        controller.startPlayback(for: fixture.inputURL, target: .input)
+        let inputState = controller.playbackDiagnosticState()
+        #expect(inputState.analysisOutputSampleRate == 44_100)
+        #expect(inputState.analysisOutputChannelCount == 1)
+        #expect(controller.cardState(for: .input).vectorScopeSnapshot.inputState == .mono)
+
+        controller.toggleComparisonSide()
+
+        let correctedState = controller.playbackDiagnosticState()
+        #expect(correctedState.playbackSessionID == inputState.playbackSessionID)
+        #expect(correctedState.engineIdentifier == inputState.engineIdentifier)
+        #expect(correctedState.analysisOutputSampleRate == 48_000)
+        #expect(correctedState.analysisOutputChannelCount == 2)
+        #expect(controller.cardState(for: .corrected).vectorScopeSnapshot.inputState == .stereo)
+    }
+
+    @Test
+    func comparisonAnalysisReflectsPlaybackVolume() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 2)
+        defer {
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let fullVolumeController = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: fullVolumeController)
+        fullVolumeController.startPlayback(for: fixture.inputURL, target: .input)
+        let fullVolumePeak = try await waitForTruePeak(
+            controller: fullVolumeController,
+            target: .input
+        )
+        fullVolumeController.stopPlayback()
+
+        let halfVolumeController = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: halfVolumeController)
+        halfVolumeController.setPlaybackVolume(0.5)
+        halfVolumeController.startPlayback(for: fixture.inputURL, target: .input)
+        let halfVolumePeak = try await waitForTruePeak(
+            controller: halfVolumeController,
+            target: .input
+        )
+        halfVolumeController.stopPlayback()
+
+        #expect(abs((fullVolumePeak - halfVolumePeak) - 6.02) < 0.75)
+    }
+
+    @Test
+    func changingComparisonPairRefreshesPreparedPlayersBeforeTheNextABSwitch() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 2)
+        defer {
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+        defer {
+            controller.stopPlayback()
+        }
+
+        controller.startPlayback(for: fixture.inputURL, target: .input)
+        let originalSession = controller.playbackDiagnosticState().playbackSessionID
+
+        controller.setComparisonPair(.inputVsMastered)
+
+        let refreshedState = controller.playbackDiagnosticState()
+        #expect(refreshedState.playbackSessionID != originalSession)
+        #expect(refreshedState.engineIsRunning)
+        #expect(refreshedState.playerNodeIdentifiers.keys.contains(.input))
+        #expect(refreshedState.playerNodeIdentifiers.keys.contains(.mastered))
+        #expect(controller.activeTarget == .input)
+
+        controller.toggleComparisonSide()
+
+        let switchedState = controller.playbackDiagnosticState()
+        #expect(switchedState.playbackSessionID == refreshedState.playbackSessionID)
+        #expect(switchedState.engineIdentifier == refreshedState.engineIdentifier)
+        #expect(controller.activeTarget == .mastered)
+        let positions = AudioPreviewTarget.allCases.map {
+            controller.cardState(for: $0).playbackPosition
+        }
+        #expect((positions.max() ?? 0) - (positions.min() ?? 0) < 0.001)
+    }
+
+    @Test
+    func changingComparisonPairWhilePausedPreservesTheResumePosition() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 2)
+        defer {
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+        defer {
+            controller.stopPlayback()
+        }
+
+        controller.startPlayback(for: fixture.inputURL, target: .input)
+        let didAdvance = await waitUntil {
+            controller.cardState(for: .input).playbackPosition > 0.05
+        }
+        #expect(didAdvance)
+        controller.pausePlayback(target: .input)
+        let pausedPosition = controller.cardState(for: .input).playbackPosition
+
+        controller.setComparisonPair(.inputVsMastered)
+
+        #expect(controller.playbackDiagnosticState().engineIdentifier == nil)
+        #expect(controller.activeTarget == .input)
+        #expect(controller.playbackState(for: .input) == .paused)
+        #expect(abs(controller.cardState(for: .input).playbackPosition - pausedPosition) < 0.01)
+
+        controller.toggleComparisonPlayback()
+
+        let resumedState = controller.playbackDiagnosticState()
+        #expect(resumedState.engineIsRunning)
+        #expect(resumedState.playerNodeIdentifiers.keys.contains(.input))
+        #expect(resumedState.playerNodeIdentifiers.keys.contains(.mastered))
+        #expect(controller.playbackState(for: .input) == .playing)
+        #expect(controller.cardState(for: .input).playbackPosition >= pausedPosition - 0.01)
+    }
+
+    @Test
+    func preparedComparisonPlaybackPreservesPauseSeekAndStopContracts() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 2)
+        defer {
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+
+        controller.startPlayback(for: fixture.inputURL, target: .input)
+        try await Task.sleep(for: .milliseconds(120))
+        controller.pausePlayback(target: .input)
+
+        let paused = controller.playbackDiagnosticState()
+        #expect(paused.playerNodeIdentifiers.count == 2)
+        #expect(paused.playerNodeIsPlaying.values.allSatisfy { !$0 })
+        let pausedPositions = AudioPreviewTarget.allCases.map {
+            controller.cardState(for: $0).playbackPosition
+        }
+        #expect((pausedPositions.max() ?? 0) - (pausedPositions.min() ?? 0) < 0.001)
+
+        controller.toggleComparisonPlayback()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(controller.playbackDiagnosticState().playerNodeIsPlaying.values.allSatisfy { $0 })
+
+        controller.seek(to: 0.6, target: .input)
+        let soughtPositions = AudioPreviewTarget.allCases.map {
+            controller.cardState(for: $0).playbackPosition
+        }
+        #expect(soughtPositions.allSatisfy { abs($0 - 1.2) < 0.001 })
+        #expect(controller.playbackDiagnosticState().playerNodeIsPlaying.values.allSatisfy { $0 })
+
+        controller.stopPlayback()
+        let stopped = controller.playbackDiagnosticState()
+        #expect(stopped.engineIdentifier == nil)
+        #expect(stopped.playerNodeIdentifiers.isEmpty)
+        #expect(stopped.analysisTarget == nil)
+        for target in AudioPreviewTarget.allCases {
+            #expect(controller.cardState(for: target).playbackPosition == 0)
+            #expect(controller.cardState(for: target).playbackProgress == 0)
+            #expect(controller.playbackState(for: target) == .stopped)
+        }
+    }
+
+    @Test
     func realtimeSpectrumUsesSelectedPairAtTheSamePlaybackPosition() {
         let controller = AudioPreviewController()
         controller.setPreviewSnapshot(
@@ -818,6 +1199,14 @@ struct AudioPreviewControllerTests {
         let url: URL
     }
 
+    private struct ComparisonPreviewFixture {
+        let directory: URL
+        let inputURL: URL
+        let correctedURL: URL
+        let inputDuration: TimeInterval
+        let correctedDuration: TimeInterval
+    }
+
     private func previewSnapshot(
         duration: TimeInterval,
         spectrumLevels: [Double] = []
@@ -847,6 +1236,73 @@ struct AudioPreviewControllerTests {
             integratedLUFS: -20,
             truePeakDBTP: -1
         )
+    }
+
+    private func configureComparisonFixture(
+        _ fixture: ComparisonPreviewFixture,
+        controller: AudioPreviewController
+    ) {
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: fixture.inputDuration),
+            for: .input,
+            sourceURL: fixture.inputURL
+        )
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: fixture.correctedDuration),
+            for: .corrected,
+            sourceURL: fixture.correctedURL
+        )
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: fixture.inputDuration),
+            for: .mastered,
+            sourceURL: fixture.inputURL
+        )
+    }
+
+    private func waitForCorrelation(
+        controller: AudioPreviewController,
+        target: AudioPreviewTarget,
+        satisfying predicate: (Double) -> Bool
+    ) async throws -> Double {
+        for _ in 0..<100 {
+            if
+                let correlation = controller.cardState(for: target).vectorScopeSnapshot.correlation,
+                predicate(correlation)
+            {
+                return correlation
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return try #require(controller.cardState(for: target).vectorScopeSnapshot.correlation)
+    }
+
+    private func waitForTruePeak(
+        controller: AudioPreviewController,
+        target: AudioPreviewTarget
+    ) async throws -> Double {
+        for _ in 0..<100 {
+            if let truePeak = controller.cardState(for: target).liveLoudnessMeterSnapshot.truePeakDBTP {
+                return truePeak
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return try #require(controller.cardState(for: target).liveLoudnessMeterSnapshot.truePeakDBTP)
+    }
+
+    private func waitUntil(
+        timeout: Duration = .seconds(1),
+        pollInterval: Duration = .milliseconds(10),
+        _ predicate: () -> Bool
+    ) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if predicate() {
+                return true
+            }
+            try? await Task.sleep(for: pollInterval)
+        }
+        return predicate()
     }
 
     private func stereoBuffer(
@@ -879,16 +1335,57 @@ struct AudioPreviewControllerTests {
         return buffer
     }
 
-    private func makePreviewFixture() throws -> PreviewFixture {
+    private func makePreviewFixture(duration: TimeInterval = 0.1) throws -> PreviewFixture {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
 
         let sourceURL = tempDirectory.appending(path: "preview.wav")
         let sampleRate = 44_100.0
-        let samples = (0..<4_410).map { index in
+        let sampleCount = max(Int((sampleRate * duration).rounded()), 1)
+        let samples = (0..<sampleCount).map { index in
             Float(sin(2 * Double.pi * 440 * Double(index) / sampleRate) * 0.1)
         }
         try AudioFileService.saveAudio(AudioSignal(channels: [samples], sampleRate: sampleRate), to: sourceURL)
         return PreviewFixture(directory: tempDirectory, url: sourceURL)
+    }
+
+    private func makeComparisonPreviewFixture(
+        duration: TimeInterval,
+        correctedDuration: TimeInterval? = nil,
+        inputChannelCount: Int = 2
+    ) throws -> ComparisonPreviewFixture {
+        let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        let inputURL = tempDirectory.appending(path: "input.wav")
+        let correctedURL = tempDirectory.appending(path: "corrected.wav")
+        let inputSampleRate = 44_100.0
+        let correctedSampleRate = 48_000.0
+        let resolvedCorrectedDuration = correctedDuration ?? duration
+        let inputSamples = (0..<max(Int((inputSampleRate * duration).rounded()), 1)).map { index in
+            Float(sin(2 * Double.pi * 440 * Double(index) / inputSampleRate) * 0.1)
+        }
+        let correctedSamples = (0..<max(Int((correctedSampleRate * resolvedCorrectedDuration).rounded()), 1)).map { index in
+            Float(sin(2 * Double.pi * 440 * Double(index) / correctedSampleRate) * 0.1)
+        }
+        let inputChannels = Array(repeating: inputSamples, count: max(inputChannelCount, 1))
+        try AudioFileService.saveAudio(
+            AudioSignal(channels: inputChannels, sampleRate: inputSampleRate),
+            to: inputURL
+        )
+        try AudioFileService.saveAudio(
+            AudioSignal(
+                channels: [correctedSamples, correctedSamples.map(-)],
+                sampleRate: correctedSampleRate
+            ),
+            to: correctedURL
+        )
+        return ComparisonPreviewFixture(
+            directory: tempDirectory,
+            inputURL: inputURL,
+            correctedURL: correctedURL,
+            inputDuration: duration,
+            correctedDuration: resolvedCorrectedDuration
+        )
     }
 }

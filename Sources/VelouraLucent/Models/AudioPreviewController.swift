@@ -14,6 +14,26 @@ enum AudioPlaybackState {
     case playing
 }
 
+private enum PreparedComparisonSwitchResult {
+    case switched
+    case targetEnded
+    case unavailable
+}
+
+struct AudioPreviewPlaybackDiagnosticState {
+    let engineIdentifier: ObjectIdentifier?
+    let engineIsRunning: Bool
+    let playerNodeIdentifiers: [AudioPreviewTarget: ObjectIdentifier]
+    let playerNodeIsPlaying: [AudioPreviewTarget: Bool]
+    let playerNodeVolumes: [AudioPreviewTarget: Float]
+    let playbackSessionID: UUID
+    let analysisTarget: AudioPreviewTarget?
+    let analysisID: UUID
+    let completedTargets: Set<AudioPreviewTarget>
+    let analysisOutputSampleRate: Double?
+    let analysisOutputChannelCount: AVAudioChannelCount?
+}
+
 @MainActor
 @Observable
 final class AudioPreviewCardState {
@@ -63,9 +83,16 @@ final class AudioPreviewController {
     private var playerNode: AVAudioPlayerNode?
     private var analysisMixer: AVAudioMixerNode?
     private var activeAudioFile: AVAudioFile?
+    private var comparisonPlayerNodes: [AudioPreviewTarget: AVAudioPlayerNode] = [:]
+    private var comparisonAnalysisMixers: [AudioPreviewTarget: AVAudioMixerNode] = [:]
+    private var comparisonAudioFiles: [AudioPreviewTarget: AVAudioFile] = [:]
+    private var comparisonPlaybackDurations: [AudioPreviewTarget: TimeInterval] = [:]
+    private var completedComparisonTargets: Set<AudioPreviewTarget> = []
     private var activePlaybackStartTime: TimeInterval = 0
     private var activePlaybackDuration: TimeInterval = 0
     private var activePlaybackID = UUID()
+    private var activeAnalysisID = UUID()
+    private var activeAnalysisTarget: AudioPreviewTarget?
     private var hasInstalledAnalysisTap = false
     private var meterTimer: Timer?
     private var previewTasks: [AudioPreviewTarget: Task<Void, Never>] = [:]
@@ -85,6 +112,16 @@ final class AudioPreviewController {
             return
         }
 
+        switch switchToPreparedComparisonTargetIfPossible(target, sourceURL: url) {
+        case .switched:
+            return
+        case .targetEnded:
+            finishActivePlayback()
+            return
+        case .unavailable:
+            break
+        }
+
         do {
             preparePreview(for: url, target: target)
             syncComparisonPositionIfNeeded(for: target)
@@ -93,20 +130,30 @@ final class AudioPreviewController {
             let duration = Double(audioFile.length) / audioFile.processingFormat.sampleRate
             let targetState = cardState(for: target)
             let resumeTime = min(targetState.playbackPosition, max(duration - 0.05, 0))
-            try prepareEnginePlayback(audioFile: audioFile, target: target, startTime: resumeTime, duration: duration)
-            targetState.playbackState = .playing
-            if let comparisonSide = comparisonSide(for: target) {
-                activeComparisonSide = comparisonSide
-                playbackLabel = "\(comparisonPair.title(for: comparisonSide)) \(target.rawValue)を再生中"
+            let playbackStartTime: TimeInterval
+            if let comparisonFiles = loadComparisonAudioFiles(activeAudioFile: audioFile, activeTarget: target) {
+                playbackStartTime = try prepareComparisonEnginePlayback(
+                    audioFiles: comparisonFiles,
+                    target: target,
+                    startTime: resumeTime
+                )
             } else {
-                playbackLabel = "\(target.rawValue)を再生中"
+                playbackStartTime = try prepareEnginePlayback(
+                    audioFile: audioFile,
+                    target: target,
+                    startTime: resumeTime,
+                    duration: duration
+                )
             }
-            targetState.playbackPosition = resumeTime
-            targetState.playbackProgress = duration > 0 ? max(0, min(1, resumeTime / duration)) : 0
-            updateComparisonSpectra(at: resumeTime)
+            targetState.playbackState = .playing
+            updatePlaybackLabel(for: target)
+            synchronizePlaybackPositions(to: playbackStartTime, updatesLiveBandLevels: false)
+            updateComparisonSpectra(at: playbackStartTime)
             startMetering(target: target)
-            playerNode?.play()
+            playPreparedNodes()
         } catch {
+            stopActivePlaybackEngine()
+            activeTarget = nil
             stopPlayback(target: target)
             playbackLabel = "再生できませんでした"
         }
@@ -156,7 +203,22 @@ final class AudioPreviewController {
         let previousActiveTarget = activeTarget
         let previousActiveSide = activeComparisonSide
         let preservedPosition = comparisonPositionForPairChange()
-        if let previousActiveTarget, !pair.targets.contains(previousActiveTarget) {
+        let wasPlaying = previousActiveTarget.map {
+            cardState(for: $0).playbackState == .playing
+        } ?? false
+        let wasPaused = previousActiveTarget.map {
+            cardState(for: $0).playbackState == .paused
+        } ?? false
+        let previousSourceURL = previousActiveTarget.flatMap {
+            cardState(for: $0).sourceURL
+        }
+        let preparedTargets = Set(comparisonPlayerNodes.keys)
+        let needsPreparedPairRefresh = engine != nil
+            && preparedTargets != Set(pair.targets)
+        if
+            let previousActiveTarget,
+            !pair.targets.contains(previousActiveTarget) || needsPreparedPairRefresh
+        {
             transitionAwayFromCurrentTarget(keepingPosition: true)
         }
 
@@ -177,7 +239,26 @@ final class AudioPreviewController {
         } else {
             updateComparisonSpectra(at: nil)
         }
-        refreshPlaybackVolumeIfNeeded()
+
+        if
+            wasPlaying,
+            let previousActiveTarget,
+            pair.targets.contains(previousActiveTarget),
+            let previousSourceURL
+        {
+            startPlayback(for: previousSourceURL, target: previousActiveTarget)
+        } else if
+            wasPaused,
+            needsPreparedPairRefresh,
+            let previousActiveTarget,
+            pair.targets.contains(previousActiveTarget)
+        {
+            activeTarget = previousActiveTarget
+            cardState(for: previousActiveTarget).playbackState = .paused
+            playbackLabel = "\(previousActiveTarget.rawValue)を一時停止中"
+        } else {
+            refreshPlaybackVolumeIfNeeded()
+        }
     }
 
     func setLoudnessMatchedComparisonEnabled(_ isEnabled: Bool) {
@@ -242,12 +323,15 @@ final class AudioPreviewController {
         let targetState = cardState(for: target)
         guard let playerNode else { return }
         let currentTime = currentPlaybackPosition()
-        targetState.playbackPosition = currentTime
-        targetState.playbackProgress = activePlaybackDuration > 0 ? max(0, min(1, currentTime / activePlaybackDuration)) : 0
+        synchronizePlaybackPositions(to: currentTime, updatesLiveBandLevels: false)
         updateComparisonSpectra(at: currentTime)
         meterTimer?.invalidate()
         meterTimer = nil
-        playerNode.pause()
+        if comparisonPlayerNodes.isEmpty {
+            playerNode.pause()
+        } else {
+            comparisonPlayerNodes.values.forEach { $0.pause() }
+        }
         targetState.playbackState = .paused
         playbackLabel = "\(target.rawValue)を一時停止中"
     }
@@ -349,6 +433,8 @@ final class AudioPreviewController {
         if activeTarget == target {
             stopActivePlaybackEngine()
             activeTarget = nil
+        } else if comparisonPlayerNodes[target] != nil {
+            transitionAwayFromCurrentTarget(keepingPosition: true)
         }
         previewTasks[target] = nil
     }
@@ -387,6 +473,8 @@ final class AudioPreviewController {
         if activeTarget == target {
             stopActivePlaybackEngine()
             activeTarget = nil
+        } else if comparisonPlayerNodes[target] != nil {
+            transitionAwayFromCurrentTarget(keepingPosition: true)
         }
     }
 
@@ -674,7 +762,16 @@ final class AudioPreviewController {
 
     private func refreshPlaybackVolumeIfNeeded() {
         guard let activeTarget else { return }
-        playerNode?.volume = effectivePlaybackVolume(for: activeTarget)
+        if let activePlayerNode = comparisonPlayerNodes[activeTarget] {
+            // Make the next side audible before muting the previous side so the
+            // A/B command never creates a silent interval between assignments.
+            activePlayerNode.volume = effectivePlaybackVolume(for: activeTarget)
+            for (target, node) in comparisonPlayerNodes where target != activeTarget {
+                node.volume = 0
+            }
+        } else {
+            playerNode?.volume = effectivePlaybackVolume(for: activeTarget)
+        }
     }
 
     private func effectivePlaybackVolume(for target: AudioPreviewTarget) -> Float {
@@ -705,18 +802,98 @@ final class AudioPreviewController {
 
         if let activeTarget, isInComparisonPair(activeTarget), activeTarget != target {
             let currentTime = playerNode == nil ? cardState(for: activeTarget).playbackPosition : currentPlaybackPosition()
-            let activeState = cardState(for: activeTarget)
-            activeState.playbackPosition = currentTime
-            activeState.playbackProgress = activePlaybackDuration > 0 ? currentTime / activePlaybackDuration : 0
-            cardState(for: target).playbackPosition = currentTime
+            synchronizePlaybackPositions(to: currentTime, updatesLiveBandLevels: false)
+            return
+        }
+
+        let targetPosition = cardState(for: target).playbackPosition
+        if targetPosition > 0 {
+            synchronizePlaybackPositions(to: targetPosition, updatesLiveBandLevels: false)
             return
         }
 
         let pairedTarget = comparisonPair.firstTarget == target ? comparisonPair.secondTarget : comparisonPair.firstTarget
         let pairedPosition = cardState(for: pairedTarget).playbackPosition
         if pairedPosition > 0 {
-            cardState(for: target).playbackPosition = pairedPosition
+            synchronizePlaybackPositions(to: pairedPosition, updatesLiveBandLevels: false)
         }
+    }
+
+    private func switchToPreparedComparisonTargetIfPossible(
+        _ target: AudioPreviewTarget,
+        sourceURL: URL
+    ) -> PreparedComparisonSwitchResult {
+        guard
+            let previousTarget = activeTarget,
+            previousTarget != target,
+            isInComparisonPair(previousTarget),
+            isInComparisonPair(target),
+            engine?.isRunning == true,
+            comparisonPair.targets.allSatisfy({ comparisonAudioFiles[$0]?.url == cardState(for: $0).sourceURL }),
+            comparisonAudioFiles[target]?.url == sourceURL,
+            let nextAudioFile = comparisonAudioFiles[target],
+            let nextDuration = comparisonPlaybackDurations[target]
+        else {
+            return .unavailable
+        }
+
+        let currentTime = currentPlaybackPosition()
+        synchronizePlaybackPositions(to: currentTime, updatesLiveBandLevels: false)
+        let endTolerance = 1 / max(nextAudioFile.processingFormat.sampleRate, 1)
+        if completedComparisonTargets.contains(target) || currentTime >= nextDuration - endTolerance {
+            return .targetEnded
+        }
+        guard
+            let nextPlayerNode = comparisonPlayerNodes[target],
+            nextPlayerNode.isPlaying
+        else {
+            return .unavailable
+        }
+        cardState(for: previousTarget).playbackState = .paused
+
+        activeTarget = target
+        playerNode = nextPlayerNode
+        activeAudioFile = nextAudioFile
+        activePlaybackDuration = nextDuration
+        cardState(for: target).playbackState = .playing
+        if let comparisonSide = comparisonSide(for: target) {
+            activeComparisonSide = comparisonSide
+        }
+
+        refreshPlaybackVolumeIfNeeded()
+        replaceRealtimeAnalysisTap(for: target)
+        updateComparisonSpectra(at: currentTime)
+        startMetering(target: target)
+        updatePlaybackLabel(for: target)
+        return .switched
+    }
+
+    private func updatePlaybackLabel(for target: AudioPreviewTarget) {
+        if let comparisonSide = comparisonSide(for: target) {
+            activeComparisonSide = comparisonSide
+            playbackLabel = "\(comparisonPair.title(for: comparisonSide)) \(target.rawValue)を再生中"
+        } else {
+            playbackLabel = "\(target.rawValue)を再生中"
+        }
+    }
+
+    private func loadComparisonAudioFiles(
+        activeAudioFile: AVAudioFile,
+        activeTarget: AudioPreviewTarget
+    ) -> [AudioPreviewTarget: AVAudioFile]? {
+        guard isInComparisonPair(activeTarget) else { return nil }
+
+        var audioFiles = [activeTarget: activeAudioFile]
+        for target in comparisonPair.targets where target != activeTarget {
+            guard
+                let url = cardState(for: target).sourceURL,
+                let audioFile = try? AVAudioFile(forReading: url)
+            else {
+                return nil
+            }
+            audioFiles[target] = audioFile
+        }
+        return audioFiles.count == comparisonPair.targets.count ? audioFiles : nil
     }
 
     private func comparisonPositionForPairChange() -> TimeInterval? {
@@ -739,12 +916,107 @@ final class AudioPreviewController {
         return otherPosition > 0 ? otherPosition : nil
     }
 
+    private func prepareComparisonEnginePlayback(
+        audioFiles: [AudioPreviewTarget: AVAudioFile],
+        target: AudioPreviewTarget,
+        startTime: TimeInterval
+    ) throws -> TimeInterval {
+        let engine = AVAudioEngine()
+        let playbackID = UUID()
+        let durations = Dictionary(uniqueKeysWithValues: audioFiles.map { target, audioFile in
+            (target, Double(audioFile.length) / audioFile.processingFormat.sampleRate)
+        })
+        let activeDuration = durations[target] ?? 0
+        let safeStartTime = min(max(startTime, 0), max(activeDuration - 0.05, 0))
+        var playerNodes: [AudioPreviewTarget: AVAudioPlayerNode] = [:]
+        var analysisMixers: [AudioPreviewTarget: AVAudioMixerNode] = [:]
+        var initiallyCompletedTargets: Set<AudioPreviewTarget> = []
+
+        for (busIndex, comparisonTarget) in comparisonPair.targets.enumerated() {
+            guard let audioFile = audioFiles[comparisonTarget] else { continue }
+            let node = AVAudioPlayerNode()
+            let sourceMixer = AVAudioMixerNode()
+            let format = audioFile.processingFormat
+            engine.attach(node)
+            engine.attach(sourceMixer)
+            engine.connect(
+                node,
+                to: sourceMixer,
+                format: format
+            )
+            engine.connect(
+                sourceMixer,
+                to: engine.mainMixerNode,
+                fromBus: 0,
+                toBus: AVAudioNodeBus(busIndex),
+                format: format
+            )
+            playerNodes[comparisonTarget] = node
+            analysisMixers[comparisonTarget] = sourceMixer
+        }
+
+        guard let activeAnalysisMixer = analysisMixers[target] else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        installRealtimeAnalysisTap(
+            on: activeAnalysisMixer,
+            target: target,
+            sourceFormat: audioFiles[target]?.processingFormat
+        )
+
+        for comparisonTarget in comparisonPair.targets {
+            guard
+                let audioFile = audioFiles[comparisonTarget],
+                let node = playerNodes[comparisonTarget]
+            else {
+                continue
+            }
+            let sampleRate = audioFile.processingFormat.sampleRate
+            let startFrame = AVAudioFramePosition(safeStartTime * sampleRate)
+            guard startFrame < audioFile.length else {
+                initiallyCompletedTargets.insert(comparisonTarget)
+                continue
+            }
+            let remainingFrames = max(AVAudioFramePosition(0), audioFile.length - startFrame)
+            let frameCount = AVAudioFrameCount(min(remainingFrames, AVAudioFramePosition(UInt32.max)))
+            node.scheduleSegment(
+                audioFile,
+                startingFrame: startFrame,
+                frameCount: frameCount,
+                at: nil,
+                completionCallbackType: .dataPlayedBack
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.finishPlaybackIfCurrent(target: comparisonTarget, playbackID: playbackID)
+                }
+            }
+        }
+
+        try engine.start()
+
+        self.engine = engine
+        self.analysisMixer = activeAnalysisMixer
+        comparisonPlayerNodes = playerNodes
+        comparisonAnalysisMixers = analysisMixers
+        comparisonAudioFiles = audioFiles
+        comparisonPlaybackDurations = durations
+        completedComparisonTargets = initiallyCompletedTargets
+        activeTarget = target
+        playerNode = playerNodes[target]
+        activeAudioFile = audioFiles[target]
+        activePlaybackStartTime = safeStartTime
+        activePlaybackDuration = durations[target] ?? 0
+        activePlaybackID = playbackID
+        refreshPlaybackVolumeIfNeeded()
+        return safeStartTime
+    }
+
     private func prepareEnginePlayback(
         audioFile: AVAudioFile,
         target: AudioPreviewTarget,
         startTime: TimeInterval,
         duration: TimeInterval
-    ) throws {
+    ) throws -> TimeInterval {
         let engine = AVAudioEngine()
         let playerNode = AVAudioPlayerNode()
         let analysisMixer = AVAudioMixerNode()
@@ -756,30 +1028,12 @@ final class AudioPreviewController {
         let frameCount = AVAudioFrameCount(min(remainingFrames, AVAudioFramePosition(UInt32.max)))
         let playbackID = UUID()
 
-        clearRealtimeVisualSnapshots()
-        vectorScopeHistoryCounters[target] = nil
-        cardState(for: target).vectorScopeSnapshot = VectorScopeSnapshot(
-            inputState: VectorScopeAnalyzer.inputState(forChannelCount: Int(format.channelCount)),
-            points: []
-        )
-        cardState(for: target).liveLoudnessMeterSnapshot = .unavailable
-
         engine.attach(playerNode)
         engine.attach(analysisMixer)
         engine.connect(playerNode, to: analysisMixer, format: format)
         engine.connect(analysisMixer, to: engine.mainMixerNode, format: format)
 
-        let tapBufferSize = RealtimeSpectrumAnalyzer.tapBufferSize(for: sampleRate)
-        RealtimeSpectrumTapInstaller.installTap(
-            on: analysisMixer,
-            bufferSize: tapBufferSize,
-            format: format,
-            analysisQueue: realtimeAnalysisQueue,
-            controller: self,
-            target: target,
-            playbackID: playbackID
-        )
-        hasInstalledAnalysisTap = true
+        installRealtimeAnalysisTap(on: analysisMixer, target: target, sourceFormat: format)
 
         try engine.start()
         playerNode.volume = effectivePlaybackVolume(for: target)
@@ -792,10 +1046,6 @@ final class AudioPreviewController {
         activePlaybackStartTime = safeStartTime
         activePlaybackDuration = duration
         activePlaybackID = playbackID
-        let targetState = cardState(for: target)
-        targetState.playbackState = .playing
-        targetState.playbackPosition = safeStartTime
-        targetState.playbackProgress = duration > 0 ? max(0, min(1, safeStartTime / duration)) : 0
 
         playerNode.scheduleSegment(
             audioFile,
@@ -808,24 +1058,93 @@ final class AudioPreviewController {
                 self?.finishPlaybackIfCurrent(target: target, playbackID: playbackID)
             }
         }
+        return safeStartTime
+    }
+
+    private func playPreparedNodes() {
+        guard !comparisonPlayerNodes.isEmpty else {
+            playerNode?.play()
+            return
+        }
+
+        let sharedStartTime = AVAudioTime(
+            hostTime: mach_absolute_time() + AVAudioTime.hostTime(forSeconds: 0.02)
+        )
+        for target in comparisonPair.targets {
+            guard !completedComparisonTargets.contains(target) else { continue }
+            comparisonPlayerNodes[target]?.play(at: sharedStartTime)
+        }
+    }
+
+    private func installRealtimeAnalysisTap(
+        on mixer: AVAudioMixerNode,
+        target: AudioPreviewTarget,
+        sourceFormat: AVAudioFormat?
+    ) {
+        let analysisID = UUID()
+        let outputFormat = mixer.outputFormat(forBus: 0)
+        let sourceInputState = VectorScopeAnalyzer.inputState(
+            forChannelCount: Int(sourceFormat?.channelCount ?? outputFormat.channelCount)
+        )
+        clearRealtimeVisualSnapshots()
+        vectorScopeHistoryCounters[target] = nil
+        cardState(for: target).vectorScopeSnapshot = VectorScopeSnapshot(
+            inputState: sourceInputState,
+            points: []
+        )
+        cardState(for: target).liveLoudnessMeterSnapshot = .unavailable
+
+        let tapBufferSize = RealtimeSpectrumAnalyzer.tapBufferSize(for: outputFormat.sampleRate)
+        RealtimeSpectrumTapInstaller.installTap(
+            on: mixer,
+            bufferSize: tapBufferSize,
+            analysisFormat: outputFormat,
+            analysisQueue: realtimeAnalysisQueue,
+            controller: self,
+            target: target,
+            analysisID: analysisID
+        )
+        activeAnalysisID = analysisID
+        activeAnalysisTarget = target
+        hasInstalledAnalysisTap = true
+    }
+
+    private func replaceRealtimeAnalysisTap(for target: AudioPreviewTarget) {
+        guard let nextAnalysisMixer = comparisonAnalysisMixers[target] ?? analysisMixer else { return }
+        if hasInstalledAnalysisTap {
+            analysisMixer?.removeTap(onBus: 0)
+            hasInstalledAnalysisTap = false
+        }
+        analysisMixer = nextAnalysisMixer
+        installRealtimeAnalysisTap(
+            on: nextAnalysisMixer,
+            target: target,
+            sourceFormat: comparisonAudioFiles[target]?.processingFormat ?? activeAudioFile?.processingFormat
+        )
     }
 
     fileprivate func storeVectorScopeSnapshot(
         _ snapshot: VectorScopeSnapshot,
         for target: AudioPreviewTarget,
-        playbackID: UUID
+        analysisID: UUID
     ) {
-        guard activeTarget == target, activePlaybackID == playbackID else { return }
+        guard acceptsRealtimeAnalysis(for: target, analysisID: analysisID) else { return }
         storeVectorScopeSnapshotIfPlaying(snapshot, for: target)
     }
 
     fileprivate func storeLiveLoudnessMeterSnapshot(
         _ snapshot: LiveLoudnessMeterSnapshot,
         for target: AudioPreviewTarget,
-        playbackID: UUID
+        analysisID: UUID
     ) {
-        guard activeTarget == target, activePlaybackID == playbackID else { return }
+        guard acceptsRealtimeAnalysis(for: target, analysisID: analysisID) else { return }
         storeLiveLoudnessMeterSnapshotIfPlaying(snapshot, for: target)
+    }
+
+    func acceptsRealtimeAnalysis(for target: AudioPreviewTarget, analysisID: UUID) -> Bool {
+        activeTarget == target
+            && activeAnalysisTarget == target
+            && activeAnalysisID == analysisID
     }
 
     func storeVectorScopeSnapshotIfPlaying(
@@ -854,7 +1173,11 @@ final class AudioPreviewController {
     }
 
     private func finishPlaybackIfCurrent(target: AudioPreviewTarget, playbackID: UUID) {
-        guard activeTarget == target, activePlaybackID == playbackID else { return }
+        guard activePlaybackID == playbackID else { return }
+        if !comparisonPlayerNodes.isEmpty {
+            completedComparisonTargets.insert(target)
+        }
+        guard activeTarget == target else { return }
         finishActivePlayback()
     }
 
@@ -872,16 +1195,27 @@ final class AudioPreviewController {
 
     private func stopActivePlaybackEngine() {
         activePlaybackID = UUID()
+        activeAnalysisID = UUID()
+        activeAnalysisTarget = nil
         if hasInstalledAnalysisTap {
             analysisMixer?.removeTap(onBus: 0)
             hasInstalledAnalysisTap = false
         }
-        playerNode?.stop()
+        if comparisonPlayerNodes.isEmpty {
+            playerNode?.stop()
+        } else {
+            comparisonPlayerNodes.values.forEach { $0.stop() }
+        }
         engine?.stop()
         playerNode = nil
         analysisMixer = nil
         engine = nil
         activeAudioFile = nil
+        comparisonPlayerNodes.removeAll()
+        comparisonAnalysisMixers.removeAll()
+        comparisonAudioFiles.removeAll()
+        comparisonPlaybackDurations.removeAll()
+        completedComparisonTargets.removeAll()
         activePlaybackStartTime = 0
         activePlaybackDuration = 0
     }
@@ -920,6 +1254,26 @@ final class AudioPreviewController {
         }
     }
 
+    func playbackDiagnosticState() -> AudioPreviewPlaybackDiagnosticState {
+        var nodes = comparisonPlayerNodes
+        if nodes.isEmpty, let activeTarget, let playerNode {
+            nodes[activeTarget] = playerNode
+        }
+        return AudioPreviewPlaybackDiagnosticState(
+            engineIdentifier: engine.map(ObjectIdentifier.init),
+            engineIsRunning: engine?.isRunning == true,
+            playerNodeIdentifiers: nodes.mapValues(ObjectIdentifier.init),
+            playerNodeIsPlaying: nodes.mapValues(\.isPlaying),
+            playerNodeVolumes: nodes.mapValues(\.volume),
+            playbackSessionID: activePlaybackID,
+            analysisTarget: activeAnalysisTarget,
+            analysisID: activeAnalysisID,
+            completedTargets: completedComparisonTargets,
+            analysisOutputSampleRate: analysisMixer?.outputFormat(forBus: 0).sampleRate,
+            analysisOutputChannelCount: analysisMixer?.outputFormat(forBus: 0).channelCount
+        )
+    }
+
     private func format(duration: TimeInterval) -> String {
         let totalSeconds = Int(duration.rounded())
         let minutes = totalSeconds / 60
@@ -932,21 +1286,21 @@ private enum RealtimeSpectrumTapInstaller {
     nonisolated static func installTap(
         on mixer: AVAudioMixerNode,
         bufferSize: AVAudioFrameCount,
-        format: AVAudioFormat,
+        analysisFormat: AVAudioFormat,
         analysisQueue: DispatchQueue,
         controller: AudioPreviewController,
         target: AudioPreviewTarget,
-        playbackID: UUID
+        analysisID: UUID
     ) {
-        let loudnessAnalyzer = LiveLoudnessAnalyzer(sampleRate: format.sampleRate)
-        mixer.installTap(onBus: 0, bufferSize: bufferSize, format: format) { [weak controller] buffer, _ in
+        let loudnessAnalyzer = LiveLoudnessAnalyzer(sampleRate: analysisFormat.sampleRate)
+        mixer.installTap(onBus: 0, bufferSize: bufferSize, format: nil) { [weak controller] buffer, _ in
             guard let sampleBuffer = RealtimeSpectrumAnalyzer.sampleBuffer(from: buffer) else { return }
             analysisQueue.async { [weak controller] in
                 let vectorScopeSnapshot = VectorScopeAnalyzer.snapshot(from: sampleBuffer)
                 let loudnessSnapshot = loudnessAnalyzer.snapshot(from: sampleBuffer)
                 Task { @MainActor [weak controller] in
-                    controller?.storeVectorScopeSnapshot(vectorScopeSnapshot, for: target, playbackID: playbackID)
-                    controller?.storeLiveLoudnessMeterSnapshot(loudnessSnapshot, for: target, playbackID: playbackID)
+                    controller?.storeVectorScopeSnapshot(vectorScopeSnapshot, for: target, analysisID: analysisID)
+                    controller?.storeLiveLoudnessMeterSnapshot(loudnessSnapshot, for: target, analysisID: analysisID)
                 }
             }
         }
