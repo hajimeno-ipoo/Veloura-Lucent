@@ -7,7 +7,7 @@ enum WorkspaceLayoutMetrics {
     static let minimumCenterWidth: CGFloat = 680
     static let inspectorWidth: CGFloat = 480
     static let inspectorVisibleMinimumWindowWidth: CGFloat = 1_500
-    static let inspectorHiddenMinimumWindowWidth: CGFloat = 1_000
+    static let inspectorHiddenMinimumWindowWidth: CGFloat = 1_500
     static let minimumWindowHeight: CGFloat = 720
     static let recentLogMinimumWidth: CGFloat = 260
     static let standardWorkflowMinimumWidth: CGFloat = 260
@@ -20,6 +20,17 @@ enum WorkspaceLayoutMetrics {
         stageCount > 4
             ? expandedWorkflowMinimumWidth
             : standardWorkflowMinimumWidth
+    }
+}
+
+private struct WorkspaceFooterTrailingInsetKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+private extension EnvironmentValues {
+    var workspaceFooterTrailingInset: CGFloat {
+        get { self[WorkspaceFooterTrailingInsetKey.self] }
+        set { self[WorkspaceFooterTrailingInsetKey.self] = newValue }
     }
 }
 
@@ -45,46 +56,65 @@ struct WorkspaceShellView<
                     max: WorkspaceLayoutMetrics.sidebarMaximumWidth
                 )
         } detail: {
-            HStack(spacing: 0) {
-                center()
-                    .frame(
-                        minWidth: WorkspaceLayoutMetrics.minimumCenterWidth,
-                        maxWidth: .infinity,
-                        maxHeight: .infinity
-                    )
+            ZStack(alignment: .bottomTrailing) {
+                HStack(spacing: 0) {
+                    center()
+                        .environment(
+                            \.workspaceFooterTrailingInset,
+                            isInspectorPresented ? 0 : WorkspaceLayoutMetrics.inspectorWidth
+                        )
+                        .frame(
+                            minWidth: WorkspaceLayoutMetrics.minimumCenterWidth,
+                            maxWidth: .infinity,
+                            maxHeight: .infinity
+                        )
 
-                if isInspectorPresented {
-                    VStack(spacing: 0) {
-                        HStack(spacing: 0) {
+                    if isInspectorPresented {
+                        VStack(spacing: 0) {
+                            HStack(spacing: 0) {
+                                Divider()
+
+                                inspector()
+                                    .frame(
+                                        minWidth: WorkspaceLayoutMetrics.inspectorWidth,
+                                        idealWidth: WorkspaceLayoutMetrics.inspectorWidth,
+                                        maxWidth: WorkspaceLayoutMetrics.inspectorWidth,
+                                        maxHeight: .infinity
+                                    )
+                                    .clipped()
+                            }
+
                             Divider()
 
-                            inspector()
+                            Color.clear
                                 .frame(
-                                    minWidth: WorkspaceLayoutMetrics.inspectorWidth,
-                                    idealWidth: WorkspaceLayoutMetrics.inspectorWidth,
-                                    maxWidth: WorkspaceLayoutMetrics.inspectorWidth,
-                                    maxHeight: .infinity
+                                    minHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionMinimumHeight,
+                                    idealHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionIdealHeight,
+                                    maxHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionMaximumHeight
                                 )
-                                .clipped()
+                                .accessibilityHidden(true)
                         }
-
-                        Divider()
-
-                        ScrollView {
-                            inspectorFooter()
-                                .padding(14)
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                                .velouraTransientOverlayScrollIndicators()
-                        }
-                        .scrollContentBackground(.hidden)
-                        .frame(
-                            minHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionMinimumHeight,
-                            idealHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionIdealHeight,
-                            maxHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionMaximumHeight
-                        )
+                        .frame(maxHeight: .infinity)
                     }
-                    .frame(maxHeight: .infinity)
                 }
+
+                VStack(spacing: 0) {
+                    Divider()
+
+                    ScrollView {
+                        inspectorFooter()
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .velouraTransientOverlayScrollIndicators()
+                    }
+                    .scrollContentBackground(.hidden)
+                    .frame(
+                        minHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionMinimumHeight,
+                        idealHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionIdealHeight,
+                        maxHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionMaximumHeight
+                    )
+                }
+                .frame(width: WorkspaceLayoutMetrics.inspectorWidth)
             }
         }
         .navigationSplitViewStyle(.prominentDetail)
@@ -98,6 +128,7 @@ struct WorkspaceCenterLayout<
     Footer: View,
     FullLog: View
 >: View {
+    @Environment(\.workspaceFooterTrailingInset) private var footerTrailingInset
     let isFullLogPresented: Bool
     @ViewBuilder let header: () -> Header
     @ViewBuilder let mainContent: () -> MainContent
@@ -128,6 +159,7 @@ struct WorkspaceCenterLayout<
 
                 Divider()
                 footer()
+                    .padding(.trailing, footerTrailingInset)
             }
         }
     }

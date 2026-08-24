@@ -467,12 +467,26 @@ struct UIWordingPolicyTests {
         #expect(source.contains("static let minimumCenterWidth: CGFloat = 680"))
         #expect(source.contains("static let inspectorWidth: CGFloat = 480"))
         #expect(source.contains("static let inspectorVisibleMinimumWindowWidth: CGFloat = 1_500"))
-        #expect(source.contains("static let inspectorHiddenMinimumWindowWidth: CGFloat = 1_000"))
+        #expect(source.contains("static let inspectorHiddenMinimumWindowWidth: CGFloat = 1_500"))
         #expect(source.contains("static let recentLogMinimumWidth: CGFloat = 260"))
         #expect(source.contains("static let expandedWorkflowMinimumWidth: CGFloat = 360"))
         #expect(source.contains("stageCount: stages.count"))
         #expect(source.contains("sidebarVisibility: $sidebarVisibility"))
         #expect(source.contains("NavigationSplitView(columnVisibility: $sidebarVisibility)"))
+    }
+
+    @Test
+    func inspectorAnalysisRemainsInBottomRightWhenSettingsAreHidden() throws {
+        let source = try combinedSource([
+            "Sources/VelouraLucent/Views/WorkspaceShellView.swift",
+        ])
+
+        #expect(source.contains("ZStack(alignment: .bottomTrailing)"))
+        #expect(source.contains("isInspectorPresented ? 0 : WorkspaceLayoutMetrics.inspectorWidth"))
+        #expect(source.contains("@Environment(\\.workspaceFooterTrailingInset)"))
+        #expect(source.contains(
+            "ScrollView {\n                        inspectorFooter()"
+        ))
     }
 
     @Test

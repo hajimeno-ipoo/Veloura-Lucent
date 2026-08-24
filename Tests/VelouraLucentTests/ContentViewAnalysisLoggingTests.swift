@@ -12,7 +12,7 @@ struct ContentViewAnalysisLoggingTests {
         #expect(WorkspaceLayoutMetrics.minimumCenterWidth == 680)
         #expect(WorkspaceLayoutMetrics.inspectorWidth == 480)
         #expect(WorkspaceLayoutMetrics.inspectorVisibleMinimumWindowWidth == 1_500)
-        #expect(WorkspaceLayoutMetrics.inspectorHiddenMinimumWindowWidth == 1_000)
+        #expect(WorkspaceLayoutMetrics.inspectorHiddenMinimumWindowWidth == 1_500)
         #expect(WorkspaceLayoutMetrics.minimumWindowHeight == 720)
         #expect(WorkspaceLayoutMetrics.recentLogMinimumWidth == 260)
         #expect(WorkspaceLayoutMetrics.workflowMinimumWidth(stageCount: 4) == 260)
@@ -33,6 +33,7 @@ struct ContentViewAnalysisLoggingTests {
         #expect(
             WorkspaceLayoutMetrics.sidebarMaximumWidth
                 + WorkspaceLayoutMetrics.minimumCenterWidth
+                + WorkspaceLayoutMetrics.inspectorWidth
                 < WorkspaceLayoutMetrics.inspectorHiddenMinimumWindowWidth
         )
     }
