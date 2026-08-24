@@ -620,6 +620,12 @@ struct StemModeWorkspaceWordingTests {
         #expect(preview.contains("comparisonPairPickerMaxWidth: CGFloat = 360"))
         #expect(preview.contains("maxWidth: comparisonPairPickerMaxWidth"))
         #expect(preview.contains("targetTitle: targetTitle"))
+        #expect(preview.contains(
+            "WorkspaceLazySection {\n                AverageSpectrumComparisonView"
+        ))
+        #expect(preview.contains(
+            "WorkspaceLazySection {\n                SpectrogramComparisonView"
+        ))
         #expect(preview.contains("model.remixedPreviewArtifact == nil"))
         #expect(preview.contains("private var waveformProcessedTitle: String {\n        \"再ミックス\"\n    }"))
         #expect(preview.contains("case .correctedVsMastered:\n            \"再ミックスvs最終版\""))

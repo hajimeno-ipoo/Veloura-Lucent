@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct StemModeWorkspaceView: View {
     @Bindable var model: StemModeWorkspaceModel
+    let footerTrailingInset: CGFloat
 
     @State private var isFullLogPresented = false
     @State private var inputAudioDropVisualState: InputAudioDropVisualState = .inactive
@@ -11,7 +12,8 @@ struct StemModeWorkspaceView: View {
         ZStack {
             StemModeMainWorkspaceView(
                 model: model,
-                isFullLogPresented: $isFullLogPresented
+                isFullLogPresented: $isFullLogPresented,
+                footerTrailingInset: footerTrailingInset
             )
 
             InputAudioDropReceiver(
@@ -56,6 +58,7 @@ struct StemModeWorkspaceView: View {
 struct StemModeMainWorkspaceView: View {
     @Bindable var model: StemModeWorkspaceModel
     @Binding var isFullLogPresented: Bool
+    let footerTrailingInset: CGFloat
     @State private var selectedMode: WorkspaceDisplayMode = .basic
 
     private enum WorkspaceDisplayMode: String, CaseIterable, Identifiable {
@@ -68,7 +71,8 @@ struct StemModeMainWorkspaceView: View {
 
     var body: some View {
         WorkspaceCenterLayout(
-            isFullLogPresented: isFullLogPresented
+            isFullLogPresented: isFullLogPresented,
+            footerTrailingInset: footerTrailingInset
         ) {
             fixedHeader
         } mainContent: {

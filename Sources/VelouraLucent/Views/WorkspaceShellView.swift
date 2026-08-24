@@ -23,17 +23,6 @@ enum WorkspaceLayoutMetrics {
     }
 }
 
-private struct WorkspaceFooterTrailingInsetKey: EnvironmentKey {
-    static let defaultValue: CGFloat = 0
-}
-
-private extension EnvironmentValues {
-    var workspaceFooterTrailingInset: CGFloat {
-        get { self[WorkspaceFooterTrailingInsetKey.self] }
-        set { self[WorkspaceFooterTrailingInsetKey.self] = newValue }
-    }
-}
-
 struct WorkspaceShellView<
     Sidebar: View,
     Center: View,
@@ -42,14 +31,30 @@ struct WorkspaceShellView<
 >: View {
     @Binding var sidebarVisibility: NavigationSplitViewVisibility
     let isInspectorPresented: Bool
-    @ViewBuilder let sidebar: () -> Sidebar
-    @ViewBuilder let center: () -> Center
-    @ViewBuilder let inspector: () -> Inspector
-    @ViewBuilder let inspectorFooter: () -> InspectorFooter
+    let sidebar: Sidebar
+    let center: Center
+    let inspector: Inspector
+    let inspectorFooter: InspectorFooter
+
+    init(
+        sidebarVisibility: Binding<NavigationSplitViewVisibility>,
+        isInspectorPresented: Bool,
+        @ViewBuilder sidebar: () -> Sidebar,
+        @ViewBuilder center: () -> Center,
+        @ViewBuilder inspector: () -> Inspector,
+        @ViewBuilder inspectorFooter: () -> InspectorFooter
+    ) {
+        _sidebarVisibility = sidebarVisibility
+        self.isInspectorPresented = isInspectorPresented
+        self.sidebar = sidebar()
+        self.center = center()
+        self.inspector = inspector()
+        self.inspectorFooter = inspectorFooter()
+    }
 
     var body: some View {
         NavigationSplitView(columnVisibility: $sidebarVisibility) {
-            sidebar()
+            sidebar
                 .navigationSplitViewColumnWidth(
                     min: WorkspaceLayoutMetrics.sidebarMinimumWidth,
                     ideal: WorkspaceLayoutMetrics.sidebarIdealWidth,
@@ -58,11 +63,7 @@ struct WorkspaceShellView<
         } detail: {
             ZStack(alignment: .bottomTrailing) {
                 HStack(spacing: 0) {
-                    center()
-                        .environment(
-                            \.workspaceFooterTrailingInset,
-                            isInspectorPresented ? 0 : WorkspaceLayoutMetrics.inspectorWidth
-                        )
+                    center
                         .frame(
                             minWidth: WorkspaceLayoutMetrics.minimumCenterWidth,
                             maxWidth: .infinity,
@@ -74,7 +75,7 @@ struct WorkspaceShellView<
                             HStack(spacing: 0) {
                                 Divider()
 
-                                inspector()
+                                inspector
                                     .frame(
                                         minWidth: WorkspaceLayoutMetrics.inspectorWidth,
                                         idealWidth: WorkspaceLayoutMetrics.inspectorWidth,
@@ -102,7 +103,7 @@ struct WorkspaceShellView<
                     Divider()
 
                     ScrollView {
-                        inspectorFooter()
+                        inspectorFooter
                             .padding(14)
                             .frame(maxWidth: .infinity, alignment: .topLeading)
                             .velouraTransientOverlayScrollIndicators()
@@ -128,27 +129,43 @@ struct WorkspaceCenterLayout<
     Footer: View,
     FullLog: View
 >: View {
-    @Environment(\.workspaceFooterTrailingInset) private var footerTrailingInset
     let isFullLogPresented: Bool
-    @ViewBuilder let header: () -> Header
-    @ViewBuilder let mainContent: () -> MainContent
-    @ViewBuilder let footer: () -> Footer
-    @ViewBuilder let fullLog: () -> FullLog
+    let footerTrailingInset: CGFloat
+    let header: Header
+    let mainContent: MainContent
+    let footer: Footer
+    let fullLog: FullLog
+
+    init(
+        isFullLogPresented: Bool,
+        footerTrailingInset: CGFloat,
+        @ViewBuilder header: () -> Header,
+        @ViewBuilder mainContent: () -> MainContent,
+        @ViewBuilder footer: () -> Footer,
+        @ViewBuilder fullLog: () -> FullLog
+    ) {
+        self.isFullLogPresented = isFullLogPresented
+        self.footerTrailingInset = footerTrailingInset
+        self.header = header()
+        self.mainContent = mainContent()
+        self.footer = footer()
+        self.fullLog = fullLog()
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             if isFullLogPresented {
-                fullLog()
+                fullLog
                     .frame(
                         maxWidth: .infinity,
                         maxHeight: .infinity,
                         alignment: .top
                     )
             } else {
-                header()
+                header
 
                 ScrollView {
-                    mainContent()
+                    mainContent
                         .padding(.horizontal, 24)
                         .padding(.top, 16)
                         .padding(.bottom, 24)
@@ -158,7 +175,7 @@ struct WorkspaceCenterLayout<
                 .scrollEdgeEffectStyle(.soft, for: .top)
 
                 Divider()
-                footer()
+                footer
                     .padding(.trailing, footerTrailingInset)
             }
         }
@@ -168,7 +185,17 @@ struct WorkspaceCenterLayout<
 struct WorkspaceFixedHeaderView<DisplayPicker: View>: View {
     let title: String
     let summary: String
-    @ViewBuilder let displayPicker: () -> DisplayPicker
+    let displayPicker: DisplayPicker
+
+    init(
+        title: String,
+        summary: String,
+        @ViewBuilder displayPicker: () -> DisplayPicker
+    ) {
+        self.title = title
+        self.summary = summary
+        self.displayPicker = displayPicker()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -177,13 +204,27 @@ struct WorkspaceFixedHeaderView<DisplayPicker: View>: View {
             Text(summary)
                 .foregroundStyle(.secondary)
 
-            displayPicker()
+            displayPicker
                 .padding(.top, 10)
         }
         .padding(.horizontal, 24)
         .padding(.top, 16)
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct WorkspaceLazySection<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            content
+        }
     }
 }
 

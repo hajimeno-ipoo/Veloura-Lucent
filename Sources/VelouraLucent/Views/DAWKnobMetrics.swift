@@ -138,3 +138,154 @@ enum DAWKnobMetrics {
         min(max(value, range.lowerBound), range.upperBound)
     }
 }
+
+struct DAWResponsiveThreeControlLayout: Layout {
+    enum Arrangement: Equatable {
+        case threeColumns
+        case twoColumns
+        case oneColumn
+    }
+
+    static func arrangement(for availableWidth: CGFloat?) -> Arrangement {
+        guard let availableWidth else { return .threeColumns }
+        if availableWidth >= DAWKnobMetrics.threeColumnWidth {
+            return .threeColumns
+        }
+        if availableWidth >= DAWKnobMetrics.twoColumnWidth {
+            return .twoColumns
+        }
+        return .oneColumn
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let sizes = measuredSizes(for: subviews)
+        guard !sizes.isEmpty else { return .zero }
+
+        switch Self.arrangement(for: proposal.width) {
+        case .threeColumns:
+            return CGSize(
+                width: rowWidth(for: min(3, sizes.count)),
+                height: sizes.map(\.height).max() ?? 0
+            )
+        case .twoColumns:
+            let firstRow = Array(sizes.prefix(2))
+            let firstRowHeight = firstRow.map(\.height).max() ?? 0
+            let remainingHeight = sizes.dropFirst(2).reduce(CGFloat.zero) { partial, size in
+                partial + DAWKnobMetrics.rowSpacing + size.height
+            }
+            return CGSize(
+                width: rowWidth(for: min(2, sizes.count)),
+                height: firstRowHeight + remainingHeight
+            )
+        case .oneColumn:
+            return CGSize(
+                width: sizes.map(\.width).max() ?? 0,
+                height: stackedHeight(for: sizes)
+            )
+        }
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let sizes = measuredSizes(for: subviews)
+        guard !sizes.isEmpty else { return }
+
+        switch Self.arrangement(for: proposal.width) {
+        case .threeColumns:
+            placeRow(
+                subviews: subviews,
+                sizes: sizes,
+                indexes: Array(sizes.indices.prefix(3)),
+                origin: bounds.origin
+            )
+        case .twoColumns:
+            let firstRowIndexes = Array(sizes.indices.prefix(2))
+            placeRow(
+                subviews: subviews,
+                sizes: sizes,
+                indexes: firstRowIndexes,
+                origin: bounds.origin
+            )
+
+            var y = bounds.minY
+                + (firstRowIndexes.map { sizes[$0].height }.max() ?? 0)
+                + DAWKnobMetrics.rowSpacing
+            for index in sizes.indices.dropFirst(2) {
+                let x = bounds.midX - sizes[index].width / 2
+                place(
+                    subviews[index],
+                    size: sizes[index],
+                    at: CGPoint(x: x, y: y)
+                )
+                y += sizes[index].height + DAWKnobMetrics.rowSpacing
+            }
+        case .oneColumn:
+            var y = bounds.minY
+            for index in sizes.indices {
+                let x = bounds.midX - sizes[index].width / 2
+                place(
+                    subviews[index],
+                    size: sizes[index],
+                    at: CGPoint(x: x, y: y)
+                )
+                y += sizes[index].height + DAWKnobMetrics.rowSpacing
+            }
+        }
+    }
+
+    private func measuredSizes(for subviews: Subviews) -> [CGSize] {
+        subviews.map {
+            $0.sizeThatFits(
+                ProposedViewSize(
+                    width: DAWKnobMetrics.controlWidth,
+                    height: nil
+                )
+            )
+        }
+    }
+
+    private func rowWidth(for count: Int) -> CGFloat {
+        guard count > 0 else { return 0 }
+        return DAWKnobMetrics.controlWidth * CGFloat(count)
+            + DAWKnobMetrics.columnSpacing * CGFloat(count - 1)
+    }
+
+    private func stackedHeight(for sizes: [CGSize]) -> CGFloat {
+        guard !sizes.isEmpty else { return 0 }
+        return sizes.map(\.height).reduce(0, +)
+            + DAWKnobMetrics.rowSpacing * CGFloat(sizes.count - 1)
+    }
+
+    private func placeRow(
+        subviews: Subviews,
+        sizes: [CGSize],
+        indexes: [Int],
+        origin: CGPoint
+    ) {
+        var x = origin.x
+        for index in indexes {
+            place(
+                subviews[index],
+                size: sizes[index],
+                at: CGPoint(x: x, y: origin.y)
+            )
+            x += sizes[index].width + DAWKnobMetrics.columnSpacing
+        }
+    }
+
+    private func place(_ subview: LayoutSubview, size: CGSize, at point: CGPoint) {
+        subview.place(
+            at: point,
+            anchor: .topLeading,
+            proposal: ProposedViewSize(size)
+        )
+    }
+}

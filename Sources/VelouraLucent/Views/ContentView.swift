@@ -4,15 +4,18 @@ import SwiftUI
 struct ContentView: View {
     @State private var processingActions = ProcessingActions(notificationReporter: NotificationService.shared)
     private let shutsDownOnDisappear: Bool
+    private let footerTrailingInset: CGFloat
     @State private var inputAudioDropVisualState: InputAudioDropVisualState = .inactive
 
     @MainActor
     init(
         processingActions: ProcessingActions,
-        shutsDownOnDisappear: Bool
+        shutsDownOnDisappear: Bool,
+        footerTrailingInset: CGFloat
     ) {
         _processingActions = State(initialValue: processingActions)
         self.shutsDownOnDisappear = shutsDownOnDisappear
+        self.footerTrailingInset = footerTrailingInset
     }
 
     private var job: ProcessingJob {
@@ -48,7 +51,8 @@ struct ContentView: View {
         ZStack {
             VelouraMainWorkspaceView(
                 job: job,
-                preview: preview
+                preview: preview,
+                footerTrailingInset: footerTrailingInset
             )
 
             InputAudioDropReceiver(
@@ -711,7 +715,8 @@ private struct ContentViewPreviewHost: View {
     var body: some View {
         ContentView(
             processingActions: processingActions,
-            shutsDownOnDisappear: true
+            shutsDownOnDisappear: true,
+            footerTrailingInset: 0
         )
     }
 }

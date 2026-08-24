@@ -37,27 +37,10 @@ struct StemModeCorrectionControlList: View {
     }
 
     private var basicKnobRow: some View {
-        ViewThatFits(in: .horizontal) {
-            knobRow(
-                Array(layout.definitions.prefix(3)),
-                width: DAWKnobMetrics.threeColumnWidth
-            )
-
-            VStack(spacing: DAWKnobMetrics.rowSpacing) {
-                knobRow(
-                    Array(layout.definitions.prefix(2)),
-                    width: DAWKnobMetrics.twoColumnWidth
-                )
-                knob(for: layout.definitions[2])
+        DAWResponsiveThreeControlLayout {
+            ForEach(layout.definitions, id: \.id) { definition in
+                knob(for: definition)
             }
-            .frame(width: DAWKnobMetrics.twoColumnWidth)
-
-            VStack(spacing: DAWKnobMetrics.rowSpacing) {
-                ForEach(layout.definitions, id: \.id) { definition in
-                    knob(for: definition)
-                }
-            }
-            .frame(width: DAWKnobMetrics.controlWidth)
         }
         .frame(maxWidth: .infinity, alignment: .center)
     }

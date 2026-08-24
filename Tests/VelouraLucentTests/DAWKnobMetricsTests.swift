@@ -152,6 +152,34 @@ struct DAWKnobMetricsTests {
     }
 
     @Test
+    func responsiveThreeControlLayoutKeepsTheExistingColumnBreakpoints() {
+        #expect(
+            DAWResponsiveThreeControlLayout.arrangement(
+                for: DAWKnobMetrics.threeColumnWidth
+            ) == .threeColumns
+        )
+        #expect(
+            DAWResponsiveThreeControlLayout.arrangement(
+                for: DAWKnobMetrics.threeColumnWidth - 1
+            ) == .twoColumns
+        )
+        #expect(
+            DAWResponsiveThreeControlLayout.arrangement(
+                for: DAWKnobMetrics.twoColumnWidth
+            ) == .twoColumns
+        )
+        #expect(
+            DAWResponsiveThreeControlLayout.arrangement(
+                for: DAWKnobMetrics.twoColumnWidth - 1
+            ) == .oneColumn
+        )
+        #expect(
+            DAWResponsiveThreeControlLayout.arrangement(for: nil)
+                == .threeColumns
+        )
+    }
+
+    @Test
     func fiveRepairKnobsRequireThreePlusTwoRowsInInspectorWidth() {
         let originalMaximumPanelContentWidth: CGFloat = 440 - 28 - 24
 

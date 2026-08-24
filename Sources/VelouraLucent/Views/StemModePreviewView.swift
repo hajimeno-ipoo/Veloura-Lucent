@@ -32,10 +32,12 @@ struct StemModePreviewView: View {
 
             StemRemixComparisonView(model: model)
 
-            AverageSpectrumComparisonView(
-                preview: model.previewController,
-                targetTitle: targetTitle
-            )
+            WorkspaceLazySection {
+                AverageSpectrumComparisonView(
+                    preview: model.previewController,
+                    targetTitle: targetTitle
+                )
+            }
 
             VectorScopeView(
                 preview: model.previewController,
@@ -43,12 +45,14 @@ struct StemModePreviewView: View {
                 targetTitle: targetTitle
             )
 
-            SpectrogramComparisonView(
-                input: model.inputSpectrogram,
-                corrected: model.correctedRemixSpectrogram,
-                mastered: model.finalSpectrogram,
-                correctedTitle: processedTitle
-            )
+            WorkspaceLazySection {
+                SpectrogramComparisonView(
+                    input: model.inputSpectrogram,
+                    corrected: model.correctedRemixSpectrogram,
+                    mastered: model.finalSpectrogram,
+                    correctedTitle: processedTitle
+                )
+            }
 
             if model.isAnalyzingInput || model.isAnalyzingDisplayAudio {
                 ProgressView(model.isAnalyzingInput ? "入力音源を解析しています" : "スペクトログラムを解析しています")

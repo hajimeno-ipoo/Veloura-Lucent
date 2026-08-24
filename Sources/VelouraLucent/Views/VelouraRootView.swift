@@ -185,10 +185,18 @@ struct VelouraRootView: View {
             case .standard:
                 ContentView(
                     processingActions: runtime.standardActions,
-                    shutsDownOnDisappear: false
+                    shutsDownOnDisappear: false,
+                    footerTrailingInset: isInspectorPresented
+                        ? 0
+                        : WorkspaceLayoutMetrics.inspectorWidth
                 )
             case .stem:
-                StemModeWorkspaceView(model: runtime.stemWorkspaceModel)
+                StemModeWorkspaceView(
+                    model: runtime.stemWorkspaceModel,
+                    footerTrailingInset: isInspectorPresented
+                        ? 0
+                        : WorkspaceLayoutMetrics.inspectorWidth
+                )
             }
         } inspector: {
             switch runtime.processingMode {

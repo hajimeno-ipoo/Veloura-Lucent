@@ -110,6 +110,17 @@ struct UIWordingPolicyTests {
         #expect(source.contains("AudioWaveformWorkspaceView"))
         #expect(source.contains("AverageSpectrumComparisonView"))
         #expect(source.contains("SpectrogramComparisonView"))
+        #expect(source.contains("struct VelouraBasicWorkspaceView: View"))
+        #expect(source.contains("VelouraBasicWorkspaceView("))
+        #expect(!source.contains("private var basicWorkspace"))
+        #expect(source.contains("struct WorkspaceLazySection<Content: View>: View"))
+        #expect(source.contains("LazyVStack(alignment: .leading, spacing: 0)"))
+        #expect(source.contains(
+            "WorkspaceLazySection {\n            AverageSpectrumComparisonView"
+        ))
+        #expect(source.contains(
+            "WorkspaceLazySection {\n            SpectrogramComparisonView"
+        ))
         #expect(source.contains("主要数値比較"))
         #expect(source.contains("補正差分"))
         #expect(source.contains("マスタリング差分"))
@@ -479,13 +490,15 @@ struct UIWordingPolicyTests {
     func inspectorAnalysisRemainsInBottomRightWhenSettingsAreHidden() throws {
         let source = try combinedSource([
             "Sources/VelouraLucent/Views/WorkspaceShellView.swift",
+            "Sources/VelouraLucent/Views/VelouraRootView.swift",
         ])
 
         #expect(source.contains("ZStack(alignment: .bottomTrailing)"))
-        #expect(source.contains("isInspectorPresented ? 0 : WorkspaceLayoutMetrics.inspectorWidth"))
-        #expect(source.contains("@Environment(\\.workspaceFooterTrailingInset)"))
+        #expect(source.contains("footerTrailingInset: isInspectorPresented"))
+        #expect(source.contains(": WorkspaceLayoutMetrics.inspectorWidth"))
+        #expect(!source.contains("@Environment(\\.workspaceFooterTrailingInset)"))
         #expect(source.contains(
-            "ScrollView {\n                        inspectorFooter()"
+            "ScrollView {\n                        inspectorFooter"
         ))
     }
 

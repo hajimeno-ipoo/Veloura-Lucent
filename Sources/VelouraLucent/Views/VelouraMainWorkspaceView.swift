@@ -3,18 +3,32 @@ import SwiftUI
 struct VelouraMainWorkspaceView: View {
     @Bindable var job: ProcessingJob
     let preview: AudioPreviewController
+    let footerTrailingInset: CGFloat
     @State private var displayMode: WorkspaceDisplayMode = .basic
     @State private var isFullLogPresented = false
 
     var body: some View {
         WorkspaceCenterLayout(
-            isFullLogPresented: isFullLogPresented
+            isFullLogPresented: isFullLogPresented,
+            footerTrailingInset: footerTrailingInset
         ) {
             fixedHeader
         } mainContent: {
             switch displayMode {
             case .basic:
-                basicWorkspace
+                VelouraBasicWorkspaceView(
+                    preview: preview,
+                    inputFileURL: job.inputFile,
+                    correctedFileURL: job.hasExistingOutput ? job.outputFile : nil,
+                    masteredFileURL: job.hasExistingMasteredOutput
+                        ? job.masteredOutputFile
+                        : nil,
+                    masteringSettings: job.appliedMasteringSettings
+                        ?? job.editableMasteringSettings,
+                    inputSpectrogram: job.inputSpectrogram,
+                    correctedSpectrogram: job.outputSpectrogram,
+                    masteredSpectrogram: job.masteredSpectrogram
+                )
             case .detail:
                 DetailedAnalysisWorkspaceView(job: job)
             }
@@ -70,27 +84,42 @@ struct VelouraMainWorkspaceView: View {
         }
     }
 
-    @ViewBuilder
-    private var basicWorkspace: some View {
+}
+
+private struct VelouraBasicWorkspaceView: View {
+    let preview: AudioPreviewController
+    let inputFileURL: URL?
+    let correctedFileURL: URL?
+    let masteredFileURL: URL?
+    let masteringSettings: MasteringSettings
+    let inputSpectrogram: SpectrogramSnapshot?
+    let correctedSpectrogram: SpectrogramSnapshot?
+    let masteredSpectrogram: SpectrogramSnapshot?
+
+    var body: some View {
         AudioWaveformWorkspaceView(
             preview: preview,
-            inputFileURL: job.inputFile,
-            correctedFileURL: job.hasExistingOutput ? job.outputFile : nil,
-            masteredFileURL: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil
+            inputFileURL: inputFileURL,
+            correctedFileURL: correctedFileURL,
+            masteredFileURL: masteredFileURL
         )
 
-        AverageSpectrumComparisonView(preview: preview)
+        WorkspaceLazySection {
+            AverageSpectrumComparisonView(preview: preview)
+        }
 
         VectorScopeView(
             preview: preview,
-            masteringSettings: job.appliedMasteringSettings ?? job.editableMasteringSettings
+            masteringSettings: masteringSettings
         )
 
-        SpectrogramComparisonView(
-            input: job.inputSpectrogram,
-            corrected: job.outputSpectrogram,
-            mastered: job.masteredSpectrogram
-        )
+        WorkspaceLazySection {
+            SpectrogramComparisonView(
+                input: inputSpectrogram,
+                corrected: correctedSpectrogram,
+                mastered: masteredSpectrogram
+            )
+        }
     }
 }
 

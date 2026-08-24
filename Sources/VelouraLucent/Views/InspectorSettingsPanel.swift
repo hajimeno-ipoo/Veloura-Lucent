@@ -320,43 +320,12 @@ struct InspectorSettingsPanel: View {
     }
 
     private var correctionBasicKnobRow: some View {
-        ViewThatFits(in: .horizontal) {
-            correctionBasicThreeColumnRow
-            correctionBasicTwoColumnRow
-            correctionBasicOneColumnRow
+        DAWResponsiveThreeControlLayout {
+            correctionIntensityKnob
+            originalRetentionKnob
+            coreProtectionKnob
         }
         .frame(maxWidth: .infinity, alignment: .center)
-    }
-
-    private var correctionBasicThreeColumnRow: some View {
-        HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
-            correctionIntensityKnob
-            originalRetentionKnob
-            coreProtectionKnob
-        }
-        .frame(width: DAWKnobMetrics.threeColumnWidth)
-    }
-
-    private var correctionBasicTwoColumnRow: some View {
-        VStack(spacing: DAWKnobMetrics.rowSpacing) {
-            HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
-                correctionIntensityKnob
-                originalRetentionKnob
-            }
-            .frame(width: DAWKnobMetrics.twoColumnWidth)
-
-            coreProtectionKnob
-        }
-        .frame(width: DAWKnobMetrics.twoColumnWidth)
-    }
-
-    private var correctionBasicOneColumnRow: some View {
-        VStack(spacing: DAWKnobMetrics.rowSpacing) {
-            correctionIntensityKnob
-            originalRetentionKnob
-            coreProtectionKnob
-        }
-        .frame(width: DAWKnobMetrics.controlWidth)
     }
 
     private var correctionIntensityKnob: some View {
