@@ -112,6 +112,8 @@ struct InspectorSettingsPanel: View {
                 openKeyboardShortcutManager: openKeyboardShortcutManager
             )
 
+            Divider()
+
             VStack(alignment: .leading, spacing: 10) {
                 titleWithHelp(
                     "解析モード",

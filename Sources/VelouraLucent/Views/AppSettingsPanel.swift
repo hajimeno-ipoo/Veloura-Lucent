@@ -133,6 +133,8 @@ struct AppSettingsPanel: View {
                     .foregroundStyle(.secondary)
             }
 
+            Divider()
+
             notificationSettings
 
             Divider()

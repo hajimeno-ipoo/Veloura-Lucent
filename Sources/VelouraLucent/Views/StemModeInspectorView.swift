@@ -93,7 +93,9 @@ private struct StemModeInspectorSettingsPanel: View {
                         isWindowFullScreen: isWindowFullScreen,
                         openKeyboardShortcutManager: openKeyboardShortcutManager
                     )
+                    Divider()
                     StemModeAnalysisModeSettings(model: model)
+                    Divider()
                     StemModelManagementSection(
                         modelManager: modelManager,
                         settings: model.separationSettings,
