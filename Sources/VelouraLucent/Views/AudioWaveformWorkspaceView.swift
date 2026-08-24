@@ -436,6 +436,9 @@ struct AudioWaveformWorkspaceView: View {
         let state = preview.cardState(for: target)
         let snapshot = state.snapshot
         let comparisonSide = preview.comparisonSide(for: target)
+        let isSelected = comparisonSide.map {
+            $0 == preview.activeComparisonSide
+        } ?? false
         let fileURL = track.fileURL
 
         return HStack(spacing: 12) {
@@ -464,7 +467,7 @@ struct AudioWaveformWorkspaceView: View {
                 duration: snapshot?.duration ?? 0,
                 viewport: waveformViewport,
                 tint: tint,
-                isActive: preview.activeTarget == target,
+                isSelected: isSelected,
                 isAvailable: snapshot != nil,
                 showsHoverTime: hoveredWaveformTarget == target,
                 onSeek: { progress in
@@ -884,7 +887,7 @@ struct SeekableWaveformView: View {
     let duration: TimeInterval
     let viewport: WaveformViewport
     let tint: Color
-    let isActive: Bool
+    let isSelected: Bool
     let isAvailable: Bool
     let showsHoverTime: Bool
     let onSeek: (Double) -> Void
@@ -1022,6 +1025,9 @@ struct SeekableWaveformView: View {
         Canvas { context, size in
             guard !samples.isEmpty else { return }
 
+            let waveformTint = isSelected
+                ? tint
+                : Color(nsColor: .secondaryLabelColor)
             let renderedSamples = renderedSamples(for: size.width)
             let peakPath = verticalEnvelopePath(
                 samples: renderedSamples,
@@ -1054,12 +1060,12 @@ struct SeekableWaveformView: View {
 
             context.stroke(
                 peakPath,
-                with: .color(tint.opacity(0.20)),
+                with: .color(waveformTint.opacity(0.20)),
                 lineWidth: columnWidth
             )
             context.stroke(
                 rmsPath,
-                with: .color(tint.opacity(isActive ? 0.48 : 0.36)),
+                with: .color(waveformTint.opacity(isSelected ? 0.48 : 0.36)),
                 lineWidth: columnWidth
             )
 
@@ -1076,12 +1082,12 @@ struct SeekableWaveformView: View {
             )
             playedContext.stroke(
                 peakPath,
-                with: .color(tint.opacity(0.62)),
+                with: .color(waveformTint.opacity(0.62)),
                 lineWidth: columnWidth
             )
             playedContext.stroke(
                 rmsPath,
-                with: .color(tint.opacity(isActive ? 0.95 : 0.78)),
+                with: .color(waveformTint.opacity(isSelected ? 0.95 : 0.78)),
                 lineWidth: columnWidth
             )
         }
