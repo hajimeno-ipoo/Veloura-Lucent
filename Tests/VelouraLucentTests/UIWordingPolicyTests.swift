@@ -420,7 +420,7 @@ struct UIWordingPolicyTests {
         #expect(combined.contains("NavigationSplitView(columnVisibility: $sidebarVisibility)"))
         #expect(combined.contains("HStack(spacing: 0)"))
         #expect(combined.contains("VelouraMainWorkspaceView("))
-        #expect(combined.contains("if isInspectorPresented"))
+        #expect(combined.contains("width: isInspectorPresented"))
         #expect(combined.contains("VelouraInspectorView("))
         #expect(combined.contains("windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount"))
         #expect(combined.contains("isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled"))
@@ -487,19 +487,50 @@ struct UIWordingPolicyTests {
     }
 
     @Test
-    func inspectorAnalysisRemainsInBottomRightWhenSettingsAreHidden() throws {
-        let source = try combinedSource([
+    func inspectorAnalysisBelongsToTheExtendedWorkspaceBottomRegion() throws {
+        let combined = try combinedSource([
+            "Sources/VelouraLucent/Views/ContentView.swift",
+            "Sources/VelouraLucent/Views/StemModeWorkspaceView.swift",
+            "Sources/VelouraLucent/Views/VelouraMainWorkspaceView.swift",
             "Sources/VelouraLucent/Views/WorkspaceShellView.swift",
             "Sources/VelouraLucent/Views/VelouraRootView.swift",
         ])
+        let shell = try combinedSource([
+            "Sources/VelouraLucent/Views/WorkspaceShellView.swift",
+        ])
+        let shellOwner = shell.components(
+            separatedBy: "struct WorkspaceCenterLayout<"
+        )[0]
 
-        #expect(source.contains("ZStack(alignment: .bottomTrailing)"))
-        #expect(source.contains("footerTrailingInset: isInspectorPresented"))
-        #expect(source.contains(": WorkspaceLayoutMetrics.inspectorWidth"))
-        #expect(!source.contains("@Environment(\\.workspaceFooterTrailingInset)"))
-        #expect(source.contains(
-            "ScrollView {\n                        inspectorFooter"
+        #expect(combined.contains("bottomRegionTrailingExtension: isInspectorPresented"))
+        #expect(shell.contains("HStack(alignment: .top, spacing: 0)"))
+        #expect(shell.contains(
+            "Divider()\n                    .padding(.trailing, -bottomRegionTrailingExtension)"
         ))
+        #expect(shell.contains(
+            "analysisPanel\n                        .padding(14)"
+        ))
+        #expect(!shell.contains(
+            "ScrollView {\n                        analysisPanel"
+        ))
+        #expect(shell.contains(".padding(.trailing, -bottomRegionTrailingExtension)"))
+        #expect(shellOwner.contains(".contentMargins("))
+        #expect(shellOwner.contains(".mask(alignment: .top)"))
+        #expect(shellOwner.contains(
+            "width: isInspectorPresented\n                            ? WorkspaceLayoutMetrics.inspectorWidth\n                            : 0"
+        ))
+        #expect(shellOwner.contains(".clipped()"))
+        #expect(shellOwner.contains(".opacity(isInspectorPresented ? 1 : 0)"))
+        #expect(shellOwner.contains(".allowsHitTesting(isInspectorPresented)"))
+        #expect(shellOwner.contains(".accessibilityHidden(!isInspectorPresented)"))
+        #expect(!shellOwner.contains("if isInspectorPresented"))
+        #expect(shell.contains("value = max(value, nextValue())"))
+        #expect(!shellOwner.contains("analysisPanel"))
+        #expect(!shellOwner.contains("Color.clear"))
+        #expect(!combined.contains("ZStack(alignment: .bottomTrailing)"))
+        #expect(!combined.contains("inspectorFooter"))
+        #expect(!combined.contains("footerTrailingInset"))
+        #expect(!combined.contains("safeAreaInset"))
     }
 
     @Test
@@ -751,7 +782,7 @@ struct UIWordingPolicyTests {
             "Sources/VelouraLucent/Views/WindowScrollbarAppearanceConfigurator.swift"
         )
 
-        #expect(source.components(separatedBy: ".velouraTransientOverlayScrollIndicators()").count == 7)
+        #expect(source.components(separatedBy: ".velouraTransientOverlayScrollIndicators()").count == 6)
         #expect(source.contains("hostView?.enclosingScrollView"))
         #expect(source.contains("scrollView.scrollerStyle = .overlay"))
         #expect(source.contains("scrollView.autohidesScrollers = false"))

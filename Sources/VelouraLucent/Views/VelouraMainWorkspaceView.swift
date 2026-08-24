@@ -1,16 +1,29 @@
 import SwiftUI
 
-struct VelouraMainWorkspaceView: View {
+struct VelouraMainWorkspaceView<AnalysisPanel: View>: View {
     @Bindable var job: ProcessingJob
     let preview: AudioPreviewController
-    let footerTrailingInset: CGFloat
+    let bottomRegionTrailingExtension: CGFloat
+    let analysisPanel: AnalysisPanel
     @State private var displayMode: WorkspaceDisplayMode = .basic
     @State private var isFullLogPresented = false
+
+    init(
+        job: ProcessingJob,
+        preview: AudioPreviewController,
+        bottomRegionTrailingExtension: CGFloat,
+        @ViewBuilder analysisPanel: () -> AnalysisPanel
+    ) {
+        self.job = job
+        self.preview = preview
+        self.bottomRegionTrailingExtension = bottomRegionTrailingExtension
+        self.analysisPanel = analysisPanel()
+    }
 
     var body: some View {
         WorkspaceCenterLayout(
             isFullLogPresented: isFullLogPresented,
-            footerTrailingInset: footerTrailingInset
+            bottomRegionTrailingExtension: bottomRegionTrailingExtension
         ) {
             fixedHeader
         } mainContent: {
@@ -37,6 +50,8 @@ struct VelouraMainWorkspaceView: View {
                 job: job,
                 isFullLogPresented: $isFullLogPresented
             )
+        } analysisPanel: {
+            analysisPanel
         } fullLog: {
             FullProcessingLogView(
                 job: job,

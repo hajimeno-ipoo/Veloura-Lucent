@@ -1,21 +1,24 @@
 import AppKit
 import SwiftUI
 
-struct ContentView: View {
+struct ContentView<AnalysisPanel: View>: View {
     @State private var processingActions = ProcessingActions(notificationReporter: NotificationService.shared)
     private let shutsDownOnDisappear: Bool
-    private let footerTrailingInset: CGFloat
+    private let bottomRegionTrailingExtension: CGFloat
+    private let analysisPanel: AnalysisPanel
     @State private var inputAudioDropVisualState: InputAudioDropVisualState = .inactive
 
     @MainActor
     init(
         processingActions: ProcessingActions,
         shutsDownOnDisappear: Bool,
-        footerTrailingInset: CGFloat
+        bottomRegionTrailingExtension: CGFloat,
+        @ViewBuilder analysisPanel: () -> AnalysisPanel
     ) {
         _processingActions = State(initialValue: processingActions)
         self.shutsDownOnDisappear = shutsDownOnDisappear
-        self.footerTrailingInset = footerTrailingInset
+        self.bottomRegionTrailingExtension = bottomRegionTrailingExtension
+        self.analysisPanel = analysisPanel()
     }
 
     private var job: ProcessingJob {
@@ -52,8 +55,10 @@ struct ContentView: View {
             VelouraMainWorkspaceView(
                 job: job,
                 preview: preview,
-                footerTrailingInset: footerTrailingInset
-            )
+                bottomRegionTrailingExtension: bottomRegionTrailingExtension
+            ) {
+                analysisPanel
+            }
 
             InputAudioDropReceiver(
                 isEnabled: processingActions.canAcceptInputAudioDrop,
@@ -716,8 +721,10 @@ private struct ContentViewPreviewHost: View {
         ContentView(
             processingActions: processingActions,
             shutsDownOnDisappear: true,
-            footerTrailingInset: 0
-        )
+            bottomRegionTrailingExtension: 0
+        ) {
+            EmptyView()
+        }
     }
 }
 

@@ -1,20 +1,33 @@
 import SwiftUI
 
 @MainActor
-struct StemModeWorkspaceView: View {
+struct StemModeWorkspaceView<AnalysisPanel: View>: View {
     @Bindable var model: StemModeWorkspaceModel
-    let footerTrailingInset: CGFloat
+    let bottomRegionTrailingExtension: CGFloat
+    let analysisPanel: AnalysisPanel
 
     @State private var isFullLogPresented = false
     @State private var inputAudioDropVisualState: InputAudioDropVisualState = .inactive
+
+    init(
+        model: StemModeWorkspaceModel,
+        bottomRegionTrailingExtension: CGFloat,
+        @ViewBuilder analysisPanel: () -> AnalysisPanel
+    ) {
+        self.model = model
+        self.bottomRegionTrailingExtension = bottomRegionTrailingExtension
+        self.analysisPanel = analysisPanel()
+    }
 
     var body: some View {
         ZStack {
             StemModeMainWorkspaceView(
                 model: model,
                 isFullLogPresented: $isFullLogPresented,
-                footerTrailingInset: footerTrailingInset
-            )
+                bottomRegionTrailingExtension: bottomRegionTrailingExtension
+            ) {
+                analysisPanel
+            }
 
             InputAudioDropReceiver(
                 isEnabled: model.canChooseInput,
@@ -55,11 +68,24 @@ struct StemModeWorkspaceView: View {
 }
 
 @MainActor
-struct StemModeMainWorkspaceView: View {
+struct StemModeMainWorkspaceView<AnalysisPanel: View>: View {
     @Bindable var model: StemModeWorkspaceModel
     @Binding var isFullLogPresented: Bool
-    let footerTrailingInset: CGFloat
+    let bottomRegionTrailingExtension: CGFloat
+    let analysisPanel: AnalysisPanel
     @State private var selectedMode: WorkspaceDisplayMode = .basic
+
+    init(
+        model: StemModeWorkspaceModel,
+        isFullLogPresented: Binding<Bool>,
+        bottomRegionTrailingExtension: CGFloat,
+        @ViewBuilder analysisPanel: () -> AnalysisPanel
+    ) {
+        self.model = model
+        _isFullLogPresented = isFullLogPresented
+        self.bottomRegionTrailingExtension = bottomRegionTrailingExtension
+        self.analysisPanel = analysisPanel()
+    }
 
     private enum WorkspaceDisplayMode: String, CaseIterable, Identifiable {
         case basic
@@ -72,7 +98,7 @@ struct StemModeMainWorkspaceView: View {
     var body: some View {
         WorkspaceCenterLayout(
             isFullLogPresented: isFullLogPresented,
-            footerTrailingInset: footerTrailingInset
+            bottomRegionTrailingExtension: bottomRegionTrailingExtension
         ) {
             fixedHeader
         } mainContent: {
@@ -87,6 +113,8 @@ struct StemModeMainWorkspaceView: View {
                 model: model,
                 isFullLogPresented: $isFullLogPresented
             )
+        } analysisPanel: {
+            analysisPanel
         } fullLog: {
             StemModeFullProcessingLogView(
                 session: model.session,

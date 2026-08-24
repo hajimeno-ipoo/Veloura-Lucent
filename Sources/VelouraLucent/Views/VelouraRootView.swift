@@ -186,17 +186,30 @@ struct VelouraRootView: View {
                 ContentView(
                     processingActions: runtime.standardActions,
                     shutsDownOnDisappear: false,
-                    footerTrailingInset: isInspectorPresented
-                        ? 0
-                        : WorkspaceLayoutMetrics.inspectorWidth
-                )
+                    bottomRegionTrailingExtension: isInspectorPresented
+                        ? WorkspaceLayoutMetrics.inspectorWidth
+                        : 0
+                ) {
+                    InspectorAnalysisPanel(
+                        job: runtime.standardActions.job,
+                        completionReport: standardCompletionReport,
+                        selectedAudio: standardAnalysisSelectionBinding,
+                        isCompletionReportPresented: $isStandardCompletionReportPresented
+                    )
+                }
             case .stem:
                 StemModeWorkspaceView(
                     model: runtime.stemWorkspaceModel,
-                    footerTrailingInset: isInspectorPresented
-                        ? 0
-                        : WorkspaceLayoutMetrics.inspectorWidth
-                )
+                    bottomRegionTrailingExtension: isInspectorPresented
+                        ? WorkspaceLayoutMetrics.inspectorWidth
+                        : 0
+                ) {
+                    StemModeInspectorAnalysisPanel(
+                        model: runtime.stemWorkspaceModel,
+                        selectedAudio: stemAnalysisSelectionBinding,
+                        isCompletionReportPresented: $isStemCompletionReportPresented
+                    )
+                }
             }
         } inspector: {
             switch runtime.processingMode {
@@ -220,22 +233,6 @@ struct VelouraRootView: View {
                     selectedSettingsSectionRawValue: $stemModeInspectorSettingsSelectedSectionRawValue,
                     isWindowFullScreen: isWindowFullScreen,
                     openKeyboardShortcutManager: openKeyboardShortcutManager
-                )
-            }
-        } inspectorFooter: {
-            switch runtime.processingMode {
-            case .standard:
-                InspectorAnalysisPanel(
-                    job: runtime.standardActions.job,
-                    completionReport: standardCompletionReport,
-                    selectedAudio: standardAnalysisSelectionBinding,
-                    isCompletionReportPresented: $isStandardCompletionReportPresented
-                )
-            case .stem:
-                StemModeInspectorAnalysisPanel(
-                    model: runtime.stemWorkspaceModel,
-                    selectedAudio: stemAnalysisSelectionBinding,
-                    isCompletionReportPresented: $isStemCompletionReportPresented
                 )
             }
         }
