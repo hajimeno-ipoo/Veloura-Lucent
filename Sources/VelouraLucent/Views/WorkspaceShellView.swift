@@ -12,6 +12,9 @@ enum WorkspaceLayoutMetrics {
     static let recentLogMinimumWidth: CGFloat = 260
     static let standardWorkflowMinimumWidth: CGFloat = 260
     static let expandedWorkflowMinimumWidth: CGFloat = 360
+    static let inspectorFooterExtensionMinimumHeight: CGFloat = 206
+    static let inspectorFooterExtensionIdealHeight: CGFloat = 214
+    static let inspectorFooterExtensionMaximumHeight: CGFloat = 224
 
     static func workflowMinimumWidth(stageCount: Int) -> CGFloat {
         stageCount > 4
@@ -23,13 +26,15 @@ enum WorkspaceLayoutMetrics {
 struct WorkspaceShellView<
     Sidebar: View,
     Center: View,
-    Inspector: View
+    Inspector: View,
+    InspectorFooter: View
 >: View {
     @Binding var sidebarVisibility: NavigationSplitViewVisibility
     let isInspectorPresented: Bool
     @ViewBuilder let sidebar: () -> Sidebar
     @ViewBuilder let center: () -> Center
     @ViewBuilder let inspector: () -> Inspector
+    @ViewBuilder let inspectorFooter: () -> InspectorFooter
 
     var body: some View {
         NavigationSplitView(columnVisibility: $sidebarVisibility) {
@@ -49,16 +54,36 @@ struct WorkspaceShellView<
                     )
 
                 if isInspectorPresented {
-                    Divider()
+                    VStack(spacing: 0) {
+                        HStack(spacing: 0) {
+                            Divider()
 
-                    inspector()
+                            inspector()
+                                .frame(
+                                    minWidth: WorkspaceLayoutMetrics.inspectorWidth,
+                                    idealWidth: WorkspaceLayoutMetrics.inspectorWidth,
+                                    maxWidth: WorkspaceLayoutMetrics.inspectorWidth,
+                                    maxHeight: .infinity
+                                )
+                                .clipped()
+                        }
+
+                        Divider()
+
+                        ScrollView {
+                            inspectorFooter()
+                                .padding(14)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                                .velouraTransientOverlayScrollIndicators()
+                        }
+                        .scrollContentBackground(.hidden)
                         .frame(
-                            minWidth: WorkspaceLayoutMetrics.inspectorWidth,
-                            idealWidth: WorkspaceLayoutMetrics.inspectorWidth,
-                            maxWidth: WorkspaceLayoutMetrics.inspectorWidth,
-                            maxHeight: .infinity
+                            minHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionMinimumHeight,
+                            idealHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionIdealHeight,
+                            maxHeight: WorkspaceLayoutMetrics.inspectorFooterExtensionMaximumHeight
                         )
-                        .clipped()
+                    }
+                    .frame(maxHeight: .infinity)
                 }
             }
         }

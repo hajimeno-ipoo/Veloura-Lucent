@@ -83,7 +83,7 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
     @ViewBuilder let additionalContent: AdditionalContent
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("解析結果")
                     .font(.title3.bold())
@@ -122,13 +122,25 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
                 .accessibilityElement(children: .combine)
             }
 
-            additionalContent
-            completionReportControl
+            HStack(alignment: .bottom, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
+                    additionalContent
+                }
+
+                completionReportControl
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
     }
 
     private func metricsGrid(_ metrics: AudioMetricSnapshot) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+        LazyVGrid(
+            columns: Array(
+                repeating: GridItem(.flexible(minimum: 0), spacing: 8),
+                count: 4
+            ),
+            spacing: 8
+        ) {
             metricCell(
                 title: "ラウドネス",
                 value: String(format: "%.1f LUFS", metrics.integratedLoudnessLUFS),
@@ -167,6 +179,8 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
                 Text(title)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 TermHelpButton(title: title, reading: title, description: help)
             }
             Text(value)

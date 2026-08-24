@@ -8,31 +8,21 @@ struct StemModeInspectorView: View {
     @Binding var isWindowBackgroundBlurEnabled: Bool
     @Binding var windowBackgroundBlurLevel: WindowBackgroundBlurLevel
     @Binding var selectedSettingsSectionRawValue: String
-    @Binding var selectedAnalysisAudio: InspectorAudioSelection
-    @Binding var isCompletionReportPresented: Bool
     let isWindowFullScreen: Bool
     let openKeyboardShortcutManager: @MainActor () -> Void
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                StemModeInspectorSettingsPanel(
-                    model: model,
-                    modelManager: modelManager,
-                    windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
-                    isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
-                    windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
-                    selectedSectionRawValue: $selectedSettingsSectionRawValue,
-                    isWindowFullScreen: isWindowFullScreen,
-                    openKeyboardShortcutManager: openKeyboardShortcutManager
-                )
-                Divider()
-                StemModeInspectorAudioPanel(
-                    model: model,
-                    selectedAudio: $selectedAnalysisAudio,
-                    isCompletionReportPresented: $isCompletionReportPresented
-                )
-            }
+            StemModeInspectorSettingsPanel(
+                model: model,
+                modelManager: modelManager,
+                windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
+                isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
+                windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
+                selectedSectionRawValue: $selectedSettingsSectionRawValue,
+                isWindowFullScreen: isWindowFullScreen,
+                openKeyboardShortcutManager: openKeyboardShortcutManager
+            )
             .padding(14)
             .velouraTransientOverlayScrollIndicators()
         }
@@ -161,7 +151,7 @@ private struct StemModeAnalysisModeSettings: View {
 }
 
 @MainActor
-private struct StemModeInspectorAudioPanel: View {
+struct StemModeInspectorAnalysisPanel: View {
     @Bindable var model: StemModeWorkspaceModel
     @Binding var selectedAudio: InspectorAudioSelection
     @Binding var isCompletionReportPresented: Bool

@@ -724,7 +724,7 @@ struct UIWordingPolicyTests {
             "Sources/VelouraLucent/Views/WindowScrollbarAppearanceConfigurator.swift"
         )
 
-        #expect(source.components(separatedBy: ".velouraTransientOverlayScrollIndicators()").count == 6)
+        #expect(source.components(separatedBy: ".velouraTransientOverlayScrollIndicators()").count == 7)
         #expect(source.contains("hostView?.enclosingScrollView"))
         #expect(source.contains("scrollView.scrollerStyle = .overlay"))
         #expect(source.contains("scrollView.autohidesScrollers = false"))

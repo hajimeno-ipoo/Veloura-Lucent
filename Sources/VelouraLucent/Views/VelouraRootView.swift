@@ -195,13 +195,10 @@ struct VelouraRootView: View {
             case .standard:
                 VelouraInspectorView(
                     job: runtime.standardActions.job,
-                    completionReport: standardCompletionReport,
                     windowBackgroundMaterialAmount: $windowBackgroundMaterialAmount,
                     isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
                     windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
                     selectedSettingsSectionRawValue: $inspectorSettingsSelectedSectionRawValue,
-                    selectedAnalysisAudio: standardAnalysisSelectionBinding,
-                    isCompletionReportPresented: $isStandardCompletionReportPresented,
                     isWindowFullScreen: isWindowFullScreen,
                     openKeyboardShortcutManager: openKeyboardShortcutManager
                 )
@@ -213,10 +210,24 @@ struct VelouraRootView: View {
                     isWindowBackgroundBlurEnabled: $isWindowBackgroundBlurEnabled,
                     windowBackgroundBlurLevel: $windowBackgroundBlurLevel,
                     selectedSettingsSectionRawValue: $stemModeInspectorSettingsSelectedSectionRawValue,
-                    selectedAnalysisAudio: stemAnalysisSelectionBinding,
-                    isCompletionReportPresented: $isStemCompletionReportPresented,
                     isWindowFullScreen: isWindowFullScreen,
                     openKeyboardShortcutManager: openKeyboardShortcutManager
+                )
+            }
+        } inspectorFooter: {
+            switch runtime.processingMode {
+            case .standard:
+                InspectorAnalysisPanel(
+                    job: runtime.standardActions.job,
+                    completionReport: standardCompletionReport,
+                    selectedAudio: standardAnalysisSelectionBinding,
+                    isCompletionReportPresented: $isStandardCompletionReportPresented
+                )
+            case .stem:
+                StemModeInspectorAnalysisPanel(
+                    model: runtime.stemWorkspaceModel,
+                    selectedAudio: stemAnalysisSelectionBinding,
+                    isCompletionReportPresented: $isStemCompletionReportPresented
                 )
             }
         }
