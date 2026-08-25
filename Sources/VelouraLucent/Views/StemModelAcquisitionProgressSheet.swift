@@ -44,7 +44,7 @@ struct StemModelAcquisitionProgressSheet: View {
             Text("AIモデルを取得")
                 .font(.title2.bold())
             Text(modelManager.selectedModel.displayName)
-                .font(.headline)
+                .font(.title3.bold())
                 .foregroundStyle(.secondary)
         }
     }
@@ -63,11 +63,11 @@ struct StemModelAcquisitionProgressSheet: View {
                 )
 
                 Text("取得するファイル")
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
                 ForEach(assetFileNames, id: \.self) { fileName in
                     Label(fileName, systemImage: "doc")
-                        .font(.callout.monospaced())
+                        .font(.body.monospaced())
                 }
             }
 
@@ -195,13 +195,13 @@ struct StemModelAcquisitionProgressSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("モデル取得に失敗しました", systemImage: "exclamationmark.triangle")
-                .font(.headline)
+                .font(.title3.bold())
                 .foregroundStyle(.red)
             Text(message)
                 .font(.body)
                 .textSelection(.enabled)
             Text("既存の検証済みモデルは維持されています。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
             HStack {
                 Spacer()
@@ -259,10 +259,10 @@ struct StemModelAcquisitionProgressSheet: View {
     private func detailValue(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
-                .font(.callout)
+                .font(.title3)
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.callout.monospaced())
+                .font(.body.monospaced())
                 .textSelection(.enabled)
         }
         .accessibilityElement(children: .combine)

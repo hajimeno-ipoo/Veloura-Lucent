@@ -71,7 +71,7 @@ struct VectorScopeView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text("ベクトルスコープ")
-                    .font(.headline)
+                    .font(.title3.bold())
                 TermHelpButton(
                     title: "ベクトルスコープ",
                     reading: "べくとるすこーぷ",
@@ -86,7 +86,7 @@ struct VectorScopeView: View {
             }
 
             Text(scopeDescription)
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
 
             VectorScopeModePicker(displayMode: $displayMode)
@@ -122,7 +122,7 @@ struct VectorScopeView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text("ラウドネスメーター")
-                    .font(.headline)
+                    .font(.title3.bold())
                 TermHelpButton(
                     title: "ラウドネスメーター",
                     reading: "らうどねすめーたー",
@@ -131,13 +131,13 @@ struct VectorScopeView: View {
                 Spacer()
                 if let activeTarget {
                     Text(targetTitle(activeTarget))
-                        .font(.callout.weight(.semibold))
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(targetColor(activeTarget))
                 }
             }
 
             Text("目標線と上限線で、再生中の音を確認します。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
 
             loudnessMeter
@@ -156,7 +156,7 @@ struct VectorScopeView: View {
 
             if let message = statusMessage {
                 Text(message)
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(16)
@@ -453,7 +453,7 @@ private struct CorrelationMeterView: View {
     var body: some View {
         VStack(spacing: 6) {
             Text("相関")
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
 
             HStack(alignment: .top, spacing: 6) {
                 GeometryReader { proxy in
@@ -518,7 +518,7 @@ private struct BalanceMeterView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("L/Rバランス")
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
             GeometryReader { proxy in
                 let safeValue = value.map { max(-1, min(1, $0)) }
                 let x = safeValue.map { proxy.size.width * CGFloat(($0 + 1) / 2) }

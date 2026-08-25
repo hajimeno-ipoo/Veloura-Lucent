@@ -13,7 +13,7 @@ struct DAWKnobMetricsTests {
     func artworkUsesFullImageScaleWithoutCroppingBasis() {
         #expect(DAWKnobMetrics.artworkSize == 226)
         #expect(DAWKnobMetrics.controlWidth == 118)
-        #expect(DAWKnobMetrics.controlHeight == 181)
+        #expect(DAWKnobMetrics.controlHeight == 190)
         #expect(DAWKnobMetrics.knobSourceDiameter == 342)
         #expect(abs(DAWKnobMetrics.knobHitDiameter - 75.48046875) < 0.000001)
         #expect(DAWKnobMetrics.knobHitRect.midX == DAWKnobMetrics.scaledPoint(DAWKnobMetrics.knobCenter).x)

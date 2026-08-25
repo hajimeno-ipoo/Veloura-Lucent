@@ -45,9 +45,9 @@ struct TermHelpButton: View {
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
-                    .font(.headline)
+                    .font(.title3.bold())
                 Text(reading)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                 Text(description)
                     .font(.body)

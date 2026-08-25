@@ -6,7 +6,7 @@ struct OverallWorkflowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("全体進捗")
-                .font(.headline)
+                .font(.title3.bold())
 
             HStack(alignment: .top, spacing: 0) {
                 ForEach(Array(stages.enumerated()), id: \.element.id) { index, stage in
@@ -31,11 +31,13 @@ struct OverallWorkflowView: View {
                 .foregroundStyle(stage.state.color)
                 .accessibilityHidden(true)
             Text(stage.title)
-                .font(.callout.bold())
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .font(.title3.bold())
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 36, alignment: .top)
             Text(stage.state.label)
-                .font(.callout)
+                .font(.title3)
                 .foregroundStyle(stage.state.color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.9)

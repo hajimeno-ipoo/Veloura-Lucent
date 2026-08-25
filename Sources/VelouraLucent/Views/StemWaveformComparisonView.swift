@@ -58,7 +58,7 @@ struct StemWaveformComparisonView: View {
     private var rolePicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("表示するStem")
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(.secondary)
 
             LiquidGlassSegmentedPicker(

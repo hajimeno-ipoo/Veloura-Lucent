@@ -59,7 +59,7 @@ struct StemModePreviewView: View {
                     .controlSize(.small)
             } else if let error = model.inputAnalysisError ?? model.displayAnalysisError {
                 Label("表示用解析の一部を取得できませんでした: \(error)", systemImage: "exclamationmark.triangle")
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.orange)
             }
         }

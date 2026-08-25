@@ -45,15 +45,17 @@ struct AppSettingsPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("アプリ")
-                .font(.headline)
+                .font(.title3.bold())
 
             VStack(alignment: .leading, spacing: 6) {
                 LabeledContent {
                     Text("\(AppAppearanceSettings.windowBackgroundMaterialPercent(windowBackgroundMaterialAmount))%")
+                        .font(.title3)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 } label: {
                     Text("アプリ背景の透明感")
+                        .font(.title3)
                 }
 
                 Slider(
@@ -76,10 +78,11 @@ struct AppSettingsPanel: View {
                 }
 
                 Text("0%で現在と同じ完全透明です。数値を上げると、アプリ全体の背景だけが濃くなります。")
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
 
                 Toggle("ぼかし具合を調整", isOn: $isWindowBackgroundBlurEnabled)
+                    .font(.title3)
                     .toggleStyle(.switch)
                     .tint(LiquidGlassSegmentedPickerStyle.switchTint)
                     .disabled(isWindowFullScreen)
@@ -91,9 +94,11 @@ struct AppSettingsPanel: View {
                 if isWindowBackgroundBlurEnabled {
                     LabeledContent {
                         Text(windowBackgroundBlurLevel.title)
+                            .font(.title3)
                             .foregroundStyle(.secondary)
                     } label: {
                         Text("ぼかし具合")
+                            .font(.title3)
                     }
 
                     Slider(
@@ -129,7 +134,7 @@ struct AppSettingsPanel: View {
                 Text(isWindowBackgroundBlurEnabled
                      ? "ぼかし具合を5段階で調整します。"
                      : "従来の透明感設定を使用しています。")
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
 
@@ -142,8 +147,9 @@ struct AppSettingsPanel: View {
             HStack(alignment: .center, spacing: 16) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("キーボード操作")
+                        .font(.title3)
                     Text("変更できるショートカットと固定操作を確認します")
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
 
@@ -262,7 +268,7 @@ struct AppSettingsPanel: View {
     private var notificationSettings: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("通知")
-                .font(.headline)
+                .font(.title3.bold())
 
             LabeledContent {
                 Text(notificationAuthorizationStatus.title)
@@ -278,7 +284,7 @@ struct AppSettingsPanel: View {
             }
 
             Text("通知項目")
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
 
             VStack(spacing: 0) {
                 notificationToggleRow(
@@ -317,6 +323,7 @@ struct AppSettingsPanel: View {
     ) -> some View {
         HStack(spacing: 12) {
             Text(title)
+                .font(.title3)
 
             Spacer(minLength: 12)
 

@@ -191,9 +191,16 @@ struct KeyboardShortcutManagementView: View {
                 LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                     ForEach(VelouraShortcutCategory.allCases) { category in
                         Section {
-                            ForEach(actions(in: category)) { action in
-                                editableRow(action)
-                                Divider().padding(.leading, 18)
+                            let categoryActions = actions(in: category)
+
+                            shortcutCategoryCard {
+                                ForEach(categoryActions) { action in
+                                    editableRow(action)
+
+                                    if action.id != categoryActions.last?.id {
+                                        Divider().padding(.leading, 8)
+                                    }
+                                }
                             }
                         } header: {
                             sectionHeader(category.rawValue)
@@ -206,7 +213,7 @@ struct KeyboardShortcutManagementView: View {
 
             if let validationMessage {
                 Label(validationMessage, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.red)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
@@ -226,7 +233,7 @@ struct KeyboardShortcutManagementView: View {
                 .frame(width: 220, alignment: .leading)
             Color.clear.frame(width: 164, height: 1)
         }
-        .font(.callout)
+        .font(.title3)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 18)
         .padding(.vertical, 9)
@@ -301,7 +308,7 @@ struct KeyboardShortcutManagementView: View {
                 .frame(width: 164)
             }
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 8)
         .frame(minHeight: 52)
     }
 
@@ -311,7 +318,7 @@ struct KeyboardShortcutManagementView: View {
             HStack(spacing: 14) {
                 ZStack(alignment: .leading) {
                     Text("キーを押してください")
-                        .font(.callout)
+                        .font(.title3)
                         .foregroundStyle(.purple)
                     ShortcutKeyCaptureView { shortcut in
                         accept(shortcut, for: action)
@@ -356,7 +363,7 @@ struct KeyboardShortcutManagementView: View {
                 Text("キー")
                     .frame(width: 260, alignment: .leading)
             }
-            .font(.callout)
+            .font(.title3)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 18)
             .padding(.vertical, 9)
@@ -365,19 +372,24 @@ struct KeyboardShortcutManagementView: View {
                 LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                     ForEach(fixedOperationGroups) { group in
                         Section {
-                            ForEach(group.operations) { operation in
-                                HStack(spacing: 12) {
-                                    Text(operation.operation)
-                                        .font(.system(size: 16, weight: .regular))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                            shortcutCategoryCard {
+                                ForEach(group.operations) { operation in
+                                    HStack(spacing: 12) {
+                                        Text(operation.operation)
+                                            .font(.system(size: 16, weight: .regular))
+                                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                                    Text(operation.keys)
-                                        .font(.system(size: 20, weight: .regular))
-                                        .frame(width: 260, alignment: .leading)
+                                        Text(operation.keys)
+                                            .font(.system(size: 20, weight: .regular))
+                                            .frame(width: 260, alignment: .leading)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .frame(minHeight: 52)
+
+                                    if operation.id != group.operations.last?.id {
+                                        Divider().padding(.leading, 8)
+                                    }
                                 }
-                                .padding(.horizontal, 18)
-                                .frame(minHeight: 52)
-                                Divider().padding(.leading, 18)
                             }
                         } header: {
                             sectionHeader(group.title)
@@ -388,6 +400,21 @@ struct KeyboardShortcutManagementView: View {
             .scrollContentBackground(.hidden)
             .velouraTransientOverlayScrollIndicators()
         }
+    }
+
+    private func shortcutCategoryCard<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.secondary.opacity(0.36), lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 12)
     }
 
     private var footer: some View {
@@ -431,11 +458,11 @@ struct KeyboardShortcutManagementView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.callout)
+            .font(.title3.bold())
             .padding(.horizontal, 18)
             .padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.ultraThinMaterial)
+            .background(.regularMaterial)
     }
 
     private func actions(in category: VelouraShortcutCategory) -> [VelouraShortcutAction] {

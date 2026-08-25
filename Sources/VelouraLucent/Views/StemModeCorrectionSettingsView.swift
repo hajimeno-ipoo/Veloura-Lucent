@@ -7,10 +7,10 @@ struct StemModeCorrectionSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Stem別の独立設定")
-                .font(.callout.bold())
+                .font(.title3.bold())
 
             Text("実行モデルの各Stemごとに補正プリセットと12項目を保持します。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
 
             LiquidGlassSegmentedPicker(
@@ -25,7 +25,7 @@ struct StemModeCorrectionSettingsView: View {
 
             HStack(spacing: 6) {
                 Text("補正プリセット")
-                    .font(.headline)
+                    .font(.title3.bold())
                 TermHelpButton(
                     title: "補正プリセット",
                     reading: "ほせいぷりせっと",
@@ -43,14 +43,14 @@ struct StemModeCorrectionSettingsView: View {
             .accessibilityHint("選択中Stemの補正上限を決める出発点です")
 
             Text(model.selectedDenoiseStrength.summary)
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
 
             Label(
                 "この設定は選択中Stemの処理量上限です。役割解析とguardにより不要な処理は行わず、設定値より強くしません。",
                 systemImage: "waveform.badge.magnifyingglass"
             )
-            .font(.callout)
+            .font(.body)
             .foregroundStyle(.secondary)
             .accessibilityElement(children: .combine)
 
@@ -139,7 +139,7 @@ struct StemModeCorrectionSettingsView: View {
 
     private var customStatus: some View {
         Text(model.isUsingCustomCorrectionSettings ? "手動調整中です" : "既定値を使用しています")
-            .font(.body)
+            .font(.title3)
             .foregroundStyle(
                 model.isUsingCustomCorrectionSettings
                     ? VelouraTextColors.orange

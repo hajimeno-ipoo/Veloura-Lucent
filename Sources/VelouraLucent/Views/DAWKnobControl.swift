@@ -142,9 +142,10 @@ struct DAWKnobControl: View {
                     .accessibilityHidden(true)
 
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.9)
+                    .font(.title3.bold())
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let help {
                     TermHelpButton(title: help.title, reading: help.reading, description: help.description)
                 }

@@ -148,7 +148,7 @@ private struct CompletionReportDocumentSectionView: View {
                 ForEach(section.subsections) { subsection in
                     VStack(alignment: .leading, spacing: 8) {
                         Text(subsection.title)
-                            .font(.headline)
+                            .font(.title3.bold())
                         ForEach(Array(subsection.paragraphs.enumerated()), id: \.offset) { _, paragraph in
                             Text(paragraph)
                                 .font(.body)
@@ -220,7 +220,7 @@ private struct CompletionReportChartsView: View {
                 ForEach(charts) { chart in
                     VStack(alignment: .leading, spacing: 10) {
                         Text(chart.title)
-                            .font(.headline)
+                            .font(.title3.bold())
                         CompletionReportChartView(chart: chart)
                             .frame(height: 260)
                         HStack {

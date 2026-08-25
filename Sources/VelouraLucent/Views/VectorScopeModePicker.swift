@@ -7,7 +7,7 @@ struct VectorScopeModePicker: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text("ベクトルスコープ表示")
-                    .font(.callout.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                 TermHelpButton(
                     title: "ベクトルスコープ表示",
                     reading: "べくとるすこーぷひょうじ",

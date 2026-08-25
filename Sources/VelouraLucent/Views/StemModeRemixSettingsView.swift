@@ -32,7 +32,7 @@ struct StemModeRemixSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text("再ミックス調整")
-                        .font(.headline)
+                        .font(.title3.bold())
                     TermHelpButton(
                         title: "再ミックス調整",
                         reading: "さいみっくすちょうせい",
@@ -40,7 +40,7 @@ struct StemModeRemixSettingsView: View {
                     )
                 }
                 Text("自動値を使うか、全項目を手動調整するかを切り替えます。")
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
 
@@ -55,6 +55,7 @@ struct StemModeRemixSettingsView: View {
                     }
                 )
             )
+            .font(.title3)
             .toggleStyle(.switch)
             .tint(LiquidGlassSegmentedPickerStyle.switchTint)
             .disabled(model.isRemixSettingsDisabled)
@@ -78,7 +79,7 @@ struct StemModeRemixSettingsView: View {
 
     private var remixResetStatus: some View {
         Text(remixAdjustmentStatusText)
-        .font(.callout)
+        .font(.title3)
         .foregroundStyle(
             model.isRemixManualEditingEnabled && !model.manualRemixOverrides.isEmpty
                 ? VelouraTextColors.orange
@@ -353,7 +354,7 @@ struct StemModeRemixSettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
                 Text(title)
-                    .font(.callout.bold())
+                    .font(.title3.bold())
                 Spacer()
                 Toggle(
                     "有効",
@@ -362,6 +363,7 @@ struct StemModeRemixSettingsView: View {
                         set: setEnabled
                     )
                 )
+                .font(.title3)
                 .toggleStyle(.switch)
                 .tint(LiquidGlassSegmentedPickerStyle.switchTint)
                 .controlSize(.small)
@@ -410,7 +412,7 @@ struct StemModeRemixSettingsView: View {
 
     private func evidenceText(_ title: String, value: Float) -> some View {
         Text("\(title): \(percentText(value))")
-            .font(.caption.monospacedDigit())
+            .font(.body.monospacedDigit())
             .foregroundStyle(.secondary)
     }
 
@@ -437,14 +439,14 @@ struct StemModeRemixSettingsView: View {
                 "reverb根拠: raw空間成分の減少 \(percentText(plan.reverbLossEvidence[role, default: 0])) → Send \(percentText(automatic.reverbSend))"
             )
         }
-        .font(.caption.monospacedDigit())
+        .font(.body.monospacedDigit())
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func automaticDecisionText(_ value: String) -> some View {
         Text(value)
-            .font(.caption)
+            .font(.body)
             .foregroundStyle(.secondary)
     }
 

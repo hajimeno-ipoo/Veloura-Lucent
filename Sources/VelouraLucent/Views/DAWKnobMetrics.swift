@@ -5,7 +5,7 @@ enum DAWKnobMetrics {
     static let sourceSize = CGSize(width: 1024, height: 1024)
     static let artworkSize: CGFloat = 226
     static let controlWidth: CGFloat = 118
-    static let controlHeight: CGFloat = 181
+    static let controlHeight: CGFloat = 190
     static let columnSpacing: CGFloat = 7
     static let rowSpacing: CGFloat = 8
     static let artworkVerticalOffset: CGFloat = -22
@@ -26,7 +26,7 @@ enum DAWKnobMetrics {
     static let topLabelCenter = CGPoint(x: 59, y: 40)
     static let leftLabelCenter = CGPoint(x: 21, y: 140)
     static let rightLabelCenter = CGPoint(x: 97, y: 140)
-    static let titleCenter = CGPoint(x: 59, y: 165)
+    static let titleCenter = CGPoint(x: 59, y: 168)
     static let decrementRailCenter = CGPoint(x: 7, y: 102)
     static let incrementRailCenter = CGPoint(x: 111, y: 102)
     static let stepRailHitSize = CGSize(width: 18, height: 70)

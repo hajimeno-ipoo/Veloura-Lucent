@@ -16,7 +16,7 @@ struct AverageSpectrumComparisonView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("再生中スペクトル")
-                    .font(.headline)
+                    .font(.title3.bold())
                 TermHelpButton(
                     title: "再生中スペクトル",
                     reading: "さいせいちゅうすぺくとる",
@@ -105,7 +105,7 @@ struct AverageSpectrumComparisonView: View {
 
     private var emptySpectrumMessage: some View {
         Text("音声を再生すると、いま鳴っている音の周波数バランスを表示します")
-            .font(.callout.weight(.semibold))
+            .font(.title3.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)

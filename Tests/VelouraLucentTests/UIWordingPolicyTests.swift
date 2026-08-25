@@ -639,7 +639,7 @@ struct UIWordingPolicyTests {
             "Text(actionTitle)\n                .font(.system(size: 16, weight: .regular))"
         ))
         #expect(shortcutManager.contains(
-            "Text(operation.operation)\n                                        .font(.system(size: 16, weight: .regular))"
+            "Text(operation.operation)\n                                            .font(.system(size: 16, weight: .regular))"
         ))
         #expect(!shortcutManager.contains(".weight(.bold)"))
         #expect(!shortcutManager.contains(".weight(.semibold)"))
@@ -648,7 +648,7 @@ struct UIWordingPolicyTests {
             "Text(shortcut.displayText)\n                .font(.system(size: 20, weight: .regular))"
         ))
         #expect(shortcutManager.contains(
-            "Text(operation.keys)\n                                        .font(.system(size: 20, weight: .regular))"
+            "Text(operation.keys)\n                                            .font(.system(size: 20, weight: .regular))"
         ))
         #expect(!shortcutManager.contains("\"xmark\""))
         #expect(shortcutManager.contains("変更をキャンセル"))
@@ -667,6 +667,12 @@ struct UIWordingPolicyTests {
         #expect(shortcutManager.contains("ForEach(fixedOperationGroups)"))
         #expect(shortcutManager.contains("ForEach(group.operations)"))
         #expect(shortcutManager.contains("sectionHeader(group.title)"))
+        #expect(shortcutManager.contains("shortcutCategoryCard"))
+        #expect(shortcutManager.contains("RoundedRectangle(cornerRadius: 14)"))
+        #expect(shortcutManager.contains(".stroke(Color.secondary.opacity(0.36), lineWidth: 1)"))
+        #expect(shortcutManager.contains(".padding(.horizontal, 10)"))
+        #expect(shortcutManager.contains("action.id != categoryActions.last?.id"))
+        #expect(shortcutManager.contains("operation.id != group.operations.last?.id"))
         #expect(shortcutManager.contains("operation: shortcut.conflictTitle"))
         #expect(!shortcutManager.contains("Text(operation.detail)"))
         #expect(!shortcutManager.contains("の固定操作"))

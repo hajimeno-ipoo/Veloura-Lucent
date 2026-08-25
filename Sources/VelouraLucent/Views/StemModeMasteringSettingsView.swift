@@ -61,7 +61,7 @@ private struct StemModeMasteringProfileSection: View {
         VStack(alignment: .leading, spacing: 8) {
             StemModeMasteringTitleWithHelp(
                 title: "仕上がりプロファイル",
-                font: .headline,
+                font: .title3.bold(),
                 help: SettingHelp(
                     title: "仕上がりプロファイル",
                     reading: "しあがりぷろふぁいる",
@@ -93,7 +93,7 @@ private struct StemModeMasteringProfileSection: View {
                         .font(.caption)
                         .accessibilityHidden(true)
                 }
-                .font(.callout)
+                .font(.title3)
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                 .velouraAdaptiveGlass(in: .rect(cornerRadius: 10), interactive: true)
@@ -132,7 +132,7 @@ private struct StemModeMasteringProfileSection: View {
 
     private var resetStatus: some View {
         Text(model.isUsingCustomMasteringSettings ? "手動調整中です" : "既定値を使用しています")
-            .font(.body)
+            .font(.title3)
             .foregroundStyle(model.isUsingCustomMasteringSettings ? VelouraTextColors.orange : .secondary)
     }
 
@@ -468,7 +468,7 @@ private struct StemModeMasteringCompressorControls: View {
         VStack(spacing: 6) {
             StemModeMasteringTitleWithHelp(
                 title: title,
-                font: .callout.bold(),
+                font: .title3.bold(),
                 help: help
             )
             .frame(width: DAWKnobMetrics.twoColumnWidth, alignment: .leading)
@@ -544,10 +544,10 @@ private struct StemModeMasteringWarnings: View {
     private var normalNotice: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label("現在の音量とピーク上限は安全な範囲です。", systemImage: "checkmark.circle.fill")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
             Text("必要に応じて試聴しながら微調整してください。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
         }
     }

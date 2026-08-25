@@ -23,7 +23,7 @@ struct SpectrogramComparisonView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("スペクトログラム")
-                    .font(.headline)
+                    .font(.title3.bold())
                 TermHelpButton(
                     title: "スペクトログラム",
                     reading: "すぺくとろぐらむ",
@@ -104,7 +104,7 @@ struct SpectrogramComparisonView: View {
                 }
             } else {
                 Text(unavailableText(for: title))
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 94)
             }

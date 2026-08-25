@@ -48,7 +48,7 @@ struct VelouraSidebarView: View {
     private func sidebarSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.callout.bold())
+                .font(.title3.bold())
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()

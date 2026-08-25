@@ -138,7 +138,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                             }
                             if !evaluation.stageGuards.isEmpty {
                                 Text("DSP最終適用結果")
-                                    .font(.callout.bold())
+                                    .font(.title3.bold())
                                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 8) {
                                     GridRow {
                                         headerCell("処理段")
@@ -151,16 +151,16 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                                             Text(record.stage.stemModeDisplayTitle)
                                                 .analysisTableLabelCell()
                                             Text(record.action.stemModeDisplayTitle)
-                                                .font(.callout)
+                                                .font(.body)
                                                 .foregroundStyle(.secondary)
                                                 .analysisTableTextColumn(minWidth: 160)
                                         }
                                         GridRow {
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(record.outcome.stemModeDisplayTitle)
-                                                    .font(.callout.weight(.semibold))
+                                                    .font(.title3.weight(.semibold))
                                                 Text(record.reason)
-                                                    .font(.callout)
+                                                    .font(.body)
                                                     .foregroundStyle(.secondary)
                                                 if !record.protectedComponents.isEmpty {
                                                     Text(
@@ -170,7 +170,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                                                                 .map(\.stemModeDisplayTitle)
                                                                 .joined(separator: "、")
                                                     )
-                                                    .font(.callout)
+                                                    .font(.body)
                                                     .foregroundStyle(.secondary)
                                                 }
                                                 ForEach(Array(record.protectionEvidence.enumerated()), id: \.offset) { _, evidence in
@@ -205,7 +205,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                             .analysisTableLabelCell()
                             .foregroundStyle(.secondary)
                         Text(presentation.validation.canContinue ? "継続可能" : "継続不能")
-                            .font(.callout.weight(.semibold))
+                            .font(.title3.weight(.semibold))
                             .analysisTableTextColumn()
                     }
                     Divider().gridCellColumns(2)
@@ -249,7 +249,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                 }
                 HStack(spacing: 6) {
                     Text(title)
-                        .font(.headline)
+                        .font(.title3.bold())
                     TermHelpButton(
                         title: title,
                         reading: title,
@@ -308,7 +308,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
     private func roleAnalysisGrid(_ snapshot: StemRoleAnalysisSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("役割別解析")
-                .font(.callout.bold())
+                .font(.title3.bold())
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 7) {
                 GridRow {
                     headerCell("保護対象")
@@ -334,13 +334,13 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                             color: .secondary
                         )
                         Text(distribution.preservationRule.stemModeDisplayTitle)
-                            .font(.callout)
+                            .font(.title3)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
             Text("今回のraw Stem自身から取得した解析量です。他曲の固定基準や品質スコアには使用しません。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
         }
     }
@@ -351,17 +351,17 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
         let summary = evidence.summary
         return VStack(alignment: .leading, spacing: 2) {
             Text(evidence.label)
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
             Text(
                 "対象区間 \(percentage(summary.affectedTimeRatio))"
                     + "・DSP差分保持 平均\(percentage(summary.averageRetainedDSPDeltaRatio))"
                     + "／最小\(percentage(summary.minimumRetainedDSPDeltaRatio))"
             )
-            .font(.callout.monospacedDigit())
+            .font(.body.monospacedDigit())
             .foregroundStyle(.secondary)
             if let reason = summary.restorationReason {
                 Text("復帰理由: \(reason.logDescription)")
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
         }
@@ -449,21 +449,21 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("解析上の確認事項")
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
 
             if let issues {
                 if issues.isEmpty {
                     Text("確認事項はありません。")
-                        .font(.callout)
+                        .font(.title3)
                         .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(issue.check.stemModeDisplayTitle)・\(issue.subject)")
-                                    .font(.callout.weight(.semibold))
+                                    .font(.title3.weight(.semibold))
                                 Text(issue.detail)
-                                    .font(.callout)
+                                    .font(.body)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -471,7 +471,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                 }
             } else {
                 Text("再ミックス解析が完了すると表示します。")
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
             }
         }
@@ -479,7 +479,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
 
     private func headerCell(_ text: String) -> some View {
         Text(text)
-            .font(.callout.weight(.semibold))
+            .font(.title3.weight(.semibold))
             .foregroundStyle(.secondary)
     }
 

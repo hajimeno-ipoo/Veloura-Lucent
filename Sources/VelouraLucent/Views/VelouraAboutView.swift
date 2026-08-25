@@ -143,13 +143,13 @@ struct VelouraAboutView: View {
                 Text("Veloura Lucent")
                     .font(.largeTitle.bold())
                 Text("音声を補正し、マスタリングで最終版に仕上げます。")
-                    .font(.headline)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let applicationVersion {
                     Text(applicationVersion)
-                        .font(.subheadline)
+                        .font(.title3)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -211,7 +211,7 @@ struct VelouraAboutView: View {
     private func assetInformation(_ asset: AssetPresentation) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(asset.fileName, systemImage: "doc")
-                .font(.headline)
+                .font(.title3.bold())
             informationList([
                 (label: "容量", value: "\(asset.byteCount) bytes"),
                 (label: "SHA-256", value: asset.sha256),
@@ -237,10 +237,10 @@ struct VelouraAboutView: View {
     private func detailValue(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
-                .font(.callout)
+                .font(.title3)
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.callout.monospaced())
+                .font(.body.monospaced())
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }

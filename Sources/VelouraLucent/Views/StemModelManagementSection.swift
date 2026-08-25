@@ -23,7 +23,7 @@ struct StemModelManagementSection: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 8) {
                 Text("Stem分離")
-                    .font(.headline)
+                    .font(.title3.bold())
                 Spacer(minLength: 0)
                 StemSeparationHelpButton(
                     isPresented: $isSeparationHelpPresented,
@@ -703,12 +703,12 @@ private extension StemModelManagementSection {
         var body: some View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.callout.bold())
+                    .font(.title3.bold())
                     .foregroundStyle(color)
                 Text(emphasis)
-                    .font(.callout.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                 Text(detail)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
@@ -779,7 +779,7 @@ private extension StemModelManagementSection {
                     }
 
                     Text("分離結果は、楽曲、録音状態、音の重なり方によって変わります。")
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -787,7 +787,7 @@ private extension StemModelManagementSection {
 
                     HelpSection(title: "選択中モデルの詳細情報") {
                         Text(separationInformation)
-                            .font(.callout.monospaced())
+                            .font(.body.monospaced())
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
@@ -841,7 +841,7 @@ private extension StemModelManagementSection {
         var body: some View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(title)
-                    .font(.headline)
+                    .font(.title3.bold())
                 content
             }
         }
@@ -854,9 +854,9 @@ private extension StemModelManagementSection {
         var body: some View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.callout.bold())
+                    .font(.title3.bold())
                 Text(description)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
@@ -875,7 +875,7 @@ private extension StemModelManagementSection {
                             .foregroundStyle(.secondary)
                             .accessibilityHidden(true)
                         Text(item)
-                            .font(.callout)
+                            .font(.body)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -898,7 +898,7 @@ private extension StemModelManagementSection {
                     Text("HTDemucs")
                     Text("BS-RoFormer-SW")
                 }
-                .font(.caption.bold())
+                .font(.title3.bold())
 
                 Divider().gridCellColumns(3)
 
@@ -908,7 +908,7 @@ private extension StemModelManagementSection {
                         Text(row.1)
                         Text(row.2)
                     }
-                    .font(.caption)
+                    .font(.body)
                     Divider().gridCellColumns(3)
                 }
             }
@@ -933,24 +933,29 @@ private extension StemModelManagementSection {
                                 .accessibilityHidden(true)
                         }
                         Text(presentation.statusText)
+                            .font(.title3)
                             .fontWeight(.semibold)
                             .foregroundStyle(toneColor)
                     }
                 }
+                .font(.title3)
 
                 Text(presentation.title)
-                    .font(.callout.bold())
+                    .font(.title3.bold())
                 Text(presentation.message)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
 
                 if let detail = presentation.detail {
-                    LabeledContent("確認結果") {
+                    LabeledContent {
                         Text(detail)
+                            .font(.body)
                             .multilineTextAlignment(.trailing)
                             .textSelection(.enabled)
+                    } label: {
+                        Text("確認結果")
+                            .font(.title3)
                     }
-                    .font(.callout)
                     .foregroundStyle(.secondary)
                 }
 
@@ -959,7 +964,7 @@ private extension StemModelManagementSection {
                         "この状態が続く場合は、アプリを正規配布物から再インストールしてください。AIモデルの再取得では直りません。",
                         systemImage: "arrow.down.app"
                     )
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .accessibilityElement(children: .combine)
                 }

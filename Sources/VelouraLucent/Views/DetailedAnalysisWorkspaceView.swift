@@ -194,7 +194,7 @@ struct DetailedAnalysisComparisonView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("解析状態")
-                    .font(.headline)
+                    .font(.title3.bold())
                 Spacer()
                 if presentation.isAnalyzing {
                     ProgressView()
@@ -211,12 +211,12 @@ struct DetailedAnalysisComparisonView: View {
 
             if let statusText = presentation.statusText {
                 Label(statusText, systemImage: "clock")
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
             }
             if let failedText = presentation.failedText {
                 Label(failedText, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.red)
             }
         }
@@ -231,9 +231,9 @@ struct DetailedAnalysisComparisonView: View {
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title(for: target))
-                    .font(.callout.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                 Text(state.title)
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
             }
         }
@@ -321,7 +321,7 @@ struct DetailedAnalysisComparisonView: View {
             ForEach(rows) { row in
                 GridRow {
                     Text(row.definition.label)
-                        .font(.callout.weight(.semibold))
+                        .font(.title3.weight(.semibold))
                         .frame(width: labelWidth, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
                     TermHelpButton(
@@ -346,7 +346,7 @@ struct DetailedAnalysisComparisonView: View {
 
     private func tableHeader(_ title: String) -> some View {
         Text(title)
-            .font(.callout.weight(.semibold))
+            .font(.title3.weight(.semibold))
             .foregroundStyle(.secondary)
     }
 
@@ -378,7 +378,7 @@ struct DetailedAnalysisComparisonView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(row.label)
-                        .font(.headline)
+                        .font(.title3.bold())
                     Text(row.measurementDescription)
                         .font(.body)
                         .foregroundStyle(.secondary)
@@ -389,10 +389,10 @@ struct DetailedAnalysisComparisonView: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(noiseOriginalComparisonStatus(row))
-                        .font(.callout.weight(.semibold))
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(noiseOriginalComparisonColor(row))
                     Text(noiseOriginalComparisonReason(row))
-                        .font(.callout.monospacedDigit())
+                        .font(.body.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
             }
@@ -421,7 +421,7 @@ struct DetailedAnalysisComparisonView: View {
     ) -> some View {
         VStack(spacing: 4) {
             Text(title)
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
             Text(value.map { formatNoiseValue($0) } ?? "--")
@@ -439,7 +439,7 @@ struct DetailedAnalysisComparisonView: View {
             Text(formatNoiseDelta(deltaDB))
                 .font(.callout.monospacedDigit().weight(.semibold))
             Text(noiseDeltaDirectionText(deltaDB))
-                .font(.callout)
+                .font(.title3)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
@@ -453,7 +453,7 @@ struct DetailedAnalysisComparisonView: View {
         )
         return VStack(alignment: .leading, spacing: 6) {
             Text("原音を基準にした差分")
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
             HStack(spacing: 8) {
                 Color.clear.frame(width: 112, height: 1)
                 HStack(spacing: 8) {
@@ -483,7 +483,7 @@ struct DetailedAnalysisComparisonView: View {
                 displayScale: displayScale
             )
             Text("中央の帯は原音との差が±1.0 dB以内です。表示範囲は補正後と最終版の差に合わせて項目ごとに調整します。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
         }
     }
@@ -542,12 +542,12 @@ struct DetailedAnalysisComparisonView: View {
                 help: "左右の音がどれくらい同じ向きで鳴っているかを見る指標です。0より下はモノラル再生で音が痩せる可能性があります。"
             )
             Text("0未満はモノラル再生で音が痩せる可能性があります。0以上は左右の音が同じ向きに近い状態です。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
 
             if stages.isEmpty {
                 Text("解析が完了するとステレオ相関を表示します。")
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(stages) { stage in
@@ -567,7 +567,7 @@ struct DetailedAnalysisComparisonView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(stage.label)
-                    .font(.callout.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                 Spacer()
                 Text(String(format: "%+.2f", value))
                     .font(.callout.monospacedDigit().weight(.semibold))
@@ -615,13 +615,13 @@ struct DetailedAnalysisComparisonView: View {
         let maxTime = max(1, ceil(correlationTimelineDuration(stages: stages)))
         return VStack(alignment: .leading, spacing: 8) {
             Text("時間ごとの相関推移")
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
             Text("0未満の時間帯は、モノラル再生で音が痩せる可能性があります。無音区間は相関値として計算せず、線を区切ります。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
             if points.isEmpty {
                 Text(correlationTimelineUnavailableText(stages: stages))
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
                     .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
@@ -630,7 +630,7 @@ struct DetailedAnalysisComparisonView: View {
                     .accessibilityLabel("時間ごとのステレオ相関推移")
                 if let note = correlationTimelinePartialNote(stages: stages) {
                     Text(note)
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -966,7 +966,7 @@ struct DetailedAnalysisComparisonView: View {
             Text(formatBandDelta(deltaDB))
                 .font(.callout.monospacedDigit().weight(.semibold))
             Text(bandDeltaDirectionText(deltaDB))
-                .font(.callout)
+                .font(.title3)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
@@ -980,7 +980,7 @@ struct DetailedAnalysisComparisonView: View {
         )
         return VStack(alignment: .leading, spacing: 6) {
             Text("入力を基準にした差分")
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
             HStack(spacing: 8) {
                 Color.clear.frame(width: 112, height: 1)
                 HStack(spacing: 8) {
@@ -1012,7 +1012,7 @@ struct DetailedAnalysisComparisonView: View {
                 tint: .orange
             )
             Text("中央の帯は入力との差が±1.00 dB以内です。表示範囲は補正後と最終版の差に合わせて帯域ごとに調整します。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
         }
     }
@@ -1108,7 +1108,7 @@ struct DetailedAnalysisComparisonView: View {
     private func sectionLabel(title: String, help: String) -> some View {
         HStack(spacing: 6) {
             Text(title)
-                .font(.headline)
+                .font(.title3.bold())
             TermHelpButton(title: title, reading: title, description: help)
         }
     }
@@ -1116,7 +1116,7 @@ struct DetailedAnalysisComparisonView: View {
     private func termLabel(_ definition: TermDefinition) -> some View {
         HStack(spacing: 5) {
             Text(definition.label)
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
             TermHelpButton(title: definition.label, reading: definition.reading, description: definition.description)
         }
     }
@@ -1539,7 +1539,7 @@ extension View {
 
     func analysisTableLabelCell(minWidth: CGFloat = 152) -> some View {
         self
-            .font(.callout.weight(.semibold))
+            .font(.title3.weight(.semibold))
             .frame(minWidth: minWidth, alignment: .leading)
     }
 

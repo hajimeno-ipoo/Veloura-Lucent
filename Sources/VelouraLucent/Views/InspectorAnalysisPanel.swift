@@ -109,9 +109,9 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
                 Label {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(emptyStateTitle(state, selection: selectedAudio))
-                            .font(.headline)
+                            .font(.title3.bold())
                         Text(unavailableDescription(selectedAudio))
-                            .font(.callout)
+                            .font(.body)
                             .foregroundStyle(.secondary)
                     }
                 } icon: {
@@ -177,7 +177,7 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 5) {
                 Text(title)
-                    .font(.callout)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)

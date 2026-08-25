@@ -29,7 +29,7 @@ struct SettingsDisclosureCard<Content: View>: View {
             if isExpanded {
                 VStack(alignment: .leading, spacing: 14) {
                     Text(summary)
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                     content
                 }
@@ -52,7 +52,7 @@ struct SettingsDisclosureCard<Content: View>: View {
             disclosureButton
 
             Text(title)
-                .font(.headline)
+                .font(.title3.bold())
                 .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
 
             if let help {

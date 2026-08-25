@@ -17,9 +17,9 @@ struct SidebarFileRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.callout.bold())
+                    .font(.title3.bold())
                 Text(fileURL?.lastPathComponent ?? placeholder)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(fileURL == nil ? .secondary : .primary)
                     .lineLimit(fileURL == nil ? 2 : 1)
                     .truncationMode(.middle)
@@ -27,7 +27,7 @@ struct SidebarFileRow: View {
 
                 if let fileURL {
                     Text(fileURL.path(percentEncoded: false))
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -45,7 +45,7 @@ struct SidebarFileRow: View {
                             .monospacedDigit()
                             .lineLimit(1)
                     }
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                 }

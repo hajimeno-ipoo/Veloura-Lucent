@@ -107,7 +107,7 @@ struct AudioWaveformWorkspaceView: View {
         self.activeSideBTitle = "B"
         self.volumeAccessibilityLabel = "試聴音量"
         self.loudnessHelp = "音量差を揃えて音質の違いを比較します"
-        self.waveformLabelColumnWidth = 112
+        self.waveformLabelColumnWidth = 150
         self.topAccessory = nil
         self.resetToken = inputFileURL?.path ?? ""
     }
@@ -228,9 +228,9 @@ struct AudioWaveformWorkspaceView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(workspaceTitle)
-                .font(.headline)
+                .font(.title3.bold())
             Text(playbackStatusText ?? preview.playbackLabel)
-                .font(.callout)
+                .font(.title3)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
@@ -250,7 +250,7 @@ struct AudioWaveformWorkspaceView: View {
 
     private var comparisonLabel: some View {
         Text("比較対象")
-            .font(.callout.weight(.semibold))
+            .font(.title3.weight(.semibold))
             .foregroundStyle(.secondary)
     }
 
@@ -276,7 +276,7 @@ struct AudioWaveformWorkspaceView: View {
 
     private var comparisonSummary: some View {
         Text(comparisonSummaryText)
-            .font(.callout)
+            .font(.body)
             .foregroundStyle(.secondary)
             .lineLimit(1)
     }
@@ -411,7 +411,7 @@ struct AudioWaveformWorkspaceView: View {
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text("現在 \(activeSideTitle)")
-                .font(.callout.weight(.bold))
+                .font(.title3.weight(.bold))
                 .foregroundStyle(displayTint)
         }
             .padding(.horizontal, 10)
@@ -447,11 +447,12 @@ struct AudioWaveformWorkspaceView: View {
                     .fill(tint)
                     .frame(width: 8, height: 8)
                 Text(track.title)
-                    .font(.callout.weight(.semibold))
-                    .lineLimit(1)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let comparisonSide {
                     Text(sideTitle(for: comparisonSide))
-                        .font(.callout.bold())
+                        .font(.body.bold())
                         .foregroundStyle(tint)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -946,7 +947,7 @@ struct SeekableWaveformView: View {
                     }
                 } else {
                     Text("音声なし")
-                        .font(.callout)
+                        .font(.title3)
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

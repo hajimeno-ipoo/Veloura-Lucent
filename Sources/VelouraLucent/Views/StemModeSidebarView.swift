@@ -46,7 +46,7 @@ struct StemModeSidebarView: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("\(model.availableStemRoles.count) Stem")
-                            .font(.callout.bold())
+                            .font(.title3.bold())
                             .foregroundStyle(.secondary)
                         ForEach(model.availableStemRoles, id: \.self) { role in
                             StemModeSidebarStemRow(
@@ -81,7 +81,7 @@ struct StemModeSidebarView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.callout.bold())
+                .font(.title3.bold())
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()
@@ -123,17 +123,17 @@ private struct StemModeSidebarStemRow: View {
                     .foregroundStyle(correctedArtifact == nil ? Color.secondary : Color.green)
                     .accessibilityHidden(true)
                 Text(role.stemModeDisplayTitle)
-                    .font(.callout.bold())
+                    .font(.title3.bold())
                 Spacer(minLength: 6)
                 if usedRawFallback {
                     Text("raw使用")
-                        .font(.caption)
+                        .font(.body)
                         .foregroundStyle(.orange)
                 }
             }
 
             Text(statusText)
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }

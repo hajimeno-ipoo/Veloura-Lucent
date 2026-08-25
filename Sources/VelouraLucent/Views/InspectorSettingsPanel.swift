@@ -25,7 +25,7 @@ struct InspectorSettingsSectionLayout<Selection: Hashable, Content: View>: View 
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("詳細設定")
-                    .font(.headline)
+                    .font(.title3.bold())
 
                 LiquidGlassSegmentedPicker(
                     title: "詳細設定",
@@ -117,7 +117,7 @@ struct InspectorSettingsPanel: View {
             VStack(alignment: .leading, spacing: 10) {
                 titleWithHelp(
                     "解析モード",
-                    font: .headline,
+                    font: .title3.bold(),
                     help: SettingHelp(
                         title: "解析モード",
                         reading: "かいせきもーど",
@@ -146,7 +146,7 @@ struct InspectorSettingsPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 titleWithHelp(
                     "補正プリセット",
-                    font: .headline,
+                    font: .title3.bold(),
                     help: SettingHelp(
                         title: "補正プリセット",
                         reading: "ほせいぷりせっと",
@@ -161,7 +161,7 @@ struct InspectorSettingsPanel: View {
                 )
 
                 Text(job.selectedDenoiseStrength.summary)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
 
                 resetRow(
@@ -217,7 +217,7 @@ struct InspectorSettingsPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 titleWithHelp(
                     "仕上がりプロファイル",
-                    font: .headline,
+                    font: .title3.bold(),
                     help: SettingHelp(
                         title: "仕上がりプロファイル",
                         reading: "しあがりぷろふぁいる",
@@ -248,7 +248,7 @@ struct InspectorSettingsPanel: View {
                             .font(.caption)
                             .accessibilityHidden(true)
                     }
-                    .font(.callout)
+                    .font(.title3)
                     .padding(.horizontal, 12)
                     .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                     .velouraAdaptiveGlass(in: .rect(cornerRadius: 10), interactive: true)
@@ -889,7 +889,7 @@ struct InspectorSettingsPanel: View {
         band: WritableKeyPath<MultibandCompressionSettings, BandCompressorSettings>
     ) -> some View {
         VStack(spacing: 6) {
-            titleWithHelp(title, font: .callout.bold(), help: help)
+            titleWithHelp(title, font: .title3.bold(), help: help)
                 .frame(width: DAWKnobMetrics.twoColumnWidth, alignment: .leading)
 
             HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
@@ -968,10 +968,10 @@ struct InspectorSettingsPanel: View {
     private var masteringNormalNotice: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label("現在の音量とピーク上限は安全な範囲です。", systemImage: "checkmark.circle.fill")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
             Text("必要に応じて試聴しながら微調整してください。")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
         }
     }
@@ -988,7 +988,7 @@ struct InspectorSettingsPanel: View {
 
     private func compressorGroup(title: String, help: SettingHelp?, band: WritableKeyPath<MultibandCompressionSettings, BandCompressorSettings>) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            titleWithHelp(title, font: .callout.bold(), help: help)
+            titleWithHelp(title, font: .title3.bold(), help: help)
             inspectorSlider(title: "Threshold", help: SettingHelp(title: "\(title) Threshold", reading: "すれっしょるど", description: "コンプレッサーが反応し始める音量です。値を低くするほど、より小さな音から圧縮が始まります。"), valueText: String(format: "%.1f dB", job.editableMasteringSettings.multibandCompression[keyPath: band].thresholdDB), labels: ["深く効く", "標準", "浅く効く"], value: compressorBinding(band: band, field: \.thresholdDB, range: -36 ... -12), range: -36 ... -12, step: 0.1)
             inspectorSlider(title: "Ratio", help: SettingHelp(title: "\(title) Ratio", reading: "れしお", description: "しきい値を超えた音をどれくらい圧縮するかです。値を上げるほど強く抑えます。"), valueText: String(format: "%.2f", job.editableMasteringSettings.multibandCompression[keyPath: band].ratio), labels: ["自然", "標準", "強く圧縮"], value: compressorBinding(band: band, field: \.ratio, range: 1.1 ... 4.0), range: 1.1 ... 4.0)
         }
@@ -1024,7 +1024,7 @@ struct InspectorSettingsPanel: View {
         VStack(alignment: .leading, spacing: 8) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    titleWithHelp(title, font: .callout.bold(), help: help)
+                    titleWithHelp(title, font: .title3.bold(), help: help)
                     Spacer()
                     stepperButtons(title: title, value: value, range: range, step: step)
                     sliderValueText(valueText)
@@ -1032,7 +1032,7 @@ struct InspectorSettingsPanel: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        titleWithHelp(title, font: .callout.bold(), help: help)
+                        titleWithHelp(title, font: .title3.bold(), help: help)
                         Spacer()
                         sliderValueText(valueText)
                     }
@@ -1104,7 +1104,7 @@ struct InspectorSettingsPanel: View {
 
     private func resetStatusText(isCustom: Bool) -> some View {
         Text(isCustom ? "手動調整中です" : "既定値を使用しています")
-            .font(.body)
+            .font(.title3)
             .foregroundStyle(isCustom ? VelouraTextColors.orange : .secondary)
     }
 

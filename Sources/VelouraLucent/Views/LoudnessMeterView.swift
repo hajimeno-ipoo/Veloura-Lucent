@@ -109,7 +109,7 @@ private struct LoudnessMeterColumn: View {
     var body: some View {
         VStack(spacing: 6) {
             Text(title)
-                .font(.callout.weight(.semibold))
+                .font(.title3.weight(.semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.9)
 

@@ -26,7 +26,7 @@ struct SidebarProcessStatusRow: View {
                         .minimumScaleFactor(0.9)
                         .layoutPriority(1)
                 }
-                .font(.callout.bold())
+                .font(.title3.bold())
                 .foregroundStyle(statusTint)
                 Spacer(minLength: 6)
                 if let elapsedText {
@@ -38,14 +38,14 @@ struct SidebarProcessStatusRow: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(currentStatusText)
-                    .font(.callout)
+                    .font(.title3)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
 
                 if let displayedActiveStepDetail {
                     Text(displayedActiveStepDetail)
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -221,7 +221,7 @@ private struct SidebarProcessStepRow: View {
                     .accessibilityHidden(true)
 
                 Text(step.title)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(step.state.color(tint: tint))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -230,7 +230,7 @@ private struct SidebarProcessStepRow: View {
                 if step.showsTransientStatus,
                    let shortLabel = step.state.shortLabel {
                     Text(shortLabel)
-                        .font(.caption)
+                        .font(.body)
                         .foregroundStyle(step.state.color(tint: tint))
                         .lineLimit(1)
                         .padding(.horizontal, 5)
@@ -246,7 +246,7 @@ private struct SidebarProcessStepRow: View {
                step.state == .active,
                let detail = step.detail {
                 Text(detail)
-                    .font(.caption)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)

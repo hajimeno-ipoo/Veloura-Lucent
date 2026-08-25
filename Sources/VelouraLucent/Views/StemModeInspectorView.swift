@@ -117,7 +117,7 @@ private struct StemModeAnalysisModeSettings: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Text("解析モード")
-                    .font(.headline)
+                    .font(.title3.bold())
                 TermHelpButton(
                     title: "解析モード",
                     reading: "かいせきもーど",
@@ -253,9 +253,9 @@ struct StemModeInspectorAnalysisPanel: View {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("重要警告")
-                        .font(.headline)
+                        .font(.title3.bold())
                     Text(lastError.message)
-                        .font(.callout)
+                        .font(.body)
                 }
             } icon: {
                 Image(systemName: "xmark.octagon.fill")
@@ -265,29 +265,29 @@ struct StemModeInspectorAnalysisPanel: View {
 
         VStack(alignment: .leading, spacing: 6) {
             Text("再ミックス解析の確認事項")
-                .font(.headline)
+                .font(.title3.bold())
 
             if let presentation = model.remixAnalysisPresentation {
                 let issues = presentation.validation.analysisIssues
                 if issues.isEmpty {
                     Text("確認事項はありません。")
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 } else {
                     Text("\(issues.count)件あります。")
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
                         Text("\(issue.subject): \(issue.detail)")
-                            .font(.callout)
+                            .font(.body)
                             .foregroundStyle(.secondary)
                     }
                 }
             } else {
                 Text("再ミックス解析が完了すると表示します。")
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
         }
