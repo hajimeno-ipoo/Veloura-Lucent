@@ -264,27 +264,70 @@ struct AppSettingsPanel: View {
             Text("通知")
                 .font(.headline)
 
-            LabeledContent("macOSの通知許可") {
+            LabeledContent {
                 Text(notificationAuthorizationStatus.title)
-                    .foregroundStyle(notificationAuthorizationStatus == .authorized ? .primary : .secondary)
+                    .font(.title3)
+                    .foregroundStyle(
+                        notificationAuthorizationStatus == .authorized
+                            ? Color.green
+                            : Color.red
+                    )
+            } label: {
+                Text("macOSの通知許可")
+                    .font(.title3)
             }
 
-            Toggle("アプリ通知", isOn: completionNotificationsBinding)
-                .toggleStyle(.switch)
-                .tint(LiquidGlassSegmentedPickerStyle.switchTint)
+            Text("通知項目")
+                .font(.callout.weight(.semibold))
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("通知項目")
-                    .font(.callout.weight(.semibold))
+            VStack(spacing: 0) {
+                notificationToggleRow(
+                    title: "アプリ通知",
+                    isOn: completionNotificationsBinding
+                )
+
+                Divider()
 
                 ForEach(CompletionNotificationItem.allCases) { item in
-                    Toggle(item.title, isOn: completionNotificationItemBinding(for: item))
-                        .toggleStyle(.switch)
-                        .tint(LiquidGlassSegmentedPickerStyle.switchTint)
+                    notificationToggleRow(
+                        title: item.title,
+                        isOn: completionNotificationItemBinding(for: item),
+                        isEnabled: completionNotificationsEnabled
+                    )
+
+                    if item.id != CompletionNotificationItem.allCases.last?.id {
+                        Divider()
+                    }
                 }
             }
-            .disabled(!completionNotificationsEnabled)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity)
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.secondary.opacity(0.22), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
         }
+    }
+
+    private func notificationToggleRow(
+        title: String,
+        isOn: Binding<Bool>,
+        isEnabled: Bool = true
+    ) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+
+            Spacer(minLength: 12)
+
+            Toggle(title, isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(LiquidGlassSegmentedPickerStyle.switchTint)
+                .accessibilityLabel(title)
+        }
+        .padding(.vertical, 10)
+        .disabled(!isEnabled)
     }
 
     private func completionNotificationItemBinding(
