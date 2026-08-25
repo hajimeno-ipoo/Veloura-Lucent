@@ -374,9 +374,28 @@ struct AppSettingsPanel: View {
     }
 
     private func openSystemNotificationSettings() {
-        guard let settingsURL = URL(
-            string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
-        ) else { return }
-        NSWorkspace.shared.open(settingsURL)
+        let rootURLString = "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+
+        guard let rootURL = URL(string: rootURLString) else { return }
+
+        guard
+            let bundleIdentifier = Bundle.main.bundleIdentifier,
+            var components = URLComponents(string: rootURLString)
+        else {
+            NSWorkspace.shared.open(rootURL)
+            return
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "id", value: bundleIdentifier)
+        ]
+
+        guard
+            let appSettingsURL = components.url,
+            NSWorkspace.shared.open(appSettingsURL)
+        else {
+            NSWorkspace.shared.open(rootURL)
+            return
+        }
     }
 }
