@@ -93,11 +93,12 @@ fi
 
 printf 'creating local-install DMG...\n'
 "$CREATE_DMG_BIN" \
+  --skip-jenkins \
   --volname "$DISPLAY_NAME" \
   --window-pos 200 120 \
-  --window-size 800 400 \
+  --window-size 800 432 \
   --text-size 14 \
-  --icon-size 128 \
+  --icon-size 104 \
   --icon "$DISPLAY_NAME.app" 200 200 \
   --app-drop-link 600 200 \
   --format UDZO \
@@ -128,21 +129,23 @@ printf 'applying Finder layout for macOS 26 compatibility...\n'
 
 FINDER_DISK_NAME="${MOUNT_POINT##*/}"
 /usr/bin/osascript \
-  -e 'tell application "Finder"' \
+  -e 'tell application id "com.apple.finder"' \
   -e "tell disk \"$FINDER_DISK_NAME\"" \
   -e 'open' \
   -e 'set current view of container window to icon view' \
   -e 'set toolbar visible of container window to false' \
   -e 'set statusbar visible of container window to false' \
   -e 'set pathbar visible of container window to false' \
-  -e 'set bounds of container window to {200, 120, 1000, 520}' \
+  -e 'set bounds of container window to {200, 120, 1000, 552}' \
   -e 'set viewOptions to the icon view options of container window' \
   -e 'set arrangement of viewOptions to not arranged' \
-  -e 'set icon size of viewOptions to 128' \
+  -e 'set icon size of viewOptions to 104' \
   -e 'set text size of viewOptions to 14' \
   -e "set background picture of viewOptions to file \"$DMG_BACKGROUND_NAME\"" \
-  -e "set position of item \"$DISPLAY_NAME.app\" of container window to {200, 200}" \
-  -e 'set position of item "Applications" of container window to {600, 200}' \
+  -e "set position of item \"$DISPLAY_NAME.app\" of container window to {222, 200}" \
+  -e 'set position of item "Applications" of container window to {569, 200}' \
+  -e "set position of item \"$DMG_BACKGROUND_NAME\" of container window to {1100, 100}" \
+  -e 'if exists item ".fseventsd" of container window then set position of item ".fseventsd" of container window to {1100, 200}' \
   -e 'update without registering applications' \
   -e 'delay 2' \
   -e 'close container window' \
@@ -151,25 +154,54 @@ FINDER_DISK_NAME="${MOUNT_POINT##*/}"
 
 /usr/bin/SetFile -a V "$MOUNT_POINT/$DMG_BACKGROUND_NAME"
 
-FINDER_ICON_SIZE="$(/usr/bin/osascript \
-  -e 'tell application "Finder"' \
+/usr/bin/osascript \
+  -e 'tell application id "com.apple.finder"' \
+  -e "tell disk \"$FINDER_DISK_NAME\"" \
+  -e 'open' \
+  -e 'set current view of container window to icon view' \
+  -e 'set toolbar visible of container window to false' \
+  -e 'set statusbar visible of container window to false' \
+  -e 'set pathbar visible of container window to false' \
+  -e 'set bounds of container window to {200, 120, 1000, 552}' \
+  -e 'set viewOptions to the icon view options of container window' \
+  -e 'set arrangement of viewOptions to not arranged' \
+  -e 'set icon size of viewOptions to 104' \
+  -e 'set text size of viewOptions to 14' \
+  -e "set background picture of viewOptions to file \"$DMG_BACKGROUND_NAME\"" \
+  -e "set position of item \"$DISPLAY_NAME.app\" of container window to {222, 200}" \
+  -e 'set position of item "Applications" of container window to {569, 200}' \
+  -e "set position of item \"$DMG_BACKGROUND_NAME\" of container window to {1100, 100}" \
+  -e 'if exists item ".fseventsd" of container window then set position of item ".fseventsd" of container window to {1100, 200}' \
+  -e 'update without registering applications' \
+  -e 'delay 3' \
+  -e 'close container window' \
+  -e 'end tell' \
+  -e 'end tell'
+
+FINDER_LAYOUT_STATE="$(/usr/bin/osascript \
+  -e 'tell application id "com.apple.finder"' \
   -e "tell disk \"$FINDER_DISK_NAME\"" \
   -e 'open' \
   -e 'set viewOptions to the icon view options of container window' \
   -e 'set savedIconSize to icon size of viewOptions' \
-  -e 'delay 3' \
+  -e "set appPosition to position of item \"$DISPLAY_NAME.app\" of container window" \
+  -e 'set applicationsPosition to position of item "Applications" of container window' \
+  -e "set backgroundPosition to position of item \"$DMG_BACKGROUND_NAME\" of container window" \
   -e 'close container window' \
-  -e 'return savedIconSize' \
+  -e 'return {savedIconSize, appPosition, applicationsPosition, backgroundPosition}' \
   -e 'end tell' \
   -e 'end tell')"
 
-[[ "$FINDER_ICON_SIZE" == "128" ]] ||
-  die "Finder icon size was not saved: $FINDER_ICON_SIZE"
+[[ "$FINDER_LAYOUT_STATE" == "104, 222, 200, 569, 200, 1100, 100" ]] ||
+  die "Finder layout was not saved: $FINDER_LAYOUT_STATE"
 [[ "$(/usr/bin/GetFileInfo -a "$MOUNT_POINT/$DMG_BACKGROUND_NAME")" == *V* ]] ||
   die "DMG background file is not hidden"
 [[ -f "$MOUNT_POINT/.DS_Store" ]] || die "Finder layout metadata is missing"
 /usr/bin/grep -aFq "$DMG_BACKGROUND_NAME" "$MOUNT_POINT/.DS_Store" ||
   die "Finder background reference was not saved"
+/bin/rm -rf "$MOUNT_POINT/.fseventsd"
+[[ ! -e "$MOUNT_POINT/.fseventsd" && ! -L "$MOUNT_POINT/.fseventsd" ]] ||
+  die "DMG contains Finder event-log files"
 
 /bin/sync
 /usr/bin/hdiutil detach "$MOUNT_POINT" >/dev/null
@@ -201,6 +233,8 @@ DMG_MOUNTED="true"
   die "final DMG background file is not hidden"
 /usr/bin/grep -aFq "$DMG_BACKGROUND_NAME" "$MOUNT_POINT/.DS_Store" ||
   die "final DMG background reference is missing"
+[[ ! -e "$MOUNT_POINT/.fseventsd" && ! -L "$MOUNT_POINT/.fseventsd" ]] ||
+  die "final DMG contains Finder event-log files"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$MOUNT_POINT/$DISPLAY_NAME.app"
 
 /usr/bin/hdiutil detach "$MOUNT_POINT" >/dev/null
