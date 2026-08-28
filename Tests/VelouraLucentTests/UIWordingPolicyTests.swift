@@ -753,6 +753,39 @@ struct UIWordingPolicyTests {
     }
 
     @Test
+    func toolbarUsesApprovedReadableSizingWithoutChangingItsGlassStyle() throws {
+        let toolbar = try combinedSource([
+            "Sources/VelouraLucent/Views/WorkspaceToolbarView.swift",
+        ])
+        let label = try combinedSource([
+            "Sources/VelouraLucent/Views/LiquidGlassToolbarLabel.swift",
+        ])
+        let modePicker = try combinedSource([
+            "Sources/VelouraLucent/Views/ProcessingModeToolbarPicker.swift",
+        ])
+        let segmentedPicker = try combinedSource([
+            "Sources/VelouraLucent/Views/LiquidGlassSegmentedPicker.swift",
+        ])
+
+        #expect(label.contains(".font(.body)"))
+        #expect(label.contains(".padding(.horizontal, 14)"))
+        #expect(label.contains(".padding(.vertical, 9)"))
+        #expect(toolbar.contains(".padding(.top, 6)"))
+        #expect(toolbar.contains(".labelStyle(.iconOnly)\n            .font(.system(size: 22))"))
+        #expect(toolbar.contains(".padding(.horizontal, 8)"))
+        #expect(toolbar.contains(".padding(.vertical, 3.5)"))
+        #expect(toolbar.contains("HStack(spacing: 8)"))
+        #expect(toolbar.contains("HStack(spacing: 4)"))
+        #expect(!toolbar.contains("glass: .regular"))
+        #expect(modePicker.contains("maxWidth: 220,\n            labelFont: .body,\n            optionMinHeight: 36"))
+        #expect(modePicker.contains(".frame(width: 220)"))
+        #expect(segmentedPicker.contains("var labelFont: Font = .callout"))
+        #expect(segmentedPicker.contains("var optionMinHeight: CGFloat = 32"))
+        #expect(segmentedPicker.contains(".font(labelFont)"))
+        #expect(segmentedPicker.contains("minHeight: optionMinHeight"))
+    }
+
+    @Test
     func appBundleDeclaresJapaneseAsItsLocalization() throws {
         let package = try combinedSource(["Package.swift"])
         let buildScript = try combinedSource(["script/build_and_run.sh"])

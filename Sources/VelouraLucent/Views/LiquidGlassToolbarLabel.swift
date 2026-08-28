@@ -21,10 +21,10 @@ struct LiquidGlassToolbarLabel: View {
     private var toolbarLabel: some View {
         Label(title, systemImage: systemImage)
             .labelStyle(.titleAndIcon)
-            .font(.callout)
+            .font(.body)
             .fixedSize()
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
             .liquidGlassCapsuleMorphSurface(
                 isActive: isActive,
                 effectID: effectID,

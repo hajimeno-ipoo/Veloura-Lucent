@@ -6,6 +6,8 @@ struct LiquidGlassSegmentedPicker<Selection: Hashable>: View {
     @Binding var selection: Selection
     let label: (Selection) -> String
     var maxWidth: CGFloat = 360
+    var labelFont: Font = .callout
+    var optionMinHeight: CGFloat = 32
     var isDisabled = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -53,12 +55,12 @@ struct LiquidGlassSegmentedPicker<Selection: Hashable>: View {
 
     private func optionLabel(for option: Selection, isSelected: Bool) -> some View {
         Text(label(option))
-            .font(.callout)
+            .font(labelFont)
             .foregroundStyle(isSelected ? LiquidGlassSegmentedPickerStyle.selectedText : Color.secondary)
             .lineLimit(1)
             .minimumScaleFactor(0.9)
             .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 32)
+            .frame(maxWidth: .infinity, minHeight: optionMinHeight)
             .modifier(
                 SelectedLiquidGlassSegmentModifier(
                     isSelected: isSelected,

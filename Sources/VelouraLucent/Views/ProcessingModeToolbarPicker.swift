@@ -11,6 +11,8 @@ struct ProcessingModeToolbarPicker: View {
             selection: $selection,
             label: \.title,
             maxWidth: 220,
+            labelFont: .body,
+            optionMinHeight: 36,
             isDisabled: isDisabled
         )
         .frame(width: 220)

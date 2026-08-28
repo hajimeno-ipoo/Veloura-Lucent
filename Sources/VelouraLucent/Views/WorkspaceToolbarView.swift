@@ -23,6 +23,7 @@ struct WorkspaceToolbarView: View {
             exportMenu
             comparisonVideoButton
         }
+        .padding(.top, 6)
     }
 
     private var actionGroup: some View {
@@ -127,10 +128,10 @@ struct WorkspaceToolbarView: View {
                 systemImage: "rectangle.stack.badge.play"
             )
             .labelStyle(.iconOnly)
-            .font(.callout)
+            .font(.system(size: 22))
             .fixedSize()
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3.5)
             .liquidGlassCapsuleMorphSurface(
                 isActive: highlightedTarget == .comparisonVideo,
                 effectID: "toolbar-action-highlight",
