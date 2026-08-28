@@ -266,6 +266,16 @@ struct VelouraAboutView: View {
         }
         let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return "バージョン \(trimmed)"
+
+        guard let build = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleVersion"
+        ) as? String else {
+            return "バージョン \(trimmed)"
+        }
+        let trimmedBuild = build.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBuild.isEmpty else {
+            return "バージョン \(trimmed)"
+        }
+        return "バージョン \(trimmed)（ビルド \(trimmedBuild)）"
     }
 }

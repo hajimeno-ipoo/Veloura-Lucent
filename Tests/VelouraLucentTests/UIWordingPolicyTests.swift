@@ -747,6 +747,8 @@ struct UIWordingPolicyTests {
         #expect(buildScript.contains("BUNDLE_ID=\"$PROJECT_BUNDLE_ID\""))
         #expect(buildScript.contains("BUNDLE_ID=\"$PRODUCTION_BUNDLE_ID\""))
         #expect(buildScript.contains("APP_VERSION=\"${VELOURA_APP_VERSION:-1.0.0}\""))
+        #expect(buildScript.contains("/bin/date -u +%Y%m%d%H%M%S"))
+        #expect(buildScript.contains("\"$MODE\" == \"package\" || \"$MODE\" == \"--package\""))
         #expect(buildScript.contains("git -C \"$ROOT_DIR\" rev-list --count HEAD"))
         #expect(buildScript.contains("<key>CFBundleShortVersionString</key>\n  <string>$APP_VERSION</string>"))
         #expect(buildScript.contains("<key>CFBundleVersion</key>\n  <string>$BUILD_VERSION</string>"))

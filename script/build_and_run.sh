@@ -90,9 +90,12 @@ configure_build_identity() {
   APP_VERSION="${VELOURA_APP_VERSION:-1.0.0}"
   if [[ -n "${VELOURA_BUILD_VERSION:-}" ]]; then
     BUILD_VERSION="$VELOURA_BUILD_VERSION"
-  else
+  elif [[ "$MODE" == "package" || "$MODE" == "--package" ]]; then
     BUILD_VERSION="$(git -C "$ROOT_DIR" rev-list --count HEAD)" ||
       die "unable to derive the build version from Git"
+  else
+    BUILD_VERSION="$(/bin/date -u +%Y%m%d%H%M%S)" ||
+      die "unable to derive the project build version from the current time"
   fi
 
   [[ "$APP_VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]] ||

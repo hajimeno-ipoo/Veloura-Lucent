@@ -304,6 +304,8 @@ struct StemModeWorkspaceWordingTests {
             "音声を補正し、マスタリングで最終版に仕上げます。"
         ))
         #expect(about.contains("CFBundleShortVersionString"))
+        #expect(about.contains("CFBundleVersion"))
+        #expect(about.contains("（ビルド "))
         #expect(about.contains(
             ".containerBackground(.regularMaterial, for: .window)"
         ))
