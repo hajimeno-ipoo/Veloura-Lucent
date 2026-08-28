@@ -25,7 +25,11 @@ struct StemModePreviewView: View {
                 playbackInterlocks: [
                     model.stemPreviewController,
                     model.remixPreviewController,
-                ]
+                ],
+                comparisonVideoLaunch: ComparisonVideoLaunch(
+                    mode: .stem,
+                    sources: ComparisonVideoSourceCatalog.stem(model: model)
+                )
             )
 
             StemWaveformComparisonView(model: model)

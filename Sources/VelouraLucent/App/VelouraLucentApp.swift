@@ -122,5 +122,13 @@ struct VelouraLucentApp: App {
         .defaultLaunchBehavior(.suppressed)
         .windowResizability(.contentMinSize)
         .restorationBehavior(.disabled)
+
+        Window("比較動画", id: "comparison-video") {
+            ComparisonVideoWindowView(launchStore: .shared)
+        }
+        .defaultSize(width: 1_220, height: 780)
+        .defaultLaunchBehavior(.suppressed)
+        .windowResizability(.contentMinSize)
+        .restorationBehavior(.disabled)
     }
 }

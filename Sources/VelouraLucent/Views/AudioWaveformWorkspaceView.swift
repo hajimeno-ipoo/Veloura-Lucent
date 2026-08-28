@@ -17,6 +17,7 @@ enum AudioWaveformComparisonPresentation {
 }
 
 struct AudioWaveformWorkspaceView: View {
+    @Environment(\.openWindow) private var openWindow
     let preview: AudioPreviewController
     let inputFileURL: URL?
     let correctedFileURL: URL?
@@ -39,6 +40,7 @@ struct AudioWaveformWorkspaceView: View {
     let waveformLabelColumnWidth: CGFloat
     let topAccessory: AnyView?
     let resetToken: String
+    let comparisonVideoLaunch: ComparisonVideoLaunch?
     @State private var hoveredWaveformProgress: Double?
     @State private var hoveredWaveformTarget: AudioPreviewTarget?
     @State private var waveformViewport = WaveformViewport()
@@ -64,7 +66,8 @@ struct AudioWaveformWorkspaceView: View {
         comparisonPairLabel: @escaping (AudioComparisonPair) -> String = \.title,
         comparisonPairSummary: @escaping (AudioComparisonPair) -> String = \.summary,
         comparisonPairPickerMaxWidth: CGFloat = 360,
-        playbackInterlocks: [AudioPreviewController] = []
+        playbackInterlocks: [AudioPreviewController] = [],
+        comparisonVideoLaunch: ComparisonVideoLaunch? = nil
     ) {
         self.preview = preview
         self.inputFileURL = inputFileURL
@@ -110,6 +113,7 @@ struct AudioWaveformWorkspaceView: View {
         self.waveformLabelColumnWidth = 150
         self.topAccessory = nil
         self.resetToken = inputFileURL?.path ?? ""
+        self.comparisonVideoLaunch = comparisonVideoLaunch
     }
 
     init(
@@ -128,7 +132,8 @@ struct AudioWaveformWorkspaceView: View {
         waveformLabelColumnWidth: CGFloat = 170,
         resetToken: String,
         topAccessory: AnyView? = nil,
-        playbackInterlocks: [AudioPreviewController] = []
+        playbackInterlocks: [AudioPreviewController] = [],
+        comparisonVideoLaunch: ComparisonVideoLaunch? = nil
     ) {
         self.preview = preview
         self.inputFileURL = tracks.first(where: { $0.target == .input })?.fileURL
@@ -152,6 +157,7 @@ struct AudioWaveformWorkspaceView: View {
         self.waveformLabelColumnWidth = waveformLabelColumnWidth
         self.topAccessory = topAccessory
         self.resetToken = resetToken
+        self.comparisonVideoLaunch = comparisonVideoLaunch
     }
 
     var body: some View {
@@ -234,6 +240,18 @@ struct AudioWaveformWorkspaceView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
+            if let comparisonVideoLaunch {
+                Button("比較動画を作成", systemImage: "rectangle.stack.badge.play") {
+                    ComparisonVideoLaunchStore.shared.prepare(comparisonVideoLaunch)
+                    openWindow(id: "comparison-video")
+                }
+                .disabled(comparisonVideoLaunch.sources.count < 2)
+                .help(
+                    comparisonVideoLaunch.sources.count < 2
+                        ? "現在のモードに比較できる音源が2つ必要です"
+                        : "現在のモードの音源から比較動画を作成します"
+                )
+            }
         }
     }
 
