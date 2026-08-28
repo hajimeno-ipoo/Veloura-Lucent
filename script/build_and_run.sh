@@ -4,7 +4,11 @@ set -euo pipefail
 MODE="${1:-run}"
 BUILD_PRODUCT_NAME="VelouraLucent"
 DISPLAY_NAME="Veloura Lucent"
-BUNDLE_ID="com.codex.VelouraLucent"
+PRODUCTION_BUNDLE_ID="com.codex.VelouraLucent"
+PROJECT_BUNDLE_ID="com.codex.VelouraLucent.project"
+BUNDLE_ID=""
+APP_VERSION=""
+BUILD_VERSION=""
 MIN_SYSTEM_VERSION="26.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -73,6 +77,32 @@ validate_mode() {
 # Invalid arguments must be rejected before stopping the app, building, or signing.
 validate_mode "$@"
 
+configure_build_identity() {
+  case "$MODE" in
+    package|--package)
+      BUNDLE_ID="$PRODUCTION_BUNDLE_ID"
+      ;;
+    *)
+      BUNDLE_ID="$PROJECT_BUNDLE_ID"
+      ;;
+  esac
+
+  APP_VERSION="${VELOURA_APP_VERSION:-1.0.0}"
+  if [[ -n "${VELOURA_BUILD_VERSION:-}" ]]; then
+    BUILD_VERSION="$VELOURA_BUILD_VERSION"
+  else
+    BUILD_VERSION="$(git -C "$ROOT_DIR" rev-list --count HEAD)" ||
+      die "unable to derive the build version from Git"
+  fi
+
+  [[ "$APP_VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]] ||
+    die "VELOURA_APP_VERSION must use MAJOR.MINOR.PATCH numbers: $APP_VERSION"
+  [[ "$BUILD_VERSION" =~ ^[1-9][0-9]*$ ]] ||
+    die "VELOURA_BUILD_VERSION must be a positive integer: $BUILD_VERSION"
+}
+
+configure_build_identity
+
 initialize_staging_paths() {
   mkdir -p "$DIST_DIR"
   STAGING_DIR="$(/usr/bin/mktemp -d "$DIST_DIR/.veloura-lucent-stage.XXXXXX")" ||
@@ -94,6 +124,60 @@ initialize_staging_paths() {
   ICON_CATALOG="$STAGING_DIR/Assets.xcassets"
   APP_ICON_SET="$ICON_CATALOG/AppIcon.appiconset"
   ASSETCATALOG_INFO="$STAGING_DIR/assetcatalog_generated_info.plist"
+}
+
+published_app_pids() {
+  local pid=""
+  local command=""
+
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    command="$(/bin/ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$command" == "$FINAL_APP_BINARY" || "$command" == "$FINAL_APP_BINARY "* ]]; then
+      printf '%s\n' "$pid"
+    fi
+  done < <(/usr/bin/pgrep -x "$BUILD_PRODUCT_NAME" 2>/dev/null || true)
+}
+
+published_app_is_running() {
+  local pid=""
+
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] && return 0
+  done < <(published_app_pids)
+  return 1
+}
+
+signal_published_app() {
+  local signal="$1"
+  local pid=""
+
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    /bin/kill "-$signal" "$pid" >/dev/null 2>&1 || true
+  done < <(published_app_pids)
+}
+
+stop_published_app() {
+  local attempt=0
+
+  signal_published_app TERM
+  for ((attempt = 0; attempt < 40; attempt += 1)); do
+    if ! published_app_is_running; then
+      return 0
+    fi
+    /bin/sleep 0.05
+  done
+
+  signal_published_app KILL
+  for ((attempt = 0; attempt < 20; attempt += 1)); do
+    if ! published_app_is_running; then
+      return 0
+    fi
+    /bin/sleep 0.05
+  done
+
+  return 1
 }
 
 restore_previous_app() {
@@ -136,27 +220,12 @@ restore_previous_app() {
 }
 
 stop_launched_app_for_rollback() {
-  local attempt=0
-
   [[ "$PUBLISHED_APP_LAUNCH_ATTEMPTED" == "true" ]] || return 0
 
-  /usr/bin/pkill -TERM -x "$BUILD_PRODUCT_NAME" >/dev/null 2>&1 || true
-  for ((attempt = 0; attempt < 40; attempt += 1)); do
-    if ! /usr/bin/pgrep -x "$BUILD_PRODUCT_NAME" >/dev/null 2>&1; then
-      PUBLISHED_APP_LAUNCH_ATTEMPTED="false"
-      return 0
-    fi
-    /bin/sleep 0.05
-  done
-
-  /usr/bin/pkill -KILL -x "$BUILD_PRODUCT_NAME" >/dev/null 2>&1 || true
-  for ((attempt = 0; attempt < 20; attempt += 1)); do
-    if ! /usr/bin/pgrep -x "$BUILD_PRODUCT_NAME" >/dev/null 2>&1; then
-      PUBLISHED_APP_LAUNCH_ATTEMPTED="false"
-      return 0
-    fi
-    /bin/sleep 0.05
-  done
+  if stop_published_app; then
+    PUBLISHED_APP_LAUNCH_ATTEMPTED="false"
+    return 0
+  fi
 
   printf 'error: unable to stop the newly launched app before rollback\n' >&2
   return 1
@@ -549,7 +618,7 @@ generate_app_icon_assets() {
     "$ICON_CATALOG" >/dev/null
 }
 
-pkill -x "$BUILD_PRODUCT_NAME" >/dev/null 2>&1 || true
+stop_published_app || die "unable to stop the published project app before rebuilding"
 
 "$ROOT_DIR/script/prepare_stem_models.sh" --prepare-packaging
 swift build -c release --force-resolved-versions
@@ -600,6 +669,10 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$DISPLAY_NAME</string>
   <key>CFBundleDisplayName</key>
   <string>$DISPLAY_NAME</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$APP_VERSION</string>
+  <key>CFBundleVersion</key>
+  <string>$BUILD_VERSION</string>
   <key>CFBundleDevelopmentRegion</key>
   <string>ja</string>
   <key>CFBundleLocalizations</key>
@@ -609,6 +682,8 @@ cat >"$INFO_PLIST" <<PLIST
 ${ICON_PLIST_BLOCK}
   <key>CFBundlePackageType</key>
   <string>APPL</string>
+  <key>LSMultipleInstancesProhibited</key>
+  <true/>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>
@@ -654,7 +729,7 @@ case "$MODE" in
     verify_command=""
     open_app
     sleep 1
-    verify_pid="$(pgrep -x "$BUILD_PRODUCT_NAME" | /usr/bin/head -n 1 || true)"
+    verify_pid="$(published_app_pids | /usr/bin/head -n 1 || true)"
     [[ -n "$verify_pid" ]] || die "published app did not stay running during verification"
     verify_command="$(/bin/ps -p "$verify_pid" -o command=)"
     [[ "$verify_command" == "$FINAL_APP_BINARY"* ]] ||
