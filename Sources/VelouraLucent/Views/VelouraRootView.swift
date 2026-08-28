@@ -107,7 +107,8 @@ struct VelouraRootView: View {
                 WorkspaceToolbarView(
                     commandActions: commandActions,
                     processingMode: processingModeBinding,
-                    isModeSwitchDisabled: runtime.isModeSwitchDisabled
+                    isModeSwitchDisabled: runtime.isModeSwitchDisabled,
+                    comparisonVideoLaunch: comparisonVideoLaunch
                 )
             }
             .sharedBackgroundVisibility(.hidden)
@@ -490,6 +491,25 @@ struct VelouraRootView: View {
             standardCommandActions
         case .stem:
             stemCommandActions
+        }
+    }
+
+    private var comparisonVideoLaunch: ComparisonVideoLaunch {
+        switch runtime.processingMode {
+        case .standard:
+            ComparisonVideoLaunch(
+                mode: .standard,
+                sources: ComparisonVideoSourceCatalog.standard(
+                    job: runtime.standardActions.job
+                )
+            )
+        case .stem:
+            ComparisonVideoLaunch(
+                mode: .stem,
+                sources: ComparisonVideoSourceCatalog.stem(
+                    model: runtime.stemWorkspaceModel
+                )
+            )
         }
     }
 

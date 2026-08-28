@@ -40,11 +40,7 @@ struct VelouraMainWorkspaceView<AnalysisPanel: View>: View {
                         ?? job.editableMasteringSettings,
                     inputSpectrogram: job.inputSpectrogram,
                     correctedSpectrogram: job.outputSpectrogram,
-                    masteredSpectrogram: job.masteredSpectrogram,
-                    comparisonVideoLaunch: ComparisonVideoLaunch(
-                        mode: .standard,
-                        sources: ComparisonVideoSourceCatalog.standard(job: job)
-                    )
+                    masteredSpectrogram: job.masteredSpectrogram
                 )
             case .detail:
                 DetailedAnalysisWorkspaceView(job: job)
@@ -114,15 +110,13 @@ private struct VelouraBasicWorkspaceView: View {
     let inputSpectrogram: SpectrogramSnapshot?
     let correctedSpectrogram: SpectrogramSnapshot?
     let masteredSpectrogram: SpectrogramSnapshot?
-    let comparisonVideoLaunch: ComparisonVideoLaunch
 
     var body: some View {
         AudioWaveformWorkspaceView(
             preview: preview,
             inputFileURL: inputFileURL,
             correctedFileURL: correctedFileURL,
-            masteredFileURL: masteredFileURL,
-            comparisonVideoLaunch: comparisonVideoLaunch
+            masteredFileURL: masteredFileURL
         )
 
         WorkspaceLazySection {

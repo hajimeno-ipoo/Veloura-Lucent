@@ -4,4 +4,5 @@ enum LiquidGlassToolbarTarget {
     case runRemix
     case runMastering
     case export
+    case comparisonVideo
 }

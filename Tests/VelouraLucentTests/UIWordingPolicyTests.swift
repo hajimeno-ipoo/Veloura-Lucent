@@ -162,6 +162,8 @@ struct UIWordingPolicyTests {
         #expect(source.contains("comparisonLabel\n                comparisonSummary\n                Spacer(minLength: 0)\n            }\n            comparisonPairPicker"))
         #expect(source.contains("comparisonPairPicker"))
         #expect(!source.contains("comparisonLabel\n                comparisonPairPicker\n                comparisonSummary"))
+        #expect(!source.contains("比較動画を作成"))
+        #expect(!source.contains("comparisonVideoLaunch"))
         #expect(source.contains("WaveformTransportButton(\n                    title: switchButtonTitle"))
         #expect(source.contains("isDisabled: comparisonFileURL(for: .a) == nil\n                        || comparisonFileURL(for: .b) == nil"))
         #expect(source.contains("Text(\"現在 \\(activeSideTitle)\")"))
@@ -730,6 +732,24 @@ struct UIWordingPolicyTests {
         #expect(label.contains("if isCancellation"))
         #expect(label.contains("toolbarLabel\n                .foregroundStyle(.red)"))
         #expect(label.contains("Label(title, systemImage: systemImage)"))
+    }
+
+    @Test
+    func comparisonVideoButtonIsIconOnlyAndFollowsExportInToolbar() throws {
+        let toolbar = try combinedSource([
+            "Sources/VelouraLucent/Views/WorkspaceToolbarView.swift",
+        ])
+        let root = try combinedSource([
+            "Sources/VelouraLucent/Views/VelouraRootView.swift",
+        ])
+
+        #expect(toolbar.contains("exportMenu\n            comparisonVideoButton"))
+        #expect(toolbar.contains("systemImage: \"rectangle.stack.badge.play\""))
+        #expect(toolbar.contains(".labelStyle(.iconOnly)"))
+        #expect(toolbar.contains(".accessibilityLabel(\"比較動画を作成\")"))
+        #expect(toolbar.contains("ComparisonVideoLaunchStore.shared.prepare(comparisonVideoLaunch)"))
+        #expect(toolbar.contains("openWindow(id: \"comparison-video\")"))
+        #expect(root.contains("comparisonVideoLaunch: comparisonVideoLaunch"))
     }
 
     @Test

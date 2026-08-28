@@ -5,8 +5,10 @@ struct WorkspaceToolbarView: View {
     let commandActions: VelouraCommandActions
     @Binding var processingMode: ProcessingMode
     let isModeSwitchDisabled: Bool
+    let comparisonVideoLaunch: ComparisonVideoLaunch
 
     @State private var highlightedTarget: LiquidGlassToolbarTarget?
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var glassNamespace
 
@@ -19,6 +21,7 @@ struct WorkspaceToolbarView: View {
 
             actionGroup
             exportMenu
+            comparisonVideoButton
         }
     }
 
@@ -117,6 +120,37 @@ struct WorkspaceToolbarView: View {
         .help(exportHelp)
     }
 
+    private var comparisonVideoButton: some View {
+        Button(action: openComparisonVideo) {
+            Label(
+                "比較動画を作成",
+                systemImage: "rectangle.stack.badge.play"
+            )
+            .labelStyle(.iconOnly)
+            .font(.callout)
+            .fixedSize()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .liquidGlassCapsuleMorphSurface(
+                isActive: highlightedTarget == .comparisonVideo,
+                effectID: "toolbar-action-highlight",
+                namespace: glassNamespace,
+                reduceMotion: reduceMotion
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(4)
+        .velouraAdaptiveGlass(in: .capsule, interactive: true)
+        .onHover { updateHighlight(.comparisonVideo, isHovering: $0) }
+        .accessibilityLabel("比較動画を作成")
+        .help(
+            comparisonVideoLaunch.sources.count < 2
+                ? "現在のモードに比較できる音源が2つ必要です"
+                : "現在のモードの音源から比較動画を作成します"
+        )
+        .disabled(comparisonVideoLaunch.sources.count < 2)
+    }
+
     @ViewBuilder
     private func exportMenuContent(format: AudioExportFormat) -> some View {
         ForEach(commandActions.exportActions) { exportAction in
@@ -206,6 +240,11 @@ struct WorkspaceToolbarView: View {
         processingMode == .standard
             ? "補正済みまたはマスタリング済みの音源を書き出します"
             : "再ミックス済み、マスタリング済み、または補正済みStemを書き出します"
+    }
+
+    private func openComparisonVideo() {
+        ComparisonVideoLaunchStore.shared.prepare(comparisonVideoLaunch)
+        openWindow(id: "comparison-video")
     }
 
     private func performCorrectionAction() {
