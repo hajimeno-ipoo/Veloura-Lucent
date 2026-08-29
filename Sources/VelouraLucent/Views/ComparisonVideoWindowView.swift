@@ -42,6 +42,16 @@ struct ComparisonVideoWindowView: View {
                         sourceSelection(model: model)
                         rangeSelection(model: model)
                         exportSettings(model: model)
+                        if model.isExporting {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("動画を書き出しています…")
+                                    .font(.body)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
                         if let message = model.message {
                             Text(message)
                                 .font(.body)
@@ -75,17 +85,10 @@ struct ComparisonVideoWindowView: View {
         .toolbar(removing: .title)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 8) {
-                    if model.isExporting {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-
-                    Button("動画を書き出す", systemImage: "square.and.arrow.up") {
-                        chooseExportDestination(model: model)
-                    }
-                    .disabled(!model.canExport)
+                Button("動画を書き出す", systemImage: "square.and.arrow.up") {
+                    chooseExportDestination(model: model)
                 }
+                .disabled(!model.canExport)
             }
         }
         .task(id: launchStore.revision) {

@@ -8,6 +8,12 @@ struct ComparisonVideoRangeView: View {
 
     @State private var dragStartTime: TimeInterval?
 
+    private let waveformColor = Color(
+        red: 213 / 255,
+        green: 203 / 255,
+        blue: 250 / 255
+    )
+
     private var selectionDuration: TimeInterval {
         min(ComparisonVideoPlan.maximumOutputDuration, fullDuration)
     }
@@ -20,7 +26,7 @@ struct ComparisonVideoRangeView: View {
 
                 ZStack(alignment: .leading) {
                     ComparisonVideoWaveformShape(samples: waveform)
-                        .stroke(.secondary.opacity(0.68), lineWidth: 1)
+                        .stroke(waveformColor, lineWidth: 1)
 
                     Rectangle()
                         .fill(.primary.opacity(0.12))
@@ -52,12 +58,11 @@ struct ComparisonVideoRangeView: View {
             }
             .frame(height: 66)
 
-            HStack {
-                Text(timeText(startTime))
-                Spacer()
-                Text(timeText(startTime + selectionDuration))
-            }
+            Text(
+                "選択範囲 \(timeText(startTime))〜\(timeText(startTime + selectionDuration))"
+            )
             .font(.callout.monospacedDigit().weight(.semibold))
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .padding(10)
         .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))

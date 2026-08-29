@@ -497,14 +497,7 @@ struct ComparisonVideoTests {
 
     @Test
     func comparisonWindowObservesSharedAppearanceSettings() throws {
-        let repositoryRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let sourceURL = repositoryRoot.appending(
-            path: "Sources/VelouraLucent/Views/ComparisonVideoWindowView.swift"
-        )
-        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let source = try viewSource("ComparisonVideoWindowView.swift")
 
         #expect(source.contains(
             "@AppStorage(AppAppearanceSettings.windowBackgroundMaterialAmountKey)"
@@ -520,7 +513,51 @@ struct ComparisonVideoTests {
         #expect(!source.contains("@State private var windowBackgroundBlurLevel"))
     }
 
+    @Test
+    func comparisonRangeUsesMeasuredIconPurpleAndOneLabeledTimeRange() throws {
+        let source = try viewSource("ComparisonVideoRangeView.swift")
+
+        #expect(source.contains("red: 213 / 255"))
+        #expect(source.contains("green: 203 / 255"))
+        #expect(source.contains("blue: 250 / 255"))
+        #expect(source.contains(".stroke(waveformColor, lineWidth: 1)"))
+        #expect(source.contains("選択範囲 \\(timeText(startTime))〜"))
+        #expect(!source.contains(".stroke(.secondary.opacity(0.68), lineWidth: 1)"))
+    }
+
+    @Test
+    func comparisonExportProgressIsShownWithTheExportSettings() throws {
+        let source = try viewSource("ComparisonVideoWindowView.swift")
+        let toolbarStart = try #require(source.range(of: ".toolbar {"))
+        let toolbarSource = source[toolbarStart.lowerBound...]
+
+        #expect(source.contains("Text(\"動画を書き出しています…\")"))
+        #expect(!toolbarSource.contains("ProgressView()"))
+    }
+
+    @Test
+    func comparisonPreviewUsesTheExportCanvasForTitleLayout() throws {
+        let source = try viewSource("ComparisonVideoFrameView.swift")
+
+        #expect(source.contains("let canvasSize = orientation.pixelSize"))
+        #expect(source.contains("canvasSize.width * 0.84"))
+        #expect(source.contains("canvasSize.width * 0.78"))
+        #expect(source.contains(".frame(width: canvasSize.width, height: canvasSize.height)"))
+        #expect(source.contains(".scaleEffect(scale)"))
+    }
+
     private func source(_ url: URL, role: String) -> ComparisonVideoSource {
         ComparisonVideoSource(fileURL: url, trackTitle: "Test Song", roleTitle: role)
+    }
+
+    private func viewSource(_ fileName: String) throws -> String {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURL = repositoryRoot.appending(
+            path: "Sources/VelouraLucent/Views/\(fileName)"
+        )
+        return try String(contentsOf: sourceURL, encoding: .utf8)
     }
 }

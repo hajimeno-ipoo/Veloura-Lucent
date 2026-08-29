@@ -9,6 +9,11 @@ struct ComparisonVideoFrameView: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let canvasSize = orientation.pixelSize
+            let scale = min(
+                proxy.size.width / canvasSize.width,
+                proxy.size.height / canvasSize.height
+            )
             let compact = orientation == .portrait
             ZStack {
                 LinearGradient(
@@ -21,23 +26,26 @@ struct ComparisonVideoFrameView: View {
                 )
 
                 VStack(spacing: compact ? 36 : 28) {
-                        Text(state.trackTitle)
-                            .font(.system(size: compact ? 76 : 82, weight: .medium, design: .rounded))
-                            .multilineTextAlignment(.center)
-                            .lineLimit(3)
-                            .minimumScaleFactor(0.55)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: compact ? proxy.size.width * 0.84 : proxy.size.width * 0.78)
+                    Text(state.trackTitle)
+                        .font(.system(size: compact ? 76 : 82, weight: .medium, design: .rounded))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.55)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: compact ? canvasSize.width * 0.84 : canvasSize.width * 0.78)
 
-                        Text(state.activeRoleTitle)
-                            .font(.system(size: compact ? 46 : 42, weight: .medium, design: .rounded))
-                            .foregroundStyle(activeColor)
-                            .shadow(color: activeColor.opacity(0.8), radius: 28)
-                            .scaleEffect(0.97 + 0.03 * state.transitionProgress)
-                            .opacity(0.62 + 0.38 * state.transitionProgress)
+                    Text(state.activeRoleTitle)
+                        .font(.system(size: compact ? 46 : 42, weight: .medium, design: .rounded))
+                        .foregroundStyle(activeColor)
+                        .shadow(color: activeColor.opacity(0.8), radius: 28)
+                        .scaleEffect(0.97 + 0.03 * state.transitionProgress)
+                        .opacity(0.62 + 0.38 * state.transitionProgress)
                 }
                 .padding(compact ? 72 : 54)
             }
+            .frame(width: canvasSize.width, height: canvasSize.height)
+            .scaleEffect(scale)
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .background(Color.black)
         .clipped()
