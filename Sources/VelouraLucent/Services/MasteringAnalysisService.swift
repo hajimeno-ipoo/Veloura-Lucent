@@ -73,8 +73,8 @@ enum MasteringAnalysisService {
     }
 
     static func spectralSummary(signal: AudioSignal) -> MasteringSpectralSummary {
-        let mono = signal.monoMixdown()
-        guard !mono.isEmpty else {
+        let channels = signal.channels.filter { !$0.isEmpty }
+        guard !channels.isEmpty else {
             return MasteringSpectralSummary(
                 lowBandLevelDB: -120,
                 midBandLevelDB: -120,
@@ -83,7 +83,7 @@ enum MasteringAnalysisService {
             )
         }
         return spectralSummary(
-            from: spectralFrameSummary(for: mono, sampleRate: signal.sampleRate)
+            from: spectralFrameSummary(for: channels, sampleRate: signal.sampleRate)
         ).summary
     }
 
@@ -94,8 +94,8 @@ enum MasteringAnalysisService {
 
     static func analyzeWithBenchmark(signal: AudioSignal) -> Benchmark {
         var recorder = AnalysisBenchmarkRecorder()
-        let mono = signal.monoMixdown()
-        guard !mono.isEmpty else {
+        let channels = signal.channels.filter { !$0.isEmpty }
+        guard !channels.isEmpty else {
             let analysis = MasteringAnalysis(
                 integratedLoudness: -70,
                 truePeakDBFS: -120,
@@ -111,7 +111,7 @@ enum MasteringAnalysisService {
         }
 
         let frameSummary = recorder.measureSpectralFrameSummary {
-            spectralFrameSummary(for: mono, sampleRate: signal.sampleRate)
+            spectralFrameSummary(for: channels, sampleRate: signal.sampleRate)
         }
         let loudnessMeasurement = recorder.measure("loudness") {
             LoudnessMeasurementService.measure(signal: signal, includeLoudnessRange: true)
@@ -182,6 +182,29 @@ enum MasteringAnalysisService {
         func contains(_ binIndex: Int) -> Bool {
             binIndex >= lower && binIndex <= upperInclusive
         }
+    }
+
+    private static func spectralFrameSummary(for channels: [[Float]], sampleRate: Double) -> SpectralFrameSummary {
+        var combined = SpectralFrameSummary()
+        var hasSummary = false
+
+        for channel in channels where !channel.isEmpty {
+            let channelSummary = spectralFrameSummary(for: channel, sampleRate: sampleRate)
+            if !hasSummary {
+                combined.backend = channelSummary.backend
+                hasSummary = true
+            }
+            combined.lowEnergy += channelSummary.lowEnergy
+            combined.midEnergy += channelSummary.midEnergy
+            combined.highEnergy += channelSummary.highEnergy
+            combined.harshUpperMid += channelSummary.harshUpperMid
+            combined.harshAir += channelSummary.harshAir
+            combined.lowCount += channelSummary.lowCount
+            combined.midCount += channelSummary.midCount
+            combined.highCount += channelSummary.highCount
+            combined.frameCount += channelSummary.frameCount
+        }
+        return combined
     }
 
     private static func spectralFrameSummary(for mono: [Float], sampleRate: Double) -> SpectralFrameSummary {

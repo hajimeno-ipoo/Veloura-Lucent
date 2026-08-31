@@ -48,8 +48,8 @@ struct AudioAnalyzer {
     }
 
     func analyze(signal: AudioSignal) -> AnalysisData {
-        let mono = signal.monoMixdown()
-        let spectrogram = makeAnalysisSpectrogram(mono)
+        let channels = signal.channels.filter { !$0.isEmpty }
+        let spectrogram = makeAnalysisSpectrogram(channels)
         guard spectrogram.frameCount > 0 else {
             return AnalysisData(
                 cutoffFrequency: 16_000,
@@ -116,7 +116,7 @@ struct AudioAnalyzer {
         let artifactEnergy = bandEnergy(meanSpectrum, frequencyStep: frequencyStep, lower: 18_000, upper: signal.sampleRate * 0.5)
         let centroid = SpectralDSP.spectralCentroid(meanSpectrum, sampleRate: signal.sampleRate, fftSize: spectrogram.fftSize)
         let brightnessRatio = Float(centroid / max(signal.sampleRate * 0.5, 1))
-        let transientAmount = estimateTransientAmount(mono)
+        let transientAmount = estimateTransientAmount(channels)
         let shimmerRatio = shimmerEnergy / max(bodyEnergy + upperBandEnergy, 1e-6)
         let rolloffDepth = min(1.0, max(0, (20 * log10f(max(preRolloffEnergy, 1e-6) / max(postRolloffEnergy, 1e-6))) / 24))
         let airBandEnergyRatio = min(1.0, upperBandEnergy / max(bodyEnergy + upperBandEnergy, 1e-6))
@@ -144,19 +144,20 @@ struct AudioAnalyzer {
         )
     }
 
-    private func makeAnalysisSpectrogram(_ mono: [Float]) -> AudioAnalysisSpectrogram {
+    private func makeAnalysisSpectrogram(_ channels: [[Float]]) -> AudioAnalysisSpectrogram {
         let fftSize = SpectralDSP.fftSize
         let hopSize = SpectralDSP.hopSize
         let binCount = fftSize / 2 + 1
-        let expectedFrameCount = analysisSTFTFrameCount(forSampleCount: mono.count, fftSize: fftSize, hopSize: hopSize)
+        let sampleCount = channels.map(\.count).min() ?? 0
+        let expectedFrameCount = analysisSTFTFrameCount(forSampleCount: sampleCount, fftSize: fftSize, hopSize: hopSize)
         var magnitudes: [Float] = []
         magnitudes.reserveCapacity(expectedFrameCount * binCount)
         var frameCount = 0
 
-        SpectralDSP.forEachSTFTFrame(mono, fftSize: fftSize, hopSize: hopSize) { frameIndex, _, real, imag in
+        SpectralDSP.forEachAveragePowerFrame(channels, fftSize: fftSize, hopSize: hopSize) { frameIndex, _, averagePower in
             frameCount = frameIndex + 1
             for binIndex in 0..<binCount {
-                magnitudes.append(hypotf(real[binIndex], imag[binIndex]))
+                magnitudes.append(sqrtf(max(averagePower[binIndex], 0)))
             }
         }
 
@@ -303,17 +304,27 @@ struct AudioAnalyzer {
         return AudioSeparatedMeanSpectra(harmonic: harmonicSpectrum, percussive: percussiveSpectrum)
     }
 
-    private func estimateTransientAmount(_ signal: [Float]) -> Float {
-        guard signal.count > 2 else { return 0 }
-        var diffSum: Float = 0
-        var levelSum: Float = abs(signal[0])
-        for index in 1..<signal.count {
-            diffSum += abs(signal[index] - signal[index - 1])
-            levelSum += abs(signal[index])
+    private func estimateTransientAmount(_ channels: [[Float]]) -> Float {
+        var diffSum = 0.0
+        var levelSum = 0.0
+        var diffCount = 0
+        var sampleCount = 0
+
+        for channel in channels where !channel.isEmpty {
+            levelSum += channel.reduce(0.0) { $0 + abs(Double($1)) }
+            sampleCount += channel.count
+
+            guard channel.count > 1 else { continue }
+            for index in 1..<channel.count {
+                diffSum += abs(Double(channel[index]) - Double(channel[index - 1]))
+            }
+            diffCount += channel.count - 1
         }
-        let averageDiff = diffSum / Float(signal.count - 1)
-        let averageLevel = max(levelSum / Float(signal.count), 1e-6)
-        return min(1.5, averageDiff / averageLevel)
+
+        guard diffCount > 0, sampleCount > 0 else { return 0 }
+        let averageDiff = diffSum / Double(diffCount)
+        let averageLevel = max(levelSum / Double(sampleCount), 1e-6)
+        return Float(min(1.5, averageDiff / averageLevel))
     }
 
     private func estimateNoiseAmount(percussiveSpectrum: [Float], meanSpectrum: [Float], frequencyStep: Double) -> Float {

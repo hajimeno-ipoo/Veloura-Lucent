@@ -23,8 +23,8 @@ enum NoiseMeasurementService {
         cancellationCheck: @escaping () throws -> Void
     ) throws -> NoiseMeasurementSnapshot {
         try cancellationCheck()
-        let mono = signal.monoMixdown()
-        guard !mono.isEmpty else {
+        let channels = signal.channels.filter { !$0.isEmpty }
+        guard !channels.isEmpty else {
             return NoiseMeasurementSnapshot(values: selectedDefinitions.map {
                 NoiseMeasurementValue(
                     id: $0.id,
@@ -39,12 +39,19 @@ enum NoiseMeasurementService {
         }
 
         let requestedIDs = Set(selectedDefinitions.map(\.id))
-        let measuredLevels = try measure(
-            mono: mono,
-            sampleRate: signal.sampleRate,
-            ids: requestedIDs,
-            cancellationCheck: cancellationCheck
-        )
+        var measuredLevels: [String: Double] = [:]
+        for channel in channels {
+            try cancellationCheck()
+            let channelLevels = try measure(
+                mono: channel,
+                sampleRate: signal.sampleRate,
+                ids: requestedIDs,
+                cancellationCheck: cancellationCheck
+            )
+            for (id, level) in channelLevels {
+                measuredLevels[id] = max(measuredLevels[id] ?? -.infinity, level)
+            }
+        }
 
         let values = selectedDefinitions.map { definition in
             let measured = measuredLevels[definition.id] ?? -120

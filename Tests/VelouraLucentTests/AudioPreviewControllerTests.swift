@@ -894,6 +894,30 @@ struct AudioPreviewControllerTests {
     }
 
     @Test
+    func realtimeSpectrumTimelineKeepsOppositePhaseStereoEnergy() throws {
+        let sampleRate = 48_000.0
+        let left = (0..<Int(sampleRate)).map { index in
+            Float(sin(2 * Double.pi * 1_000 * Double(index) / sampleRate) * 0.5)
+        }
+        let inPhase = RealtimeSpectrumAnalyzer.timeline(
+            from: [left, left],
+            sampleRate: sampleRate
+        )
+        let oppositePhase = RealtimeSpectrumAnalyzer.timeline(
+            from: [left, left.map { -$0 }],
+            sampleRate: sampleRate
+        )
+
+        #expect(inPhase.count == oppositePhase.count)
+        for (inPhaseFrame, oppositePhaseFrame) in zip(inPhase, oppositePhase) {
+            let inPhaseLevel = try #require(inPhaseFrame.first { $0.frequencyHz == 1_000 }?.levelDB)
+            let oppositePhaseLevel = try #require(oppositePhaseFrame.first { $0.frequencyHz == 1_000 }?.levelDB)
+            #expect(abs(inPhaseLevel - oppositePhaseLevel) < 0.000_001)
+            #expect(oppositePhaseLevel > -60)
+        }
+    }
+
+    @Test
     func realtimeSpectrumTapBufferSizeKeepsLowSampleRateAnalyzable() throws {
         let sampleRate = 16_000.0
         let bufferSize = RealtimeSpectrumAnalyzer.tapBufferSize(for: sampleRate)

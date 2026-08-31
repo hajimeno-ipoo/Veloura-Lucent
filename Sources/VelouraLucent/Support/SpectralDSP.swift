@@ -192,6 +192,76 @@ enum SpectralDSP {
         }
     }
 
+    static func forEachAveragePowerFrame(
+        _ channels: [[Float]],
+        fftSize: Int = fftSize,
+        hopSize: Int = hopSize,
+        body: (_ frameIndex: Int, _ binCount: Int, _ averagePower: [Float]) -> Void
+    ) {
+        try! forEachAveragePowerFrameThrowing(
+            channels,
+            fftSize: fftSize,
+            hopSize: hopSize
+        ) { frameIndex, binCount, averagePower in
+            body(frameIndex, binCount, averagePower)
+        }
+    }
+
+    static func forEachAveragePowerFrameThrowing(
+        _ channels: [[Float]],
+        fftSize: Int = fftSize,
+        hopSize: Int = hopSize,
+        body: (_ frameIndex: Int, _ binCount: Int, _ averagePower: [Float]) throws -> Void
+    ) throws {
+        let nonEmptyChannels = channels.filter { !$0.isEmpty }
+        guard let sampleCount = nonEmptyChannels.map(\.count).min(), sampleCount > 0 else { return }
+
+        let padding = fftSize / 2
+        let sources = nonEmptyChannels.map { Array($0.prefix(sampleCount)) }
+        let paddedSources = sources.map { reflectPad(signal: $0, count: padding) }
+        guard let paddedCount = paddedSources.first?.count else { return }
+        let remainder = max(0, (paddedCount - fftSize) % hopSize)
+        let trailingPadding = remainder == 0 ? 0 : (hopSize - remainder)
+        let workingSources = paddedSources.map { source in
+            trailingPadding > 0
+                ? source + Array(repeating: Float.zero, count: trailingPadding)
+                : source
+        }
+        let frameCount = max(1, Int(ceil(Double(max(paddedCount + trailingPadding - fftSize, 0)) / Double(hopSize))) + 1)
+        let resources = resourceCache.resources(for: fftSize)
+        let window = resources.window
+        let dft = resources.forward
+        let binCount = fftSize / 2 + 1
+        let channelScale = 1 / Float(workingSources.count)
+        let inputImaginary = Array(repeating: Float.zero, count: fftSize)
+        var frame = Array(repeating: Float.zero, count: fftSize)
+        var outputReal = Array(repeating: Float.zero, count: fftSize)
+        var outputImaginary = Array(repeating: Float.zero, count: fftSize)
+        var averagePower = Array(repeating: Float.zero, count: binCount)
+
+        for frameIndex in 0..<frameCount {
+            for binIndex in averagePower.indices {
+                averagePower[binIndex] = 0
+            }
+            let start = frameIndex * hopSize
+            for source in workingSources {
+                frame[0..<fftSize] = source[start..<(start + fftSize)]
+                vDSP.multiply(frame, window, result: &frame)
+                dft.transform(
+                    inputReal: frame,
+                    inputImaginary: inputImaginary,
+                    outputReal: &outputReal,
+                    outputImaginary: &outputImaginary
+                )
+                for binIndex in 0..<binCount {
+                    let magnitude = hypotf(outputReal[binIndex], outputImaginary[binIndex])
+                    averagePower[binIndex] += magnitude * magnitude * channelScale
+                }
+            }
+            try body(frameIndex, binCount, averagePower)
+        }
+    }
+
     static func istft(_ spectrogram: Spectrogram) -> [Float] {
         let fftSize = spectrogram.fftSize
         let hopSize = spectrogram.hopSize

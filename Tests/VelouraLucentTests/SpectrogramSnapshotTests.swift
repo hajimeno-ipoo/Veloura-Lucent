@@ -117,6 +117,26 @@ struct SpectrogramSnapshotTests {
     }
 
     @Test
+    func spectrogramKeepsOppositePhaseStereoEnergy() throws {
+        let mono = makeToneSignal(frequency: 1_000, amplitude: 0.5)
+        let left = try #require(mono.channels.first)
+        let inPhase = AudioSignal(channels: [left, left], sampleRate: mono.sampleRate)
+        let oppositePhase = AudioSignal(channels: [left, left.map { -$0 }], sampleRate: mono.sampleRate)
+
+        let inPhaseLevel = try #require(maximumLevel(
+            near: 1_000,
+            in: AudioFileService.makeSpectrogramSnapshot(from: inPhase)
+        ))
+        let oppositePhaseLevel = try #require(maximumLevel(
+            near: 1_000,
+            in: AudioFileService.makeSpectrogramSnapshot(from: oppositePhase)
+        ))
+
+        #expect(abs(inPhaseLevel - oppositePhaseLevel) < 0.000_001)
+        #expect(oppositePhaseLevel > AudioFileService.spectrogramDisplayMinimumDB)
+    }
+
+    @Test
     func equalAmplitudeTonesRemainComparableAcrossFrequencyBuckets() throws {
         let levels = try [100.0, 250.0, 1_000.0, 4_000.0, 10_000.0, 18_000.0].map { frequency in
             let snapshot = AudioFileService.makeSpectrogramSnapshot(

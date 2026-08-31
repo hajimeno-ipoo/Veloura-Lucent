@@ -131,6 +131,26 @@ struct AudioAnalysisModeTests {
     }
 
     @Test
+    func correctionAnalysisKeepsOppositePhaseStereoEnergy() {
+        let mono = makeTestSignal(duration: 2).channels[0]
+        let monoSignal = AudioSignal(channels: [mono], sampleRate: 48_000)
+        let inPhase = AudioSignal(channels: [mono, mono], sampleRate: 48_000)
+        let oppositePhase = AudioSignal(channels: [mono, mono.map { -$0 }], sampleRate: 48_000)
+
+        let monoAnalysis = AudioAnalyzer(mode: .cpu).analyze(signal: monoSignal)
+        let inPhaseAnalysis = AudioAnalyzer(mode: .cpu).analyze(signal: inPhase)
+        let oppositePhaseAnalysis = AudioAnalyzer(mode: .cpu).analyze(signal: oppositePhase)
+
+        #expect(inPhaseAnalysis.cutoffFrequency == oppositePhaseAnalysis.cutoffFrequency)
+        #expect(abs(inPhaseAnalysis.harmonicConfidence - oppositePhaseAnalysis.harmonicConfidence) < 0.000_001)
+        #expect(abs(inPhaseAnalysis.shimmerRatio - oppositePhaseAnalysis.shimmerRatio) < 0.000_001)
+        #expect(abs(inPhaseAnalysis.brightnessRatio - oppositePhaseAnalysis.brightnessRatio) < 0.000_001)
+        #expect(abs(monoAnalysis.transientAmount - inPhaseAnalysis.transientAmount) < 0.000_001)
+        #expect(abs(inPhaseAnalysis.transientAmount - oppositePhaseAnalysis.transientAmount) < 0.000_001)
+        #expect(abs(inPhaseAnalysis.noiseAmount - oppositePhaseAnalysis.noiseAmount) < 0.000_001)
+    }
+
+    @Test
     func recordsCPUAndExperimentalMetalAnalysisBenchmarks() throws {
         let durations = [0.5, 1.25, 2.0]
         let warmupIterations = 1

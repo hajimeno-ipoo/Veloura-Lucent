@@ -132,7 +132,7 @@ struct MasteringAnalysisServiceTests {
 
         let signal = try AudioFileService.loadAudio(from: fileURL)
         let spectrogram = SpectralDSP.stft(signal.monoMixdown())
-        let cpu = referenceAnalysis(signal: signal)
+        let cpu = referenceSpectralSummary(for: spectrogram, sampleRate: signal.sampleRate)
         let metal = processor.masteringSpectralSummary(spectrogram: spectrogram, sampleRate: signal.sampleRate)
 
         #expect(metal != nil)
@@ -161,6 +161,30 @@ struct MasteringAnalysisServiceTests {
         expectClose(benchmark.analysis.midBandLevelDB, reference.midBandLevelDB, tolerance: 0.001)
         expectClose(benchmark.analysis.highBandLevelDB, reference.highBandLevelDB, tolerance: 0.001)
         expectClose(benchmark.analysis.harshnessScore, reference.harshnessScore, tolerance: 0.0001)
+    }
+
+    @Test
+    func masteringSpectralSummaryKeepsOppositePhaseStereoEnergy() {
+        let sampleRate = 48_000.0
+        let left = (0..<Int(sampleRate)).map { index in
+            let time = Double(index) / sampleRate
+            return Float(
+                sin(2 * Double.pi * 120 * time) * 0.12
+                    + sin(2 * Double.pi * 2_000 * time) * 0.06
+                    + sin(2 * Double.pi * 9_000 * time) * 0.03
+            )
+        }
+        let inPhase = MasteringAnalysisService.spectralSummary(
+            signal: AudioSignal(channels: [left, left], sampleRate: sampleRate)
+        )
+        let oppositePhase = MasteringAnalysisService.spectralSummary(
+            signal: AudioSignal(channels: [left, left.map { -$0 }], sampleRate: sampleRate)
+        )
+
+        expectClose(inPhase.lowBandLevelDB, oppositePhase.lowBandLevelDB, tolerance: 0.000_001)
+        expectClose(inPhase.midBandLevelDB, oppositePhase.midBandLevelDB, tolerance: 0.000_001)
+        expectClose(inPhase.highBandLevelDB, oppositePhase.highBandLevelDB, tolerance: 0.000_001)
+        expectClose(inPhase.harshnessScore, oppositePhase.harshnessScore, tolerance: 0.000_001)
     }
 
     @Test
@@ -319,9 +343,8 @@ struct MasteringAnalysisServiceTests {
     }
 
     private func referenceAnalysis(signal: AudioSignal) -> MasteringAnalysis {
-        let mono = signal.monoMixdown()
-        let spectrogram = SpectralDSP.stft(mono)
-        let spectralSummary = referenceSpectralSummary(for: spectrogram, sampleRate: signal.sampleRate)
+        let spectrograms = signal.channels.filter { !$0.isEmpty }.map { SpectralDSP.stft($0) }
+        let spectralSummary = referenceSpectralSummary(for: spectrograms, sampleRate: signal.sampleRate)
         let truePeak = referenceTruePeak(signal.channels)
         return MasteringAnalysis(
             integratedLoudness: Float(LoudnessMeasurementService.measure(signal: signal).integratedLoudnessLUFS),
@@ -402,16 +425,21 @@ struct MasteringAnalysisServiceTests {
     }
 
     private func referenceSpectralSummary(for spectrogram: Spectrogram, sampleRate: Double) -> ReferenceSpectralSummary {
-        guard spectrogram.frameCount > 0 else {
+        referenceSpectralSummary(for: [spectrogram], sampleRate: sampleRate)
+    }
+
+    private func referenceSpectralSummary(for spectrograms: [Spectrogram], sampleRate: Double) -> ReferenceSpectralSummary {
+        let spectrograms = spectrograms.filter { $0.frameCount > 0 }
+        guard let firstSpectrogram = spectrograms.first else {
             return ReferenceSpectralSummary(lowBandLevelDB: -120, midBandLevelDB: -120, highBandLevelDB: -120, harshnessScore: 0)
         }
 
-        let frequencyStep = sampleRate / Double(spectrogram.fftSize)
-        let lowRange = referenceBinRange(20...180, frequencyStep: frequencyStep, binCount: spectrogram.binCount)
-        let midRange = referenceBinRange(180...5_000, frequencyStep: frequencyStep, binCount: spectrogram.binCount)
-        let highRange = referenceBinRange(5_000...20_000, frequencyStep: frequencyStep, binCount: spectrogram.binCount)
-        let harshUpperMidRange = referenceBinRange(3_000...8_000, frequencyStep: frequencyStep, binCount: spectrogram.binCount)
-        let harshAirRange = referenceBinRange(12_000...(sampleRate * 0.5), frequencyStep: frequencyStep, binCount: spectrogram.binCount)
+        let frequencyStep = sampleRate / Double(firstSpectrogram.fftSize)
+        let lowRange = referenceBinRange(20...180, frequencyStep: frequencyStep, binCount: firstSpectrogram.binCount)
+        let midRange = referenceBinRange(180...5_000, frequencyStep: frequencyStep, binCount: firstSpectrogram.binCount)
+        let highRange = referenceBinRange(5_000...20_000, frequencyStep: frequencyStep, binCount: firstSpectrogram.binCount)
+        let harshUpperMidRange = referenceBinRange(3_000...8_000, frequencyStep: frequencyStep, binCount: firstSpectrogram.binCount)
+        let harshAirRange = referenceBinRange(12_000...(sampleRate * 0.5), frequencyStep: frequencyStep, binCount: firstSpectrogram.binCount)
 
         var lowEnergy: Float = 0
         var midEnergy: Float = 0
@@ -422,12 +450,14 @@ struct MasteringAnalysisServiceTests {
         var midCount = 0
         var highCount = 0
 
-        for frameIndex in 0..<spectrogram.frameCount {
-            referenceAccumulateBandEnergy(spectrogram: spectrogram, frameIndex: frameIndex, range: lowRange, energy: &lowEnergy, count: &lowCount)
-            referenceAccumulateBandEnergy(spectrogram: spectrogram, frameIndex: frameIndex, range: midRange, energy: &midEnergy, count: &midCount)
-            referenceAccumulateBandEnergy(spectrogram: spectrogram, frameIndex: frameIndex, range: highRange, energy: &highEnergy, count: &highCount)
-            harshUpperMid += referenceMagnitudeSum(spectrogram: spectrogram, frameIndex: frameIndex, range: harshUpperMidRange)
-            harshAir += referenceMagnitudeSum(spectrogram: spectrogram, frameIndex: frameIndex, range: harshAirRange)
+        for spectrogram in spectrograms {
+            for frameIndex in 0..<spectrogram.frameCount {
+                referenceAccumulateBandEnergy(spectrogram: spectrogram, frameIndex: frameIndex, range: lowRange, energy: &lowEnergy, count: &lowCount)
+                referenceAccumulateBandEnergy(spectrogram: spectrogram, frameIndex: frameIndex, range: midRange, energy: &midEnergy, count: &midCount)
+                referenceAccumulateBandEnergy(spectrogram: spectrogram, frameIndex: frameIndex, range: highRange, energy: &highEnergy, count: &highCount)
+                harshUpperMid += referenceMagnitudeSum(spectrogram: spectrogram, frameIndex: frameIndex, range: harshUpperMidRange)
+                harshAir += referenceMagnitudeSum(spectrogram: spectrogram, frameIndex: frameIndex, range: harshAirRange)
+            }
         }
 
         return ReferenceSpectralSummary(

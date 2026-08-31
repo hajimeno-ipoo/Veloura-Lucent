@@ -319,7 +319,7 @@ enum AudioFileService {
         }
 
         let spectralAnalysis = makePreviewSpectralAnalysis(
-            mono: mono,
+            channels: signal.channels,
             sampleRate: signal.sampleRate,
             bucketCount: bucketCount,
             includesBandLevels: true,
@@ -338,7 +338,7 @@ enum AudioFileService {
         }
 
         let spectralAnalysis = makePreviewSpectralAnalysis(
-            mono: mono,
+            channels: signal.channels,
             sampleRate: signal.sampleRate,
             bucketCount: bucketCount,
             includesBandLevels: true,
@@ -364,7 +364,7 @@ enum AudioFileService {
             bandLevels: bandLevels,
             bandLevelDBs: bandLevelDBs,
             realtimeSpectrumTimeline: RealtimeSpectrumAnalyzer.timeline(
-                from: mono,
+                from: signal.channels,
                 sampleRate: signal.sampleRate
             )
         )
@@ -420,7 +420,7 @@ enum AudioFileService {
         }
 
         let spectralAnalysis = makePreviewSpectralAnalysis(
-            mono: mono,
+            channels: signal.channels,
             sampleRate: signal.sampleRate,
             bucketCount: previewBucketCount,
             includesBandLevels: false,
@@ -526,7 +526,7 @@ enum AudioFileService {
 
     private static func makeBandLevels(from mono: [Float], sampleRate: Double, bucketCount: Int) -> ([String: [Float]], [String: [Float]]) {
         let spectralAnalysis = makePreviewSpectralAnalysis(
-            mono: mono,
+            channels: [mono],
             sampleRate: sampleRate,
             bucketCount: bucketCount,
             includesBandLevels: true,
@@ -585,7 +585,7 @@ enum AudioFileService {
     }
 
     private static func makePreviewSpectralAnalysis(
-        mono: [Float],
+        channels: [[Float]],
         sampleRate: Double,
         bucketCount _: Int,
         includesBandLevels: Bool,
@@ -601,7 +601,8 @@ enum AudioFileService {
             }
             : []
 
-        let frameCount = previewSTFTFrameCount(forSampleCount: mono.count)
+        let sampleCount = channels.filter { !$0.isEmpty }.map(\.count).min() ?? 0
+        let frameCount = previewSTFTFrameCount(forSampleCount: sampleCount)
         let timeBuckets = min(120, max(1, frameCount))
         let frequencyBuckets = 56
         let frameGroupSize = max(1, Int(ceil(Double(frameCount) / Double(timeBuckets))))
@@ -615,13 +616,12 @@ enum AudioFileService {
         var spectrogramEnergy = includesSpectrogram ? Array(repeating: Float.zero, count: timeBuckets * frequencyBuckets) : []
         var spectrogramCounts = includesSpectrogram ? Array(repeating: 0, count: timeBuckets * frequencyBuckets) : []
 
-        SpectralDSP.forEachSTFTFrame(mono, fftSize: previewFFTSize, hopSize: previewHopSize) { frameIndex, _, real, imag in
+        SpectralDSP.forEachAveragePowerFrame(channels, fftSize: previewFFTSize, hopSize: previewHopSize) { frameIndex, _, averagePower in
             if includesBandLevels {
                 for (bandID, range) in previewBandRanges {
                     var energy: Float = 0
                     for binIndex in range {
-                        let value = hypotf(real[binIndex], imag[binIndex])
-                        energy += value * value
+                        energy += averagePower[binIndex]
                     }
                     let meanSquare = energy / Float(max(range.count, 1))
                     let rms = sqrtf(max(meanSquare, 1e-12))
@@ -634,8 +634,7 @@ enum AudioFileService {
                 for frequencyBucket in 0..<frequencyBuckets {
                     let outputIndex = timeBucket * frequencyBuckets + frequencyBucket
                     for binIndex in binEdges[frequencyBucket] {
-                        let value = hypotf(real[binIndex], imag[binIndex])
-                        spectrogramEnergy[outputIndex] += value * value
+                        spectrogramEnergy[outputIndex] += averagePower[binIndex]
                         spectrogramCounts[outputIndex] += 1
                     }
                 }

@@ -1453,7 +1453,20 @@ enum RealtimeSpectrumAnalyzer {
         frameInterval: TimeInterval = timelineInterval
     ) -> [[RealtimeSpectrumPoint]] {
         timeline(
-            from: mono,
+            from: [mono],
+            sampleRate: sampleRate,
+            frameInterval: frameInterval,
+            frequencies: displayedFrequencies
+        )
+    }
+
+    static func timeline(
+        from channels: [[Float]],
+        sampleRate: Double,
+        frameInterval: TimeInterval = timelineInterval
+    ) -> [[RealtimeSpectrumPoint]] {
+        timeline(
+            from: channels,
             sampleRate: sampleRate,
             frameInterval: frameInterval,
             frequencies: displayedFrequencies
@@ -1466,26 +1479,50 @@ enum RealtimeSpectrumAnalyzer {
         frameInterval: TimeInterval = timelineInterval,
         frequencies: [Double]
     ) -> [[RealtimeSpectrumPoint]] {
-        guard !mono.isEmpty, sampleRate > 0, frameInterval > 0, let dft = makeTransform() else {
+        timeline(
+            from: [mono],
+            sampleRate: sampleRate,
+            frameInterval: frameInterval,
+            frequencies: frequencies
+        )
+    }
+
+    static func timeline(
+        from channels: [[Float]],
+        sampleRate: Double,
+        frameInterval: TimeInterval = timelineInterval,
+        frequencies: [Double]
+    ) -> [[RealtimeSpectrumPoint]] {
+        let channels = channels.filter { !$0.isEmpty }
+        guard
+            let sampleCount = channels.map(\.count).min(),
+            sampleCount > 0,
+            sampleRate > 0,
+            frameInterval > 0,
+            let dft = makeTransform()
+        else {
             return []
         }
 
         let segmentLength = max(analysisSampleCount, Int(sampleRate * 0.1))
-        let maximumStart = max(mono.count - segmentLength, 0)
-        let duration = Double(mono.count) / sampleRate
+        let maximumStart = max(sampleCount - segmentLength, 0)
+        let duration = Double(sampleCount) / sampleRate
         let frameCount = max(1, Int(ceil(duration / frameInterval)) + 1)
         return (0..<frameCount).map { frameIndex in
             let time = min(Double(frameIndex) * frameInterval, duration)
-            let centerIndex = min(Int((time * sampleRate).rounded()), mono.count - 1)
+            let centerIndex = min(Int((time * sampleRate).rounded()), sampleCount - 1)
             let startIndex = min(max(centerIndex - segmentLength / 2, 0), maximumStart)
-            var segment = Array(repeating: Float.zero, count: segmentLength)
-            let copiedCount = min(segmentLength, mono.count - startIndex)
-            if copiedCount > 0 {
-                segment.replaceSubrange(0..<copiedCount, with: mono[startIndex..<(startIndex + copiedCount)])
+            let segments = channels.map { channel in
+                var segment = Array(repeating: Float.zero, count: segmentLength)
+                let copiedCount = min(segmentLength, sampleCount - startIndex)
+                if copiedCount > 0 {
+                    segment.replaceSubrange(0..<copiedCount, with: channel[startIndex..<(startIndex + copiedCount)])
+                }
+                return segment
             }
-            let window = loudestWindow(from: [segment])
+            let windows = loudestWindows(from: segments)
             return points(
-                from: window,
+                from: windows,
                 sampleRate: sampleRate,
                 dft: dft,
                 frequencies: frequencies
@@ -1517,9 +1554,9 @@ enum RealtimeSpectrumAnalyzer {
     }
 
     fileprivate static func points(from sampleBuffer: RealtimeSpectrumSampleBuffer) -> [RealtimeSpectrumPoint] {
-        let mono = loudestWindow(from: sampleBuffer.channelSamples)
-        guard !mono.isEmpty, let dft = makeTransform() else { return [] }
-        return points(from: mono, sampleRate: sampleBuffer.sampleRate, dft: dft)
+        let windows = loudestWindows(from: sampleBuffer.channelSamples)
+        guard !windows.isEmpty, let dft = makeTransform() else { return [] }
+        return points(from: windows, sampleRate: sampleBuffer.sampleRate, dft: dft)
     }
 
     private static func makeTransform() -> vDSP.DiscreteFourierTransform<Float>? {
@@ -1532,30 +1569,39 @@ enum RealtimeSpectrumAnalyzer {
     }
 
     private static func points(
-        from mono: [Float],
+        from channels: [[Float]],
         sampleRate: Double,
         dft: vDSP.DiscreteFourierTransform<Float>,
         frequencies: [Double] = displayedFrequencies
     ) -> [RealtimeSpectrumPoint] {
-        guard mono.count == analysisSampleCount else { return [] }
+        let channels = channels.filter { $0.count == analysisSampleCount }
+        guard !channels.isEmpty else { return [] }
 
         let inputImaginary = [Float](repeating: .zero, count: analysisSampleCount)
         var outputReal = Array(repeating: Float.zero, count: analysisSampleCount)
         var outputImaginary = Array(repeating: Float.zero, count: analysisSampleCount)
-        dft.transform(
-            inputReal: mono,
-            inputImaginary: inputImaginary,
-            outputReal: &outputReal,
-            outputImaginary: &outputImaginary
-        )
+        let halfCount = analysisSampleCount / 2
+        let channelScale = 1 / Double(channels.count)
+        var averagePower = Array(repeating: Double.zero, count: halfCount)
+        for channel in channels {
+            dft.transform(
+                inputReal: channel,
+                inputImaginary: inputImaginary,
+                outputReal: &outputReal,
+                outputImaginary: &outputImaginary
+            )
+            for binIndex in 0..<halfCount {
+                let real = Double(outputReal[binIndex])
+                let imag = Double(outputImaginary[binIndex])
+                averagePower[binIndex] += (real * real + imag * imag) * channelScale
+            }
+        }
 
         let frequencyStep = sampleRate / Double(analysisSampleCount)
-        let halfCount = analysisSampleCount / 2
         return frequencies.compactMap { frequency in
             guard frequency < sampleRate / 2 else { return nil }
             let bin = min(max(Int((frequency / frequencyStep).rounded()), 1), halfCount - 1)
-            let power = Double(outputReal[bin] * outputReal[bin] + outputImaginary[bin] * outputImaginary[bin])
-            let amplitude = sqrt(power) * 2 / Double(analysisSampleCount)
+            let amplitude = sqrt(averagePower[bin]) * 2 / Double(analysisSampleCount)
             let levelDB = 20 * log10(max(amplitude, 1e-9))
             return RealtimeSpectrumPoint(
                 id: String(format: "%.0f", frequency),
@@ -1565,8 +1611,14 @@ enum RealtimeSpectrumAnalyzer {
         }
     }
 
-    private static func loudestWindow(from channelSamples: [[Float]]) -> [Float] {
-        guard let frameLength = channelSamples.first?.count, frameLength >= analysisSampleCount else { return [] }
+    private static func loudestWindows(from channelSamples: [[Float]]) -> [[Float]] {
+        let channelSamples = channelSamples.filter { !$0.isEmpty }
+        guard
+            let frameLength = channelSamples.map(\.count).min(),
+            frameLength >= analysisSampleCount
+        else {
+            return []
+        }
 
         var loudestIndex = 0
         var loudestSample = Float.zero
@@ -1582,13 +1634,9 @@ enum RealtimeSpectrumAnalyzer {
         guard loudestSample > minimumAudibleSample else { return [] }
 
         let startIndex = min(max(loudestIndex - analysisSampleCount / 2, 0), frameLength - analysisSampleCount)
-        var mono = Array(repeating: Float.zero, count: analysisSampleCount)
-        for samples in channelSamples {
-            for index in 0..<analysisSampleCount {
-                mono[index] += samples[startIndex + index] / Float(channelSamples.count)
-            }
+        return channelSamples.map { samples in
+            Array(samples[startIndex..<(startIndex + analysisSampleCount)])
         }
-        return mono
     }
 }
 

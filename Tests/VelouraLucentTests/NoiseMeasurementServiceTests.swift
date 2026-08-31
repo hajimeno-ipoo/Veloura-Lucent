@@ -113,6 +113,25 @@ struct NoiseMeasurementServiceTests {
     }
 
     @Test
+    func oppositePhaseStereoDoesNotHideNoiseMeasurement() throws {
+        let mono = testSignal { time in
+            let tone = sin(2 * Double.pi * 440 * time) * 0.08
+            let hiss = sin(2 * Double.pi * 12_000 * time) * 0.006
+            return Float(tone + hiss)
+        }
+        let left = try #require(mono.channels.first)
+        let oppositePhase = AudioSignal(
+            channels: [left, left.map { -$0 }],
+            sampleRate: mono.sampleRate
+        )
+
+        let monoHiss = value("hiss", in: NoiseMeasurementService.analyze(signal: mono, ids: [NoiseMeasurementID.hiss]))
+        let stereoHiss = value("hiss", in: NoiseMeasurementService.analyze(signal: oppositePhase, ids: [NoiseMeasurementID.hiss]))
+
+        #expect(abs(monoHiss - stereoHiss) < 0.000_001)
+    }
+
+    @Test
     func partialMeasurementMatchesFullMeasurementForRequestedIDs() throws {
         let signal = testSignal { time in
             let tone = sin(2 * Double.pi * 440 * time) * 0.08
