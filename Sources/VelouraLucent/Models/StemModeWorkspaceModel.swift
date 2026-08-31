@@ -90,6 +90,16 @@ final class StemModeWorkspaceModel {
         self.actions = actions
     }
 
+    var centralAnalysisPreviewController: AudioPreviewController {
+        if stemPreviewController.activeTarget != nil {
+            return stemPreviewController
+        }
+        if remixPreviewController.activeTarget != nil {
+            return remixPreviewController
+        }
+        return previewController
+    }
+
     var stemEvaluations: [StemModeStemEvaluationPresentation] {
         (runContract?.activeRoles ?? []).compactMap { stemEvaluationsByRole[$0] }
     }

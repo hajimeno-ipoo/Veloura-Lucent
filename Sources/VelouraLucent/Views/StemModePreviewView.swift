@@ -34,15 +34,15 @@ struct StemModePreviewView: View {
 
             WorkspaceLazySection {
                 AverageSpectrumComparisonView(
-                    preview: model.previewController,
-                    targetTitle: targetTitle
+                    preview: centralAnalysisPreviewController,
+                    targetTitle: centralAnalysisTargetTitle
                 )
             }
 
             VectorScopeView(
-                preview: model.previewController,
+                preview: centralAnalysisPreviewController,
                 masteringSettings: model.masteringSettings,
-                targetTitle: targetTitle
+                targetTitle: centralAnalysisTargetTitle
             )
 
             WorkspaceLazySection {
@@ -75,6 +75,30 @@ struct StemModePreviewView: View {
 
     private var waveformProcessedTitle: String {
         "再ミックス"
+    }
+
+    private var centralAnalysisPreviewController: AudioPreviewController {
+        model.centralAnalysisPreviewController
+    }
+
+    private func centralAnalysisTargetTitle(_ target: AudioPreviewTarget) -> String {
+        let preview = centralAnalysisPreviewController
+        if preview === model.stemPreviewController {
+            let role = model.selectedStemPreviewRole.stemModeDisplayTitle
+            return switch target {
+            case .input: "\(role) raw"
+            case .corrected: "\(role) 補正後"
+            case .mastered: "最終版"
+            }
+        }
+        if preview === model.remixPreviewController {
+            return switch target {
+            case .input: "補正後"
+            case .corrected: "再ミックス"
+            case .mastered: "最終版"
+            }
+        }
+        return targetTitle(target)
     }
 
     private var mainPlaybackStatusText: String {

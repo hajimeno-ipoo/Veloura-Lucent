@@ -730,6 +730,25 @@ struct StemModeWorkspaceModelTests {
         #expect(model.stemPreviewController.activeTarget == nil)
     }
 
+    @Test("中央解析表示はStem Mode内で再生中の試聴欄を参照する")
+    func centralAnalysisDisplayFollowsTheActivePreviewController() {
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(recorder: recorder)
+
+        #expect(model.centralAnalysisPreviewController === model.previewController)
+
+        model.stemPreviewController.activeTarget = .input
+        #expect(model.centralAnalysisPreviewController === model.stemPreviewController)
+
+        model.stemPreviewController.activeTarget = nil
+        model.remixPreviewController.activeTarget = .corrected
+        #expect(model.centralAnalysisPreviewController === model.remixPreviewController)
+
+        model.remixPreviewController.activeTarget = nil
+        model.previewController.activeTarget = .mastered
+        #expect(model.centralAnalysisPreviewController === model.previewController)
+    }
+
     @Test("契約外役割の直接選択を拒否する")
     func roleSelectionRejectsRolesOutsideTheCurrentContract() {
         let recorder = WorkspaceActionRecorder()
