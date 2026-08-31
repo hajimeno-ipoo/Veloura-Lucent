@@ -5,6 +5,7 @@ struct ComparisonVideoWindowView: View {
     let launchStore: ComparisonVideoLaunchStore
     @State private var model = ComparisonVideoWindowModel()
     @State private var isWindowFullScreen = false
+    @State private var comparisonWindow: NSWindow?
     @AppStorage(AppAppearanceSettings.windowBackgroundMaterialAmountKey)
     private var windowBackgroundMaterialAmount =
         AppAppearanceSettings.defaultWindowBackgroundMaterialAmount
@@ -41,25 +42,11 @@ struct ComparisonVideoWindowView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         sourceSelection(model: model)
                         rangeSelection(model: model)
+                        ComparisonVideoDisplaySettingsView(
+                            model: model,
+                            parentWindow: comparisonWindow
+                        )
                         exportSettings(model: model)
-                        if model.isExporting {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("動画を書き出しています…")
-                                    .font(.body)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .accessibilityElement(children: .combine)
-                        }
-                        if let message = model.message {
-                            Text(message)
-                                .font(.body)
-                                .foregroundStyle(
-                                    message == "動画を書き出しました。" ? .green : .secondary
-                                )
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
                     }
                     .padding(.horizontal, 24)
                     .padding(.top, 16)
@@ -79,6 +66,8 @@ struct ComparisonVideoWindowView: View {
             WindowChromeConfigurator(
                 minSize: NSSize(width: 980, height: 700),
                 appearanceState: appearanceState,
+                hidesOnDeactivate: true,
+                resolvedWindow: $comparisonWindow,
                 isFullScreen: $isWindowFullScreen
             )
         )
@@ -90,6 +79,11 @@ struct ComparisonVideoWindowView: View {
                 }
                 .disabled(!model.canExport)
             }
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) {
+                exportStatus(model: model)
+            }
+            .sharedBackgroundVisibility(.hidden)
         }
         .task(id: launchStore.revision) {
             model.configure(with: launchStore.launch)
@@ -100,12 +94,9 @@ struct ComparisonVideoWindowView: View {
     }
 
     private func sourceSelection(model: ComparisonVideoWindowModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("比較する音源")
-                .font(.title3.bold())
-
+        ComparisonVideoSettingsSection(title: "比較する音源") {
             GlassEffectContainer(spacing: 8) {
-                VStack(spacing: 8) {
+                VStack(spacing: 0) {
                     sourceMenu(
                         title: "先に再生",
                         selectedID: model.firstSourceID,
@@ -114,6 +105,9 @@ struct ComparisonVideoWindowView: View {
                     ) { selectedID in
                         model.firstSourceID = selectedID
                     }
+                    .padding(.vertical, 12)
+
+                    Divider()
 
                     sourceMenu(
                         title: "次に再生",
@@ -123,6 +117,7 @@ struct ComparisonVideoWindowView: View {
                     ) { selectedID in
                         model.secondSourceID = selectedID
                     }
+                    .padding(.vertical, 12)
                 }
             }
         }
@@ -182,34 +177,35 @@ struct ComparisonVideoWindowView: View {
     @ViewBuilder
     private func rangeSelection(model: ComparisonVideoWindowModel) -> some View {
         if model.isLoading {
-            ProgressView("波形を読み込んでいます")
-                .controlSize(.small)
+            ComparisonVideoSettingsSection(title: "比較範囲") {
+                ProgressView("波形を読み込んでいます")
+                    .font(.title3)
+                    .controlSize(.regular)
+                    .padding(.vertical, 16)
+            }
         } else if !model.selectionWaveform.isEmpty,
                   model.sourceDuration > 0 {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(model.sourceDuration <= ComparisonVideoPlan.maximumOutputDuration
-                     ? "比較範囲（全体）"
-                     : "比較範囲（60秒）")
-                    .font(.title3.bold())
+            ComparisonVideoSettingsSection(
+                title: model.sourceDuration <= ComparisonVideoPlan.maximumOutputDuration
+                    ? "比較範囲（全体）"
+                    : "比較範囲（60秒）"
+            ) {
                 ComparisonVideoRangeView(
                     waveform: model.selectionWaveform,
                     fullDuration: model.sourceDuration,
                     startTime: model.startTime,
                     onStartTimeChange: model.setStartTime
                 )
+                .padding(.vertical, 12)
             }
         }
     }
 
     private func exportSettings(model: ComparisonVideoWindowModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("書き出し")
-                .font(.title3.bold())
-
+        ComparisonVideoSettingsSection(title: "書き出し") {
             VStack(alignment: .leading, spacing: 6) {
                 Text("向き")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(.title3)
                 LiquidGlassSegmentedPicker(
                     title: "向き",
                     options: ComparisonVideoOrientation.allCases,
@@ -218,14 +214,18 @@ struct ComparisonVideoWindowView: View {
                         set: { model.orientation = $0 }
                     ),
                     label: \ComparisonVideoOrientation.title,
-                    maxWidth: .infinity
+                    maxWidth: .infinity,
+                    labelFont: .title3,
+                    optionMinHeight: 38
                 )
             }
+            .padding(.vertical, 12)
+
+            Divider()
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("形式")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(.title3)
                 LiquidGlassSegmentedPicker(
                     title: "形式",
                     options: ComparisonVideoFormat.allCases,
@@ -234,9 +234,12 @@ struct ComparisonVideoWindowView: View {
                         set: { model.format = $0 }
                     ),
                     label: \ComparisonVideoFormat.title,
-                    maxWidth: .infinity
+                    maxWidth: .infinity,
+                    labelFont: .title3,
+                    optionMinHeight: 38
                 )
             }
+            .padding(.vertical, 12)
         }
     }
 
@@ -244,10 +247,33 @@ struct ComparisonVideoWindowView: View {
         guard let suggestedFileName = model.suggestedFileName() else { return }
         FilePanelService.chooseSaveLocation(
             suggestedFileName: suggestedFileName,
-            allowedContentTypes: [model.format.contentType]
+            allowedContentTypes: [model.format.contentType],
+            attachedTo: comparisonWindow
         ) { destinationURL in
             guard let destinationURL else { return }
             model.export(to: destinationURL)
+        }
+    }
+
+    @ViewBuilder
+    private func exportStatus(model: ComparisonVideoWindowModel) -> some View {
+        if model.isExporting {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("動画を書き出しています…")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .fixedSize(horizontal: true, vertical: false)
+        } else if let message = model.message {
+            Text(message)
+                .font(.body)
+                .foregroundStyle(
+                    message == "動画を書き出しました。" ? .green : .secondary
+                )
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 

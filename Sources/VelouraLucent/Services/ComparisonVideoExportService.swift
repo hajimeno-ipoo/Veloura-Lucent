@@ -36,6 +36,46 @@ enum ComparisonVideoExportError: LocalizedError {
 struct ComparisonVideoPreparedAudio: Sendable {
     let signal: AudioSignal
     let plan: ComparisonVideoPlan
+    let spectrumTimeline: [ComparisonVideoSpectrumFrame]
+
+    func spectrumFrame(at time: TimeInterval) -> ComparisonVideoSpectrumFrame {
+        Self.spectrumFrame(in: spectrumTimeline, at: time)
+    }
+
+    static func spectrumFrame(
+        in spectrumTimeline: [ComparisonVideoSpectrumFrame],
+        at time: TimeInterval
+    ) -> ComparisonVideoSpectrumFrame {
+        guard !spectrumTimeline.isEmpty else { return .empty }
+        let interval = RealtimeSpectrumAnalyzer.timelineInterval
+        let position = min(
+            max(time.isFinite ? time : 0, 0) / interval,
+            Double(spectrumTimeline.count - 1)
+        )
+        let lowerIndex = Int(position.rounded(.down))
+        let upperIndex = min(lowerIndex + 1, spectrumTimeline.count - 1)
+        let fraction = position - Double(lowerIndex)
+        let lower = spectrumTimeline[lowerIndex]
+        let upper = spectrumTimeline[upperIndex]
+        guard lower.points.count == upper.points.count,
+              lower.peakLevelsDB.count == upper.peakLevelsDB.count,
+              !lower.points.isEmpty else {
+            return fraction < 0.5 ? lower : upper
+        }
+        return ComparisonVideoSpectrumFrame(
+            points: zip(lower.points, upper.points).map { lowerPoint, upperPoint in
+                RealtimeSpectrumPoint(
+                    id: lowerPoint.id,
+                    frequencyHz: lowerPoint.frequencyHz,
+                    levelDB: lowerPoint.levelDB
+                        + (upperPoint.levelDB - lowerPoint.levelDB) * fraction
+                )
+            },
+            peakLevelsDB: zip(lower.peakLevelsDB, upper.peakLevelsDB).map { lowerPeak, upperPeak in
+                lowerPeak + (upperPeak - lowerPeak) * fraction
+            }
+        )
+    }
 }
 
 struct ComparisonVideoExportRequest: Sendable {
@@ -44,7 +84,36 @@ struct ComparisonVideoExportRequest: Sendable {
     let startTime: TimeInterval
     let orientation: ComparisonVideoOrientation
     let format: ComparisonVideoFormat
+    let displaySettings: ComparisonVideoDisplaySettings
+    let firstInspectorInfo: ComparisonVideoInspectorInfo?
+    let secondInspectorInfo: ComparisonVideoInspectorInfo?
     let destinationURL: URL
+
+    init(
+        first: ComparisonVideoSource,
+        second: ComparisonVideoSource,
+        startTime: TimeInterval,
+        orientation: ComparisonVideoOrientation,
+        format: ComparisonVideoFormat,
+        displaySettings: ComparisonVideoDisplaySettings? = nil,
+        firstInspectorInfo: ComparisonVideoInspectorInfo? = nil,
+        secondInspectorInfo: ComparisonVideoInspectorInfo? = nil,
+        destinationURL: URL
+    ) {
+        self.first = first
+        self.second = second
+        self.startTime = startTime
+        self.orientation = orientation
+        self.format = format
+        self.displaySettings = displaySettings ?? ComparisonVideoDisplaySettings(
+            trackTitle: first.trackTitle,
+            firstRoleTitle: first.roleTitle,
+            secondRoleTitle: second.roleTitle
+        )
+        self.firstInspectorInfo = firstInspectorInfo
+        self.secondInspectorInfo = secondInspectorInfo
+        self.destinationURL = destinationURL
+    }
 }
 
 private final class ComparisonVideoWritingContext: @unchecked Sendable {
@@ -76,88 +145,11 @@ struct ComparisonVideoExportService {
     static let frameRate: Int32 = 30
     private static let waveformReadChunkFrameCount: AVAudioFrameCount = 16_384
 
-    func writePreviewVideo(
-        duration: TimeInterval,
-        to destinationURL: URL
-    ) async throws {
-        guard duration.isFinite, duration > 0 else {
-            throw ComparisonVideoExportError.invalidDuration
-        }
-
-        let size = CGSize(width: 16, height: 16)
-        let writer = try AVAssetWriter(outputURL: destinationURL, fileType: .mov)
-        let videoInput = AVAssetWriterInput(
-            mediaType: .video,
-            outputSettings: [
-                AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: Int(size.width),
-                AVVideoHeightKey: Int(size.height),
-            ]
-        )
-        videoInput.expectsMediaDataInRealTime = false
-        let pixelAdaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: videoInput,
-            sourcePixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: Int(size.width),
-                kCVPixelBufferHeightKey as String: Int(size.height),
-            ]
-        )
-        guard writer.canAdd(videoInput) else {
-            throw ComparisonVideoExportError.writerConfigurationFailed
-        }
-        writer.add(videoInput)
-        guard writer.startWriting() else {
-            throw ComparisonVideoExportError.writingFailed(
-                writer.error?.localizedDescription ?? "プレビュー映像を開始できませんでした"
-            )
-        }
-        defer {
-            if writer.status == .writing {
-                writer.cancelWriting()
-            }
-        }
-        writer.startSession(atSourceTime: .zero)
-        guard let pool = pixelAdaptor.pixelBufferPool else {
-            throw ComparisonVideoExportError.writerConfigurationFailed
-        }
-        while !videoInput.isReadyForMoreMediaData {
-            guard writer.status == .writing else {
-                throw ComparisonVideoExportError.writingFailed(
-                    writer.error?.localizedDescription ?? "プレビュー映像入力が停止しました"
-                )
-            }
-            try await Task.sleep(for: .milliseconds(2))
-        }
-        var pixelBuffer: CVPixelBuffer?
-        guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBuffer) == kCVReturnSuccess,
-              let pixelBuffer else {
-            throw ComparisonVideoExportError.videoFrameFailed
-        }
-        CVPixelBufferLockBaseAddress(pixelBuffer, [])
-        if let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) {
-            memset(baseAddress, 0, CVPixelBufferGetDataSize(pixelBuffer))
-        }
-        CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
-        guard pixelAdaptor.append(pixelBuffer, withPresentationTime: .zero) else {
-            throw ComparisonVideoExportError.writingFailed(
-                writer.error?.localizedDescription ?? "プレビュー映像を追加できませんでした"
-            )
-        }
-        videoInput.markAsFinished()
-        writer.endSession(atSourceTime: CMTime(seconds: duration, preferredTimescale: 600))
-        await writer.finishWriting()
-        guard writer.status == .completed else {
-            throw ComparisonVideoExportError.writingFailed(
-                writer.error?.localizedDescription ?? "プレビュー映像を完了できませんでした"
-            )
-        }
-    }
-
     func prepareAudio(
         first: ComparisonVideoSource,
         second: ComparisonVideoSource,
-        startTime: TimeInterval
+        startTime: TimeInterval,
+        displaySettings: ComparisonVideoDisplaySettings? = nil
     ) throws -> ComparisonVideoPreparedAudio {
         try requireSource(first)
         try requireSource(second)
@@ -187,14 +179,70 @@ struct ComparisonVideoExportService {
             loadedSecondSignal,
             to: firstSignal.sampleRate
         )
-        let output = try makeSequence(
+        let sequencedOutput = try makeSequence(
             first: firstSignal,
             second: secondSignal,
             plan: plan
         )
+        let output = displaySettings.map {
+            Self.applyingFade(
+                to: sequencedOutput,
+                fadeInDuration: $0.effectiveAudioFadeInDuration,
+                fadeOutDuration: $0.effectiveAudioFadeOutDuration
+            )
+        } ?? sequencedOutput
         return ComparisonVideoPreparedAudio(
             signal: output,
-            plan: plan
+            plan: plan,
+            spectrumTimeline: displaySettings == nil
+                ? []
+                : Self.makeSpectrumTimeline(from: output)
+        )
+    }
+
+    static func applyingFade(
+        to signal: AudioSignal,
+        fadeInDuration: TimeInterval,
+        fadeOutDuration: TimeInterval
+    ) -> AudioSignal {
+        guard signal.frameCount > 0, signal.sampleRate > 0 else { return signal }
+        let duration = Double(max(signal.frameCount - 1, 0)) / signal.sampleRate
+        let gains = (0..<signal.frameCount).map { frameIndex in
+            Float(ComparisonVideoFadeEnvelope.level(
+                at: Double(frameIndex) / signal.sampleRate,
+                duration: duration,
+                fadeInDuration: fadeInDuration,
+                fadeOutDuration: fadeOutDuration
+            ))
+        }
+        return AudioSignal(
+            channels: signal.channels.map { channel in
+                zip(channel, gains).map { sample, gain in
+                    sample * gain
+                }
+            },
+            sampleRate: signal.sampleRate
+        )
+    }
+
+    private static func makeSpectrumTimeline(
+        from signal: AudioSignal
+    ) -> [ComparisonVideoSpectrumFrame] {
+        guard let firstChannel = signal.channels.first, !firstChannel.isEmpty else { return [] }
+        var mono = Array(repeating: Float.zero, count: firstChannel.count)
+        for channel in signal.channels {
+            for index in mono.indices {
+                mono[index] += channel[index] / Float(signal.channels.count)
+            }
+        }
+        let rawTimeline = RealtimeSpectrumAnalyzer.timeline(
+            from: mono,
+            sampleRate: signal.sampleRate,
+            frequencies: ComparisonVideoSpectrumProcessor.frequencies
+        )
+        return ComparisonVideoSpectrumProcessor.frames(
+            from: rawTimeline,
+            interval: RealtimeSpectrumAnalyzer.timelineInterval
         )
     }
 
@@ -281,7 +329,8 @@ struct ComparisonVideoExportService {
         let prepared = try prepareAudio(
             first: request.first,
             second: request.second,
-            startTime: request.startTime
+            startTime: request.startTime,
+            displaySettings: request.displaySettings
         )
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("VelouraComparisonVideo-\(UUID().uuidString)", isDirectory: true)
@@ -548,11 +597,12 @@ struct ComparisonVideoExportService {
             }
             let outputTime = Double(frameIndex) / Double(Self.frameRate)
             let frameState = ComparisonVideoFrameState(
-                trackTitle: request.first.trackTitle,
-                firstRoleTitle: request.first.roleTitle,
-                secondRoleTitle: request.second.roleTitle,
+                displaySettings: request.displaySettings,
+                firstInspectorInfo: request.firstInspectorInfo,
+                secondInspectorInfo: request.secondInspectorInfo,
                 plan: prepared.plan,
-                outputTime: outputTime
+                outputTime: outputTime,
+                visualizerSpectrum: prepared.spectrumFrame(at: outputTime)
             )
             let image: CGImage?
             if let sourceIndex = Self.cachedStaticFrameSourceIndex(for: frameState),
@@ -569,7 +619,12 @@ struct ComparisonVideoExportService {
                 }
             }
             guard let image,
-                  let pixelBuffer = makePixelBuffer(from: image, pool: pool) else {
+                  let pixelBuffer = makePixelBuffer(
+                    from: image,
+                    pool: pool,
+                    state: frameState,
+                    orientation: request.orientation
+                  ) else {
                 throw ComparisonVideoExportError.videoFrameFailed
             }
             let presentationTime = CMTime(value: CMTimeValue(frameIndex), timescale: Self.frameRate)
@@ -623,7 +678,11 @@ struct ComparisonVideoExportService {
     ) -> CGImage? {
         let size = orientation.pixelSize
         let renderer = ImageRenderer(
-            content: ComparisonVideoFrameView(state: state, orientation: orientation)
+            content: ComparisonVideoFrameView(
+                state: state,
+                orientation: orientation,
+                showsDynamicOverlays: false
+            )
                 .frame(width: size.width, height: size.height)
         )
         renderer.proposedSize = ProposedViewSize(size)
@@ -635,7 +694,9 @@ struct ComparisonVideoExportService {
 
     private func makePixelBuffer(
         from image: CGImage,
-        pool: CVPixelBufferPool
+        pool: CVPixelBufferPool,
+        state: ComparisonVideoFrameState,
+        orientation: ComparisonVideoOrientation
     ) -> CVPixelBuffer? {
         var buffer: CVPixelBuffer?
         guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess,
@@ -666,7 +727,145 @@ struct ComparisonVideoExportService {
                 height: CVPixelBufferGetHeight(buffer)
             )
         )
+        drawDynamicOverlays(
+            in: context,
+            state: state,
+            orientation: orientation
+        )
         return buffer
+    }
+
+    private func drawDynamicOverlays(
+        in context: CGContext,
+        state: ComparisonVideoFrameState,
+        orientation: ComparisonVideoOrientation
+    ) {
+        let canvasSize = orientation.pixelSize
+        if state.displaySettings.visualizerEnabled {
+            drawSpectrumVisualizer(
+                in: context,
+                state: state,
+                orientation: orientation
+            )
+        }
+
+        let blackOpacity = 1 - state.videoFadeLevel
+        if blackOpacity > 0 {
+            context.setFillColor(CGColor(gray: 0, alpha: CGFloat(blackOpacity)))
+            context.fill(CGRect(origin: .zero, size: canvasSize))
+        }
+    }
+
+    private func drawSpectrumVisualizer(
+        in context: CGContext,
+        state: ComparisonVideoFrameState,
+        orientation: ComparisonVideoOrientation
+    ) {
+        let settings = state.displaySettings
+        let canvasSize = orientation.pixelSize
+        let visualizerSize = settings.visualizerSize(for: orientation)
+        let position = settings.position(for: .visualizer)
+        let originX = canvasSize.width * position.x / 100 - visualizerSize.width / 2
+        let originYFromTop = canvasSize.height * position.y / 100 - visualizerSize.height / 2
+        let dots = ComparisonVideoSpectrumGeometry.dots(
+            for: state.visualizerSpectrum,
+            in: visualizerSize
+        )
+        guard let gradient = makeVisualizerGradient(settings: settings) else { return }
+        let gradientStart = CGPoint(x: originX, y: 0)
+        let gradientEnd = CGPoint(x: originX + visualizerSize.width, y: 0)
+        let layers: [([CGRect], CGFloat)] = [
+            (dots.outerGlowDots, 0.08),
+            (dots.innerGlowDots, 0.16),
+            (dots.peakGlowDots, 0.24),
+            (dots.inactiveDots, 0.10),
+            (dots.lowDots, 0.68),
+            (dots.middleDots, 0.84),
+            (dots.highDots, 1),
+            (dots.reflectionDots, 0.18),
+            (dots.peakDots, 1)
+        ]
+        for (rects, opacity) in layers {
+            fillSpectrumDots(
+                rects,
+                opacity: opacity,
+                in: context,
+                gradient: gradient,
+                gradientStart: gradientStart,
+                gradientEnd: gradientEnd,
+                originX: originX,
+                originYFromTop: originYFromTop,
+                canvasHeight: canvasSize.height
+            )
+        }
+    }
+
+    private func makeVisualizerGradient(
+        settings: ComparisonVideoDisplaySettings
+    ) -> CGGradient? {
+        let stops = settings.visualizerGradientStops
+        let colors = stops.map { stop in
+            let color = stop.color
+            return CGColor(
+                red: CGFloat(color.red),
+                green: CGFloat(color.green),
+                blue: CGFloat(color.blue),
+                alpha: CGFloat(color.alpha)
+            )
+        }
+        return CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: colors as CFArray,
+            locations: stops.map { CGFloat($0.location) }
+        )
+    }
+
+    private func fillSpectrumDots(
+        _ rects: [CGRect],
+        opacity: CGFloat,
+        in context: CGContext,
+        gradient: CGGradient,
+        gradientStart: CGPoint,
+        gradientEnd: CGPoint,
+        originX: CGFloat,
+        originYFromTop: CGFloat,
+        canvasHeight: CGFloat
+    ) {
+        guard !rects.isEmpty else { return }
+        let path = CGMutablePath()
+        for rect in rects {
+            path.addEllipse(in: outputRect(
+                for: rect,
+                originX: originX,
+                originYFromTop: originYFromTop,
+                canvasHeight: canvasHeight
+            ))
+        }
+        context.saveGState()
+        context.setAlpha(opacity)
+        context.addPath(path)
+        context.clip()
+        context.drawLinearGradient(
+            gradient,
+            start: gradientStart,
+            end: gradientEnd,
+            options: []
+        )
+        context.restoreGState()
+    }
+
+    private func outputRect(
+        for rect: CGRect,
+        originX: CGFloat,
+        originYFromTop: CGFloat,
+        canvasHeight: CGFloat
+    ) -> CGRect {
+        CGRect(
+            x: originX + rect.minX,
+            y: canvasHeight - originYFromTop - rect.maxY,
+            width: rect.width,
+            height: rect.height
+        )
     }
 
     private func audioSettings(

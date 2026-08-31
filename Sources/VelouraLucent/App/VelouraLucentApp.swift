@@ -175,5 +175,6 @@ struct VelouraLucentApp: App {
         .defaultLaunchBehavior(.suppressed)
         .windowResizability(.contentMinSize)
         .restorationBehavior(.disabled)
+        .windowLevel(.floating)
     }
 }

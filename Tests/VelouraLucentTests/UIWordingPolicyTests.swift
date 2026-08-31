@@ -1101,6 +1101,7 @@ struct UIWordingPolicyTests {
         let source = try combinedSource(["Sources/VelouraLucent/Services/FilePanelService.swift"])
 
         #expect(source.contains("panel.begin"))
+        #expect(source.contains("panel.beginSheetModal(for: parentWindow"))
         #expect(!source.contains("runModal()"))
     }
 

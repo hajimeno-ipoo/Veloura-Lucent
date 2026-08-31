@@ -1452,6 +1452,20 @@ enum RealtimeSpectrumAnalyzer {
         sampleRate: Double,
         frameInterval: TimeInterval = timelineInterval
     ) -> [[RealtimeSpectrumPoint]] {
+        timeline(
+            from: mono,
+            sampleRate: sampleRate,
+            frameInterval: frameInterval,
+            frequencies: displayedFrequencies
+        )
+    }
+
+    static func timeline(
+        from mono: [Float],
+        sampleRate: Double,
+        frameInterval: TimeInterval = timelineInterval,
+        frequencies: [Double]
+    ) -> [[RealtimeSpectrumPoint]] {
         guard !mono.isEmpty, sampleRate > 0, frameInterval > 0, let dft = makeTransform() else {
             return []
         }
@@ -1470,7 +1484,12 @@ enum RealtimeSpectrumAnalyzer {
                 segment.replaceSubrange(0..<copiedCount, with: mono[startIndex..<(startIndex + copiedCount)])
             }
             let window = loudestWindow(from: [segment])
-            return points(from: window, sampleRate: sampleRate, dft: dft)
+            return points(
+                from: window,
+                sampleRate: sampleRate,
+                dft: dft,
+                frequencies: frequencies
+            )
         }
     }
 
@@ -1515,7 +1534,8 @@ enum RealtimeSpectrumAnalyzer {
     private static func points(
         from mono: [Float],
         sampleRate: Double,
-        dft: vDSP.DiscreteFourierTransform<Float>
+        dft: vDSP.DiscreteFourierTransform<Float>,
+        frequencies: [Double] = displayedFrequencies
     ) -> [RealtimeSpectrumPoint] {
         guard mono.count == analysisSampleCount else { return [] }
 
@@ -1531,7 +1551,7 @@ enum RealtimeSpectrumAnalyzer {
 
         let frequencyStep = sampleRate / Double(analysisSampleCount)
         let halfCount = analysisSampleCount / 2
-        return displayedFrequencies.compactMap { frequency in
+        return frequencies.compactMap { frequency in
             guard frequency < sampleRate / 2 else { return nil }
             let bin = min(max(Int((frequency / frequencyStep).rounded()), 1), halfCount - 1)
             let power = Double(outputReal[bin] * outputReal[bin] + outputImaginary[bin] * outputImaginary[bin])

@@ -1,4 +1,3 @@
-import AVKit
 import SwiftUI
 
 struct ComparisonVideoPlayerView: View {
@@ -8,19 +7,18 @@ struct ComparisonVideoPlayerView: View {
         ZStack {
             Color.clear
 
-            if let player = model.previewPlayer,
-               let state = model.frameState {
-                ComparisonVideoNativePlayerView(
-                    player: player,
-                    state: state,
-                    orientation: model.orientation
-                )
-                .aspectRatio(
-                    model.orientation.pixelSize.width / model.orientation.pixelSize.height,
-                    contentMode: .fit
-                )
-                .padding(8)
-                .velouraAdaptiveGlass(in: .rect(cornerRadius: 18))
+            if model.previewPlayer != nil {
+                VStack(spacing: 12) {
+                    ComparisonVideoCanvasView(model: model)
+                        .aspectRatio(
+                            model.orientation.pixelSize.width / model.orientation.pixelSize.height,
+                            contentMode: .fit
+                        )
+                        .padding(8)
+                        .velouraAdaptiveGlass(in: .rect(cornerRadius: 18))
+
+                    ComparisonVideoPlaybackControls(model: model)
+                }
                 .padding(24)
             } else if model.isPreparingPreview {
                 ProgressView("プレイヤーを準備しています")
@@ -38,154 +36,94 @@ struct ComparisonVideoPlayerView: View {
     }
 }
 
-private struct ComparisonVideoNativePlayerView: NSViewRepresentable {
-    let player: AVPlayer
-    let state: ComparisonVideoFrameState
-    let orientation: ComparisonVideoOrientation
+private struct ComparisonVideoCanvasView: View {
+    let model: ComparisonVideoWindowModel
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeNSView(context: Context) -> AVPlayerView {
-        let playerView = ComparisonVideoAVPlayerView()
-        playerView.player = player
-        playerView.videoGravity = .resizeAspect
-        playerView.updatesNowPlayingInfoCenter = false
-        updateOverlay(in: playerView, coordinator: context.coordinator)
-        return playerView
-    }
-
-    func updateNSView(_ playerView: AVPlayerView, context: Context) {
-        if playerView.player !== player {
-            playerView.player = player
+    var body: some View {
+        if let state = model.frameState {
+            ComparisonVideoFrameView(
+                state: state,
+                orientation: model.orientation,
+                onPositionChange: { element, position in
+                    model.setDisplayPosition(position, for: element)
+                }
+            )
+        } else {
+            Color.black
         }
-        updateOverlay(in: playerView, coordinator: context.coordinator)
-    }
-
-    static func dismantleNSView(_ playerView: AVPlayerView, coordinator: Coordinator) {
-        playerView.player = nil
-        coordinator.hostingView?.removeFromSuperview()
-        coordinator.hostingView = nil
-    }
-
-    private func updateOverlay(in playerView: AVPlayerView, coordinator: Coordinator) {
-        guard let overlayContainer = playerView.contentOverlayView else { return }
-        let content = AnyView(
-            ComparisonVideoFrameView(state: state, orientation: orientation)
-                .allowsHitTesting(false)
-        )
-
-        if let hostingView = coordinator.hostingView {
-            hostingView.rootView = content
-            return
-        }
-
-        let hostingView = NSHostingView(rootView: content)
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        overlayContainer.addSubview(hostingView)
-        NSLayoutConstraint.activate([
-            hostingView.leadingAnchor.constraint(equalTo: overlayContainer.leadingAnchor),
-            hostingView.trailingAnchor.constraint(equalTo: overlayContainer.trailingAnchor),
-            hostingView.topAnchor.constraint(equalTo: overlayContainer.topAnchor),
-            hostingView.bottomAnchor.constraint(equalTo: overlayContainer.bottomAnchor),
-        ])
-        coordinator.hostingView = hostingView
-    }
-
-    final class Coordinator {
-        var hostingView: NSHostingView<AnyView>?
     }
 }
 
-private final class ComparisonVideoAVPlayerView: AVPlayerView {
-    private var pointerTrackingArea: NSTrackingArea?
-    private var isPointerInside = false
+private struct ComparisonVideoPlaybackControls: View {
+    let model: ComparisonVideoWindowModel
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                model.togglePreviewPlayback()
+            } label: {
+                Image(systemName: model.isPreviewPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(model.isPreviewPlaying ? "一時停止" : "再生")
 
-        if let pointerTrackingArea {
-            removeTrackingArea(pointerTrackingArea)
+            Text(timeText(model.outputTime))
+                .monospacedDigit()
+
+            Slider(
+                value: Binding(
+                    get: { min(max(model.outputTime, 0), maximumDuration) },
+                    set: { newValue in
+                        model.seekPreview(to: newValue)
+                    }
+                ),
+                in: 0...maximumDuration
+            )
+            .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
+            .accessibilityLabel("再生位置")
+            .accessibilityValue("\(timeText(model.outputTime)) / \(timeText(duration))")
+
+            Text(timeText(duration))
+                .monospacedDigit()
+
+            Image(systemName: model.previewVolume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+
+            Slider(
+                value: Binding(
+                    get: { model.previewVolume },
+                    set: { newValue in
+                        model.setPreviewVolume(newValue)
+                    }
+                ),
+                in: 0...1
+            )
+            .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
+            .frame(width: 96)
+            .accessibilityLabel("音量")
+            .accessibilityValue("\(Int((model.previewVolume * 100).rounded()))パーセント")
         }
-
-        let trackingArea = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        pointerTrackingArea = trackingArea
+        .font(.body)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 640)
+        .velouraAdaptiveGlass(in: .capsule, interactive: true)
     }
 
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-
-        NotificationCenter.default.removeObserver(
-            self,
-            name: NSWindow.didBecomeKeyNotification,
-            object: nil
-        )
-        NotificationCenter.default.removeObserver(
-            self,
-            name: NSWindow.didResignKeyNotification,
-            object: nil
-        )
-
-        guard let window else {
-            isPointerInside = false
-            updateControlsVisibility()
-            return
-        }
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowKeyStateChanged),
-            name: NSWindow.didBecomeKeyNotification,
-            object: window
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowKeyStateChanged),
-            name: NSWindow.didResignKeyNotification,
-            object: window
-        )
-        updatePointerLocation()
-        updateControlsVisibility()
+    private var duration: TimeInterval {
+        model.plan?.outputDuration ?? 0
     }
 
-    override func mouseEntered(with event: NSEvent) {
-        isPointerInside = true
-        updateControlsVisibility()
+    private var maximumDuration: TimeInterval {
+        max(duration.isFinite ? duration : 0, 0.001)
     }
 
-    override func mouseExited(with event: NSEvent) {
-        isPointerInside = false
-        updateControlsVisibility()
-    }
-
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-
-    @objc private func windowKeyStateChanged(_ notification: Notification) {
-        updatePointerLocation()
-        updateControlsVisibility()
-    }
-
-    private func updatePointerLocation() {
-        guard let window else {
-            isPointerInside = false
-            return
-        }
-        let pointerLocation = convert(window.mouseLocationOutsideOfEventStream, from: nil)
-        isPointerInside = bounds.contains(pointerLocation)
-    }
-
-    private func updateControlsVisibility() {
-        controlsStyle = isPointerInside && window?.isKeyWindow == true
-            ? .inline
-            : .none
+    private func timeText(_ time: TimeInterval) -> String {
+        let seconds = max(Int(time.isFinite ? time.rounded(.down) : 0), 0)
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }

@@ -119,6 +119,8 @@ struct WindowChromeConfigurator: NSViewRepresentable {
     let appearanceState: WindowAppearanceState
     let hidesTitle: Bool
     let extendsContentIntoTitlebar: Bool
+    let hidesOnDeactivate: Bool
+    let resolvedWindow: Binding<NSWindow?>?
     @Binding var isFullScreen: Bool
 
     init(
@@ -126,12 +128,16 @@ struct WindowChromeConfigurator: NSViewRepresentable {
         appearanceState: WindowAppearanceState,
         hidesTitle: Bool = true,
         extendsContentIntoTitlebar: Bool = false,
+        hidesOnDeactivate: Bool = false,
+        resolvedWindow: Binding<NSWindow?>? = nil,
         isFullScreen: Binding<Bool>
     ) {
         self.minSize = minSize
         self.appearanceState = appearanceState
         self.hidesTitle = hidesTitle
         self.extendsContentIntoTitlebar = extendsContentIntoTitlebar
+        self.hidesOnDeactivate = hidesOnDeactivate
+        self.resolvedWindow = resolvedWindow
         _isFullScreen = isFullScreen
     }
 
@@ -168,6 +174,9 @@ struct WindowChromeConfigurator: NSViewRepresentable {
     private func updateWindow(for view: NSView, context: Context) {
         Task { @MainActor in
             guard let window = view.window else { return }
+            if let resolvedWindow, resolvedWindow.wrappedValue !== window {
+                resolvedWindow.wrappedValue = window
+            }
             context.coordinator.observe(window)
             configure(window, coordinator: context.coordinator)
         }
@@ -178,6 +187,9 @@ struct WindowChromeConfigurator: NSViewRepresentable {
             window.minSize = minSize
         }
         coordinator.applyChrome(to: window)
+        if window.hidesOnDeactivate != hidesOnDeactivate {
+            window.hidesOnDeactivate = hidesOnDeactivate
+        }
         window.titlebarAppearsTransparent = true
         window.titleVisibility = hidesTitle ? .hidden : .visible
         coordinator.scheduleTransparentTitlebarReapplication(for: window)

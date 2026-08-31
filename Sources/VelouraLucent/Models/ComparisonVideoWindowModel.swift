@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import Foundation
 import Observation
@@ -8,23 +9,46 @@ final class ComparisonVideoWindowModel {
     private(set) var launch: ComparisonVideoLaunch?
     var firstSourceID: String?
     var secondSourceID: String?
-    var orientation: ComparisonVideoOrientation = .landscape
+    var orientation: ComparisonVideoOrientation = .landscape {
+        didSet {
+            guard orientation != oldValue else { return }
+            displaySettings.updateInspectorDefaultPosition(
+                from: oldValue,
+                to: orientation
+            )
+            guard !hasExplicitInspectorAspectRatio else { return }
+            displaySettings.setInspectorAspectRatio(
+                orientation == .landscape ? .custom : .portrait,
+                for: orientation
+            )
+        }
+    }
     var format: ComparisonVideoFormat = .mp4
     var startTime: TimeInterval = 0
+    var displaySettings = ComparisonVideoDisplaySettings(
+        trackTitle: "",
+        firstRoleTitle: "",
+        secondRoleTitle: ""
+    )
     private(set) var selectionWaveform: [WaveformEnvelopeSample] = []
     private(set) var sourceDuration: TimeInterval = 0
     private(set) var outputTime: TimeInterval = 0
+    private(set) var previewFrameTime: TimeInterval = 0
+    private(set) var previewSpectrumTimeline: [ComparisonVideoSpectrumFrame] = []
     private(set) var isLoading = false
     private(set) var isPreparingPreview = false
     private(set) var isExporting = false
+    private(set) var isPreviewPlaying = false
     private(set) var previewPlayer: AVPlayer?
+    private(set) var previewVolume: Double = 1
     private(set) var message: String?
+    private(set) var selectedFileInfoBySourceID: [String: AudioFileInfo] = [:]
 
     @ObservationIgnored private var selectionTask: Task<Void, Never>?
     @ObservationIgnored private var previewPreparationTask: Task<Void, Never>?
     @ObservationIgnored private var previewClockTask: Task<Void, Never>?
     @ObservationIgnored private var previewFileURL: URL?
-    @ObservationIgnored private var previewVideoFileURL: URL?
+    @ObservationIgnored private var hasExplicitInspectorAspectRatio = false
 
     var sources: [ComparisonVideoSource] {
         launch?.sources ?? []
@@ -53,12 +77,26 @@ final class ComparisonVideoWindowModel {
             return nil
         }
         return ComparisonVideoFrameState(
-            trackTitle: firstSource.trackTitle,
-            firstRoleTitle: firstSource.roleTitle,
-            secondRoleTitle: secondSource.roleTitle,
+            displaySettings: displaySettings,
+            firstInspectorInfo: inspectorInfo(for: firstSource),
+            secondInspectorInfo: inspectorInfo(for: secondSource),
             plan: plan,
-            outputTime: min(outputTime, plan.outputDuration)
+            outputTime: min(previewFrameTime, plan.outputDuration),
+            effectsTime: min(outputTime, plan.outputDuration),
+            visualizerSpectrum: spectrumFrame(at: outputTime)
         )
+    }
+
+    var inspectorSize: CGSize {
+        displaySettings.inspectorSize(for: orientation)
+    }
+
+    var inspectorScale: Double {
+        displaySettings.inspectorScale(for: orientation)
+    }
+
+    var inspectorScaleRange: ClosedRange<Double> {
+        displaySettings.inspectorScaleRange(for: orientation)
     }
 
     var canExport: Bool {
@@ -75,10 +113,19 @@ final class ComparisonVideoWindowModel {
         selectionWaveform = []
         sourceDuration = 0
         startTime = 0
+        previewFrameTime = 0
+        previewSpectrumTimeline = []
+        selectedFileInfoBySourceID = [:]
         isLoading = false
         isPreparingPreview = false
+        hasExplicitInspectorAspectRatio = false
         orientation = .landscape
         format = .mp4
+        displaySettings = ComparisonVideoDisplaySettings(
+            trackTitle: launch?.sources.first?.trackTitle ?? "",
+            firstRoleTitle: "",
+            secondRoleTitle: ""
+        )
         message = launch == nil ? "現在のモードに比較できる音源がありません。" : nil
     }
 
@@ -88,8 +135,17 @@ final class ComparisonVideoWindowModel {
         selectionWaveform = []
         sourceDuration = 0
         startTime = 0
+        selectedFileInfoBySourceID = [:]
         isLoading = false
         message = nil
+
+        if let firstSource {
+            displaySettings.trackTitle = firstSource.trackTitle
+            displaySettings.firstRoleTitle = firstSource.roleTitle
+        }
+        if let secondSource {
+            displaySettings.secondRoleTitle = secondSource.roleTitle
+        }
 
         guard let firstSource, let secondSource else { return }
         guard firstSource.id != secondSource.id else {
@@ -115,11 +171,15 @@ final class ComparisonVideoWindowModel {
                         for: firstSource,
                         bucketCount: 512
                     )
-                    return (waveform, firstInfo.duration)
+                    return (waveform, firstInfo, secondInfo)
                 }.value
                 guard !Task.isCancelled else { return }
                 self?.selectionWaveform = loaded.0
-                self?.sourceDuration = loaded.1
+                self?.sourceDuration = loaded.1.duration
+                self?.selectedFileInfoBySourceID = [
+                    firstSource.id: loaded.1,
+                    secondSource.id: loaded.2,
+                ]
                 self?.message = nil
                 self?.preparePreview()
             } catch is CancellationError {
@@ -140,10 +200,155 @@ final class ComparisonVideoWindowModel {
         preparePreview(after: .milliseconds(250))
     }
 
+    func setDisplayPosition(_ position: CGPoint, for element: ComparisonVideoEditableElement) {
+        displaySettings.setPosition(position, for: element)
+    }
+
+    func setInspectorAspectRatio(_ aspectRatio: ComparisonVideoInspectorAspectRatio) {
+        hasExplicitInspectorAspectRatio = true
+        displaySettings.setInspectorAspectRatio(aspectRatio, for: orientation)
+    }
+
+    func setCustomInspectorAspectWidth(_ value: Double) {
+        hasExplicitInspectorAspectRatio = true
+        displaySettings.setCustomAspectWidth(value, for: orientation)
+    }
+
+    func setCustomInspectorAspectHeight(_ value: Double) {
+        hasExplicitInspectorAspectRatio = true
+        displaySettings.setCustomAspectHeight(value, for: orientation)
+    }
+
+    func setInspectorScale(_ value: Double) {
+        displaySettings.setInspectorScale(value, for: orientation)
+    }
+
+    func setFadeInDuration(_ value: Double) {
+        displaySettings.fadeInDuration = value
+        refreshPreviewAudio()
+    }
+
+    func setFadeOutDuration(_ value: Double) {
+        displaySettings.fadeOutDuration = value
+        refreshPreviewAudio()
+    }
+
+    func setVideoFadeInEnabled(_ isEnabled: Bool) {
+        displaySettings.videoFadeInEnabled = isEnabled
+    }
+
+    func setVideoFadeOutEnabled(_ isEnabled: Bool) {
+        displaySettings.videoFadeOutEnabled = isEnabled
+    }
+
+    func setAudioFadeInEnabled(_ isEnabled: Bool) {
+        displaySettings.audioFadeInEnabled = isEnabled
+        refreshPreviewAudio()
+    }
+
+    func setAudioFadeOutEnabled(_ isEnabled: Bool) {
+        displaySettings.audioFadeOutEnabled = isEnabled
+        refreshPreviewAudio()
+    }
+
+    func setVisualizerLeadingColor(_ color: NSColor) {
+        guard let color = rgbaColor(from: color) else { return }
+        displaySettings.visualizerLeadingColor = color
+    }
+
+    func setVisualizerCenterColor(_ color: NSColor) {
+        guard let color = rgbaColor(from: color) else { return }
+        displaySettings.visualizerCenterColor = color
+    }
+
+    func setVisualizerTrailingColor(_ color: NSColor) {
+        guard let color = rgbaColor(from: color) else { return }
+        displaySettings.visualizerTrailingColor = color
+    }
+
+    func setBackgroundColor(_ color: NSColor) {
+        guard let color = rgbaColor(from: color) else { return }
+        displaySettings.backgroundColor = color
+    }
+
+    func setTitleColor(_ color: NSColor) {
+        guard let color = rgbaColor(from: color) else { return }
+        displaySettings.titleColor = color
+    }
+
+    func setFirstRoleColor(_ color: NSColor) {
+        guard let color = rgbaColor(from: color) else { return }
+        displaySettings.firstRoleColor = color
+    }
+
+    func setSecondRoleColor(_ color: NSColor) {
+        guard let color = rgbaColor(from: color) else { return }
+        displaySettings.secondRoleColor = color
+    }
+
+    func setBackgroundImage(from fileURL: URL) {
+        let didAccess = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        guard let data = try? Data(contentsOf: fileURL),
+              let image = NSImage(data: data) else {
+            message = "背景画像を読み込めませんでした。"
+            return
+        }
+        displaySettings.backgroundImage = ComparisonVideoBackgroundImage(
+            image: image,
+            fileName: fileURL.lastPathComponent
+        )
+        message = nil
+    }
+
+    func clearBackgroundImage() {
+        displaySettings.backgroundImage = nil
+    }
+
     func stopPreview() {
         previewPlayer?.pause()
         previewPlayer?.seek(to: .zero)
+        isPreviewPlaying = false
         outputTime = 0
+        previewFrameTime = 0
+    }
+
+    func togglePreviewPlayback() {
+        guard let previewPlayer else { return }
+        if isPreviewPlaying {
+            previewPlayer.pause()
+            isPreviewPlaying = false
+            return
+        }
+
+        if let duration = plan?.outputDuration,
+           outputTime >= max(duration - 0.05, 0) {
+            seekPreview(to: 0)
+        }
+        previewPlayer.play()
+        isPreviewPlaying = true
+    }
+
+    func seekPreview(to time: TimeInterval) {
+        guard let previewPlayer else { return }
+        let duration = plan?.outputDuration ?? 0
+        let clampedTime = min(max(time, 0), duration)
+        previewPlayer.seek(
+            to: CMTime(seconds: clampedTime, preferredTimescale: 600),
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        )
+        updatePreviewTimes(to: clampedTime)
+    }
+
+    func setPreviewVolume(_ volume: Double) {
+        let clampedVolume = min(max(volume.isFinite ? volume : 1, 0), 1)
+        previewVolume = clampedVolume
+        previewPlayer?.volume = Float(clampedVolume)
     }
 
     func export(to destinationURL: URL) {
@@ -174,6 +379,9 @@ final class ComparisonVideoWindowModel {
             startTime: startTime,
             orientation: orientation,
             format: format,
+            displaySettings: displaySettings,
+            firstInspectorInfo: inspectorInfo(for: firstSource),
+            secondInspectorInfo: inspectorInfo(for: secondSource),
             destinationURL: destinationURL
         )
     }
@@ -196,6 +404,7 @@ final class ComparisonVideoWindowModel {
     private func preparePreview(after delay: Duration? = nil) {
         guard let firstSource, let secondSource else { return }
         let requestedStartTime = startTime
+        let requestedDisplaySettings = displaySettings
         isPreparingPreview = true
         message = nil
         previewPreparationTask?.cancel()
@@ -210,43 +419,34 @@ final class ComparisonVideoWindowModel {
                     try ComparisonVideoExportService().prepareAudio(
                         first: firstSource,
                         second: secondSource,
-                        startTime: requestedStartTime
+                        startTime: requestedStartTime,
+                        displaySettings: requestedDisplaySettings
                     )
                 }.value
                 guard !Task.isCancelled else { return }
                 let url = FileManager.default.temporaryDirectory
                     .appendingPathComponent("VelouraComparisonPreview-\(UUID().uuidString)")
                     .appendingPathExtension("wav")
-                let videoURL = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("VelouraComparisonPreviewVideo-\(UUID().uuidString)")
-                    .appendingPathExtension("mov")
-                pendingPreviewFiles = [url, videoURL]
+                pendingPreviewFiles = [url]
                 try ComparisonVideoExportService().writePreparedAudio(prepared, to: url)
-                try await ComparisonVideoExportService().writePreviewVideo(
-                    duration: prepared.plan.outputDuration,
-                    to: videoURL
-                )
                 guard !Task.isCancelled else {
                     try? FileManager.default.removeItem(at: url)
-                    try? FileManager.default.removeItem(at: videoURL)
                     return
                 }
                 guard let self else {
                     try? FileManager.default.removeItem(at: url)
-                    try? FileManager.default.removeItem(at: videoURL)
                     return
                 }
-                let player = try await self.makePreviewPlayer(
-                    audioURL: url,
-                    videoURL: videoURL,
-                    duration: prepared.plan.outputDuration
-                )
+                let player = AVPlayer(url: url)
                 self.discardPreviewFile()
                 self.previewFileURL = url
-                self.previewVideoFileURL = videoURL
+                player.volume = Float(self.previewVolume)
                 self.previewPlayer = player
                 pendingPreviewFiles.removeAll()
                 self.outputTime = 0
+                self.previewFrameTime = 0
+                self.previewSpectrumTimeline = prepared.spectrumTimeline
+                self.isPreviewPlaying = false
                 self.startPreviewClock()
             } catch is CancellationError {
                 pendingPreviewFiles.forEach { try? FileManager.default.removeItem(at: $0) }
@@ -266,11 +466,57 @@ final class ComparisonVideoWindowModel {
                 guard let self, let player = self.previewPlayer else { return }
                 let seconds = player.currentTime().seconds
                 if seconds.isFinite {
-                    self.outputTime = min(max(seconds, 0), self.plan?.outputDuration ?? seconds)
+                    let outputTime = min(max(seconds, 0), self.plan?.outputDuration ?? seconds)
+                    self.updatePreviewTimes(to: outputTime)
+                }
+                let isPlaying = player.timeControlStatus == .playing
+                if self.isPreviewPlaying != isPlaying {
+                    self.isPreviewPlaying = isPlaying
                 }
                 try? await Task.sleep(for: .milliseconds(33))
             }
         }
+    }
+
+    private func updatePreviewTimes(to time: TimeInterval) {
+        if outputTime != time {
+            outputTime = time
+        }
+        let frameTime = plan?.previewFrameTime(at: time) ?? time
+        if previewFrameTime != frameTime {
+            previewFrameTime = frameTime
+        }
+    }
+
+    private func spectrumFrame(at time: TimeInterval) -> ComparisonVideoSpectrumFrame {
+        ComparisonVideoPreparedAudio.spectrumFrame(
+            in: previewSpectrumTimeline,
+            at: time
+        )
+    }
+
+    private func refreshPreviewAudio() {
+        guard firstSource != nil, secondSource != nil, plan != nil else { return }
+        previewPlayer?.pause()
+        isPreviewPlaying = false
+        preparePreview(after: .milliseconds(250))
+    }
+
+    private func inspectorInfo(for source: ComparisonVideoSource) -> ComparisonVideoInspectorInfo {
+        ComparisonVideoInspectorInfo(
+            metrics: source.inspectorMetrics,
+            fileInfo: selectedFileInfoBySourceID[source.id]
+        )
+    }
+
+    private func rgbaColor(from color: NSColor) -> ComparisonVideoRGBAColor? {
+        guard let converted = color.usingColorSpace(.sRGB) else { return nil }
+        return ComparisonVideoRGBAColor(
+            red: converted.redComponent,
+            green: converted.greenComponent,
+            blue: converted.blueComponent,
+            alpha: converted.alphaComponent
+        )
     }
 
     private func stopAndDiscardPreview() {
@@ -281,6 +527,7 @@ final class ComparisonVideoWindowModel {
         previewClockTask?.cancel()
         previewClockTask = nil
         previewPlayer = nil
+        previewSpectrumTimeline = []
         discardPreviewFile()
     }
 
@@ -289,39 +536,5 @@ final class ComparisonVideoWindowModel {
             try? FileManager.default.removeItem(at: previewFileURL)
         }
         previewFileURL = nil
-        if let previewVideoFileURL {
-            try? FileManager.default.removeItem(at: previewVideoFileURL)
-        }
-        previewVideoFileURL = nil
-    }
-
-    private func makePreviewPlayer(
-        audioURL: URL,
-        videoURL: URL,
-        duration: TimeInterval
-    ) async throws -> AVPlayer {
-        let audioAsset = AVURLAsset(url: audioURL)
-        let videoAsset = AVURLAsset(url: videoURL)
-        guard let audioTrack = try await audioAsset.loadTracks(withMediaType: .audio).first,
-              let videoTrack = try await videoAsset.loadTracks(withMediaType: .video).first else {
-            throw ComparisonVideoExportError.audioPreparationFailed
-        }
-        let composition = AVMutableComposition()
-        guard let compositionAudioTrack = composition.addMutableTrack(
-            withMediaType: .audio,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        ), let compositionVideoTrack = composition.addMutableTrack(
-            withMediaType: .video,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        ) else {
-            throw ComparisonVideoExportError.writerConfigurationFailed
-        }
-        let timeRange = CMTimeRange(
-            start: .zero,
-            duration: CMTime(seconds: duration, preferredTimescale: 600)
-        )
-        try compositionAudioTrack.insertTimeRange(timeRange, of: audioTrack, at: .zero)
-        try compositionVideoTrack.insertTimeRange(timeRange, of: videoTrack, at: .zero)
-        return AVPlayer(playerItem: AVPlayerItem(asset: composition))
     }
 }
