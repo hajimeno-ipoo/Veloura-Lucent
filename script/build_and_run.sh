@@ -87,7 +87,7 @@ configure_build_identity() {
       ;;
   esac
 
-  APP_VERSION="${VELOURA_APP_VERSION:-1.0.0}"
+  APP_VERSION="${VELOURA_APP_VERSION:-1.1.0}"
   if [[ -n "${VELOURA_BUILD_VERSION:-}" ]]; then
     BUILD_VERSION="$VELOURA_BUILD_VERSION"
   elif [[ "$MODE" == "package" || "$MODE" == "--package" ]]; then

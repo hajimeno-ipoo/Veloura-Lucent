@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Testing
 @testable import VelouraLucent
@@ -1199,6 +1200,41 @@ struct StemModeWorkspaceModelTests {
         #expect(first.previewController.cardState(for: .corrected).sourceURL == correctedRemix.fileURL)
     }
 
+    @Test("個別Stemの56帯域をアプリ側の表示解析結果として保持する")
+    func individualStemKeepsComparisonSpectrogramInWorkspaceModel() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(
+            path: "StemComparisonSpectrogramTests-\(UUID().uuidString)",
+            directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stemURL = root.appending(path: "vocals.wav")
+        try writeComparisonDisplayTone(to: stemURL)
+        let artifact = StemAudioArtifact(
+            id: "raw-vocals",
+            kind: .rawStem(.vocals),
+            fileURL: stemURL,
+            sampleRate: 48_000,
+            channelCount: 2,
+            frameCount: 4_800
+        )
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(recorder: recorder)
+
+        model.updatePreviewSources(from: [artifact])
+        defer { model.updatePreviewSources(from: []) }
+        for _ in 0..<200 where model.isAnalyzingDisplayAudio {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        let sourceID = stemURL.standardizedFileURL.path(percentEncoded: false)
+        let snapshot = try #require(model.comparisonSpectrogramsBySourceID[sourceID])
+        #expect(!model.isAnalyzingDisplayAudio)
+        #expect(snapshot.frequencyBucketCount == 56)
+        #expect(!snapshot.realtimeSpectrumTimeline.isEmpty)
+        #expect(snapshot.realtimeSpectrumTimeline.allSatisfy { $0.count == 56 })
+    }
+
     @Test
     func correctedOnlyPreviewSelectsInputVsCorrectedAfterCorrection() async {
         let recorder = WorkspaceActionRecorder()
@@ -1300,6 +1336,36 @@ struct StemModeWorkspaceModelTests {
             channelCount: 2,
             frameCount: 1_000
         )
+    }
+
+    private func writeComparisonDisplayTone(to URL: URL) throws {
+        let sampleRate = 48_000.0
+        let frameCount = 4_800
+        let format = AVAudioFormat(
+            standardFormatWithSampleRate: sampleRate,
+            channels: 2
+        )!
+        let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(frameCount)
+        )!
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        for channelIndex in 0..<2 {
+            let samples = buffer.floatChannelData![channelIndex]
+            for index in 0..<frameCount {
+                samples[index] = Float(
+                    sin(2 * Double.pi * 440 * Double(index) / sampleRate) * 0.2
+                )
+            }
+        }
+        let file = try AVAudioFile(
+            forWriting: URL,
+            settings: AudioFileService.interleavedFileSettings(
+                sampleRate: sampleRate,
+                channels: 2
+            )
+        )
+        try file.write(from: buffer)
     }
 
     private func addRequiredRawArtifacts(

@@ -71,7 +71,7 @@ enum AudioFileService {
     static let waveformPreviewBucketCount = 16_384
     static let outputFileExtension = "wav"
     private static let previewFFTSize = 1024
-    private static let previewHopSize = 1024
+    private static let previewHopSize = previewFFTSize / 2
     private static let spectrogramTimeBuckets = 72
     private static let spectrogramFrequencyBuckets = 28
     static let spectrogramDisplayMinimumDB = -100.0
@@ -491,7 +491,8 @@ enum AudioFileService {
             frequencyBucketCount: frequencyBuckets,
             duration: duration,
             minLevelDB: spectrogramDisplayMinimumDB,
-            maxLevelDB: spectrogramDisplayMaximumDB
+            maxLevelDB: spectrogramDisplayMaximumDB,
+            realtimeSpectrumTimeline: spectralAnalysis.realtimeSpectrumTimeline
         )
     }
 
@@ -521,6 +522,25 @@ enum AudioFileService {
             let lowerBin = max(0, min(Int(lowerFrequency / frequencyStep), binCount - 1))
             let upperBin = max(lowerBin, min(Int(upperFrequency / frequencyStep), binCount - 1))
             return lowerBin...upperBin
+        }
+    }
+
+    private static func spectrogramDisplayFrequencies(
+        sampleRate: Double,
+        frequencyBucketCount: Int
+    ) -> [Double] {
+        let minFrequency = 80.0
+        let maxFrequency = sampleRate * 0.5
+        return (0..<frequencyBucketCount).map { bucket in
+            let lowerFrequency = minFrequency * pow(
+                maxFrequency / minFrequency,
+                Double(bucket) / Double(frequencyBucketCount)
+            )
+            let upperFrequency = minFrequency * pow(
+                maxFrequency / minFrequency,
+                Double(bucket + 1) / Double(frequencyBucketCount)
+            )
+            return sqrt(lowerFrequency * upperFrequency)
         }
     }
 
@@ -582,6 +602,7 @@ enum AudioFileService {
         let frameBandLevels: [String: [Float]]
         let spectrogramEnergy: [Float]
         let spectrogramCounts: [Int]
+        let realtimeSpectrumTimeline: [[RealtimeSpectrumPoint]]
     }
 
     private static func makePreviewSpectralAnalysis(
@@ -609,12 +630,29 @@ enum AudioFileService {
         let binEdges: [ClosedRange<Int>] = includesSpectrogram
             ? spectrogramBinRanges(sampleRate: sampleRate, frequencyBucketCount: frequencyBuckets)
             : []
+        let realtimeInterval = RealtimeSpectrumAnalyzer.timelineInterval
+        let duration = sampleRate > 0 ? Double(sampleCount) / sampleRate : 0
+        let realtimeTimeBuckets = includesSpectrogram && sampleRate > 0
+            ? max(1, Int(ceil(duration / realtimeInterval)) + 1)
+            : 0
+        let realtimeFrequencies = includesSpectrogram
+            ? spectrogramDisplayFrequencies(
+                sampleRate: sampleRate,
+                frequencyBucketCount: frequencyBuckets
+            )
+            : []
 
         var frames: [String: [Float]] = includesBandLevels
             ? Dictionary(uniqueKeysWithValues: previewBandRanges.map { ($0.id, Array(repeating: Float.zero, count: frameCount)) })
             : [:]
         var spectrogramEnergy = includesSpectrogram ? Array(repeating: Float.zero, count: timeBuckets * frequencyBuckets) : []
         var spectrogramCounts = includesSpectrogram ? Array(repeating: 0, count: timeBuckets * frequencyBuckets) : []
+        var realtimeLevels = includesSpectrogram
+            ? Array(repeating: Double(-120), count: realtimeTimeBuckets * frequencyBuckets)
+            : []
+        var nextRealtimeTimeBucket = 0
+        var previousRealtimeFrameTime: Double?
+        var previousRealtimeFrameLevels: [Double]?
 
         SpectralDSP.forEachAveragePowerFrame(channels, fftSize: previewFFTSize, hopSize: previewHopSize) { frameIndex, _, averagePower in
             if includesBandLevels {
@@ -631,13 +669,73 @@ enum AudioFileService {
 
             if includesSpectrogram {
                 let timeBucket = min(timeBuckets - 1, frameIndex / frameGroupSize)
+                let frameTime = min(
+                    Double(frameIndex * previewHopSize) / sampleRate,
+                    duration
+                )
+                var frameLevels = Array(repeating: Double(-120), count: frequencyBuckets)
                 for frequencyBucket in 0..<frequencyBuckets {
                     let outputIndex = timeBucket * frequencyBuckets + frequencyBucket
+                    var frameEnergy: Float = 0
                     for binIndex in binEdges[frequencyBucket] {
-                        spectrogramEnergy[outputIndex] += averagePower[binIndex]
+                        let power = averagePower[binIndex]
+                        spectrogramEnergy[outputIndex] += power
                         spectrogramCounts[outputIndex] += 1
+                        frameEnergy += power
                     }
+                    let rms = sqrt(max(
+                        Double(frameEnergy) / Double(max(binEdges[frequencyBucket].count, 1)),
+                        1e-12
+                    ))
+                    frameLevels[frequencyBucket] = spectrogramDisplayLevelDB(
+                        rawLevelDB: 20 * log10(max(rms, 1e-12)),
+                        binCount: binEdges[frequencyBucket].count
+                    )
                 }
+
+                while nextRealtimeTimeBucket < realtimeTimeBuckets {
+                    let targetTime = Double(nextRealtimeTimeBucket) * realtimeInterval
+                    guard targetTime <= frameTime else { break }
+                    let nearestFrameLevels: [Double]
+                    if let previousRealtimeFrameTime,
+                       let previousRealtimeFrameLevels,
+                       targetTime - previousRealtimeFrameTime <= frameTime - targetTime
+                    {
+                        nearestFrameLevels = previousRealtimeFrameLevels
+                    } else {
+                        nearestFrameLevels = frameLevels
+                    }
+                    let destination = nextRealtimeTimeBucket * frequencyBuckets
+                    realtimeLevels.replaceSubrange(
+                        destination..<(destination + frequencyBuckets),
+                        with: nearestFrameLevels
+                    )
+                    nextRealtimeTimeBucket += 1
+                }
+                previousRealtimeFrameTime = frameTime
+                previousRealtimeFrameLevels = frameLevels
+            }
+        }
+
+        if let previousRealtimeFrameLevels {
+            while nextRealtimeTimeBucket < realtimeTimeBuckets {
+                let destination = nextRealtimeTimeBucket * frequencyBuckets
+                realtimeLevels.replaceSubrange(
+                    destination..<(destination + frequencyBuckets),
+                    with: previousRealtimeFrameLevels
+                )
+                nextRealtimeTimeBucket += 1
+            }
+        }
+
+        let realtimeSpectrumTimeline = (0..<realtimeTimeBuckets).map { timeBucket in
+            realtimeFrequencies.enumerated().map { frequencyBucket, frequency in
+                let index = timeBucket * frequencyBuckets + frequencyBucket
+                return RealtimeSpectrumPoint(
+                    id: "comparison-\(frequencyBucket)",
+                    frequencyHz: frequency,
+                    levelDB: realtimeLevels[index]
+                )
             }
         }
 
@@ -646,7 +744,8 @@ enum AudioFileService {
             spectrogramTimeBuckets: timeBuckets,
             frameBandLevels: frames,
             spectrogramEnergy: spectrogramEnergy,
-            spectrogramCounts: spectrogramCounts
+            spectrogramCounts: spectrogramCounts,
+            realtimeSpectrumTimeline: realtimeSpectrumTimeline
         )
     }
 

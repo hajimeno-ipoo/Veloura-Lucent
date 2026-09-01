@@ -175,6 +175,8 @@ struct ComparisonVideoTests {
         #expect(defaults.visualizerWidth == 1)
         #expect(defaults.visualizerHeight == 0.65)
         #expect(defaults.visualizerScale == 1)
+        #expect(defaults.visualizerResponse == 0.8)
+        #expect(defaults.visualizerHeightScale == 1)
 
         let titleColor = ComparisonVideoRGBAColor(red: 0.8, green: 0.7, blue: 0.6, alpha: 1)
         let firstRoleColor = ComparisonVideoRGBAColor(red: 0.5, green: 0.4, blue: 0.3, alpha: 1)
@@ -211,7 +213,9 @@ struct ComparisonVideoTests {
             visualizerTrailingColor: titleColor,
             visualizerWidth: 2,
             visualizerHeight: 0,
-            visualizerScale: 3
+            visualizerScale: 3,
+            visualizerResponse: -1,
+            visualizerHeightScale: 4
         )
 
         #expect(settings.titleFontSize == 24)
@@ -239,6 +243,8 @@ struct ComparisonVideoTests {
         #expect(settings.visualizerWidth == 1)
         #expect(settings.visualizerHeight == 0.25)
         #expect(settings.visualizerScale == 2)
+        #expect(settings.visualizerResponse == 0)
+        #expect(settings.visualizerHeightScale == 3)
 
         settings.setPosition(CGPoint(x: 80, y: 35), for: .title)
         settings.setPosition(CGPoint(x: 45, y: 60), for: .inspector)
@@ -686,6 +692,9 @@ struct ComparisonVideoTests {
         job.inputMetrics = metrics(integratedLoudness: -18, truePeak: -2)
         job.outputMetrics = metrics(integratedLoudness: -16, truePeak: -1.5)
         job.masteredMetrics = metrics(integratedLoudness: -14, truePeak: -1)
+        job.inputSpectrogram = spectrogram(levelDB: -30)
+        job.outputSpectrogram = spectrogram(levelDB: -24)
+        job.masteredSpectrogram = spectrogram(levelDB: -18)
 
         let sources = ComparisonVideoSourceCatalog.standard(job: job)
 
@@ -697,6 +706,7 @@ struct ComparisonVideoTests {
         #expect(sources.map(\.trackTitle) == ["Test Song", "Test Song", "Test Song"])
         #expect(sources.map(\.roleTitle) == ["入力", "補正後", "最終版"])
         #expect(sources.map { $0.inspectorMetrics?.integratedLoudnessLUFS } == [-18, -16, -14])
+        #expect(sources.map { $0.spectrogram?.cells.first?.levelDB } == [-30, -24, -18])
         #expect(!sources.contains { $0.fileURL == unregistered })
     }
 
@@ -763,13 +773,46 @@ struct ComparisonVideoTests {
                 ),
                 .init(id: invalid.id, runID: runID, kind: invalid.kind, artifact: invalid, status: .invalid(message: "invalid")),
                 .init(id: missing.id, runID: runID, kind: missing.kind, artifact: missing, status: .valid),
+            ],
+            spectrogramsBySourceID: [
+                validURL.standardizedFileURL.path(percentEncoded: false): spectrogram(levelDB: -22),
             ]
         )
 
         #expect(sources.map(\.fileURL) == [inputURL.standardizedFileURL, validURL.standardizedFileURL])
         #expect(sources.map(\.trackTitle) == ["Stem Song", "Stem Song"])
         #expect(sources.map(\.roleTitle) == ["入力", "ボーカル（補正済み）"])
+        #expect(sources[0].spectrogram == nil)
+        #expect(sources[1].spectrogram?.cells.first?.levelDB == -22)
         #expect(!sources.contains { $0.roleTitle == "変換済み入力" })
+    }
+
+    @Test
+    func comparisonLaunchWaitsForEverySourceSpectrumTimeline() {
+        let firstURL = URL(fileURLWithPath: "/tmp/comparison-ready-first.wav")
+        let secondURL = URL(fileURLWithPath: "/tmp/comparison-ready-second.wav")
+        let readySource = source(
+            firstURL,
+            role: "入力",
+            spectrogram: spectrogram(levelDB: -30)
+        )
+        let waitingSource = source(secondURL, role: "補正後")
+
+        #expect(!ComparisonVideoLaunch(
+            mode: .standard,
+            sources: [readySource, waitingSource]
+        ).isReady)
+        #expect(ComparisonVideoLaunch(
+            mode: .standard,
+            sources: [
+                readySource,
+                source(
+                    secondURL,
+                    role: "補正後",
+                    spectrogram: spectrogram(levelDB: -24)
+                ),
+            ]
+        ).isReady)
     }
 
     @Test
@@ -856,9 +899,13 @@ struct ComparisonVideoTests {
     }
 
     @Test
-    func studioSpectrumUsesFortyEightBandsSmoothDecayPeakHoldAndFullGeometry() {
+    func studioSpectrumUsesFiftySixBandsSmoothDecayPeakHoldAndFullGeometry() {
+        let frequencies = spectrogram(levelDB: -20).cells
+            .filter { $0.timeIndex == 0 }
+            .sorted { $0.bandIndex < $1.bandIndex }
+            .map { sqrt($0.frequencyStart * $0.frequencyEnd) }
         let rawTimeline = (0..<6).map { frameIndex in
-            ComparisonVideoSpectrumProcessor.frequencies.enumerated().map { index, frequency in
+            frequencies.enumerated().map { index, frequency in
                 RealtimeSpectrumPoint(
                     id: "raw-\(index)",
                     frequencyHz: frequency,
@@ -871,32 +918,105 @@ struct ComparisonVideoTests {
             interval: 0.1
         )
 
-        #expect(ComparisonVideoSpectrumProcessor.frequencies.count == 48)
-        #expect(abs((ComparisonVideoSpectrumProcessor.frequencies.first ?? 0) - 80) < 0.000_001)
-        #expect(abs((ComparisonVideoSpectrumProcessor.frequencies.last ?? 0) - 20_000) < 0.000_001)
+        #expect(ComparisonVideoSpectrumProcessor.frequencyCount == 56)
+        #expect(frequencies.count == 56)
         #expect(frames.count == 6)
-        #expect(frames.allSatisfy { $0.points.count == 48 && $0.peakLevelsDB.count == 48 })
+        #expect(frames.allSatisfy { $0.points.count == 56 && $0.peakLevelsDB.count == 56 })
         #expect(frames[1].points[0].levelDB > -80)
         #expect(frames[1].points[0].levelDB < -20)
-        #expect(frames[4].peakLevelsDB[0] == -20)
-        #expect(frames[5].peakLevelsDB[0] < -20)
+        #expect(frames[4].peakLevelsDB[0] == frames[0].peakLevelsDB[0])
+        #expect(frames[5].peakLevelsDB[0] < frames[4].peakLevelsDB[0])
 
+        let geometryFrame = ComparisonVideoSpectrumFrame(
+            points: rawTimeline[0],
+            peakLevelsDB: Array(repeating: -20, count: frequencies.count)
+        )
         let dots = ComparisonVideoSpectrumGeometry.dots(
-            for: frames[0],
+            for: geometryFrame,
             in: CGSize(width: 1_920, height: 100)
         )
         let bodyDots = dots.inactiveDots + dots.lowDots + dots.middleDots + dots.highDots
-        #expect(bodyDots.count == 48 * ComparisonVideoSpectrumGeometry.dotRowCount)
+        #expect(bodyDots.count == 56 * ComparisonVideoSpectrumGeometry.dotRowCount)
         #expect(!dots.lowDots.isEmpty)
         #expect(!dots.middleDots.isEmpty)
         #expect(!dots.highDots.isEmpty)
-        #expect(dots.peakDots.count == 48)
+        #expect(dots.peakDots.count == 56)
         #expect(!dots.innerGlowDots.isEmpty)
         #expect(!dots.outerGlowDots.isEmpty)
         #expect(!dots.peakGlowDots.isEmpty)
         #expect(!dots.reflectionDots.isEmpty)
         #expect((bodyDots.map(\.minX).min() ?? 0) >= 0)
         #expect((bodyDots.map(\.maxX).max() ?? 0) <= 1_920)
+    }
+
+    @Test
+    func spectrumResponseUsesMagnitudeSmoothingAndZeroRespondsImmediately() throws {
+        let frequencies = spectrogram(levelDB: -20).realtimeSpectrumTimeline[0]
+        let quiet = frequencies.map { point in
+            RealtimeSpectrumPoint(
+                id: point.id,
+                frequencyHz: point.frequencyHz,
+                levelDB: -100
+            )
+        }
+        let loud = frequencies.map { point in
+            RealtimeSpectrumPoint(
+                id: point.id,
+                frequencyHz: point.frequencyHz,
+                levelDB: -20
+            )
+        }
+
+        let immediate = ComparisonVideoSpectrumProcessor.frames(
+            from: [quiet, loud],
+            interval: 0.1,
+            response: 0
+        )
+        let smooth = ComparisonVideoSpectrumProcessor.frames(
+            from: [quiet, loud],
+            interval: 0.1,
+            response: 0.8
+        )
+        let expectedMagnitude = 0.8 * pow(10, -100.0 / 20)
+            + 0.2 * pow(10, -20.0 / 20)
+        let expectedDB = 20 * log10(expectedMagnitude)
+        let immediateLevel = try #require(immediate.last?.points.first).levelDB
+        let smoothLevel = try #require(smooth.last?.points.first).levelDB
+
+        #expect(abs(immediateLevel - (-20)) < 0.000_001)
+        #expect(abs(smoothLevel - expectedDB) < 0.000_001)
+        #expect(smoothLevel < immediateLevel)
+    }
+
+    @Test
+    func spectrumHeightScaleChangesDotCountAndClampsAtTenRows() {
+        let points = spectrogram(levelDB: -40).realtimeSpectrumTimeline[0]
+        let frame = ComparisonVideoSpectrumFrame(
+            points: points,
+            peakLevelsDB: Array(repeating: -40, count: points.count)
+        )
+        let baseline = ComparisonVideoSpectrumGeometry.dots(
+            for: frame,
+            in: CGSize(width: 1_920, height: 100),
+            heightScale: 1
+        )
+        let doubled = ComparisonVideoSpectrumGeometry.dots(
+            for: frame,
+            in: CGSize(width: 1_920, height: 100),
+            heightScale: 2
+        )
+        let clamped = ComparisonVideoSpectrumGeometry.dots(
+            for: frame,
+            in: CGSize(width: 1_920, height: 100),
+            heightScale: 3
+        )
+        let activeCount: (ComparisonVideoSpectrumDotGeometry) -> Int = {
+            $0.lowDots.count + $0.middleDots.count + $0.highDots.count
+        }
+
+        #expect(activeCount(baseline) == 56 * 5)
+        #expect(activeCount(doubled) == 56 * 10)
+        #expect(activeCount(clamped) == 56 * 10)
     }
 
     @Test
@@ -940,7 +1060,7 @@ struct ComparisonVideoTests {
         let firstURL = root.appending(path: "first.wav")
         let secondURL = root.appending(path: "second.wav")
         let sampleRate = 8_000.0
-        let samples = Array(repeating: Float(0.5), count: 4_096)
+        let samples = Array(repeating: Float(0.5), count: Int(sampleRate * 16))
         try AudioFileService.saveAudio(
             AudioSignal(channels: [samples, samples], sampleRate: sampleRate),
             to: firstURL
@@ -958,8 +1078,8 @@ struct ComparisonVideoTests {
         )
 
         let prepared = try ComparisonVideoExportService().prepareAudio(
-            first: source(firstURL, role: "入力"),
-            second: source(secondURL, role: "補正後"),
+            first: source(firstURL, role: "入力", spectrogram: spectrogram(levelDB: -30)),
+            second: source(secondURL, role: "補正後", spectrogram: spectrogram(levelDB: -18)),
             startTime: 0,
             displaySettings: settings
         )
@@ -970,20 +1090,32 @@ struct ComparisonVideoTests {
         #expect(!prepared.spectrumTimeline.isEmpty)
         #expect(prepared.spectrumTimeline.count > 1)
         #expect(prepared.spectrumTimeline.allSatisfy {
-            $0.points.count == 48 && $0.peakLevelsDB.count == 48
+            $0.points.count == 56 && $0.peakLevelsDB.count == 56
         })
+        let beforeSwitch = prepared.spectrumFrame(at: 14.9).points[0].levelDB
+        let afterSwitch = prepared.spectrumFrame(at: 15.1).points[0].levelDB
+        #expect(beforeSwitch < -29)
+        #expect(afterSwitch > beforeSwitch + 4)
 
         var audioFadeDisabled = settings
         audioFadeDisabled.audioFadeInEnabled = false
         audioFadeDisabled.audioFadeOutEnabled = false
+        let changingSpectrum = spectrogram(
+            levelDB: -30,
+            realtimeLevelsDB: [-40, -10, -40, -10]
+        )
         let unfaded = try ComparisonVideoExportService().prepareAudio(
-            first: source(firstURL, role: "入力"),
-            second: source(secondURL, role: "補正後"),
+            first: source(firstURL, role: "入力", spectrogram: changingSpectrum),
+            second: source(secondURL, role: "補正後", spectrogram: spectrogram(levelDB: -18)),
             startTime: 0,
             displaySettings: audioFadeDisabled
         )
         #expect(unfaded.signal.channels[0].first == 0.5)
         #expect(unfaded.signal.channels[0].last == 0.5)
+        #expect(
+            unfaded.spectrumFrame(at: 0.1).points[0].levelDB
+                - unfaded.spectrumFrame(at: 0).points[0].levelDB > 20
+        )
     }
 
     @Test
@@ -1141,8 +1273,16 @@ struct ComparisonVideoTests {
                     path: "output-\(orientation.rawValue).\(format.fileExtension)"
                 )
                 try await ComparisonVideoExportService().export(.init(
-                    first: source(firstURL, role: "補正後"),
-                    second: source(secondURL, role: "最終版"),
+                    first: source(
+                        firstURL,
+                        role: "補正後",
+                        spectrogram: spectrogram(levelDB: -30)
+                    ),
+                    second: source(
+                        secondURL,
+                        role: "最終版",
+                        spectrogram: spectrogram(levelDB: -18)
+                    ),
                     startTime: 0,
                     orientation: orientation,
                     format: format,
@@ -1351,13 +1491,20 @@ struct ComparisonVideoTests {
         #expect(frameSource.contains("ComparisonVideoSpectrumVisualizer"))
         #expect(frameSource.contains("ComparisonVideoSpectrumGeometry.dots"))
         #expect(frameSource.contains("gradientStops: state.displaySettings.visualizerGradientStops"))
+        #expect(frameSource.contains("heightScale: state.displaySettings.visualizerHeightScale"))
         #expect(modelSource.contains("previewSpectrumTimeline"))
-        #expect(serviceSource.contains("RealtimeSpectrumAnalyzer.timeline("))
-        #expect(serviceSource.contains("frequencies: ComparisonVideoSpectrumProcessor.frequencies"))
+        #expect(modelSource.contains("refreshPreviewSpectrumTimeline()"))
+        #expect(serviceSource.contains("first: first.spectrogram"))
+        #expect(serviceSource.contains("second: second.spectrogram"))
+        #expect(serviceSource.contains("first?.realtimeSpectrumTimeline"))
+        #expect(serviceSource.contains("second?.realtimeSpectrumTimeline"))
+        #expect(!serviceSource.contains("RealtimeSpectrumAnalyzer.timeline("))
         #expect(serviceSource.contains("showsDynamicOverlays: false"))
         #expect(serviceSource.contains("drawDynamicOverlays("))
         #expect(serviceSource.contains("prepared.spectrumFrame(at: outputTime)"))
         #expect(serviceSource.contains("ComparisonVideoSpectrumGeometry.dots"))
+        #expect(serviceSource.contains("response: displaySettings?.visualizerResponse ?? 0.8"))
+        #expect(serviceSource.contains("heightScale: settings.visualizerHeightScale"))
         #expect(serviceSource.contains("let stops = settings.visualizerGradientStops"))
         #expect(serviceSource.contains("locations: stops.map { CGFloat($0.location) }"))
     }
@@ -1383,6 +1530,18 @@ struct ComparisonVideoTests {
         #expect(source.components(separatedBy: "step: 1").count - 1 >= 2)
         #expect(source.contains("get: { value.wrappedValue * 100 }"))
         #expect(source.contains("set: { value.wrappedValue = $0 / 100 }"))
+    }
+
+    @Test
+    func comparisonVisualizerResponseAndHeightScaleUsePercentageControls() throws {
+        let source = try viewSource("ComparisonVideoDisplaySettingsView.swift")
+
+        #expect(source.contains("title: \"反応速度\""))
+        #expect(source.contains("range: 0...99"))
+        #expect(source.contains("高いほど滑らかに動きます"))
+        #expect(source.contains("title: \"高さスケール\""))
+        #expect(source.contains("range: 25...300"))
+        #expect(source.contains("音量に対するドットの高さを調整します"))
     }
 
     @Test
@@ -1481,8 +1640,83 @@ struct ComparisonVideoTests {
         #expect(try lightPixelBounds(in: fillImage) == lightPixelBounds(in: fitImage))
     }
 
-    private func source(_ url: URL, role: String) -> ComparisonVideoSource {
-        ComparisonVideoSource(fileURL: url, trackTitle: "Test Song", roleTitle: role)
+    private func source(
+        _ url: URL,
+        role: String,
+        spectrogram: SpectrogramSnapshot? = nil
+    ) -> ComparisonVideoSource {
+        ComparisonVideoSource(
+            fileURL: url,
+            trackTitle: "Test Song",
+            roleTitle: role,
+            spectrogram: spectrogram
+        )
+    }
+
+    private func spectrogram(
+        levelDB: Double,
+        realtimeLevelsDB: [Double]? = nil
+    ) -> SpectrogramSnapshot {
+        let timeBucketCount = 4
+        let frequencyBucketCount = 56
+        let duration: TimeInterval = 60
+        let minimumFrequency = 80.0
+        let maximumFrequency = 24_000.0
+        let cells = (0..<timeBucketCount).flatMap { timeIndex in
+            (0..<frequencyBucketCount).map { bandIndex in
+                let lower = minimumFrequency * pow(
+                    maximumFrequency / minimumFrequency,
+                    Double(bandIndex) / Double(frequencyBucketCount)
+                )
+                let upper = minimumFrequency * pow(
+                    maximumFrequency / minimumFrequency,
+                    Double(bandIndex + 1) / Double(frequencyBucketCount)
+                )
+                return SpectrogramCell(
+                    id: "\(timeIndex)-\(bandIndex)",
+                    timeIndex: timeIndex,
+                    bandIndex: bandIndex,
+                    timeStart: duration * Double(timeIndex) / Double(timeBucketCount),
+                    timeEnd: duration * Double(timeIndex + 1) / Double(timeBucketCount),
+                    frequencyStart: lower,
+                    frequencyEnd: upper,
+                    levelDB: levelDB
+                )
+            }
+        }
+        let frequencies = (0..<frequencyBucketCount).map { bandIndex in
+            let lower = minimumFrequency * pow(
+                maximumFrequency / minimumFrequency,
+                Double(bandIndex) / Double(frequencyBucketCount)
+            )
+            let upper = minimumFrequency * pow(
+                maximumFrequency / minimumFrequency,
+                Double(bandIndex + 1) / Double(frequencyBucketCount)
+            )
+            return sqrt(lower * upper)
+        }
+        let timelineLevels = realtimeLevelsDB ?? Array(
+            repeating: levelDB,
+            count: timeBucketCount
+        )
+        let realtimeSpectrumTimeline = timelineLevels.map { timelineLevel in
+            frequencies.enumerated().map { bandIndex, frequency in
+                RealtimeSpectrumPoint(
+                    id: "comparison-\(bandIndex)",
+                    frequencyHz: frequency,
+                    levelDB: timelineLevel
+                )
+            }
+        }
+        return SpectrogramSnapshot(
+            cells: cells,
+            timeBucketCount: timeBucketCount,
+            frequencyBucketCount: frequencyBucketCount,
+            duration: duration,
+            minLevelDB: -100,
+            maxLevelDB: 0,
+            realtimeSpectrumTimeline: realtimeSpectrumTimeline
+        )
     }
 
     @MainActor

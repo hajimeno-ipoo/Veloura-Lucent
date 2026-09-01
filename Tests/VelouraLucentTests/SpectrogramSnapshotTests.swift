@@ -52,6 +52,49 @@ struct SpectrogramSnapshotTests {
         #expect(snapshot.cells.isEmpty == false)
         #expect(snapshot.timeBucketCount > 0)
         #expect(snapshot.frequencyBucketCount > 0)
+        #expect(snapshot.realtimeSpectrumTimeline.count == 21)
+        #expect(snapshot.realtimeSpectrumTimeline.allSatisfy { $0.count == 56 })
+    }
+
+    @Test
+    func spectrogramRealtimeTimelineKeepsTenthSecondLevelChanges() throws {
+        let sampleRate = 48_000.0
+        let samples = (0..<Int(sampleRate)).map { index in
+            let time = Double(index) / sampleRate
+            let amplitude = time < 0.4 ? 0.5 : 0.01
+            return Float(sin(2 * Double.pi * 1_000 * time) * amplitude)
+        }
+        let snapshot = AudioFileService.makeSpectrogramSnapshot(
+            from: AudioSignal(channels: [samples], sampleRate: sampleRate)
+        )
+        #expect(snapshot.realtimeSpectrumTimeline.count > 7)
+        let loudFrame = snapshot.realtimeSpectrumTimeline[2]
+        let quietFrame = snapshot.realtimeSpectrumTimeline[7]
+        let loudLevel = try #require(realtimeLevel(near: 1_000, in: loudFrame))
+        let quietLevel = try #require(realtimeLevel(near: 1_000, in: quietFrame))
+
+        #expect(loudLevel - quietLevel > 20)
+    }
+
+    @Test
+    func spectrogramRealtimeTimelineUsesTheSameFiftySixBandAggregation() throws {
+        let frequency = 1_370.0
+        let snapshot = AudioFileService.makeSpectrogramSnapshot(
+            from: makeToneSignal(frequency: frequency, amplitude: 0.5)
+        )
+        let timelineFrame = try #require(
+            snapshot.realtimeSpectrumTimeline.dropFirst().first
+        )
+        let timelineLevel = try #require(realtimeLevel(
+            near: frequency,
+            in: timelineFrame
+        ))
+        let spectrogramLevel = try #require(maximumLevel(
+            near: frequency,
+            in: snapshot
+        ))
+
+        #expect(abs(timelineLevel - spectrogramLevel) < 0.1)
     }
 
     @Test
@@ -123,17 +166,23 @@ struct SpectrogramSnapshotTests {
         let inPhase = AudioSignal(channels: [left, left], sampleRate: mono.sampleRate)
         let oppositePhase = AudioSignal(channels: [left, left.map { -$0 }], sampleRate: mono.sampleRate)
 
-        let inPhaseLevel = try #require(maximumLevel(
+        let inPhaseSnapshot = AudioFileService.makeSpectrogramSnapshot(from: inPhase)
+        let oppositePhaseSnapshot = AudioFileService.makeSpectrogramSnapshot(from: oppositePhase)
+        let inPhaseLevel = try #require(maximumLevel(near: 1_000, in: inPhaseSnapshot))
+        let oppositePhaseLevel = try #require(maximumLevel(near: 1_000, in: oppositePhaseSnapshot))
+        let inPhaseRealtimeLevel = try #require(realtimeLevel(
             near: 1_000,
-            in: AudioFileService.makeSpectrogramSnapshot(from: inPhase)
+            in: inPhaseSnapshot.realtimeSpectrumTimeline[5]
         ))
-        let oppositePhaseLevel = try #require(maximumLevel(
+        let oppositePhaseRealtimeLevel = try #require(realtimeLevel(
             near: 1_000,
-            in: AudioFileService.makeSpectrogramSnapshot(from: oppositePhase)
+            in: oppositePhaseSnapshot.realtimeSpectrumTimeline[5]
         ))
 
         #expect(abs(inPhaseLevel - oppositePhaseLevel) < 0.000_001)
         #expect(oppositePhaseLevel > AudioFileService.spectrogramDisplayMinimumDB)
+        #expect(abs(inPhaseRealtimeLevel - oppositePhaseRealtimeLevel) < 0.000_001)
+        #expect(oppositePhaseRealtimeLevel > AudioFileService.spectrogramDisplayMinimumDB)
     }
 
     @Test
@@ -205,6 +254,15 @@ struct SpectrogramSnapshotTests {
             .max()
     }
 
+    private func realtimeLevel(
+        near frequency: Double,
+        in frame: [RealtimeSpectrumPoint]
+    ) -> Double? {
+        frame.min {
+            abs($0.frequencyHz - frequency) < abs($1.frequencyHz - frequency)
+        }?.levelDB
+    }
+
     private func maxPreviewDifference(_ lhs: AudioPreviewSnapshot, _ rhs: AudioPreviewSnapshot) -> Double {
         guard lhs.waveform.count == rhs.waveform.count else {
             return .infinity
@@ -227,7 +285,8 @@ struct SpectrogramSnapshotTests {
     private func maxSpectrogramDifference(_ lhs: SpectrogramSnapshot, _ rhs: SpectrogramSnapshot) -> Double {
         guard lhs.timeBucketCount == rhs.timeBucketCount,
               lhs.frequencyBucketCount == rhs.frequencyBucketCount,
-              lhs.cells.count == rhs.cells.count
+              lhs.cells.count == rhs.cells.count,
+              lhs.realtimeSpectrumTimeline.count == rhs.realtimeSpectrumTimeline.count
         else {
             return .infinity
         }
@@ -248,6 +307,21 @@ struct SpectrogramSnapshotTests {
             maxDiff = max(maxDiff, abs(left.frequencyStart - right.frequencyStart))
             maxDiff = max(maxDiff, abs(left.frequencyEnd - right.frequencyEnd))
             maxDiff = max(maxDiff, abs(left.levelDB - right.levelDB))
+        }
+        for (leftFrame, rightFrame) in zip(
+            lhs.realtimeSpectrumTimeline,
+            rhs.realtimeSpectrumTimeline
+        ) {
+            guard leftFrame.count == rightFrame.count else {
+                return .infinity
+            }
+            for (left, right) in zip(leftFrame, rightFrame) {
+                guard left.id == right.id else {
+                    return .infinity
+                }
+                maxDiff = max(maxDiff, abs(left.frequencyHz - right.frequencyHz))
+                maxDiff = max(maxDiff, abs(left.levelDB - right.levelDB))
+            }
         }
         return maxDiff
     }
@@ -273,7 +347,7 @@ struct SpectrogramSnapshotTests {
             )
         }
 
-        let spectrogram = SpectralDSP.stft(mono, fftSize: 1024, hopSize: 1024)
+        let spectrogram = SpectralDSP.stft(mono, fftSize: 1024, hopSize: 512)
         return AudioFileService.AudioDisplaySnapshots(
             previewSnapshot: referencePreviewSnapshot(signal: signal, mono: mono, spectrogram: spectrogram),
             spectrogram: referenceSpectrogramSnapshot(signal: signal, mono: mono, spectrogram: spectrogram)
@@ -314,6 +388,9 @@ struct SpectrogramSnapshotTests {
             let upperBin = max(lowerBin, min(Int(upperFrequency / frequencyStep), spectrogram.binCount - 1))
             return lowerBin...upperBin
         }
+        let duration = Double(mono.count) / signal.sampleRate
+        let realtimeInterval = RealtimeSpectrumAnalyzer.timelineInterval
+        let realtimeTimeBuckets = max(1, Int(ceil(duration / realtimeInterval)) + 1)
 
         var rawLevels = Array(repeating: Array(repeating: -120.0, count: frequencyBuckets), count: timeBuckets)
         for timeBucket in 0..<timeBuckets {
@@ -336,7 +413,87 @@ struct SpectrogramSnapshotTests {
             }
         }
 
-        let duration = Double(mono.count) / signal.sampleRate
+        var realtimeLevels = Array(
+            repeating: Double(-120),
+            count: realtimeTimeBuckets * frequencyBuckets
+        )
+        var nextRealtimeTimeBucket = 0
+        var previousRealtimeFrameTime: Double?
+        var previousRealtimeFrameLevels: [Double]?
+        for frameIndex in 0..<spectrogram.frameCount {
+            let frameTime = min(
+                Double(frameIndex * spectrogram.hopSize) / signal.sampleRate,
+                duration
+            )
+            var frameLevels = Array(repeating: Double(-120), count: frequencyBuckets)
+            for frequencyBucket in 0..<frequencyBuckets {
+                var frameEnergy: Float = 0
+                for binIndex in binEdges[frequencyBucket] {
+                    let value = spectrogram.magnitude(
+                        frameIndex: frameIndex,
+                        binIndex: binIndex
+                    )
+                    frameEnergy += value * value
+                }
+                let rms = sqrt(max(
+                    Double(frameEnergy) / Double(max(binEdges[frequencyBucket].count, 1)),
+                    1e-12
+                ))
+                frameLevels[frequencyBucket] = AudioFileService.spectrogramDisplayLevelDB(
+                    rawLevelDB: 20 * log10(max(rms, 1e-12)),
+                    binCount: binEdges[frequencyBucket].count
+                )
+            }
+            while nextRealtimeTimeBucket < realtimeTimeBuckets {
+                let targetTime = Double(nextRealtimeTimeBucket) * realtimeInterval
+                guard targetTime <= frameTime else { break }
+                let nearestFrameLevels: [Double]
+                if let previousRealtimeFrameTime,
+                   let previousRealtimeFrameLevels,
+                   targetTime - previousRealtimeFrameTime <= frameTime - targetTime
+                {
+                    nearestFrameLevels = previousRealtimeFrameLevels
+                } else {
+                    nearestFrameLevels = frameLevels
+                }
+                let destination = nextRealtimeTimeBucket * frequencyBuckets
+                realtimeLevels.replaceSubrange(
+                    destination..<(destination + frequencyBuckets),
+                    with: nearestFrameLevels
+                )
+                nextRealtimeTimeBucket += 1
+            }
+            previousRealtimeFrameTime = frameTime
+            previousRealtimeFrameLevels = frameLevels
+        }
+        if let previousRealtimeFrameLevels {
+            while nextRealtimeTimeBucket < realtimeTimeBuckets {
+                let destination = nextRealtimeTimeBucket * frequencyBuckets
+                realtimeLevels.replaceSubrange(
+                    destination..<(destination + frequencyBuckets),
+                    with: previousRealtimeFrameLevels
+                )
+                nextRealtimeTimeBucket += 1
+            }
+        }
+        let realtimeSpectrumTimeline = (0..<realtimeTimeBuckets).map { timeBucket in
+            (0..<frequencyBuckets).map { frequencyBucket in
+                let lowerFrequency = minFrequency * pow(
+                    maxFrequency / minFrequency,
+                    Double(frequencyBucket) / Double(frequencyBuckets)
+                )
+                let upperFrequency = minFrequency * pow(
+                    maxFrequency / minFrequency,
+                    Double(frequencyBucket + 1) / Double(frequencyBuckets)
+                )
+                let index = timeBucket * frequencyBuckets + frequencyBucket
+                return RealtimeSpectrumPoint(
+                    id: "comparison-\(frequencyBucket)",
+                    frequencyHz: sqrt(lowerFrequency * upperFrequency),
+                    levelDB: realtimeLevels[index]
+                )
+            }
+        }
         var cells: [SpectrogramCell] = []
         cells.reserveCapacity(timeBuckets * frequencyBuckets)
         for timeBucket in 0..<timeBuckets {
@@ -364,7 +521,8 @@ struct SpectrogramSnapshotTests {
             frequencyBucketCount: frequencyBuckets,
             duration: duration,
             minLevelDB: AudioFileService.spectrogramDisplayMinimumDB,
-            maxLevelDB: AudioFileService.spectrogramDisplayMaximumDB
+            maxLevelDB: AudioFileService.spectrogramDisplayMaximumDB,
+            realtimeSpectrumTimeline: realtimeSpectrumTimeline
         )
     }
 

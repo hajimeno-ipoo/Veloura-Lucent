@@ -144,12 +144,18 @@ struct WorkspaceToolbarView: View {
         .velouraAdaptiveGlass(in: .capsule, interactive: true)
         .onHover { updateHighlight(.comparisonVideo, isHovering: $0) }
         .accessibilityLabel("比較動画を作成")
-        .help(
-            comparisonVideoLaunch.sources.count < 2
-                ? "現在のモードに比較できる音源が2つ必要です"
-                : "現在のモードの音源から比較動画を作成します"
-        )
-        .disabled(comparisonVideoLaunch.sources.count < 2)
+        .help(comparisonVideoHelp)
+        .disabled(!comparisonVideoLaunch.isReady)
+    }
+
+    private var comparisonVideoHelp: String {
+        if comparisonVideoLaunch.sources.count < 2 {
+            return "現在のモードに比較できる音源が2つ必要です"
+        }
+        if !comparisonVideoLaunch.isReady {
+            return "比較動画用の解析結果を準備しています"
+        }
+        return "現在のモードの音源から比較動画を作成します"
     }
 
     @ViewBuilder

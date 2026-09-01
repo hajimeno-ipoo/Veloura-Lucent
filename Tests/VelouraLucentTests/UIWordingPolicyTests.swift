@@ -799,7 +799,7 @@ struct UIWordingPolicyTests {
         #expect(buildScript.contains("PROJECT_BUNDLE_ID=\"com.codex.VelouraLucent.project\""))
         #expect(buildScript.contains("BUNDLE_ID=\"$PROJECT_BUNDLE_ID\""))
         #expect(buildScript.contains("BUNDLE_ID=\"$PRODUCTION_BUNDLE_ID\""))
-        #expect(buildScript.contains("APP_VERSION=\"${VELOURA_APP_VERSION:-1.0.0}\""))
+        #expect(buildScript.contains("APP_VERSION=\"${VELOURA_APP_VERSION:-1.1.0}\""))
         #expect(buildScript.contains("/bin/date -u +%Y%m%d%H%M%S"))
         #expect(buildScript.contains("\"$MODE\" == \"package\" || \"$MODE\" == \"--package\""))
         #expect(buildScript.contains("git -C \"$ROOT_DIR\" rev-list --count HEAD"))

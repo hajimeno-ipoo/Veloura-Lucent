@@ -99,7 +99,8 @@ struct ComparisonVideoFrameView: View {
                         ComparisonVideoSpectrumVisualizer(
                             spectrum: state.visualizerSpectrum,
                             gradientStops: state.displaySettings.visualizerGradientStops,
-                            size: state.displaySettings.visualizerSize(for: orientation)
+                            size: state.displaySettings.visualizerSize(for: orientation),
+                            heightScale: state.displaySettings.visualizerHeightScale
                         )
                     }
                 }
@@ -140,10 +141,15 @@ private struct ComparisonVideoSpectrumVisualizer: View {
     let spectrum: ComparisonVideoSpectrumFrame
     let gradientStops: [ComparisonVideoVisualizerGradientStop]
     let size: CGSize
+    let heightScale: Double
 
     var body: some View {
         Canvas(opaque: false, rendersAsynchronously: false) { context, canvasSize in
-            let dots = ComparisonVideoSpectrumGeometry.dots(for: spectrum, in: canvasSize)
+            let dots = ComparisonVideoSpectrumGeometry.dots(
+                for: spectrum,
+                in: canvasSize,
+                heightScale: heightScale
+            )
             let start = CGPoint(x: 0, y: canvasSize.height / 2)
             let end = CGPoint(x: canvasSize.width, y: canvasSize.height / 2)
             let layers: [([CGRect], Double)] = [

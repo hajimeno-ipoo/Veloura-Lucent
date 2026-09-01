@@ -194,9 +194,14 @@ struct ComparisonVideoExportService {
         return ComparisonVideoPreparedAudio(
             signal: output,
             plan: plan,
-            spectrumTimeline: displaySettings == nil
-                ? []
-                : Self.makeSpectrumTimeline(from: output)
+            spectrumTimeline: displaySettings?.visualizerEnabled == true
+                ? Self.makeSpectrumTimeline(
+                    first: first.spectrogram,
+                    second: second.spectrogram,
+                    plan: plan,
+                    displaySettings: displaySettings
+                )
+                : []
         )
     }
 
@@ -225,24 +230,60 @@ struct ComparisonVideoExportService {
         )
     }
 
-    private static func makeSpectrumTimeline(
-        from signal: AudioSignal
+    static func makeSpectrumTimeline(
+        first: SpectrogramSnapshot?,
+        second: SpectrogramSnapshot?,
+        plan: ComparisonVideoPlan,
+        displaySettings: ComparisonVideoDisplaySettings?
     ) -> [ComparisonVideoSpectrumFrame] {
-        guard let firstChannel = signal.channels.first, !firstChannel.isEmpty else { return [] }
-        var mono = Array(repeating: Float.zero, count: firstChannel.count)
-        for channel in signal.channels {
-            for index in mono.indices {
-                mono[index] += channel[index] / Float(signal.channels.count)
+        let firstFrames = first?.realtimeSpectrumTimeline
+        let secondFrames = second?.realtimeSpectrumTimeline
+        guard let template = firstFrames?.first ?? secondFrames?.first else { return [] }
+        let silence = template.enumerated().map { index, point in
+            RealtimeSpectrumPoint(
+                id: "comparison-\(index)",
+                frequencyHz: point.frequencyHz,
+                levelDB: -100
+            )
+        }
+        let interval = RealtimeSpectrumAnalyzer.timelineInterval
+        let frameCount = max(1, Int(ceil(plan.outputDuration / interval)) + 1)
+        let rawTimeline = (0..<frameCount).map { frameIndex in
+            let outputTime = min(Double(frameIndex) * interval, plan.outputDuration)
+            let location = plan.segment(at: outputTime)
+            let sourceTime = location.segment.sourceStartTime
+                + min(location.localTime, location.segment.duration)
+            let snapshot = location.segment.sourceIndex == 0 ? first : second
+            let frames = location.segment.sourceIndex == 0 ? firstFrames : secondFrames
+            guard let snapshot,
+                  let frames,
+                  !frames.isEmpty,
+                  snapshot.duration > 0 else {
+                return silence
+            }
+            let sourceIndex = min(
+                max(Int((sourceTime / interval).rounded()), 0),
+                frames.count - 1
+            )
+            let fadeLevel = ComparisonVideoFadeEnvelope.level(
+                at: outputTime,
+                duration: plan.outputDuration,
+                fadeInDuration: displaySettings?.effectiveAudioFadeInDuration ?? 0,
+                fadeOutDuration: displaySettings?.effectiveAudioFadeOutDuration ?? 0
+            )
+            let fadeDB = fadeLevel > 0 ? 20 * log10(fadeLevel) : -100
+            return frames[sourceIndex].map { point in
+                RealtimeSpectrumPoint(
+                    id: point.id,
+                    frequencyHz: point.frequencyHz,
+                    levelDB: max(point.levelDB + fadeDB, -100)
+                )
             }
         }
-        let rawTimeline = RealtimeSpectrumAnalyzer.timeline(
-            from: mono,
-            sampleRate: signal.sampleRate,
-            frequencies: ComparisonVideoSpectrumProcessor.frequencies
-        )
         return ComparisonVideoSpectrumProcessor.frames(
             from: rawTimeline,
-            interval: RealtimeSpectrumAnalyzer.timelineInterval
+            interval: interval,
+            response: displaySettings?.visualizerResponse ?? 0.8
         )
     }
 
@@ -769,7 +810,8 @@ struct ComparisonVideoExportService {
         let originYFromTop = canvasSize.height * position.y / 100 - visualizerSize.height / 2
         let dots = ComparisonVideoSpectrumGeometry.dots(
             for: state.visualizerSpectrum,
-            in: visualizerSize
+            in: visualizerSize,
+            heightScale: settings.visualizerHeightScale
         )
         guard let gradient = makeVisualizerGradient(settings: settings) else { return }
         let gradientStart = CGPoint(x: originX, y: 0)

@@ -251,6 +251,11 @@ final class ComparisonVideoWindowModel {
         refreshPreviewAudio()
     }
 
+    func setVisualizerResponse(_ value: Double) {
+        displaySettings.visualizerResponse = value
+        refreshPreviewSpectrumTimeline()
+    }
+
     func setVisualizerLeadingColor(_ color: NSColor) {
         guard let color = rgbaColor(from: color) else { return }
         displaySettings.visualizerLeadingColor = color
@@ -445,7 +450,13 @@ final class ComparisonVideoWindowModel {
                 pendingPreviewFiles.removeAll()
                 self.outputTime = 0
                 self.previewFrameTime = 0
-                self.previewSpectrumTimeline = prepared.spectrumTimeline
+                if requestedDisplaySettings.visualizerResponse
+                    == self.displaySettings.visualizerResponse
+                {
+                    self.previewSpectrumTimeline = prepared.spectrumTimeline
+                } else {
+                    self.refreshPreviewSpectrumTimeline()
+                }
                 self.isPreviewPlaying = false
                 self.startPreviewClock()
             } catch is CancellationError {
@@ -500,6 +511,18 @@ final class ComparisonVideoWindowModel {
         previewPlayer?.pause()
         isPreviewPlaying = false
         preparePreview(after: .milliseconds(250))
+    }
+
+    private func refreshPreviewSpectrumTimeline() {
+        guard let firstSource,
+              let secondSource,
+              let plan else { return }
+        previewSpectrumTimeline = ComparisonVideoExportService.makeSpectrumTimeline(
+            first: firstSource.spectrogram,
+            second: secondSource.spectrogram,
+            plan: plan,
+            displaySettings: displaySettings
+        )
     }
 
     private func inspectorInfo(for source: ComparisonVideoSource) -> ComparisonVideoInspectorInfo {

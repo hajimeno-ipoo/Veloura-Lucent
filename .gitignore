@@ -7,6 +7,7 @@ __pycache__/
 /.codex/
 /.goal-state/
 /.playwright-cli/
+/.playwright-mcp/
 /.serena/
 /.stem-model-cache/
 /.swiftpm/

@@ -710,6 +710,25 @@ struct SpectrogramSnapshot: Sendable {
     let duration: TimeInterval
     let minLevelDB: Double
     let maxLevelDB: Double
+    let realtimeSpectrumTimeline: [[RealtimeSpectrumPoint]]
+
+    init(
+        cells: [SpectrogramCell],
+        timeBucketCount: Int,
+        frequencyBucketCount: Int,
+        duration: TimeInterval,
+        minLevelDB: Double,
+        maxLevelDB: Double,
+        realtimeSpectrumTimeline: [[RealtimeSpectrumPoint]] = []
+    ) {
+        self.cells = cells
+        self.timeBucketCount = timeBucketCount
+        self.frequencyBucketCount = frequencyBucketCount
+        self.duration = duration
+        self.minLevelDB = minLevelDB
+        self.maxLevelDB = maxLevelDB
+        self.realtimeSpectrumTimeline = realtimeSpectrumTimeline
+    }
 
     static let empty = SpectrogramSnapshot(cells: [], timeBucketCount: 0, frequencyBucketCount: 0, duration: 0, minLevelDB: -120, maxLevelDB: -120)
 }

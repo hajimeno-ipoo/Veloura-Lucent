@@ -68,6 +68,7 @@ final class StemModeWorkspaceModel {
     private(set) var inputSpectrogram: SpectrogramSnapshot?
     private(set) var correctedRemixSpectrogram: SpectrogramSnapshot?
     private(set) var finalSpectrogram: SpectrogramSnapshot?
+    private(set) var comparisonSpectrogramsBySourceID: [String: SpectrogramSnapshot] = [:]
     private(set) var isAnalyzingDisplayAudio = false
     private(set) var isAnalyzingInput = false
     private(set) var inputAnalysisError: String?
@@ -79,6 +80,7 @@ final class StemModeWorkspaceModel {
     @ObservationIgnored private var isApplyingMasteringProfile = false
     @ObservationIgnored private var displayAnalysisGeneration = UUID()
     @ObservationIgnored private var displayAnalysisTask: Task<Void, Never>?
+    @ObservationIgnored private var displayAnalysisArtifacts: [StemAudioArtifact] = []
     @ObservationIgnored private var inputAnalysisGeneration = UUID()
     @ObservationIgnored private var inputAnalysisTask: Task<Void, Never>?
 
@@ -498,6 +500,7 @@ final class StemModeWorkspaceModel {
         let previousFinalEvaluation = finalEvaluation
         let previousStemEvaluationsByRole = stemEvaluationsByRole
         let previousPreviewArtifacts = previewArtifacts
+        let previousDisplayAnalysisArtifacts = displayAnalysisArtifacts
         let request = StemModeStartRequest(
             inputURL: selectedInputURL,
             separationSettings: separationSettings,
@@ -517,6 +520,7 @@ final class StemModeWorkspaceModel {
             finalEvaluation = previousFinalEvaluation
             stemEvaluationsByRole = previousStemEvaluationsByRole
             replacePreviewSources(previousPreviewArtifacts)
+            replaceDisplayAnalysisSources(previousDisplayAnalysisArtifacts)
             isStartingRun = false
             return
         } catch {
@@ -527,6 +531,7 @@ final class StemModeWorkspaceModel {
             finalEvaluation = previousFinalEvaluation
             stemEvaluationsByRole = previousStemEvaluationsByRole
             replacePreviewSources(previousPreviewArtifacts)
+            replaceDisplayAnalysisSources(previousDisplayAnalysisArtifacts)
             presentError(
                 title: "Stem Modeを開始できません",
                 message: error.localizedDescription
@@ -860,6 +865,7 @@ final class StemModeWorkspaceModel {
             return leftRank < rightRank
         }
         replacePreviewSources(sortedArtifacts)
+        replaceDisplayAnalysisSources(validatedArtifacts)
         refreshSelectedStemPreviewSources()
     }
 
@@ -953,6 +959,7 @@ final class StemModeWorkspaceModel {
         finalEvaluation = nil
         stemEvaluationsByRole = [:]
         replacePreviewSources([])
+        replaceDisplayAnalysisSources([])
         clearStemPreviewSources()
         clearRemixPreviewSources()
         reconcileRoleSelections()
@@ -1001,8 +1008,28 @@ final class StemModeWorkspaceModel {
             || previousFinal != finalPreviewArtifact {
             preparePreviewSources()
             prepareRemixPreviewSources()
-            refreshDisplayAnalysis()
+            synchronizeDisplaySpectrograms()
         }
+    }
+
+    private func replaceDisplayAnalysisSources(_ artifacts: [StemAudioArtifact]) {
+        var artifactsBySourceID: [String: StemAudioArtifact] = [:]
+        for artifact in artifacts where artifact.kind != .input44100 {
+            let sourceID = Self.comparisonSourceID(for: artifact.fileURL)
+            guard FileManager.default.fileExists(
+                atPath: artifact.fileURL.path(percentEncoded: false)
+            ) else {
+                continue
+            }
+            artifactsBySourceID[sourceID] = artifact
+        }
+        let sortedArtifacts = artifactsBySourceID.values.sorted {
+            Self.comparisonSourceID(for: $0.fileURL)
+                < Self.comparisonSourceID(for: $1.fileURL)
+        }
+        guard sortedArtifacts != displayAnalysisArtifacts else { return }
+        displayAnalysisArtifacts = sortedArtifacts
+        refreshDisplayAnalysis()
     }
 
     private func preparePreviewSources() {
@@ -1040,40 +1067,67 @@ final class StemModeWorkspaceModel {
         displayAnalysisTask?.cancel()
         let generation = UUID()
         displayAnalysisGeneration = generation
-        let correctedURL = correctedRemixPreviewArtifact?.fileURL
-        let finalURL = finalPreviewArtifact?.fileURL
-
-        correctedRemixSpectrogram = nil
-        finalSpectrogram = nil
+        let artifacts = displayAnalysisArtifacts
+        let currentArtifactsBySourceID = Dictionary(
+            uniqueKeysWithValues: artifacts.map {
+                (Self.comparisonSourceID(for: $0.fileURL), $0)
+            }
+        )
+        comparisonSpectrogramsBySourceID = comparisonSpectrogramsBySourceID.filter {
+            currentArtifactsBySourceID[$0.key] != nil
+        }
+        synchronizeDisplaySpectrograms()
         displayAnalysisError = nil
 
-        guard correctedURL != nil || finalURL != nil else {
+        let missingArtifacts = artifacts.filter {
+            comparisonSpectrogramsBySourceID[Self.comparisonSourceID(for: $0.fileURL)] == nil
+        }
+        guard !missingArtifacts.isEmpty else {
             isAnalyzingDisplayAudio = false
+            displayAnalysisTask = nil
             return
         }
 
         isAnalyzingDisplayAudio = true
         displayAnalysisTask = Task { [weak self] in
-            async let correctedResult = Self.loadSpectrogram(correctedURL)
-            async let finalResult = Self.loadSpectrogram(finalURL)
-            let (corrected, final) = await (
-                correctedResult,
-                finalResult
-            )
-            guard !Task.isCancelled,
-                  let self,
+            var firstError: String?
+            for artifact in missingArtifacts {
+                let result = await Self.loadSpectrogram(artifact.fileURL)
+                guard !Task.isCancelled,
+                      let self,
+                      self.displayAnalysisGeneration == generation else {
+                    return
+                }
+                if let snapshot = result.snapshot {
+                    self.comparisonSpectrogramsBySourceID[
+                        Self.comparisonSourceID(for: artifact.fileURL)
+                    ] = snapshot
+                    self.synchronizeDisplaySpectrograms()
+                } else if firstError == nil {
+                    firstError = result.error
+                }
+            }
+            guard let self,
                   self.displayAnalysisGeneration == generation else {
                 return
             }
-
-            correctedRemixSpectrogram = corrected.snapshot
-            finalSpectrogram = final.snapshot
-            displayAnalysisError = [corrected.error, final.error]
-                .compactMap { $0 }
-                .first
-            isAnalyzingDisplayAudio = false
-            displayAnalysisTask = nil
+            self.displayAnalysisError = firstError
+            self.isAnalyzingDisplayAudio = false
+            self.displayAnalysisTask = nil
         }
+    }
+
+    private func synchronizeDisplaySpectrograms() {
+        correctedRemixSpectrogram = correctedRemixPreviewArtifact.flatMap {
+            comparisonSpectrogramsBySourceID[Self.comparisonSourceID(for: $0.fileURL)]
+        }
+        finalSpectrogram = finalPreviewArtifact.flatMap {
+            comparisonSpectrogramsBySourceID[Self.comparisonSourceID(for: $0.fileURL)]
+        }
+    }
+
+    private static func comparisonSourceID(for fileURL: URL) -> String {
+        fileURL.standardizedFileURL.path(percentEncoded: false)
     }
 
     private func acceptSelectedInput(_ inputURL: URL) {

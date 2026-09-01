@@ -10,13 +10,15 @@ struct ComparisonVideoSource: Identifiable, Sendable {
     let trackTitle: String
     let roleTitle: String
     let inspectorMetrics: AudioMetricSnapshot?
+    let spectrogram: SpectrogramSnapshot?
     private let fingerprint: ComparisonVideoSourceFingerprint?
 
     init(
         fileURL: URL,
         trackTitle: String,
         roleTitle: String,
-        inspectorMetrics: AudioMetricSnapshot? = nil
+        inspectorMetrics: AudioMetricSnapshot? = nil,
+        spectrogram: SpectrogramSnapshot? = nil
     ) {
         let normalizedURL = fileURL.standardizedFileURL
         id = normalizedURL.path(percentEncoded: false)
@@ -24,6 +26,7 @@ struct ComparisonVideoSource: Identifiable, Sendable {
         self.trackTitle = trackTitle
         self.roleTitle = roleTitle
         self.inspectorMetrics = inspectorMetrics
+        self.spectrogram = spectrogram
         fingerprint = ComparisonVideoSourceFingerprint.read(from: normalizedURL)
     }
 
@@ -227,6 +230,8 @@ struct ComparisonVideoDisplaySettings: Sendable {
     static let fadeDurationRange: ClosedRange<Double> = 0...5
     static let visualizerDimensionRange: ClosedRange<Double> = 0.25...1
     static let visualizerScaleRange: ClosedRange<Double> = 0.25...2
+    static let visualizerResponseRange: ClosedRange<Double> = 0...0.99
+    static let visualizerHeightScaleRange: ClosedRange<Double> = 0.25...3
 
     var trackTitle: String
     var firstRoleTitle: String
@@ -265,6 +270,8 @@ struct ComparisonVideoDisplaySettings: Sendable {
     private var storedVisualizerWidth: Double
     private var storedVisualizerHeight: Double
     private var storedVisualizerScale: Double
+    private var storedVisualizerResponse: Double
+    private var storedVisualizerHeightScale: Double
     private var storedCustomAspectWidth: Double
     private var storedCustomAspectHeight: Double
     private var storedInspectorArea: Double
@@ -344,6 +351,16 @@ struct ComparisonVideoDisplaySettings: Sendable {
         set { storedVisualizerScale = Self.clampVisualizerScale(newValue) }
     }
 
+    var visualizerResponse: Double {
+        get { storedVisualizerResponse }
+        set { storedVisualizerResponse = Self.clampVisualizerResponse(newValue) }
+    }
+
+    var visualizerHeightScale: Double {
+        get { storedVisualizerHeightScale }
+        set { storedVisualizerHeightScale = Self.clampVisualizerHeightScale(newValue) }
+    }
+
     var effectiveVideoFadeInDuration: Double {
         videoFadeInEnabled ? fadeInDuration : 0
     }
@@ -398,6 +415,8 @@ struct ComparisonVideoDisplaySettings: Sendable {
         visualizerWidth: Double = 1,
         visualizerHeight: Double = 0.65,
         visualizerScale: Double = 1,
+        visualizerResponse: Double = 0.8,
+        visualizerHeightScale: Double = 1,
         backgroundColor: ComparisonVideoRGBAColor = .defaultBackground,
         backgroundImage: ComparisonVideoBackgroundImage? = nil,
         backgroundImageLayout: ComparisonVideoBackgroundImageLayout = .fill
@@ -422,6 +441,8 @@ struct ComparisonVideoDisplaySettings: Sendable {
         storedVisualizerWidth = Self.clampVisualizerDimension(visualizerWidth, fallback: 1)
         storedVisualizerHeight = Self.clampVisualizerDimension(visualizerHeight, fallback: 0.65)
         storedVisualizerScale = Self.clampVisualizerScale(visualizerScale)
+        storedVisualizerResponse = Self.clampVisualizerResponse(visualizerResponse)
+        storedVisualizerHeightScale = Self.clampVisualizerHeightScale(visualizerHeightScale)
         self.inspectorAspectRatio = inspectorAspectRatio
         storedCustomAspectWidth = Self.validAspectComponent(customAspectWidth) ?? 15
         storedCustomAspectHeight = Self.validAspectComponent(customAspectHeight) ?? 2
@@ -704,6 +725,22 @@ struct ComparisonVideoDisplaySettings: Sendable {
         )
     }
 
+    private static func clampVisualizerResponse(_ value: Double) -> Double {
+        let finiteValue = value.isFinite ? value : 0.8
+        return min(
+            max(finiteValue, visualizerResponseRange.lowerBound),
+            visualizerResponseRange.upperBound
+        )
+    }
+
+    private static func clampVisualizerHeightScale(_ value: Double) -> Double {
+        let finiteValue = value.isFinite ? value : 1
+        return min(
+            max(finiteValue, visualizerHeightScaleRange.lowerBound),
+            visualizerHeightScaleRange.upperBound
+        )
+    }
+
     private static func finiteValue(_ value: Double, fallback: Double) -> Double {
         value.isFinite ? value : fallback
     }
@@ -743,6 +780,14 @@ private struct ComparisonVideoSourceFingerprint: Hashable, Sendable {
 struct ComparisonVideoLaunch: Sendable {
     let mode: ProcessingMode
     let sources: [ComparisonVideoSource]
+
+    var isReady: Bool {
+        sources.count >= 2 && sources.allSatisfy {
+            guard let spectrogram = $0.spectrogram else { return false }
+            return spectrogram.frequencyBucketCount == ComparisonVideoSpectrumProcessor.frequencyCount
+                && !spectrogram.realtimeSpectrumTimeline.isEmpty
+        }
+    }
 }
 
 enum ComparisonVideoOrientation: String, CaseIterable, Identifiable, Sendable {
@@ -959,21 +1004,20 @@ struct ComparisonVideoSpectrumFrame: Sendable {
 }
 
 enum ComparisonVideoSpectrumProcessor {
-    static let frequencyCount = 48
+    static let frequencyCount = 56
     static let peakHoldDuration: TimeInterval = 0.4
-    static let levelDecayDBPerSecond = 24.0
     static let peakDecayDBPerSecond = 18.0
-
-    static let frequencies: [Double] = (0..<frequencyCount).map { index in
-        let progress = Double(index) / Double(frequencyCount - 1)
-        return 80 * pow(20_000.0 / 80.0, progress)
-    }
 
     static func frames(
         from rawTimeline: [[RealtimeSpectrumPoint]],
-        interval: TimeInterval
+        interval: TimeInterval,
+        response: Double = 0.8
     ) -> [ComparisonVideoSpectrumFrame] {
-        guard !rawTimeline.isEmpty, interval > 0 else { return [] }
+        guard let frequencies = rawTimeline.first?.map(\.frequencyHz),
+              frequencies.count == frequencyCount,
+              interval > 0 else {
+            return []
+        }
         let silentPoints = frequencies.enumerated().map { index, frequency in
             RealtimeSpectrumPoint(
                 id: "comparison-\(index)",
@@ -985,8 +1029,8 @@ enum ComparisonVideoSpectrumProcessor {
         var peakLevels = smoothedLevels
         var peakHoldFramesRemaining = Array(repeating: 0, count: frequencyCount)
         let peakHoldFrameCount = Int(ceil(peakHoldDuration / interval))
-        let levelDecay = levelDecayDBPerSecond * interval
         let peakDecay = peakDecayDBPerSecond * interval
+        let smoothing = min(max(response.isFinite ? response : 0.8, 0), 0.99)
 
         return rawTimeline.map { rawPoints in
             let points = frequencies.indices.map { index in
@@ -994,7 +1038,11 @@ enum ComparisonVideoSpectrumProcessor {
             }
             for index in 0..<frequencyCount {
                 let rawLevel = min(max(points[index].levelDB, -100), 0)
-                smoothedLevels[index] = max(rawLevel, smoothedLevels[index] - levelDecay)
+                let previousMagnitude = pow(10, smoothedLevels[index] / 20)
+                let rawMagnitude = pow(10, rawLevel / 20)
+                let smoothedMagnitude = smoothing * previousMagnitude
+                    + (1 - smoothing) * rawMagnitude
+                smoothedLevels[index] = 20 * log10(max(smoothedMagnitude, 1e-5))
 
                 if smoothedLevels[index] >= peakLevels[index] {
                     peakLevels[index] = smoothedLevels[index]
@@ -1040,7 +1088,8 @@ enum ComparisonVideoSpectrumGeometry {
 
     static func dots(
         for frame: ComparisonVideoSpectrumFrame,
-        in size: CGSize
+        in size: CGSize,
+        heightScale: Double = 1
     ) -> ComparisonVideoSpectrumDotGeometry {
         let points = frame.points
         guard !points.isEmpty, size.width > 0, size.height > 0 else {
@@ -1079,14 +1128,22 @@ enum ComparisonVideoSpectrumGeometry {
         for (index, point) in points.enumerated() {
             let centerX = (CGFloat(index) + 0.5) * columnStep
             let activeCount = min(
-                Int(ceil(normalizedLevel(for: point.levelDB) * Double(dotRowCount))),
+                Int(ceil(
+                    normalizedLevel(for: point.levelDB)
+                        * max(heightScale.isFinite ? heightScale : 1, 0)
+                        * Double(dotRowCount)
+                )),
                 dotRowCount
             )
             let peakLevel = index < frame.peakLevelsDB.count
                 ? frame.peakLevelsDB[index]
                 : point.levelDB
             let peakCount = min(
-                Int(ceil(normalizedLevel(for: peakLevel) * Double(dotRowCount))),
+                Int(ceil(
+                    normalizedLevel(for: peakLevel)
+                        * max(heightScale.isFinite ? heightScale : 1, 0)
+                        * Double(dotRowCount)
+                )),
                 dotRowCount
             )
 
@@ -1185,21 +1242,24 @@ enum ComparisonVideoSourceCatalog {
                 title: title,
                 role: "入力",
                 requiresPreviewOwnership: false,
-                inspectorMetrics: job.inputMetrics
+                inspectorMetrics: job.inputMetrics,
+                spectrogram: job.inputSpectrogram
             ),
             source(
                 url: job.hasExistingOutput ? job.outputFile : nil,
                 title: title,
                 role: "補正後",
                 requiresPreviewOwnership: true,
-                inspectorMetrics: job.outputMetrics
+                inspectorMetrics: job.outputMetrics,
+                spectrogram: job.outputSpectrogram
             ),
             source(
                 url: job.hasExistingMasteredOutput ? job.masteredOutputFile : nil,
                 title: title,
                 role: "最終版",
                 requiresPreviewOwnership: true,
-                inspectorMetrics: job.masteredMetrics
+                inspectorMetrics: job.masteredMetrics,
+                spectrogram: job.masteredSpectrogram
             ),
         ].compactMap { $0 }
     }
@@ -1208,7 +1268,8 @@ enum ComparisonVideoSourceCatalog {
     static func stem(model: StemModeWorkspaceModel) -> [ComparisonVideoSource] {
         stem(
             selectedInputURL: model.selectedInputURL,
-            artifactStates: model.session.artifactStates
+            artifactStates: model.session.artifactStates,
+            spectrogramsBySourceID: model.comparisonSpectrogramsBySourceID
         ).map { source in
             let metrics: AudioMetricSnapshot?
             if source.fileURL == model.selectedInputURL?.standardizedFileURL {
@@ -1224,14 +1285,16 @@ enum ComparisonVideoSourceCatalog {
                 fileURL: source.fileURL,
                 trackTitle: source.trackTitle,
                 roleTitle: source.roleTitle,
-                inspectorMetrics: metrics
+                inspectorMetrics: metrics,
+                spectrogram: spectrogram(for: source.fileURL, model: model)
             )
         }
     }
 
     static func stem(
         selectedInputURL: URL?,
-        artifactStates: [StemWorkflowArtifactDisplayState]
+        artifactStates: [StemWorkflowArtifactDisplayState],
+        spectrogramsBySourceID: [String: SpectrogramSnapshot] = [:]
     ) -> [ComparisonVideoSource] {
         let title = trackTitle(from: selectedInputURL)
         let input = source(
@@ -1253,7 +1316,10 @@ enum ComparisonVideoSourceCatalog {
             return ComparisonVideoSource(
                 fileURL: artifact.fileURL,
                 trackTitle: title,
-                roleTitle: artifact.kind.stemModeDisplayTitle
+                roleTitle: artifact.kind.stemModeDisplayTitle,
+                spectrogram: spectrogramsBySourceID[
+                    artifact.fileURL.standardizedFileURL.path(percentEncoded: false)
+                ]
             )
         }
         .uniqued(by: \.id)
@@ -1280,7 +1346,8 @@ enum ComparisonVideoSourceCatalog {
         title: String,
         role: String,
         requiresPreviewOwnership: Bool,
-        inspectorMetrics: AudioMetricSnapshot? = nil
+        inspectorMetrics: AudioMetricSnapshot? = nil,
+        spectrogram: SpectrogramSnapshot? = nil
     ) -> ComparisonVideoSource? {
         guard let url else { return nil }
         let normalized = url.standardizedFileURL
@@ -1295,8 +1362,32 @@ enum ComparisonVideoSourceCatalog {
             fileURL: normalized,
             trackTitle: title,
             roleTitle: role,
-            inspectorMetrics: inspectorMetrics
+            inspectorMetrics: inspectorMetrics,
+            spectrogram: spectrogram
         )
+    }
+
+    @MainActor
+    private static func spectrogram(
+        for fileURL: URL,
+        model: StemModeWorkspaceModel
+    ) -> SpectrogramSnapshot? {
+        let normalizedURL = fileURL.standardizedFileURL
+        if normalizedURL == model.selectedInputURL?.standardizedFileURL {
+            return model.inputSpectrogram
+        }
+        if let spectrogram = model.comparisonSpectrogramsBySourceID[
+            normalizedURL.path(percentEncoded: false)
+        ] {
+            return spectrogram
+        }
+        if normalizedURL == model.correctedRemixPreviewArtifact?.fileURL.standardizedFileURL {
+            return model.correctedRemixSpectrogram
+        }
+        if normalizedURL == model.finalPreviewArtifact?.fileURL.standardizedFileURL {
+            return model.finalSpectrogram
+        }
+        return nil
     }
 
     @MainActor

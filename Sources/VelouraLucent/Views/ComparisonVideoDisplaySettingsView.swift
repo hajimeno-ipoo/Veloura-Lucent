@@ -324,6 +324,27 @@ struct ComparisonVideoDisplaySettingsView: View {
 
             Divider()
 
+            visualizerBehaviorControl(
+                title: "反応速度",
+                value: Binding(
+                    get: { model.displaySettings.visualizerResponse },
+                    set: { model.setVisualizerResponse($0) }
+                ),
+                range: 0...99,
+                helpText: "値が変化する滑らかさです。高いほど滑らかに動きます。"
+            )
+
+            Divider()
+
+            visualizerBehaviorControl(
+                title: "高さスケール",
+                value: $model.displaySettings.visualizerHeightScale,
+                range: 25...300,
+                helpText: "音量に対するドットの高さを調整します。"
+            )
+
+            Divider()
+
             visualizerDimensionControl(
                 title: "横幅",
                 value: $model.displaySettings.visualizerWidth
@@ -558,6 +579,62 @@ struct ComparisonVideoDisplaySettingsView: View {
             .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
             .accessibilityLabel("ビジュアライザーの拡大率")
             .accessibilityValue("\(Int(percentage.wrappedValue.rounded()))%")
+        }
+    }
+
+    private func visualizerBehaviorControl(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        helpText: String
+    ) -> some View {
+        let percentage = Binding(
+            get: { value.wrappedValue * 100 },
+            set: { value.wrappedValue = $0 / 100 }
+        )
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.title3)
+
+                Spacer(minLength: 12)
+
+                TextField(
+                    title,
+                    value: percentage,
+                    format: .number.precision(.fractionLength(0))
+                )
+                .font(.title3)
+                .multilineTextAlignment(.trailing)
+                .modifier(ComparisonVideoInputFieldModifier(width: 76))
+
+                Text("%")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+
+                Stepper(
+                    "\(title)を微調整",
+                    value: percentage,
+                    in: range,
+                    step: 1
+                )
+                .labelsHidden()
+                .fixedSize()
+            }
+
+            Slider(
+                value: percentage,
+                in: range,
+                step: 1
+            )
+            .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
+            .accessibilityLabel("ビジュアライザーの\(title)")
+            .accessibilityValue("\(Int(percentage.wrappedValue.rounded()))%")
+
+            Text(helpText)
+                .font(.body)
+                .foregroundStyle(.secondary)
         }
     }
 
