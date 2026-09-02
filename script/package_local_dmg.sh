@@ -5,14 +5,17 @@ DISPLAY_NAME="Veloura Lucent"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 APP_BUNDLE="$DIST_DIR/$DISPLAY_NAME.app"
-DMG_PATH="$DIST_DIR/Veloura Lucent Local.dmg"
+DMG_PATH=""
+RELEASE_MANIFEST_PATH="$DIST_DIR/veloura-lucent-release.json"
 DMG_BACKGROUND="$ROOT_DIR/Resources/DmgInstaller/background.png"
 DMG_BACKGROUND_NAME="Veloura Lucent Background.tiff"
 CREATE_DMG_EXPECTED_VERSION="1.3.0"
+APP_VERSION=""
 DMG_WORK_DIR=""
 DMG_STAGING_DIR=""
 BASE_DMG_PATH=""
 READ_WRITE_DMG_PATH=""
+FINAL_DMG_PATH=""
 MOUNT_POINT=""
 DMG_MOUNTED="false"
 
@@ -58,9 +61,12 @@ for command in \
   /usr/bin/ditto \
   /usr/bin/mktemp \
   /usr/bin/osascript \
+  /usr/libexec/PlistBuddy \
   /usr/bin/SetFile \
   /usr/bin/GetFileInfo \
-  /usr/bin/sips; do
+  /usr/bin/sips \
+  /usr/bin/shasum \
+  /usr/bin/stat; do
   [[ -x "$command" ]] || die "required macOS command is missing: $command"
 done
 
@@ -79,10 +85,20 @@ printf 'building the local-install app bundle...\n'
 [[ -d "$APP_BUNDLE" ]] || die "published app bundle is missing: $APP_BUNDLE"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
+APP_INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
+[[ -f "$APP_INFO_PLIST" ]] || die "published app Info.plist is missing: $APP_INFO_PLIST"
+APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_INFO_PLIST")" ||
+  die "unable to read the published app version"
+[[ "$APP_VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]] ||
+  die "published app version must use MAJOR.MINOR.PATCH numbers: $APP_VERSION"
+DMG_NAME="$DISPLAY_NAME Local $APP_VERSION.dmg"
+DMG_PATH="$DIST_DIR/$DMG_NAME"
+
 DMG_WORK_DIR="$(/usr/bin/mktemp -d "$DIST_DIR/.veloura-lucent-dmg.XXXXXX")"
 DMG_STAGING_DIR="$DMG_WORK_DIR/staging"
 BASE_DMG_PATH="$DMG_WORK_DIR/Veloura Lucent Base.dmg"
 READ_WRITE_DMG_PATH="$DMG_WORK_DIR/Veloura Lucent ReadWrite.dmg"
+FINAL_DMG_PATH="$DMG_WORK_DIR/$DMG_NAME"
 /bin/mkdir -p "$DMG_STAGING_DIR"
 /usr/bin/ditto "$APP_BUNDLE" "$DMG_STAGING_DIR/$DISPLAY_NAME.app"
 
@@ -213,12 +229,12 @@ MOUNT_POINT=""
   -format UDZO \
   -imagekey zlib-level=9 \
   -ov \
-  -o "$DMG_PATH" >/dev/null
+  -o "$FINAL_DMG_PATH" >/dev/null
 
-/usr/bin/hdiutil verify "$DMG_PATH" >/dev/null
+/usr/bin/hdiutil verify "$FINAL_DMG_PATH" >/dev/null
 
 MOUNT_POINT="$(/usr/bin/mktemp -d /tmp/veloura-lucent-dmg-verify.XXXXXX)"
-/usr/bin/hdiutil attach "$DMG_PATH" \
+/usr/bin/hdiutil attach "$FINAL_DMG_PATH" \
   -nobrowse \
   -readonly \
   -mountpoint "$MOUNT_POINT" >/dev/null
@@ -235,11 +251,49 @@ DMG_MOUNTED="true"
   die "final DMG background reference is missing"
 [[ ! -e "$MOUNT_POINT/.fseventsd" && ! -L "$MOUNT_POINT/.fseventsd" ]] ||
   die "final DMG contains Finder event-log files"
+FINAL_APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+  "$MOUNT_POINT/$DISPLAY_NAME.app/Contents/Info.plist")" ||
+  die "unable to read the final DMG app version"
+[[ "$FINAL_APP_VERSION" == "$APP_VERSION" ]] ||
+  die "final DMG app version does not match its filename: $FINAL_APP_VERSION != $APP_VERSION"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$MOUNT_POINT/$DISPLAY_NAME.app"
 
 /usr/bin/hdiutil detach "$MOUNT_POINT" >/dev/null
 DMG_MOUNTED="false"
 /bin/rmdir "$MOUNT_POINT"
 MOUNT_POINT=""
+
+DMG_SIZE="$(/usr/bin/stat -f '%z' "$FINAL_DMG_PATH")" || die "unable to read the DMG size"
+DMG_SHA256="$(/usr/bin/shasum -a 256 "$FINAL_DMG_PATH")"
+DMG_SHA256="${DMG_SHA256%% *}"
+[[ "$DMG_SIZE" =~ ^[1-9][0-9]*$ ]] || die "DMG size is invalid: $DMG_SIZE"
+[[ "$DMG_SHA256" =~ ^[0-9a-f]{64}$ ]] || die "DMG SHA-256 is invalid: $DMG_SHA256"
+
+RELEASE_MANIFEST_TEMP="$DMG_WORK_DIR/veloura-lucent-release.json"
+printf '{\n  "version": "%s",\n  "fileName": "%s",\n  "bytes": %s,\n  "sha256": "%s"\n}\n' \
+  "$APP_VERSION" \
+  "$DMG_NAME" \
+  "$DMG_SIZE" \
+  "$DMG_SHA256" >"$RELEASE_MANIFEST_TEMP"
+
+[[ ! -L "$RELEASE_MANIFEST_PATH" ]] ||
+  die "release manifest path must not be a symbolic link: $RELEASE_MANIFEST_PATH"
+if [[ -e "$RELEASE_MANIFEST_PATH" && ! -f "$RELEASE_MANIFEST_PATH" ]]; then
+  die "release manifest path is not a regular file: $RELEASE_MANIFEST_PATH"
+fi
+
+/bin/mv -f "$FINAL_DMG_PATH" "$DMG_PATH"
+/bin/mv -f "$RELEASE_MANIFEST_TEMP" "$RELEASE_MANIFEST_PATH"
+
+while IFS= read -r -d '' previous_dmg; do
+  [[ "$previous_dmg" != "$DMG_PATH" ]] || continue
+  previous_name="${previous_dmg##*/}"
+  if [[ "$previous_name" == "$DISPLAY_NAME Local.dmg" ||
+        "$previous_name" =~ ^Veloura\ Lucent\ Local\ [0-9]+[.][0-9]+[.][0-9]+[.]dmg$ ]]; then
+    [[ ! -L "$previous_dmg" && -f "$previous_dmg" ]] ||
+      die "old DMG path is not a regular file: $previous_dmg"
+    /bin/rm -f "$previous_dmg"
+  fi
+done < <(/usr/bin/find "$DIST_DIR" -mindepth 1 -maxdepth 1 -name 'Veloura Lucent Local*.dmg' -print0)
 
 printf 'created local-install DMG: %s\n' "$DMG_PATH"
