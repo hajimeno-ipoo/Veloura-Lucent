@@ -916,15 +916,7 @@ struct ComparisonVideoExportService {
         channelCount: Int
     ) -> [String: Any] {
         switch format {
-        case .mp4:
-            [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: sampleRate,
-                AVNumberOfChannelsKey: channelCount,
-                AVEncoderBitRateKey: 320_000,
-                AVEncoderAudioQualityKey: AVAudioQuality.max.rawValue,
-            ]
-        case .mov:
+        case .mp4, .mov:
             [
                 AVFormatIDKey: kAudioFormatLinearPCM,
                 AVSampleRateKey: sampleRate,

@@ -1226,7 +1226,7 @@ struct ComparisonVideoTests {
 
     @MainActor
     @Test
-    func exportsPlayableMP4AndPCMQuickTimeMovies() async throws {
+    func exportsPlayableMP4AndQuickTimeMoviesWithUncompressedPCMAudio() async throws {
         let preservedOutputPath = ProcessInfo.processInfo.environment[
             "VELOURA_COMPARISON_VIDEO_TEST_OUTPUT"
         ]
@@ -1318,6 +1318,8 @@ struct ComparisonVideoTests {
                         ),
                         videoFadeInEnabled: false,
                         videoFadeOutEnabled: false,
+                        audioFadeInEnabled: false,
+                        audioFadeOutEnabled: false,
                         backgroundColor: ComparisonVideoRGBAColor(
                             red: 0.2,
                             green: 0.1,
@@ -1370,11 +1372,11 @@ struct ComparisonVideoTests {
                 )
                 #expect(streamDescription.mSampleRate == sampleRate)
                 #expect(streamDescription.mChannelsPerFrame == 2)
-                if format == .mov {
-                    #expect(streamDescription.mFormatID == kAudioFormatLinearPCM)
-                } else {
-                    #expect(streamDescription.mFormatID == kAudioFormatMPEG4AAC)
-                }
+                #expect(streamDescription.mFormatID == kAudioFormatLinearPCM)
+
+                let decodedSignal = try AudioFileService.loadAudio(from: destination)
+                #expect(decodedSignal.sampleRate == sampleRate)
+                #expect(decodedSignal.channels == [firstSamples, firstSamples])
             }
         }
     }
