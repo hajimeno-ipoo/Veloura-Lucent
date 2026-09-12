@@ -84,7 +84,9 @@ struct ComparisonVideoFrameView: View {
                         contentScale: CGFloat(
                             state.displaySettings.inspectorContentScale(for: orientation)
                         ),
-                        layout: state.displaySettings.inspectorLayout
+                        layout: state.displaySettings.inspectorLayout,
+                        backgroundColor: state.displaySettings.inspectorBackgroundColor,
+                        textColor: state.displaySettings.inspectorTextColor
                     )
                 }
 
@@ -307,17 +309,23 @@ private struct ComparisonVideoInspectorPanel: View {
     let size: CGSize
     let contentScale: CGFloat
     let layout: ComparisonVideoInspectorLayout
+    let backgroundColor: ComparisonVideoRGBAColor
+    let textColor: ComparisonVideoRGBAColor
     private let values: [ComparisonVideoInspectorValue]
 
     init(
         info: ComparisonVideoInspectorInfo?,
         size: CGSize,
         contentScale: CGFloat,
-        layout: ComparisonVideoInspectorLayout
+        layout: ComparisonVideoInspectorLayout,
+        backgroundColor: ComparisonVideoRGBAColor,
+        textColor: ComparisonVideoRGBAColor
     ) {
         self.size = size
         self.contentScale = contentScale
         self.layout = layout
+        self.backgroundColor = backgroundColor
+        self.textColor = textColor
         values = ComparisonVideoInspectorValue.make(from: info)
     }
 
@@ -331,7 +339,7 @@ private struct ComparisonVideoInspectorPanel: View {
             context.scaleBy(x: scale, y: scale)
             context.fill(
                 Path(roundedRect: CGRect(origin: .zero, size: referenceSize), cornerRadius: 28),
-                with: .color(.black.opacity(0.44))
+                with: .color(backgroundColor.swiftUIColor)
             )
 
             let contentWidth = referenceSize.width - layout.panelPadding * 2
@@ -371,14 +379,14 @@ private struct ComparisonVideoInspectorPanel: View {
         context.draw(
             Text(item.label)
                 .font(.system(size: labelSize, weight: .medium))
-                .foregroundStyle(.white.opacity(0.68)),
+                .foregroundStyle(textColor.swiftUIColor.opacity(0.68)),
             at: CGPoint(x: center.x, y: center.y - valueSize * 0.55),
             anchor: .center
         )
         context.draw(
             Text(item.value)
                 .font(.system(size: valueSize, weight: .semibold))
-                .foregroundStyle(.white),
+                .foregroundStyle(textColor.swiftUIColor),
             at: CGPoint(x: center.x, y: center.y + labelSize * 0.55),
             anchor: .center
         )

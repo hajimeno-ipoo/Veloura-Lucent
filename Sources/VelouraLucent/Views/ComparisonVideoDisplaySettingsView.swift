@@ -101,6 +101,23 @@ struct ComparisonVideoDisplaySettingsView: View {
 
     private var inspectorSettings: some View {
         ComparisonVideoSettingsSection(title: "情報表示") {
+            colorPicker(
+                title: "背景色",
+                color: model.displaySettings.inspectorBackgroundColor,
+                supportsOpacity: true,
+                setColor: model.setInspectorBackgroundColor
+            )
+
+            Divider()
+
+            colorPicker(
+                title: "文字色",
+                color: model.displaySettings.inspectorTextColor,
+                setColor: model.setInspectorTextColor
+            )
+
+            Divider()
+
             inspectorSizeControls
 
             Divider()
@@ -653,6 +670,7 @@ struct ComparisonVideoDisplaySettingsView: View {
     private func colorPicker(
         title: String,
         color: ComparisonVideoRGBAColor,
+        supportsOpacity: Bool = false,
         setColor: @escaping (NSColor) -> Void
     ) -> some View {
         ColorPicker(
@@ -661,7 +679,7 @@ struct ComparisonVideoDisplaySettingsView: View {
                 get: { swiftUIColor(color) },
                 set: { setColor(NSColor($0)) }
             ),
-            supportsOpacity: false
+            supportsOpacity: supportsOpacity
         )
         .font(.title3)
         .padding(.vertical, 12)

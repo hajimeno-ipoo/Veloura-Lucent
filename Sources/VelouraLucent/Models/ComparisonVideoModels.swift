@@ -70,6 +70,20 @@ struct ComparisonVideoRGBAColor: Equatable, Sendable {
         alpha: 1
     )
 
+    static let defaultInspectorBackground = ComparisonVideoRGBAColor(
+        red: 0,
+        green: 0,
+        blue: 0,
+        alpha: 0.44
+    )
+
+    static let defaultInspectorText = ComparisonVideoRGBAColor(
+        red: 1,
+        green: 1,
+        blue: 1,
+        alpha: 1
+    )
+
     static let defaultVisualizerLeading = ComparisonVideoRGBAColor(
         red: 0.62,
         green: 0.39,
@@ -244,6 +258,8 @@ struct ComparisonVideoDisplaySettings: Sendable {
     var titleColor: ComparisonVideoRGBAColor
     var firstRoleColor: ComparisonVideoRGBAColor
     var secondRoleColor: ComparisonVideoRGBAColor
+    var inspectorBackgroundColor: ComparisonVideoRGBAColor
+    var inspectorTextColor: ComparisonVideoRGBAColor
     var videoFadeInEnabled: Bool
     var videoFadeOutEnabled: Bool
     var audioFadeInEnabled: Bool
@@ -401,6 +417,8 @@ struct ComparisonVideoDisplaySettings: Sendable {
         titleColor: ComparisonVideoRGBAColor = .defaultTitle,
         firstRoleColor: ComparisonVideoRGBAColor = .defaultFirstRole,
         secondRoleColor: ComparisonVideoRGBAColor = .defaultSecondRole,
+        inspectorBackgroundColor: ComparisonVideoRGBAColor = .defaultInspectorBackground,
+        inspectorTextColor: ComparisonVideoRGBAColor = .defaultInspectorText,
         fadeInDuration: Double = 1,
         fadeOutDuration: Double = 1,
         videoFadeInEnabled: Bool = true,
@@ -452,6 +470,8 @@ struct ComparisonVideoDisplaySettings: Sendable {
         self.titleColor = titleColor
         self.firstRoleColor = firstRoleColor
         self.secondRoleColor = secondRoleColor
+        self.inspectorBackgroundColor = inspectorBackgroundColor
+        self.inspectorTextColor = inspectorTextColor
         self.videoFadeInEnabled = videoFadeInEnabled
         self.videoFadeOutEnabled = videoFadeOutEnabled
         self.audioFadeInEnabled = audioFadeInEnabled

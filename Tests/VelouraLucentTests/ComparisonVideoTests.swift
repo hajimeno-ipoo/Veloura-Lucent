@@ -161,6 +161,8 @@ struct ComparisonVideoTests {
         #expect(defaults.titleColor == .defaultTitle)
         #expect(defaults.firstRoleColor == .defaultFirstRole)
         #expect(defaults.secondRoleColor == .defaultSecondRole)
+        #expect(defaults.inspectorBackgroundColor == .defaultInspectorBackground)
+        #expect(defaults.inspectorTextColor == .defaultInspectorText)
         #expect(defaults.fadeInDuration == 1)
         #expect(defaults.fadeOutDuration == 1)
         #expect(defaults.videoFadeInEnabled)
@@ -181,6 +183,8 @@ struct ComparisonVideoTests {
         let titleColor = ComparisonVideoRGBAColor(red: 0.8, green: 0.7, blue: 0.6, alpha: 1)
         let firstRoleColor = ComparisonVideoRGBAColor(red: 0.5, green: 0.4, blue: 0.3, alpha: 1)
         let secondRoleColor = ComparisonVideoRGBAColor(red: 0.2, green: 0.1, blue: 0.9, alpha: 1)
+        let inspectorBackgroundColor = ComparisonVideoRGBAColor(red: 0.4, green: 0.3, blue: 0.2, alpha: 0.5)
+        let inspectorTextColor = ComparisonVideoRGBAColor(red: 0.9, green: 0.8, blue: 0.7, alpha: 1)
         var settings = ComparisonVideoDisplaySettings(
             trackTitle: "Test Song",
             firstRoleTitle: "入力",
@@ -200,6 +204,8 @@ struct ComparisonVideoTests {
             titleColor: titleColor,
             firstRoleColor: firstRoleColor,
             secondRoleColor: secondRoleColor,
+            inspectorBackgroundColor: inspectorBackgroundColor,
+            inspectorTextColor: inspectorTextColor,
             fadeInDuration: -2,
             fadeOutDuration: 8,
             videoFadeInEnabled: false,
@@ -229,6 +235,8 @@ struct ComparisonVideoTests {
         #expect(settings.titleColor == titleColor)
         #expect(settings.firstRoleColor == firstRoleColor)
         #expect(settings.secondRoleColor == secondRoleColor)
+        #expect(settings.inspectorBackgroundColor == inspectorBackgroundColor)
+        #expect(settings.inspectorTextColor == inspectorTextColor)
         #expect(settings.fadeInDuration == 0)
         #expect(settings.fadeOutDuration == 5)
         #expect(!settings.videoFadeInEnabled)
@@ -253,6 +261,34 @@ struct ComparisonVideoTests {
         #expect(settings.position(for: .role) == CGPoint(x: 25, y: 75))
         #expect(settings.position(for: .inspector) == CGPoint(x: 45, y: 60))
         #expect(settings.position(for: .visualizer) == CGPoint(x: 55, y: 72))
+    }
+
+    @MainActor
+    @Test
+    func inspectorColorSettersPreserveSelectedBackgroundOpacity() {
+        let model = ComparisonVideoWindowModel()
+
+        model.setInspectorBackgroundColor(NSColor(
+            srgbRed: 0.2,
+            green: 0.3,
+            blue: 0.4,
+            alpha: 0.35
+        ))
+        model.setInspectorTextColor(NSColor(
+            srgbRed: 0.8,
+            green: 0.7,
+            blue: 0.6,
+            alpha: 1
+        ))
+
+        #expect(abs(model.displaySettings.inspectorBackgroundColor.red - 0.2) < 0.000_001)
+        #expect(abs(model.displaySettings.inspectorBackgroundColor.green - 0.3) < 0.000_001)
+        #expect(abs(model.displaySettings.inspectorBackgroundColor.blue - 0.4) < 0.000_001)
+        #expect(abs(model.displaySettings.inspectorBackgroundColor.alpha - 0.35) < 0.000_001)
+        #expect(abs(model.displaySettings.inspectorTextColor.red - 0.8) < 0.000_001)
+        #expect(abs(model.displaySettings.inspectorTextColor.green - 0.7) < 0.000_001)
+        #expect(abs(model.displaySettings.inspectorTextColor.blue - 0.6) < 0.000_001)
+        #expect(abs(model.displaySettings.inspectorTextColor.alpha - 1) < 0.000_001)
     }
 
     @Test
@@ -1523,6 +1559,21 @@ struct ComparisonVideoTests {
     }
 
     @Test
+    func comparisonInspectorColorsUseTheExistingColorPicker() throws {
+        let settingsSource = try viewSource("ComparisonVideoDisplaySettingsView.swift")
+        let frameSource = try viewSource("ComparisonVideoFrameView.swift")
+
+        #expect(settingsSource.contains("color: model.displaySettings.inspectorBackgroundColor"))
+        #expect(settingsSource.contains("supportsOpacity: true"))
+        #expect(settingsSource.contains("setColor: model.setInspectorBackgroundColor"))
+        #expect(settingsSource.contains("color: model.displaySettings.inspectorTextColor"))
+        #expect(settingsSource.contains("setColor: model.setInspectorTextColor"))
+        #expect(frameSource.contains("with: .color(backgroundColor.swiftUIColor)"))
+        #expect(frameSource.contains(".foregroundStyle(textColor.swiftUIColor.opacity(0.68))"))
+        #expect(frameSource.contains(".foregroundStyle(textColor.swiftUIColor)"))
+    }
+
+    @Test
     func comparisonVisualizerScaleUsesPercentageSliderNumberAndFineAdjustment() throws {
         let source = try viewSource("ComparisonVideoDisplaySettingsView.swift")
 
@@ -1641,6 +1692,34 @@ struct ComparisonVideoTests {
         #expect(try colorBounds(in: fillImage, color: .red) == colorBounds(in: fitImage, color: .red))
         #expect(try colorBounds(in: fillImage, color: .green) == colorBounds(in: fitImage, color: .green))
         #expect(try lightPixelBounds(in: fillImage) == lightPixelBounds(in: fitImage))
+    }
+
+    @MainActor
+    @Test
+    func renderedInspectorUsesSelectedBackgroundAndTextColors() throws {
+        let plan = try #require(ComparisonVideoPlan.make(
+            sourceDuration: 20,
+            requestedStartTime: 0
+        ))
+        let settings = ComparisonVideoDisplaySettings(
+            trackTitle: "TITLE",
+            firstRoleTitle: "ROLE",
+            secondRoleTitle: "SECOND",
+            titleColor: ComparisonVideoRGBAColor(red: 0, green: 0, blue: 1, alpha: 1),
+            firstRoleColor: ComparisonVideoRGBAColor(red: 0, green: 0, blue: 1, alpha: 1),
+            inspectorBackgroundColor: ComparisonVideoRGBAColor(red: 1, green: 0, blue: 0, alpha: 1),
+            inspectorTextColor: ComparisonVideoRGBAColor(red: 0, green: 1, blue: 0, alpha: 1),
+            visualizerEnabled: false
+        )
+
+        let image = try renderedComparisonFrame(settings: settings, plan: plan)
+        let backgroundBounds = try colorBounds(in: image, color: .red)
+        let textBounds = try colorBounds(in: image, color: .green)
+
+        #expect(backgroundBounds.width > 300)
+        #expect(backgroundBounds.height > 30)
+        #expect(textBounds.width > 0)
+        #expect(textBounds.height > 0)
     }
 
     private func source(

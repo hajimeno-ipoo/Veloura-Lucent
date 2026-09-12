@@ -291,6 +291,16 @@ final class ComparisonVideoWindowModel {
         displaySettings.secondRoleColor = color
     }
 
+    func setInspectorBackgroundColor(_ color: NSColor) {
+        guard let color = rgbaColor(from: color) else { return }
+        displaySettings.inspectorBackgroundColor = color
+    }
+
+    func setInspectorTextColor(_ color: NSColor) {
+        guard let color = rgbaColor(from: color) else { return }
+        displaySettings.inspectorTextColor = color
+    }
+
     func setBackgroundImage(from fileURL: URL) {
         let didAccess = fileURL.startAccessingSecurityScopedResource()
         defer {
