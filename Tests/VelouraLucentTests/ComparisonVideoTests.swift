@@ -1226,7 +1226,7 @@ struct ComparisonVideoTests {
 
     @MainActor
     @Test
-    func exportsPlayableMP4AndQuickTimeMoviesWithUncompressedPCMAudio() async throws {
+    func exportsPlayableMP4AndQuickTimeMoviesWithAACLCForSocialSharing() async throws {
         let preservedOutputPath = ProcessInfo.processInfo.environment[
             "VELOURA_COMPARISON_VIDEO_TEST_OUTPUT"
         ]
@@ -1243,25 +1243,26 @@ struct ComparisonVideoTests {
         }
         let firstURL = root.appending(path: "first.wav")
         let secondURL = root.appending(path: "second.wav")
-        let sampleRate = 48_000.0
-        let frames = 12_000
+        let sourceSampleRate = 44_100.0
+        let outputSampleRate = 48_000.0
+        let frames = 11_025
         let verificationFrequencies = [90.0, 180, 360, 720, 1_440, 2_880, 5_760, 11_520]
         let firstSamples = (0..<frames).map { index in
             verificationFrequencies.reduce(0) { sample, frequency in
-                sample + Float(sin(2 * Double.pi * frequency * Double(index) / sampleRate)) * 0.025
+                sample + Float(sin(2 * Double.pi * frequency * Double(index) / sourceSampleRate)) * 0.025
             }
         }
         let secondSamples = (0..<frames).map { index in
             verificationFrequencies.reduce(0) { sample, frequency in
-                sample + Float(cos(2 * Double.pi * frequency * Double(index) / sampleRate)) * 0.025
+                sample + Float(cos(2 * Double.pi * frequency * Double(index) / sourceSampleRate)) * 0.025
             }
         }
         try AudioFileService.saveAudio(
-            AudioSignal(channels: [firstSamples, firstSamples], sampleRate: sampleRate),
+            AudioSignal(channels: [firstSamples, firstSamples], sampleRate: sourceSampleRate),
             to: firstURL
         )
         try AudioFileService.saveAudio(
-            AudioSignal(channels: [secondSamples, secondSamples], sampleRate: sampleRate),
+            AudioSignal(channels: [secondSamples, secondSamples], sampleRate: sourceSampleRate),
             to: secondURL
         )
         let backgroundImage = try #require(
@@ -1318,8 +1319,6 @@ struct ComparisonVideoTests {
                         ),
                         videoFadeInEnabled: false,
                         videoFadeOutEnabled: false,
-                        audioFadeInEnabled: false,
-                        audioFadeOutEnabled: false,
                         backgroundColor: ComparisonVideoRGBAColor(
                             red: 0.2,
                             green: 0.1,
@@ -1336,7 +1335,7 @@ struct ComparisonVideoTests {
                         metrics: metrics(integratedLoudness: -16, truePeak: -1.5),
                         fileInfo: AudioFileInfo(
                             formatName: "WAV",
-                            sampleRate: sampleRate,
+                            sampleRate: sourceSampleRate,
                             channelCount: 2,
                             duration: 0.25,
                             bitDepth: 32,
@@ -1347,7 +1346,7 @@ struct ComparisonVideoTests {
                         metrics: metrics(integratedLoudness: -14, truePeak: -1),
                         fileInfo: AudioFileInfo(
                             formatName: "WAV",
-                            sampleRate: sampleRate,
+                            sampleRate: sourceSampleRate,
                             channelCount: 2,
                             duration: 0.25,
                             bitDepth: 32,
@@ -1362,6 +1361,7 @@ struct ComparisonVideoTests {
                 let audioTrack = try #require(try await asset.loadTracks(withMediaType: .audio).first)
                 let size = try await videoTrack.load(.naturalSize)
                 let duration = try await asset.load(.duration).seconds
+                #expect(try await asset.load(.isPlayable))
                 #expect(size == orientation.pixelSize)
                 #expect(abs(duration - 0.25) < 0.05)
 
@@ -1370,13 +1370,14 @@ struct ComparisonVideoTests {
                 let streamDescription = try #require(
                     CMAudioFormatDescriptionGetStreamBasicDescription(audioDescription)?.pointee
                 )
-                #expect(streamDescription.mSampleRate == sampleRate)
+                #expect(streamDescription.mSampleRate == outputSampleRate)
                 #expect(streamDescription.mChannelsPerFrame == 2)
-                #expect(streamDescription.mFormatID == kAudioFormatLinearPCM)
+                #expect(streamDescription.mFormatID == kAudioFormatMPEG4AAC)
 
                 let decodedSignal = try AudioFileService.loadAudio(from: destination)
-                #expect(decodedSignal.sampleRate == sampleRate)
-                #expect(decodedSignal.channels == [firstSamples, firstSamples])
+                #expect(decodedSignal.sampleRate == outputSampleRate)
+                #expect(decodedSignal.channels.count == 2)
+                #expect(decodedSignal.frameCount > 0)
             }
         }
     }

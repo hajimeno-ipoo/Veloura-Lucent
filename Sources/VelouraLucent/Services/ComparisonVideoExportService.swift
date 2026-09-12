@@ -571,11 +571,7 @@ struct ComparisonVideoExportService {
 
         let audioInput = AVAssetWriterInput(
             mediaType: .audio,
-            outputSettings: audioSettings(
-                format: request.format,
-                sampleRate: prepared.signal.sampleRate,
-                channelCount: prepared.signal.channels.count
-            )
+            outputSettings: audioSettings()
         )
         audioInput.expectsMediaDataInRealTime = false
         guard writer.canAdd(videoInput), writer.canAdd(audioInput) else {
@@ -910,22 +906,13 @@ struct ComparisonVideoExportService {
         )
     }
 
-    private func audioSettings(
-        format: ComparisonVideoFormat,
-        sampleRate: Double,
-        channelCount: Int
-    ) -> [String: Any] {
-        switch format {
-        case .mp4, .mov:
-            [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: sampleRate,
-                AVNumberOfChannelsKey: channelCount,
-                AVLinearPCMBitDepthKey: 32,
-                AVLinearPCMIsFloatKey: true,
-                AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsNonInterleaved: false,
-            ]
-        }
+    private func audioSettings() -> [String: Any] {
+        [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 48_000.0,
+            AVNumberOfChannelsKey: 2,
+            AVEncoderBitRateKey: 256_000,
+            AVEncoderAudioQualityKey: AVAudioQuality.max.rawValue,
+        ]
     }
 }
