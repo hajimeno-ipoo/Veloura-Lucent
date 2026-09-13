@@ -13,8 +13,11 @@ MIN_SYSTEM_VERSION="26.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-FINAL_APP_BUNDLE="$DIST_DIR/$DISPLAY_NAME.app"
-FINAL_APP_BINARY="$FINAL_APP_BUNDLE/Contents/MacOS/$BUILD_PRODUCT_NAME"
+DEVELOPMENT_TEMP_ROOT="${TMPDIR:-/private/tmp}"
+DEVELOPMENT_OUTPUT_DIR="${DEVELOPMENT_TEMP_ROOT%/}/VelouraLucentDevelopment"
+OUTPUT_DIR=""
+FINAL_APP_BUNDLE=""
+FINAL_APP_BINARY=""
 LEGACY_APP_BUNDLE="$DIST_DIR/SpectralLifter.app"
 APP_LOCALIZATION_SOURCE="$ROOT_DIR/Resources/ja.lproj"
 ICON_SOURCE="$ROOT_DIR/Resources/AppIcon-1024.png"
@@ -106,10 +109,26 @@ configure_build_identity() {
 
 configure_build_identity
 
+configure_output_paths() {
+  case "$MODE" in
+    package|--package)
+      OUTPUT_DIR="$DIST_DIR"
+      ;;
+    *)
+      OUTPUT_DIR="$DEVELOPMENT_OUTPUT_DIR"
+      ;;
+  esac
+
+  FINAL_APP_BUNDLE="$OUTPUT_DIR/$DISPLAY_NAME.app"
+  FINAL_APP_BINARY="$FINAL_APP_BUNDLE/Contents/MacOS/$BUILD_PRODUCT_NAME"
+}
+
+configure_output_paths
+
 initialize_staging_paths() {
-  mkdir -p "$DIST_DIR"
-  STAGING_DIR="$(/usr/bin/mktemp -d "$DIST_DIR/.veloura-lucent-stage.XXXXXX")" ||
-    die "unable to create a staging directory inside $DIST_DIR"
+  mkdir -p "$OUTPUT_DIR"
+  STAGING_DIR="$(/usr/bin/mktemp -d "$OUTPUT_DIR/.veloura-lucent-stage.XXXXXX")" ||
+    die "unable to create a staging directory inside $OUTPUT_DIR"
   APP_BUNDLE="$STAGING_DIR/$DISPLAY_NAME.app"
   APP_CONTENTS="$APP_BUNDLE/Contents"
   APP_MACOS="$APP_CONTENTS/MacOS"
@@ -432,8 +451,8 @@ sign_app_bundle() {
 publish_app_bundle() {
   local had_previous="false"
 
-  BACKUP_DIR="$(/usr/bin/mktemp -d "$DIST_DIR/.veloura-lucent-backup.XXXXXX")" ||
-    die "unable to create an app backup directory inside $DIST_DIR"
+  BACKUP_DIR="$(/usr/bin/mktemp -d "$OUTPUT_DIR/.veloura-lucent-backup.XXXXXX")" ||
+    die "unable to create an app backup directory inside $OUTPUT_DIR"
   BACKUP_APP_BUNDLE="$BACKUP_DIR/$DISPLAY_NAME.app"
 
   if [[ -e "$FINAL_APP_BUNDLE" || -L "$FINAL_APP_BUNDLE" ]]; then
@@ -477,7 +496,7 @@ finalize_published_app() {
   fi
   BACKUP_DIR=""
   BACKUP_APP_BUNDLE=""
-  if [[ "$LEGACY_APP_BUNDLE" != "$FINAL_APP_BUNDLE" ]]; then
+  if [[ "$MODE" == "package" || "$MODE" == "--package" ]]; then
     /bin/rm -rf "$LEGACY_APP_BUNDLE"
   fi
 }
@@ -699,6 +718,7 @@ verify_packaged_layout
 sign_app_bundle
 publish_app_bundle
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$FINAL_APP_BUNDLE"
+printf 'app bundle: %s\n' "$FINAL_APP_BUNDLE"
 
 open_app() {
   PUBLISHED_APP_LAUNCH_ATTEMPTED="true"

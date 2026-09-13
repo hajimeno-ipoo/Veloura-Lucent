@@ -289,9 +289,154 @@ struct ComparisonVideoTests {
         #expect(abs(model.displaySettings.inspectorTextColor.green - 0.7) < 0.000_001)
         #expect(abs(model.displaySettings.inspectorTextColor.blue - 0.6) < 0.000_001)
         #expect(abs(model.displaySettings.inspectorTextColor.alpha - 1) < 0.000_001)
+  }
+
+  @MainActor
+  @Test
+  func blossomColorPickerPreservesOpacityWhileChangingColorAndBrightness() {
+    let model = BlossomColorPickerModel(
+      initialColor: Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 0.44),
+      supportsOpacity: true
+    )
+    let layout = PetalLayout()
+
+    #expect(layout.colors.center.count == 1)
+    #expect(layout.colors.ring_1.count == 8)
+    #expect(layout.colors.ring_2.count == 16)
+    #expect(layout.innerPetalCount == 8)
+    #expect(layout.outerPetalCount == 16)
+    #expect(layout.totalPetalCount + layout.colors.center.count == 25)
+    #expect(BlossomConstants.arcStartAngle == -30)
+    #expect(BlossomConstants.arcEndAngle == 30)
+    #expect(BlossomConstants.opacityArcStartAngle == 150)
+    #expect(BlossomConstants.opacityArcEndAngle == 210)
+
+    let curveSamples: [(progress: Double, lightness: Double)] = [
+      (0.0, 100.0),
+      (0.1, 97.2),
+      (0.2, 89.6),
+      (0.3, 78.4),
+      (0.4, 64.8),
+      (0.5, 50.0),
+      (0.6, 35.2),
+      (0.7, 21.6),
+      (0.8, 10.4),
+      (0.9, 2.8),
+      (1.0, 0.0),
+    ]
+    for sample in curveSamples {
+      let lightness = BlossomBrightnessCurve.lightness(for: sample.progress)
+      #expect(abs(lightness - sample.lightness) < 0.000_001)
+      let progress = BlossomBrightnessCurve.progress(for: sample.lightness)
+      #expect(abs(progress - sample.progress) < 0.000_001)
     }
 
+    let innerAdditions = [layout.colors.ring_1[3], layout.colors.ring_1[6]]
+    #expect(innerAdditions[0].r == 237)
+    #expect(innerAdditions[0].g == 216)
+    #expect(innerAdditions[0].b == 231)
+    #expect(innerAdditions[1].r == 216)
+    #expect(innerAdditions[1].g == 237)
+    #expect(innerAdditions[1].b == 231)
+
+    let outerAdditions = [
+      layout.colors.ring_2[5],
+      layout.colors.ring_2[7],
+      layout.colors.ring_2[12],
+      layout.colors.ring_2[13],
+    ]
+    #expect(outerAdditions[0].r == 212)
+    #expect(outerAdditions[0].g == 85)
+    #expect(outerAdditions[0].b == 121)
+    #expect(outerAdditions[1].r == 209)
+    #expect(outerAdditions[1].g == 94)
+    #expect(outerAdditions[1].b == 209)
+    #expect(outerAdditions[2].r == 138)
+    #expect(outerAdditions[2].g == 212)
+    #expect(outerAdditions[2].b == 189)
+    #expect(outerAdditions[3].r == 139)
+    #expect(outerAdditions[3].g == 214)
+    #expect(outerAdditions[3].b == 158)
+
+    model.selectPetal(index: 4, ring: .outer, layout: layout)
+    model.updateLightness(62)
+
+    let changedColor = NSColor(model.selectedColor).usingColorSpace(.sRGB)
+    #expect(changedColor != nil)
+    #expect(abs((changedColor?.alphaComponent ?? 0) - 0.44) < 0.000_001)
+
+    model.updateOpacity(0.27)
+    let opacityChangedColor = NSColor(model.selectedColor).usingColorSpace(.sRGB)
+    #expect(opacityChangedColor != nil)
+    #expect(abs((opacityChangedColor?.alphaComponent ?? 0) - 0.27) < 0.000_001)
+
+    model.updateLightness(0)
+    let darkestColor = NSColor(model.selectedColor).usingColorSpace(.sRGB)
+    #expect(abs((darkestColor?.brightnessComponent ?? 1) - 0) < 0.000_001)
+
+    model.updateLightness(100)
+    let brightestColor = NSColor(model.selectedColor).usingColorSpace(.sRGB)
+    #expect(abs((brightestColor?.brightnessComponent ?? 0) - 1) < 0.000_001)
+
+    model.selectRecentColor(Color(.sRGB, red: 0.8, green: 0.4, blue: 0.2, opacity: 0.31))
+    let recentColor = NSColor(model.selectedColor).usingColorSpace(.sRGB)
+    #expect(abs((recentColor?.alphaComponent ?? 0) - 0.31) < 0.000_001)
+
+    model.selectSampledColor(Color(.sRGB, red: 0.1, green: 0.2, blue: 0.3, opacity: 1))
+    let sampledColor = NSColor(model.selectedColor).usingColorSpace(.sRGB)
+    #expect(abs((sampledColor?.redComponent ?? 0) - 0.1) < 0.000_001)
+    #expect(abs((sampledColor?.greenComponent ?? 0) - 0.2) < 0.000_001)
+    #expect(abs((sampledColor?.blueComponent ?? 0) - 0.3) < 0.000_001)
+    #expect(abs((sampledColor?.alphaComponent ?? 0) - 0.31) < 0.000_001)
+    }
+
+  @MainActor
     @Test
+  func comparisonRecentColorsPersistDeduplicateAndKeepSix() {
+    let suiteName = "ComparisonRecentColors-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let model = ComparisonVideoWindowModel(defaults: defaults)
+    for index in 0..<7 {
+      let component = Double(index) / 10.0
+      model.recordRecentColor(
+        NSColor(
+          srgbRed: component,
+          green: 0.2,
+          blue: 0.4,
+          alpha: 0.3 + component / 2
+        ))
+    }
+
+    #expect(model.recentColors.count == BlossomConstants.recentColorLimit)
+    let duplicate = model.recentColors[3]
+    model.recordRecentColor(
+      NSColor(
+        srgbRed: duplicate.red,
+        green: duplicate.green,
+        blue: duplicate.blue,
+        alpha: duplicate.alpha
+      ))
+
+    #expect(model.recentColors.count == BlossomConstants.recentColorLimit)
+    #expect(model.recentColors.first == duplicate)
+
+    let reloadedModel = ComparisonVideoWindowModel(defaults: defaults)
+    #expect(reloadedModel.recentColors == model.recentColors)
+  }
+
+  @Test
+  func blossomPaletteUsesPackagedAppResourceResolver() throws {
+    let source = try projectSource(
+      "Views/BlossomColorPicker/BlossomColorPicker+Colors.swift"
+    )
+
+    #expect(source.contains("AppResourceBundle.url("))
+    #expect(!source.contains("Bundle.module"))
+  }
+
+  @Test
     func visualizerPaletteSwitchesBetweenStandardSevenColorsAndCustomThreeColors() {
         let leading = ComparisonVideoRGBAColor(red: 1, green: 0, blue: 0, alpha: 1)
         let center = ComparisonVideoRGBAColor(red: 0, green: 1, blue: 0, alpha: 1)
@@ -1559,21 +1704,94 @@ struct ComparisonVideoTests {
     }
 
     @Test
-    func comparisonInspectorColorsUseTheExistingColorPicker() throws {
+  func comparisonColorsUseBlossomColorPickerWithInspectorOpacity() throws {
         let settingsSource = try viewSource("ComparisonVideoDisplaySettingsView.swift")
         let frameSource = try viewSource("ComparisonVideoFrameView.swift")
+    let expandedPickerSource = try projectSource(
+      "Views/BlossomColorPicker/ExpandedBlossomView.swift"
+    )
+    let arcSliderSource = try projectSource(
+      "Views/BlossomColorPicker/ArcSliderView.swift"
+    )
+    let presenterSource = try projectSource(
+      "Views/BlossomColorPicker/PickerWindowPresenter.swift"
+    )
 
+    #expect(settingsSource.contains("BlossomColorPicker("))
+    #expect(settingsSource.components(separatedBy: "colorPicker(").count - 1 == 10)
+    #expect(settingsSource.contains("parentWindow: parentWindow"))
         #expect(settingsSource.contains("color: model.displaySettings.inspectorBackgroundColor"))
         #expect(settingsSource.contains("supportsOpacity: true"))
+    #expect(settingsSource.contains("supportsOpacity: supportsOpacity"))
+    #expect(settingsSource.contains("recentColors: model.recentColors.map(swiftUIColor)"))
+    #expect(settingsSource.contains("onDismiss: { model.recordRecentColor(NSColor($0)) }"))
         #expect(settingsSource.contains("setColor: model.setInspectorBackgroundColor"))
         #expect(settingsSource.contains("color: model.displaySettings.inspectorTextColor"))
         #expect(settingsSource.contains("setColor: model.setInspectorTextColor"))
         #expect(frameSource.contains("with: .color(backgroundColor.swiftUIColor)"))
         #expect(frameSource.contains(".foregroundStyle(textColor.swiftUIColor.opacity(0.68))"))
         #expect(frameSource.contains(".foregroundStyle(textColor.swiftUIColor)"))
-    }
+    #expect(expandedPickerSource.contains("Image(systemName: \"eyedropper\")"))
+    #expect(expandedPickerSource.contains("recentColors.prefix(BlossomConstants.recentColorLimit)"))
+    #expect(expandedPickerSource.contains("Image(systemName: \"xmark\")"))
+    #expect(expandedPickerSource.contains("private var windowDragHandle"))
+    #expect(
+      expandedPickerSource.components(separatedBy: ".gesture(WindowDragGesture())").count - 1 == 1)
+    #expect(expandedPickerSource.contains(".allowsWindowActivationEvents()"))
+    #expect(arcSliderSource.components(separatedBy: ".secondary.opacity(0.18)").count - 1 == 2)
+    #expect(presenterSource.contains("NSColorSampler()"))
+    #expect(presenterSource.contains("let color = await sampler.sample()"))
+  }
 
+  @MainActor
     @Test
+  func blossomPickerWindowStaysAttachedAboveItsParent() async throws {
+    let parentWindow = NSWindow(
+      contentRect: NSRect(x: 100, y: 100, width: 800, height: 600),
+      styleMask: [.titled],
+      backing: .buffered,
+      defer: false
+    )
+    parentWindow.level = .floating
+    let presenter = PickerWindowPresenter()
+    let model = BlossomColorPickerModel(initialColor: .blue)
+
+    presenter.show(
+      at: CGPoint(x: 300, y: 300),
+      model: model,
+      layout: PetalLayout(),
+      parentWindow: parentWindow
+    )
+
+    #expect(parentWindow.childWindows?.count == 1)
+    #expect(parentWindow.childWindows?.first?.parent === parentWindow)
+    #expect(
+      parentWindow.childWindows?.first?.frame.size
+        == ExpandedBlossomView.totalSize(layout: PetalLayout()))
+
+    await Task.yield()
+    let escapeEvent = try #require(
+      NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: [],
+        timestamp: 0,
+        windowNumber: parentWindow.windowNumber,
+        context: nil,
+        characters: "\u{1B}",
+        charactersIgnoringModifiers: "\u{1B}",
+        isARepeat: false,
+        keyCode: 53
+      ))
+    #expect(presenter.handleLocalEvent(escapeEvent) == nil)
+    #expect(!model.isExpanded)
+
+    presenter.dismiss()
+    try await Task.sleep(for: .milliseconds(400))
+    #expect(parentWindow.childWindows?.isEmpty == true)
+  }
+
+  @Test
     func comparisonVisualizerScaleUsesPercentageSliderNumberAndFineAdjustment() throws {
         let source = try viewSource("ComparisonVideoDisplaySettingsView.swift")
 

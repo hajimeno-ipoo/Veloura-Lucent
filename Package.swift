@@ -30,6 +30,7 @@ let package = Package(
                 .process("Resources/AppIcon-1024.png"),
                 .copy("Resources/VelouraLucent.icon"),
                 .process("Resources/Rotary_Knob"),
+                .process("Resources/BlossomColorPicker"),
                 .copy("Resources/StemModels"),
                 .copy("Resources/ThirdPartyNotices")
             ]

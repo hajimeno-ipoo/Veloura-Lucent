@@ -43,12 +43,21 @@ final class ComparisonVideoWindowModel {
     private(set) var previewVolume: Double = 1
     private(set) var message: String?
     private(set) var selectedFileInfoBySourceID: [String: AudioFileInfo] = [:]
+    private(set) var recentColors: [ComparisonVideoRGBAColor]
 
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var selectionTask: Task<Void, Never>?
     @ObservationIgnored private var previewPreparationTask: Task<Void, Never>?
     @ObservationIgnored private var previewClockTask: Task<Void, Never>?
     @ObservationIgnored private var previewFileURL: URL?
     @ObservationIgnored private var hasExplicitInspectorAspectRatio = false
+
+    private static let recentColorsDefaultsKey = "comparisonVideo.recentColors"
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        recentColors = Self.loadRecentColors(from: defaults)
+    }
 
     var sources: [ComparisonVideoSource] {
         launch?.sources ?? []
@@ -301,6 +310,17 @@ final class ComparisonVideoWindowModel {
         displaySettings.inspectorTextColor = color
     }
 
+    func recordRecentColor(_ color: NSColor) {
+        guard let color = rgbaColor(from: color) else { return }
+        recentColors.removeAll { Self.recentColorsMatch($0, color) }
+        recentColors.insert(color, at: 0)
+        if recentColors.count > BlossomConstants.recentColorLimit {
+            recentColors.removeSubrange(BlossomConstants.recentColorLimit...)
+        }
+        guard let data = try? JSONEncoder().encode(recentColors) else { return }
+        defaults.set(data, forKey: Self.recentColorsDefaultsKey)
+    }
+
     func setBackgroundImage(from fileURL: URL) {
         let didAccess = fileURL.startAccessingSecurityScopedResource()
         defer {
@@ -550,6 +570,25 @@ final class ComparisonVideoWindowModel {
             blue: converted.blueComponent,
             alpha: converted.alphaComponent
         )
+    }
+
+    private static func loadRecentColors(from defaults: UserDefaults) -> [ComparisonVideoRGBAColor] {
+        guard let data = defaults.data(forKey: recentColorsDefaultsKey),
+              let colors = try? JSONDecoder().decode([ComparisonVideoRGBAColor].self, from: data) else {
+            return []
+        }
+        return Array(colors.prefix(BlossomConstants.recentColorLimit))
+    }
+
+    private static func recentColorsMatch(
+        _ first: ComparisonVideoRGBAColor,
+        _ second: ComparisonVideoRGBAColor
+    ) -> Bool {
+        let tolerance = 0.5 / 255.0
+        return abs(first.red - second.red) <= tolerance
+            && abs(first.green - second.green) <= tolerance
+            && abs(first.blue - second.blue) <= tolerance
+            && abs(first.alpha - second.alpha) <= tolerance
     }
 
     private func stopAndDiscardPreview() {

@@ -2,6 +2,11 @@
   "schemaVersion": 1,
   "notices": [
     {
+      "relativePath": "BlossomColorPicker/LICENSE",
+      "byteCount": 1065,
+      "sha256": "1f4b38df6a142e678a85d84c3a7ec4d1db328a556483241df714156134e81615"
+    },
+    {
       "relativePath": "BS-RoFormer-SW/MODEL_NOTICE.md",
       "byteCount": 1428,
       "sha256": "be5db8b5512ea71a84b551411b5d24ab697410db742ea68c2d99edbf20b51df5"

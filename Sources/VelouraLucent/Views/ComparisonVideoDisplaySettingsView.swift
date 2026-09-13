@@ -673,15 +673,28 @@ struct ComparisonVideoDisplaySettingsView: View {
         supportsOpacity: Bool = false,
         setColor: @escaping (NSColor) -> Void
     ) -> some View {
-        ColorPicker(
-            title,
-            selection: Binding(
-                get: { swiftUIColor(color) },
-                set: { setColor(NSColor($0)) }
-            ),
-            supportsOpacity: supportsOpacity
-        )
-        .font(.title3)
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.title3)
+
+            Spacer(minLength: 12)
+
+            BlossomColorPicker(
+                selection: Binding(
+                    get: { swiftUIColor(color) },
+                    set: { setColor(NSColor($0)) }
+                ),
+                supportsOpacity: supportsOpacity,
+                recentColors: model.recentColors.map(swiftUIColor),
+                parentWindow: parentWindow,
+                onDismiss: { model.recordRecentColor(NSColor($0)) }
+            )
+            .frame(
+                width: BlossomConstants.collapsedSwatchSize,
+                height: BlossomConstants.collapsedSwatchSize
+            )
+            .accessibilityLabel(title)
+        }
         .padding(.vertical, 12)
     }
 

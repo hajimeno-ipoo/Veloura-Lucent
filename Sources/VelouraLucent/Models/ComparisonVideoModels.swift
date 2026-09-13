@@ -36,7 +36,7 @@ struct ComparisonVideoSource: Identifiable, Sendable {
     }
 }
 
-struct ComparisonVideoRGBAColor: Equatable, Sendable {
+struct ComparisonVideoRGBAColor: Codable, Equatable, Sendable {
     var red: Double
     var green: Double
     var blue: Double
