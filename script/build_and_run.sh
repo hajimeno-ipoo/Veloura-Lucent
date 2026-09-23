@@ -13,11 +13,8 @@ MIN_SYSTEM_VERSION="26.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-DEVELOPMENT_TEMP_ROOT="${TMPDIR:-/private/tmp}"
-DEVELOPMENT_OUTPUT_DIR="${DEVELOPMENT_TEMP_ROOT%/}/VelouraLucentDevelopment"
-OUTPUT_DIR=""
-FINAL_APP_BUNDLE=""
-FINAL_APP_BINARY=""
+FINAL_APP_BUNDLE="$DIST_DIR/$DISPLAY_NAME.app"
+FINAL_APP_BINARY="$FINAL_APP_BUNDLE/Contents/MacOS/$BUILD_PRODUCT_NAME"
 LEGACY_APP_BUNDLE="$DIST_DIR/SpectralLifter.app"
 APP_LOCALIZATION_SOURCE="$ROOT_DIR/Resources/ja.lproj"
 ICON_SOURCE="$ROOT_DIR/Resources/AppIcon-1024.png"
@@ -90,7 +87,7 @@ configure_build_identity() {
       ;;
   esac
 
-  APP_VERSION="${VELOURA_APP_VERSION:-1.1.0}"
+  APP_VERSION="${VELOURA_APP_VERSION:-1.1.1}"
   if [[ -n "${VELOURA_BUILD_VERSION:-}" ]]; then
     BUILD_VERSION="$VELOURA_BUILD_VERSION"
   elif [[ "$MODE" == "package" || "$MODE" == "--package" ]]; then
@@ -109,26 +106,10 @@ configure_build_identity() {
 
 configure_build_identity
 
-configure_output_paths() {
-  case "$MODE" in
-    package|--package)
-      OUTPUT_DIR="$DIST_DIR"
-      ;;
-    *)
-      OUTPUT_DIR="$DEVELOPMENT_OUTPUT_DIR"
-      ;;
-  esac
-
-  FINAL_APP_BUNDLE="$OUTPUT_DIR/$DISPLAY_NAME.app"
-  FINAL_APP_BINARY="$FINAL_APP_BUNDLE/Contents/MacOS/$BUILD_PRODUCT_NAME"
-}
-
-configure_output_paths
-
 initialize_staging_paths() {
-  mkdir -p "$OUTPUT_DIR"
-  STAGING_DIR="$(/usr/bin/mktemp -d "$OUTPUT_DIR/.veloura-lucent-stage.XXXXXX")" ||
-    die "unable to create a staging directory inside $OUTPUT_DIR"
+  mkdir -p "$DIST_DIR"
+  STAGING_DIR="$(/usr/bin/mktemp -d "$DIST_DIR/.veloura-lucent-stage.XXXXXX")" ||
+    die "unable to create a staging directory inside $DIST_DIR"
   APP_BUNDLE="$STAGING_DIR/$DISPLAY_NAME.app"
   APP_CONTENTS="$APP_BUNDLE/Contents"
   APP_MACOS="$APP_CONTENTS/MacOS"
@@ -451,8 +432,8 @@ sign_app_bundle() {
 publish_app_bundle() {
   local had_previous="false"
 
-  BACKUP_DIR="$(/usr/bin/mktemp -d "$OUTPUT_DIR/.veloura-lucent-backup.XXXXXX")" ||
-    die "unable to create an app backup directory inside $OUTPUT_DIR"
+  BACKUP_DIR="$(/usr/bin/mktemp -d "$DIST_DIR/.veloura-lucent-backup.XXXXXX")" ||
+    die "unable to create an app backup directory inside $DIST_DIR"
   BACKUP_APP_BUNDLE="$BACKUP_DIR/$DISPLAY_NAME.app"
 
   if [[ -e "$FINAL_APP_BUNDLE" || -L "$FINAL_APP_BUNDLE" ]]; then
