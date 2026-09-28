@@ -118,6 +118,7 @@ struct StemModeMainWorkspaceView<AnalysisPanel: View>: View {
         } fullLog: {
             StemModeFullProcessingLogView(
                 session: model.session,
+                inputURL: model.selectedInputURL,
                 onDismiss: { isFullLogPresented = false }
             )
         }

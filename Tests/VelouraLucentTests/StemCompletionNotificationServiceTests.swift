@@ -68,7 +68,7 @@ struct StemCompletionNotificationServiceTests {
         #expect(notificationCenter.addedRequests.isEmpty)
     }
 
-    @Test("補正完了とマスタリング完了をHT4／BS6の実行契約で別々に通知する")
+    @Test("補正・再ミックス・マスタリング完了をHT4／BS6の実行契約で別々に通知する")
     func enabledPreferenceRegistersRunContractSpecificStemNotifications() throws {
         for model in StemSeparationModel.allCases {
             let runContract = makeStemTestRunContract(model: model)
@@ -110,6 +110,25 @@ struct StemCompletionNotificationServiceTests {
 
         service.notifyStemCompletion(
             for: .correction,
+            runContract: makeStemTestRunContract()
+        )
+
+        #expect(notificationCenter.addedRequests.isEmpty)
+    }
+
+    @Test
+    func disabledRemixItemDoesNotRegisterNotification() {
+        let notificationCenter = NotificationCenterSpy()
+        let service = StemCompletionNotificationService(
+            notificationCenter: notificationCenter,
+            preferences: PreferencesStub(
+                completionNotificationsEnabled: true,
+                disabledItems: [.stemRemix]
+            )
+        )
+
+        service.notifyStemCompletion(
+            for: .remix,
             runContract: makeStemTestRunContract()
         )
 

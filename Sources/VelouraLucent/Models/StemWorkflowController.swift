@@ -586,7 +586,7 @@ final class StemWorkflowController {
         _ artifact: StemAudioArtifact,
         format: AudioExportFormat
     ) async throws -> URL {
-        guard artifact.kind.isStemModeUserExportable else {
+        guard let resultName = artifact.kind.exportFileNameComponent else {
             throw StemWorkflowControllerError.artifactIsNotExportable(artifact.kind)
         }
         guard let displayState = session.artifactStates.first(where: {
@@ -613,7 +613,15 @@ final class StemWorkflowController {
             throw error
         }
 
-        let suggestedName = suggestedExportFileName(artifact: artifact, format: format)
+        guard let inputURL = workspaceModel?.selectedInputURL else {
+            throw StemWorkflowControllerError.workspaceUnavailable
+        }
+        let suggestedName = ExportFileName.audio(
+            inputURL: inputURL,
+            mode: .stem,
+            result: resultName,
+            format: format
+        )
         guard let destinationURL = await destinationChooser.chooseDestination(
             suggestedFileName: suggestedName,
             contentType: format.contentType
@@ -1001,6 +1009,7 @@ final class StemWorkflowController {
         remixResult = result
         updatePreviewSourcesFromValidatedArtifacts()
         try session.completeRemix(runID: result.runID)
+        notifyCompletionIfNeeded(.remix, runContract: result.runContract)
         finishStoppedRun()
     }
 
@@ -1158,7 +1167,7 @@ final class StemWorkflowController {
         case .mastering:
             notifiedCompletionStages.remove(.mastering)
         case .remix:
-            break
+            notifiedCompletionStages.remove(.remix)
         }
         activeRunID = runID
         executionKind = kind
@@ -1400,14 +1409,6 @@ final class StemWorkflowController {
         result.failedChecks
             .map { "\($0.check.rawValue): \($0.subject) — \($0.detail)" }
             .joined(separator: " / ")
-    }
-
-    private func suggestedExportFileName(
-        artifact: StemAudioArtifact,
-        format: AudioExportFormat
-    ) -> String {
-        let baseName = artifact.fileURL.deletingPathExtension().lastPathComponent
-        return "\(baseName)-export.\(format.fileExtension)"
     }
 
     private func isSafeExternalExportDestination(

@@ -901,13 +901,14 @@ struct StemWorkflowControllerTests {
         let manager = try await makeReadyManager(root: root)
         let workflow = PostCorrectionStageWorkflow()
         let session = StemWorkflowSession()
+        let notificationReporter = StemCompletionNotificationReporterSpy()
         let controller = StemWorkflowController(
             session: session,
             modelManager: manager,
             workflow: workflow,
             inputInspector: AutomaticStemInputInspector(),
             inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
-            notificationReporter: NoOpStemCompletionNotificationReporter.shared,
+            notificationReporter: notificationReporter,
             seedProvider: { 77 },
             revealInFinder: { _ in }
         )
@@ -926,6 +927,8 @@ struct StemWorkflowControllerTests {
         ))
         try await waitUntil { workspace.canRunRemix }
         let runID = try #require(session.runID)
+        let runContract = try #require(session.runContract)
+        #expect(notificationReporter.calls.map(\.stage) == [.correction])
 
         await workspace.beginRemix()
         try await waitUntil {
@@ -937,15 +940,21 @@ struct StemWorkflowControllerTests {
         }.count == 4)
         #expect(session.artifactStates.contains { $0.kind == .correctedPureSum48000 })
         #expect(!session.artifactStates.contains { $0.kind == .remixed48000 })
+        #expect(notificationReporter.calls.map(\.stage) == [.correction])
 
         await workspace.beginRemix()
         try await waitUntil { await workflow.remixCancellationAttemptStarted }
         await workspace.cancelRemix()
         #expect(session.state == .readyForRemix(runID: runID))
         #expect(session.lastError == nil)
+        #expect(notificationReporter.calls.map(\.stage) == [.correction])
 
         await workspace.beginRemix()
         try await waitUntil { workspace.canRunMastering }
+        #expect(notificationReporter.calls == [
+            .init(stage: .correction, runContract: runContract),
+            .init(stage: .remix, runContract: runContract),
+        ])
         let remixedArtifact = try #require(workspace.remixedPreviewArtifact)
 
         await workspace.beginMastering()

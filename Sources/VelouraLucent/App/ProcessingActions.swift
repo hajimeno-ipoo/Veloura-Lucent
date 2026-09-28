@@ -249,8 +249,10 @@ final class ProcessingActions {
 
     func exportCorrectedAudio(as format: AudioExportFormat) {
         guard let sourceURL = job.outputFile, let inputFile = job.inputFile else { return }
-        let suggestedName = exportFileName(
-            baseURL: AudioProcessingService.defaultOutputURL(for: inputFile),
+        let suggestedName = ExportFileName.audio(
+            inputURL: inputFile,
+            mode: .standard,
+            result: "補正",
             format: format
         )
         FilePanelService.chooseSaveLocation(
@@ -271,9 +273,13 @@ final class ProcessingActions {
     }
 
     func exportMasteredAudio(as format: AudioExportFormat) {
-        guard let sourceURL = job.masteredOutputFile else { return }
-        let baseURL = job.inputFile.map { MasteringService.defaultOutputURL(for: $0) } ?? sourceURL
-        let suggestedName = exportFileName(baseURL: baseURL, format: format)
+        guard let sourceURL = job.masteredOutputFile, let inputFile = job.inputFile else { return }
+        let suggestedName = ExportFileName.audio(
+            inputURL: inputFile,
+            mode: .standard,
+            result: "マスタリング",
+            format: format
+        )
         FilePanelService.chooseSaveLocation(
             suggestedFileName: suggestedName,
             allowedContentTypes: [format.contentType]
@@ -318,10 +324,6 @@ final class ProcessingActions {
         guard masteringTaskID == taskID else { return }
         masteringTask = nil
         masteringTaskID = nil
-    }
-
-    private func exportFileName(baseURL: URL, format: AudioExportFormat) -> String {
-        baseURL.deletingPathExtension().appendingPathExtension(format.fileExtension).lastPathComponent
     }
 }
 

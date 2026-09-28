@@ -4,12 +4,15 @@ import UserNotifications
 
 enum StemCompletionNotificationStage: String, CaseIterable, Equatable, Sendable {
     case correction
+    case remix
     case mastering
 
     var title: String {
         switch self {
         case .correction:
             "Stem Modeの補正が完了しました"
+        case .remix:
+            "Stem Modeの再ミックスが完了しました"
         case .mastering:
             "Stem Modeのマスタリングが完了しました"
         }
@@ -20,6 +23,8 @@ enum StemCompletionNotificationStage: String, CaseIterable, Equatable, Sendable 
         return switch self {
         case .correction:
             "\(modelName)の補正済み\(runContract.stemCount)Stemを確認できます。再ミックスは別操作で開始してください。"
+        case .remix:
+            "\(modelName)・\(runContract.stemCount)Stemの再ミックス結果を確認できます。マスタリングは別操作で開始してください。"
         case .mastering:
             "\(modelName)・\(runContract.stemCount)StemのStem Mode最終版を確認できます。"
         }
@@ -113,6 +118,8 @@ private extension StemCompletionNotificationStage {
         switch self {
         case .correction:
             .stemCorrection
+        case .remix:
+            .stemRemix
         case .mastering:
             .stemMastering
         }

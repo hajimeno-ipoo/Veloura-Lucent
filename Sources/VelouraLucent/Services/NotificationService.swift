@@ -20,6 +20,7 @@ enum CompletionNotificationItem: String, CaseIterable, Identifiable, Sendable {
     case standardCorrection
     case standardMastering
     case stemCorrection
+    case stemRemix
     case stemMastering
 
     var id: String { rawValue }
@@ -32,6 +33,8 @@ enum CompletionNotificationItem: String, CaseIterable, Identifiable, Sendable {
             "通常マスタリング"
         case .stemCorrection:
             "Stem Mode補正"
+        case .stemRemix:
+            "Stem Mode再ミックス"
         case .stemMastering:
             "Stem Modeマスタリング"
         }

@@ -121,6 +121,7 @@ struct StemModeFooterView: View {
 
 struct StemModeFullProcessingLogView: View {
     let session: StemWorkflowSession
+    let inputURL: URL?
     let onDismiss: () -> Void
 
     var body: some View {
@@ -145,6 +146,8 @@ struct StemModeFullProcessingLogView: View {
                     placeholder: "ここにマスタリングログが表示されます。"
                 ),
             ],
+            mode: .stem,
+            inputURL: inputURL,
             onDismiss: onDismiss
         )
     }

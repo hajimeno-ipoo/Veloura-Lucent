@@ -63,6 +63,16 @@ extension StemArtifactKind {
         }
     }
 
+    var exportFileNameComponent: String? {
+        switch self {
+        case .correctedStem(let role): role.stemModeDisplayTitle
+        case .correctedPureSum48000: "補正"
+        case .remixed48000: "再ミックス"
+        case .finalMaster: "マスタリング"
+        case .input44100, .rawStem: nil
+        }
+    }
+
     var stemModeExportMenuTitle: String {
         switch self {
         case .correctedPureSum48000: "補正後"
