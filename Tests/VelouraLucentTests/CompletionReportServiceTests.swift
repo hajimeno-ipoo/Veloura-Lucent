@@ -3,6 +3,11 @@ import Testing
 @testable import VelouraLucent
 
 struct CompletionReportServiceTests {
+    init() {
+        // Existing report assertions describe the Japanese presentation explicitly.
+        UserDefaults.standard.set(AppLanguageSelection.japanese.rawValue, forKey: AppLanguageSettings.key)
+    }
+
     @Test
     func reportRequiresFinalMetricsAndNoiseMeasurements() {
         let input = makeMetrics(loudness: -18, truePeak: -3)

@@ -138,7 +138,7 @@ struct DetailedAnalysisComparisonView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     analysisDisclosureSection(
                         title: "短時間ラウドネス",
-                        help: "場面ごとの音量感です。入力、\(presentation.correctedTitle)、最終版を同じ基準で比べます。",
+                        help: AppLanguageSettings.format("場面ごとの音量感です。入力、%@、最終版を同じ基準で比べます。", AppLanguageSettings.string(presentation.correctedTitle)),
                         isExpanded: $showLoudness
                     ) {
                         shortTermLoudnessChart(stages: comparisonStages)
@@ -165,7 +165,7 @@ struct DetailedAnalysisComparisonView: View {
 
                     analysisDisclosureSection(
                         title: "周波数帯域詳細",
-                        help: "9つの帯域を、入力、\(presentation.correctedTitle)、最終版の3段階と、入力を基準にした差分で確認します。実測値と差分は同じ小数第2位の表示値から計算します。",
+                        help: AppLanguageSettings.format("9つの帯域を、入力、%@、最終版の3段階と、入力を基準にした差分で確認します。実測値と差分は同じ小数第2位の表示値から計算します。", AppLanguageSettings.string(presentation.correctedTitle)),
                         isExpanded: $showBands
                     ) {
                         bandDetailRows(
@@ -179,9 +179,9 @@ struct DetailedAnalysisComparisonView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ContentUnavailableView(
-                    presentation.emptyTitle,
+                    AppLanguageSettings.string(presentation.emptyTitle),
                     systemImage: "waveform.path.ecg",
-                    description: Text(presentation.emptyDescription)
+                    description: Text(AppLanguageSettings.string(presentation.emptyDescription))
                 )
                 .frame(maxWidth: .infinity, minHeight: 260)
                 .analysisCard()
@@ -210,12 +210,12 @@ struct DetailedAnalysisComparisonView: View {
             }
 
             if let statusText = presentation.statusText {
-                Label(statusText, systemImage: "clock")
+                Label(AppLanguageSettings.string(statusText), systemImage: "clock")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
             if let failedText = presentation.failedText {
-                Label(failedText, systemImage: "exclamationmark.triangle.fill")
+                Label(AppLanguageSettings.string(failedText), systemImage: "exclamationmark.triangle.fill")
                     .font(.title3)
                     .foregroundStyle(.red)
             }
@@ -230,9 +230,9 @@ struct DetailedAnalysisComparisonView: View {
                 .fill(state.color)
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title(for: target))
+                AppLocalizedText(title(for: target))
                     .font(.title3.weight(.semibold))
-                Text(state.title)
+                AppLocalizedText(state.title)
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
@@ -262,7 +262,7 @@ struct DetailedAnalysisComparisonView: View {
         return VStack(alignment: .leading, spacing: 12) {
             sectionLabel(
                 title: "主要数値比較",
-                help: "入力、\(presentation.correctedTitle)、最終版、処理差分、マスタリング差分を同じ表で見ます。差分は良し悪しではなく、何が変わったかを見るための値です。"
+                help: AppLanguageSettings.format("入力、%@、最終版、処理差分、マスタリング差分を同じ表で見ます。差分は良し悪しではなく、何が変わったかを見るための値です。", AppLanguageSettings.string(presentation.correctedTitle))
             )
 
             ViewThatFits(in: .horizontal) {
@@ -320,7 +320,7 @@ struct DetailedAnalysisComparisonView: View {
             Divider().gridCellColumns(7)
             ForEach(rows) { row in
                 GridRow {
-                    Text(row.definition.label)
+                    AppLocalizedText(row.definition.label)
                         .font(.title3.weight(.semibold))
                         .frame(width: labelWidth, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -345,7 +345,7 @@ struct DetailedAnalysisComparisonView: View {
     }
 
     private func tableHeader(_ title: String) -> some View {
-        Text(title)
+        AppLocalizedText(title)
             .font(.title3.weight(.semibold))
             .foregroundStyle(.secondary)
     }
@@ -362,7 +362,7 @@ struct DetailedAnalysisComparisonView: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionLabel(
                 title: "ノイズ7種類比較",
-                help: "ヒス、サ行、高域のチラつき、こもり、ハム、低域ゴロゴロ、環境音を、入力、\(presentation.correctedTitle)、最終版で比較します。"
+                help: AppLanguageSettings.format("ヒス、サ行、高域のチラつき、こもり、ハム、低域ゴロゴロ、環境音を、入力、%@、最終版で比較します。", AppLanguageSettings.string(presentation.correctedTitle))
             )
 
             ForEach(report.rows) { row in
@@ -377,18 +377,18 @@ struct DetailedAnalysisComparisonView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(row.label)
+                    AppLocalizedText(row.label)
                         .font(.title3.bold())
-                    Text(row.measurementDescription)
+                    AppLocalizedText(row.measurementDescription)
                         .font(.body)
                         .foregroundStyle(.secondary)
-                    Text(row.displayDescription)
+                    AppLocalizedText(row.displayDescription)
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(noiseOriginalComparisonStatus(row))
+                    AppLocalizedText(noiseOriginalComparisonStatus(row))
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(noiseOriginalComparisonColor(row))
                     Text(noiseOriginalComparisonReason(row))
@@ -420,7 +420,7 @@ struct DetailedAnalysisComparisonView: View {
         tint: Color
     ) -> some View {
         VStack(spacing: 4) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3.weight(.semibold))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
@@ -438,7 +438,7 @@ struct DetailedAnalysisComparisonView: View {
                 .foregroundStyle(.secondary)
             Text(formatNoiseDelta(deltaDB))
                 .font(.callout.monospacedDigit().weight(.semibold))
-            Text(noiseDeltaDirectionText(deltaDB))
+            AppLocalizedText(noiseDeltaDirectionText(deltaDB))
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -457,13 +457,13 @@ struct DetailedAnalysisComparisonView: View {
             HStack(spacing: 8) {
                 Color.clear.frame(width: 112, height: 1)
                 HStack(spacing: 8) {
-                    Text("ノイズ減少 \(formatNoiseDelta(-displayScale.maximumMagnitudeDB))")
+                    Text(String(format: AppLanguageSettings.string("ノイズ減少 %@"), formatNoiseDelta(-displayScale.maximumMagnitudeDB)))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .multilineTextAlignment(.leading)
                     Text("原音 0")
                         .frame(maxWidth: .infinity, alignment: .center)
                         .multilineTextAlignment(.center)
-                    Text("ノイズ増加 \(formatNoiseDelta(displayScale.maximumMagnitudeDB))")
+                    Text(String(format: AppLanguageSettings.string("ノイズ増加 %@"), formatNoiseDelta(displayScale.maximumMagnitudeDB)))
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .multilineTextAlignment(.trailing)
                 }
@@ -494,7 +494,7 @@ struct DetailedAnalysisComparisonView: View {
         displayScale: InputRelativeDeltaScale
     ) -> some View {
         HStack(spacing: 8) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.callout.weight(.semibold))
                 .lineLimit(2)
                 .frame(width: 112, alignment: .leading)
@@ -532,7 +532,7 @@ struct DetailedAnalysisComparisonView: View {
                 .frame(width: 92, alignment: .trailing)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title)、原音比 \(formatNoiseDelta(deltaDB))")
+        .accessibilityLabel(String(format: AppLanguageSettings.string("%@、原音比 %@"), AppLanguageSettings.string(title), formatNoiseDelta(deltaDB)))
     }
 
     private func correlationCard(stages: [AnalysisStageMetrics]) -> some View {
@@ -566,7 +566,7 @@ struct DetailedAnalysisComparisonView: View {
         let ratio = (value + 1) * 0.5
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(stage.label)
+                AppLocalizedText(stage.label)
                     .font(.title3.weight(.semibold))
                 Spacer()
                 Text(String(format: "%+.2f", value))
@@ -606,8 +606,8 @@ struct DetailedAnalysisComparisonView: View {
             .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(stage.label)のステレオ相関")
-        .accessibilityValue(String(format: "%+.2f。-1は逆相、0は注意、+1は同相です。", value))
+        .accessibilityLabel(String(format: AppLanguageSettings.string("%@のステレオ相関"), AppLanguageSettings.string(stage.label)))
+        .accessibilityValue(String(format: AppLanguageSettings.string("%+.2f。-1は逆相、0は注意、+1は同相です。"), value))
     }
 
     private func correlationTimelineSection(stages: [AnalysisStageMetrics]) -> some View {
@@ -620,7 +620,7 @@ struct DetailedAnalysisComparisonView: View {
                 .font(.body)
                 .foregroundStyle(.secondary)
             if points.isEmpty {
-                Text(correlationTimelineUnavailableText(stages: stages))
+                AppLocalizedText(correlationTimelineUnavailableText(stages: stages))
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
@@ -681,7 +681,7 @@ struct DetailedAnalysisComparisonView: View {
                 AxisTick()
                 AxisValueLabel {
                     if let correlation = value.as(Double.self) {
-                        Text(correlationAxisLabel(correlation))
+                        AppLocalizedText(correlationAxisLabel(correlation))
                     }
                 }
             }
@@ -802,8 +802,8 @@ struct DetailedAnalysisComparisonView: View {
                     }
                 }
                 .chartForegroundStyleScale([
-                    "\(presentation.correctedTitle) - 入力": Color.green,
-                    "最終版 - \(presentation.correctedTitle)": Color.orange
+                    spectrumCorrectionDeltaSeries: Color.green,
+                    spectrumMasteringDeltaSeries: Color.orange
                 ])
                 .chartXScale(domain: 80 ... 20_000, type: .log)
                 .chartYScale(domain: deltaDomain)
@@ -947,7 +947,7 @@ struct DetailedAnalysisComparisonView: View {
 
     private func bandStageValue(title: String, value: Double?, tint: Color) -> some View {
         VStack(spacing: 4) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.callout.weight(.semibold))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
@@ -965,7 +965,7 @@ struct DetailedAnalysisComparisonView: View {
                 .foregroundStyle(.secondary)
             Text(formatBandDelta(deltaDB))
                 .font(.callout.monospacedDigit().weight(.semibold))
-            Text(bandDeltaDirectionText(deltaDB))
+            AppLocalizedText(bandDeltaDirectionText(deltaDB))
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -984,13 +984,13 @@ struct DetailedAnalysisComparisonView: View {
             HStack(spacing: 8) {
                 Color.clear.frame(width: 112, height: 1)
                 HStack(spacing: 8) {
-                    Text("帯域減少 \(formatBandDelta(-displayScale.maximumMagnitudeDB))")
+                    Text(String(format: AppLanguageSettings.string("帯域減少 %@"), formatBandDelta(-displayScale.maximumMagnitudeDB)))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .multilineTextAlignment(.leading)
                     Text("入力 0.00 dB")
                         .frame(maxWidth: .infinity, alignment: .center)
                         .multilineTextAlignment(.center)
-                    Text("帯域増加 \(formatBandDelta(displayScale.maximumMagnitudeDB))")
+                    Text(String(format: AppLanguageSettings.string("帯域増加 %@"), formatBandDelta(displayScale.maximumMagnitudeDB)))
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .multilineTextAlignment(.trailing)
                 }
@@ -1024,7 +1024,7 @@ struct DetailedAnalysisComparisonView: View {
         tint: Color
     ) -> some View {
         HStack(spacing: 8) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.callout.weight(.semibold))
                 .lineLimit(2)
                 .frame(width: 112, alignment: .leading)
@@ -1062,11 +1062,11 @@ struct DetailedAnalysisComparisonView: View {
                 .frame(width: 92, alignment: .trailing)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title)、入力比 \(formatBandDelta(deltaDB))")
+        .accessibilityLabel(String(format: AppLanguageSettings.string("%@、入力比 %@"), AppLanguageSettings.string(title), formatBandDelta(deltaDB)))
     }
 
     private func unavailableCard(title: String, description: String) -> some View {
-        ContentUnavailableView(title, systemImage: "chart.bar.doc.horizontal", description: Text(description))
+        ContentUnavailableView(AppLanguageSettings.string(title), systemImage: "chart.bar.doc.horizontal", description: Text(AppLanguageSettings.string(description)))
             .frame(maxWidth: .infinity, minHeight: 180)
             .analysisCard()
     }
@@ -1094,7 +1094,7 @@ struct DetailedAnalysisComparisonView: View {
         DisclosureToggleButton(
             title: title,
             isExpanded: isExpanded.wrappedValue,
-            accessibilityHint: "解析項目を開閉します"
+            accessibilityHint: AppLanguageSettings.string("解析項目を開閉します")
         ) {
             LiquidGlassMotion.perform(
                 reduceMotion: reduceMotion,
@@ -1107,7 +1107,7 @@ struct DetailedAnalysisComparisonView: View {
 
     private func sectionLabel(title: String, help: String) -> some View {
         HStack(spacing: 6) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3.bold())
             TermHelpButton(title: title, reading: title, description: help)
         }
@@ -1115,7 +1115,7 @@ struct DetailedAnalysisComparisonView: View {
 
     private func termLabel(_ definition: TermDefinition) -> some View {
         HStack(spacing: 5) {
-            Text(definition.label)
+            AppLocalizedText(definition.label)
                 .font(.title3.weight(.semibold))
             TermHelpButton(title: definition.label, reading: definition.reading, description: definition.description)
         }
@@ -1132,26 +1132,26 @@ struct DetailedAnalysisComparisonView: View {
     private var comparisonStages: [AnalysisStageMetrics] {
         var stages: [AnalysisStageMetrics] = []
         if let metrics = presentation.inputMetrics {
-            stages.append(AnalysisStageMetrics(id: "input", label: "入力", color: .blue, metrics: metrics))
+            stages.append(AnalysisStageMetrics(id: "input", label: AppLanguageSettings.string("入力"), color: .blue, metrics: metrics))
         }
         if let metrics = presentation.correctedMetrics {
             stages.append(
                 AnalysisStageMetrics(
                     id: "corrected",
-                    label: presentation.correctedTitle,
+                    label: AppLanguageSettings.string(presentation.correctedTitle),
                     color: .green,
                     metrics: metrics
                 )
             )
         }
         if let metrics = presentation.masteredMetrics {
-            stages.append(AnalysisStageMetrics(id: "mastered", label: "最終版", color: .orange, metrics: metrics))
+            stages.append(AnalysisStageMetrics(id: "mastered", label: AppLanguageSettings.string("最終版"), color: .orange, metrics: metrics))
         }
         return stages
     }
 
     private var stageColorScale: KeyValuePairs<String, Color> {
-        ["入力": .blue, presentation.correctedTitle: .green, "最終版": .orange]
+        [AppLanguageSettings.string("入力"): .blue, AppLanguageSettings.string(presentation.correctedTitle): .green, AppLanguageSettings.string("最終版"): .orange]
     }
 
     private func metricRows(
@@ -1298,11 +1298,11 @@ struct DetailedAnalysisComparisonView: View {
             guard stage.metrics.stereoCorrelationTimeline.isEmpty else { return nil }
             switch stage.metrics.stereoCorrelationTimelineStatus {
             case .mono:
-                return "\(stage.label): モノラル音源のため表示しません"
+                return AppLanguageSettings.format("%@: モノラル音源のため表示しません", stage.label)
             case .silent:
-                return "\(stage.label): 音が入っているステレオ区間がないため表示しません"
+                return AppLanguageSettings.format("%@: 音が入っているステレオ区間がないため表示しません", stage.label)
             case .unavailable:
-                return "\(stage.label): ステレオ相関推移は未解析です"
+                return AppLanguageSettings.format("%@: ステレオ相関推移は未解析です", stage.label)
             case .available:
                 return nil
             }
@@ -1325,6 +1325,14 @@ struct DetailedAnalysisComparisonView: View {
         }
     }
 
+    private var spectrumCorrectionDeltaSeries: String {
+        AppLanguageSettings.format("%@ - 入力", AppLanguageSettings.string(presentation.correctedTitle))
+    }
+
+    private var spectrumMasteringDeltaSeries: String {
+        AppLanguageSettings.format("最終版 - %@", AppLanguageSettings.string(presentation.correctedTitle))
+    }
+
     private func spectrumDeltaPoints() -> [SpectrumDeltaPoint] {
         var points: [SpectrumDeltaPoint] = []
         if let input = presentation.inputMetrics,
@@ -1335,7 +1343,7 @@ struct DetailedAnalysisComparisonView: View {
                 return SpectrumDeltaPoint(
                     id: "corrected-input-\($0.id)",
                     frequencyHz: $0.frequencyHz,
-                    series: "\(presentation.correctedTitle) - 入力",
+                    series: spectrumCorrectionDeltaSeries,
                     deltaDB: correctedPoint.levelDB - $0.levelDB
                 )
             }
@@ -1348,7 +1356,7 @@ struct DetailedAnalysisComparisonView: View {
                 return SpectrumDeltaPoint(
                     id: "mastered-corrected-\($0.id)",
                     frequencyHz: $0.frequencyHz,
-                    series: "最終版 - \(presentation.correctedTitle)",
+                    series: spectrumMasteringDeltaSeries,
                     deltaDB: masteredPoint.levelDB - $0.levelDB
                 )
             }
@@ -1396,7 +1404,7 @@ struct DetailedAnalysisComparisonView: View {
     }
 
     private func noiseOriginalComparisonStatus(_ row: NoiseCheckRow) -> String {
-        guard let deltaDB = row.latestDeltaFromInputDB else { return row.summaryText }
+        guard let deltaDB = row.latestDeltaFromInputDB else { return AppLanguageSettings.string(row.summaryText) }
         if deltaDB >= noiseDeltaScale.unchangedThresholdDB {
             return "ノイズが増加"
         }
@@ -1410,12 +1418,12 @@ struct DetailedAnalysisComparisonView: View {
     }
 
     private func noiseOriginalComparisonReason(_ row: NoiseCheckRow) -> String {
-        guard let deltaDB = row.latestDeltaFromInputDB else { return "原音との比較待ち" }
-        let currentLevel = noiseCurrentLevelText(row.severity)
+        guard let deltaDB = row.latestDeltaFromInputDB else { return AppLanguageSettings.string("原音との比較待ち") }
+        let currentLevel = AppLanguageSettings.string(noiseCurrentLevelText(row.severity))
         if abs(deltaDB) < noiseDeltaScale.unchangedThresholdDB {
-            return "原音比 \(formatNoiseDelta(deltaDB))・±1.0 dB以内・現在は\(currentLevel)"
+            return AppLanguageSettings.format("原音比 %@・±1.0 dB以内・現在は%@", formatNoiseDelta(deltaDB), currentLevel)
         }
-        return "原音比 \(formatNoiseDelta(deltaDB))・現在は\(currentLevel)"
+        return AppLanguageSettings.format("原音比 %@・現在は%@", formatNoiseDelta(deltaDB), currentLevel)
     }
 
     private func noiseOriginalComparisonColor(_ row: NoiseCheckRow) -> Color {

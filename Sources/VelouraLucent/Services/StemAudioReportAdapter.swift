@@ -153,7 +153,9 @@ enum StemAudioReportAdapter {
             id: "stem-\(row.id)",
             title: row.title,
             value: row.value,
-            detail: row.detail.replacingOccurrences(of: "補正後", with: "Stem再ミックス"),
+            detail: row.detail
+                .replacingOccurrences(of: AppLanguageSettings.string("補正後"), with: AppLanguageSettings.string("Stem再ミックス"))
+                .replacingOccurrences(of: "補正後", with: AppLanguageSettings.string("Stem再ミックス")),
             severity: row.severity
         )
     }
@@ -168,29 +170,29 @@ enum StemAudioReportAdapter {
     ) -> [CompletionReportSection] {
         let contract = reportContext.runContract
         let remix = reportContext.appliedRemixSettings
-        let roleNames = contract.activeRoles.map(\.stemModeDisplayTitle).joined(separator: " / ")
-        let pureSumNames = contract.pureSumOrder.map(\.stemModeDisplayTitle).joined(separator: " → ")
+        let roleNames = contract.activeRoles.map { AppLanguageSettings.string($0.stemModeDisplayTitle) }.joined(separator: " / ")
+        let pureSumNames = contract.pureSumOrder.map { AppLanguageSettings.string($0.stemModeDisplayTitle) }.joined(separator: " → ")
         let masking = remix.masking
         let commonSection = CompletionReportSection(
             id: "stem-run-contract",
-            title: "Stem実行契約と共通再ミックス",
+            title: AppLanguageSettings.string("Stem実行契約と共通再ミックス"),
             subsections: [
                 CompletionReportSubsection(
                     id: "stem-run-contract-model",
-                    title: "実行したモデル契約",
+                    title: AppLanguageSettings.string("実行したモデル契約"),
                     paragraphs: [
-                        "モデル: \(contract.separationModel.displayName)（\(contract.stemCount) Stem）",
-                        "有効Stem: \(roleNames)",
-                        "Float32純粋加算順: \(pureSumNames)"
+                        AppLanguageSettings.format("モデル: %@（%ld Stem）", contract.separationModel.displayName, contract.stemCount),
+                        AppLanguageSettings.format("有効Stem: %@", roleNames),
+                        AppLanguageSettings.format("Float32純粋加算順: %@", pureSumNames)
                     ]
                 ),
                 CompletionReportSubsection(
                     id: "stem-run-contract-remix",
-                    title: "全Stem共通の再ミックス設定",
+                    title: AppLanguageSettings.string("全Stem共通の再ミックス設定"),
                     paragraphs: [
-                        "ドラム→ベース帯域制御: \(onOff(masking.drumsToBassEnabled)) / 量 \(percent(masking.drumsToBassAmount))",
-                        "ボーカル→伴奏帯域制御: \(onOff(masking.vocalsToAccompanimentEnabled)) / 量 \(percent(masking.vocalsToAccompanimentAmount))",
-                        "共通reverb return: \(percent(remix.reverbReturnLevel)) / decay \(decimal(remix.reverbDecaySeconds, digits: 2))秒"
+                        AppLanguageSettings.format("ドラム→ベース帯域制御: %@ / 量 %@", onOff(masking.drumsToBassEnabled), percent(masking.drumsToBassAmount)),
+                        AppLanguageSettings.format("ボーカル→伴奏帯域制御: %@ / 量 %@", onOff(masking.vocalsToAccompanimentEnabled), percent(masking.vocalsToAccompanimentAmount)),
+                        AppLanguageSettings.format("共通reverb return: %@ / decay %@秒", percent(remix.reverbReturnLevel), decimal(remix.reverbDecaySeconds, digits: 2))
                     ]
                 )
             ]
@@ -205,15 +207,18 @@ enum StemAudioReportAdapter {
             let correctionParagraphs: [String]
             if evidence.usedRawFallback {
                 correctionParagraphs = [
-                    "選択設定: \(correctionSettingsText(evidence.selectedCorrectionSettings))",
-                    "実際の採用音声: raw Stem（補正済み候補は不採用）",
-                    "fallback理由: \(evidence.fallbackReason ?? "記録なし")"
+                    AppLanguageSettings.format("選択設定: %@", correctionSettingsText(evidence.selectedCorrectionSettings)),
+                    AppLanguageSettings.string("実際の採用音声: raw Stem（補正済み候補は不採用）"),
+                    AppLanguageSettings.format(
+                        "fallback理由: %@",
+                        StemDiagnosticLocalization.reason(evidence.fallbackReason ?? "記録なし")
+                    )
                 ]
             } else if let effective = evidence.effectiveCorrectionSettings {
                 correctionParagraphs = [
-                    "選択設定: \(correctionSettingsText(evidence.selectedCorrectionSettings))",
-                    "実効設定: \(correctionSettingsText(effective))",
-                    "実際の採用音声: 補正済みStem"
+                    AppLanguageSettings.format("選択設定: %@", correctionSettingsText(evidence.selectedCorrectionSettings)),
+                    AppLanguageSettings.format("実効設定: %@", correctionSettingsText(effective)),
+                    AppLanguageSettings.string("実際の採用音声: 補正済みStem")
                 ]
             } else {
                 return nil
@@ -221,43 +226,50 @@ enum StemAudioReportAdapter {
 
             let guardSubsections = evidence.stageGuards.map { record in
                 let protected = record.protectedComponents.isEmpty
-                    ? "なし"
-                    : record.protectedComponents.map(\.rawValue).sorted().joined(separator: " / ")
+                    ? AppLanguageSettings.string("なし")
+                    : record.protectedComponents.map { AppLanguageSettings.string($0.stemModeDisplayTitle) }.sorted().joined(separator: " / ")
                 let protectionEvidence = record.protectionEvidence.map { evidence in
                     let summary = evidence.summary
                     let restoration = summary.restorationReason.map {
-                        " / 復帰理由 \($0.logDescription)"
+                        AppLanguageSettings.format(" / 復帰理由 %@", AppLanguageSettings.string($0.logDescription))
                     } ?? ""
-                    return "役割保護実測（\(evidence.label)）: 対象区間 \(percentage(summary.affectedTimeRatio)) / DSP差分保持 平均 \(percentage(summary.averageRetainedDSPDeltaRatio)) / 最小 \(percentage(summary.minimumRetainedDSPDeltaRatio))\(restoration)"
+                    return AppLanguageSettings.format(
+                        "役割保護実測（%@）: 対象区間 %@ / DSP差分保持 平均 %@ / 最小 %@%@",
+                        AppLanguageSettings.string(evidence.label),
+                        percentage(summary.affectedTimeRatio),
+                        percentage(summary.averageRetainedDSPDeltaRatio),
+                        percentage(summary.minimumRetainedDSPDeltaRatio),
+                        restoration
+                    )
                 }
                 return CompletionReportSubsection(
                     id: "stem-role-\(role.rawValue)-guard-\(record.stage.rawValue)",
-                    title: record.stage.stemModeDisplayTitle,
+                    title: AppLanguageSettings.string(record.stage.stemModeDisplayTitle),
                     paragraphs: [
-                        "実行指示: \(record.action.stemModeDisplayTitle)",
-                        "実行結果: \(record.outcome.stemModeDisplayTitle)",
-                        "根拠: \(record.reason)",
-                        "保護対象: \(protected)"
+                        AppLanguageSettings.format("実行指示: %@", AppLanguageSettings.string(record.action.stemModeDisplayTitle)),
+                        AppLanguageSettings.format("実行結果: %@", AppLanguageSettings.string(record.outcome.stemModeDisplayTitle)),
+                        AppLanguageSettings.format("根拠: %@", StemDiagnosticLocalization.reason(record.reason)),
+                        AppLanguageSettings.format("保護対象: %@", protected)
                     ] + protectionEvidence
                 )
             }
 
             return CompletionReportSection(
                 id: "stem-role-\(role.rawValue)",
-                title: "\(role.stemModeDisplayTitle)の補正・guard・再ミックス",
+                title: AppLanguageSettings.format("%@の補正・guard・再ミックス", AppLanguageSettings.string(role.stemModeDisplayTitle)),
                 subsections: [
                     CompletionReportSubsection(
                         id: "stem-role-\(role.rawValue)-correction",
-                        title: "採用した補正結果",
+                        title: AppLanguageSettings.string("採用した補正結果"),
                         paragraphs: correctionParagraphs
                     ),
                     CompletionReportSubsection(
                         id: "stem-role-\(role.rawValue)-remix",
-                        title: "役割別再ミックス設定",
+                        title: AppLanguageSettings.string("役割別再ミックス設定"),
                         paragraphs: [
-                            "gain: \(signedDB(remixSettings.gainDB))",
-                            "pan: \(panText(remixSettings.pan))",
-                            "reverb send: \(percent(remixSettings.reverbSend))"
+                            AppLanguageSettings.format("gain: %@", signedDB(remixSettings.gainDB)),
+                            AppLanguageSettings.format("pan: %@", panText(remixSettings.pan)),
+                            AppLanguageSettings.format("reverb send: %@", percent(remixSettings.reverbSend))
                         ]
                     )
                 ] + guardSubsections
@@ -268,19 +280,19 @@ enum StemAudioReportAdapter {
 
     private static func correctionSettingsText(_ settings: CorrectionSettings) -> String {
         [
-            "profile \(settings.profile.title)",
-            "補正強度 \(percent(settings.correctionIntensity))",
-            "原音保持 \(percent(settings.originalRetention))",
-            "低域整理 \(percent(settings.lowCleanup))",
-            "低中域整理 \(percent(settings.lowMidCleanup))",
-            "presence修復 \(percent(settings.presenceRepair))",
-            "air修復 \(percent(settings.airRepair))",
-            "高域自然さ \(percent(settings.highNaturalness))",
-            "ノイズ検出感度 \(percent(settings.noiseDetectionSensitivity))",
-            "倍音修復 \(percent(settings.harmonicRepairAmount))",
-            "foldover修復 \(percent(settings.foldoverRepairAmount))",
-            "音の芯保護 \(percent(settings.coreProtection))",
-            "stereo保護 \(percent(settings.stereoProtection))"
+            AppLanguageSettings.format("profile %@", AppLanguageSettings.string(settings.profile.title)),
+            AppLanguageSettings.format("補正強度 %@", percent(settings.correctionIntensity)),
+            AppLanguageSettings.format("原音保持 %@", percent(settings.originalRetention)),
+            AppLanguageSettings.format("低域整理 %@", percent(settings.lowCleanup)),
+            AppLanguageSettings.format("低中域整理 %@", percent(settings.lowMidCleanup)),
+            AppLanguageSettings.format("presence修復 %@", percent(settings.presenceRepair)),
+            AppLanguageSettings.format("air修復 %@", percent(settings.airRepair)),
+            AppLanguageSettings.format("高域自然さ %@", percent(settings.highNaturalness)),
+            AppLanguageSettings.format("ノイズ検出感度 %@", percent(settings.noiseDetectionSensitivity)),
+            AppLanguageSettings.format("倍音修復 %@", percent(settings.harmonicRepairAmount)),
+            AppLanguageSettings.format("foldover修復 %@", percent(settings.foldoverRepairAmount)),
+            AppLanguageSettings.format("音の芯保護 %@", percent(settings.coreProtection)),
+            AppLanguageSettings.format("stereo保護 %@", percent(settings.stereoProtection))
         ].joined(separator: " / ")
     }
 
@@ -306,20 +318,25 @@ enum StemAudioReportAdapter {
     }
 
     private static func onOff(_ enabled: Bool) -> String {
-        enabled ? "有効" : "無効"
+        AppLanguageSettings.string(enabled ? "有効" : "無効")
     }
 
     private static func stemRemixEffectText(_ text: String) -> String {
         let translated = stemStageWording(text)
-        if translated.hasPrefix("再ミックス後:") {
+        let prefix = AppLanguageSettings.string("再ミックス後:")
+        if translated.hasPrefix(prefix) {
             return translated
         }
-        return "再ミックス後: \(translated)"
+        return "\(prefix) \(translated)"
     }
 
     private static func stemStageWording(_ text: String) -> String {
-        text
-            .replacingOccurrences(of: "補正後", with: "再ミックス後")
-            .replacingOccurrences(of: "補正:", with: "再ミックス後:")
+        let corrected = AppLanguageSettings.string("補正後")
+        let remixed = AppLanguageSettings.string("再ミックス後")
+        return text
+            .replacingOccurrences(of: corrected, with: remixed)
+            .replacingOccurrences(of: "補正後", with: remixed)
+            .replacingOccurrences(of: AppLanguageSettings.string("補正:"), with: AppLanguageSettings.string("再ミックス後:"))
+            .replacingOccurrences(of: "補正:", with: AppLanguageSettings.string("再ミックス後:"))
     }
 }

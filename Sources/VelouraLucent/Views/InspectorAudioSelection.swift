@@ -10,11 +10,11 @@ enum InspectorAudioSelection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .input:
-            return "入力"
+            return AppLanguageSettings.string("入力")
         case .corrected:
-            return "補正後"
+            return AppLanguageSettings.string("補正後")
         case .mastered:
-            return "最終版"
+            return AppLanguageSettings.string("最終版")
         }
     }
 }

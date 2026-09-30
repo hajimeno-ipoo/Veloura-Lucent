@@ -7,6 +7,7 @@ struct SidebarFileRow: View {
     let fileInfo: AudioFileInfo?
     let placeholder: String
     let tint: Color
+    @Environment(\.locale) private var locale
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
@@ -16,9 +17,10 @@ struct SidebarFileRow: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3.bold())
-                Text(fileURL?.lastPathComponent ?? placeholder)
+                Text(fileURL?.lastPathComponent ?? AppLanguageSettings.string(placeholder))
+                    .environment(\.locale, locale)
                     .font(.body)
                     .foregroundStyle(fileURL == nil ? .secondary : .primary)
                     .lineLimit(fileURL == nil ? 2 : 1)
@@ -59,7 +61,7 @@ struct SidebarFileRow: View {
 
     private var helpText: String {
         guard let fileURL else {
-            return placeholder
+            return AppLanguageSettings.string(placeholder)
         }
         if let fileInfo {
             return "\(fileURL.path(percentEncoded: false))\n\(fileInfo.technicalSummary) / \(fileInfo.durationText)"

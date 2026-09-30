@@ -65,6 +65,7 @@ struct InspectorSettingsPanel: View {
     @Binding var selectedSectionRawValue: String
     let isWindowFullScreen: Bool
     let openKeyboardShortcutManager: @MainActor () -> Void
+    @Environment(\.locale) private var locale
 
     var body: some View {
         InspectorSettingsSectionLayout(
@@ -75,6 +76,7 @@ struct InspectorSettingsPanel: View {
         ) {
             selectedContent
         }
+        .environment(\.locale, locale)
     }
 
     @ViewBuilder
@@ -132,9 +134,9 @@ struct InspectorSettingsPanel: View {
                     isDisabled: job.isProcessing
                 )
 
-                Text(job.selectedAnalysisMode.summary)
+                AppLocalizedText(job.selectedAnalysisMode.summary)
                     .foregroundStyle(job.selectedAnalysisMode == .experimentalMetal ? VelouraTextColors.orange : .secondary)
-                Text(job.selectedAnalysisMode.resolvedSummary)
+                AppLocalizedText(job.selectedAnalysisMode.resolvedSummary)
                     .font(.body)
                     .foregroundStyle(job.selectedAnalysisMode.resolvedMode == .experimentalMetal ? VelouraTextColors.orange : .secondary)
             }
@@ -160,7 +162,7 @@ struct InspectorSettingsPanel: View {
                     label: \.title
                 )
 
-                Text(job.selectedDenoiseStrength.summary)
+                AppLocalizedText(job.selectedDenoiseStrength.summary)
                     .font(.body)
                     .foregroundStyle(.secondary)
 
@@ -230,9 +232,13 @@ struct InspectorSettingsPanel: View {
                             job.selectedMasteringProfile = profile
                         } label: {
                             if profile == job.selectedMasteringProfile {
-                                Label(profile.menuTitle, systemImage: "checkmark")
+                                Label {
+                                    AppLocalizedText(profile.menuTitle)
+                                } icon: {
+                                    Image(systemName: "checkmark")
+                                }
                             } else {
-                                Text(profile.menuTitle)
+                                AppLocalizedText(profile.menuTitle)
                             }
                         }
                     }
@@ -241,7 +247,7 @@ struct InspectorSettingsPanel: View {
                         Text("仕上がりプロファイル")
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 8)
-                        Text(job.selectedMasteringProfile.title)
+                        AppLocalizedText(job.selectedMasteringProfile.title)
                             .lineLimit(1)
                             .minimumScaleFactor(0.9)
                         Image(systemName: "chevron.up.chevron.down")
@@ -257,13 +263,17 @@ struct InspectorSettingsPanel: View {
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
-                .accessibilityLabel("仕上がりプロファイル")
-                .accessibilityValue(job.selectedMasteringProfile.title)
+        .accessibilityLabel(AppLanguageSettings.string("仕上がりプロファイル"))
+                .accessibilityValue(AppLanguageSettings.string(job.selectedMasteringProfile.title))
 
-                Text(job.selectedMasteringProfile.summary)
+                AppLocalizedText(job.selectedMasteringProfile.summary)
                     .font(.body)
                     .foregroundStyle(.secondary)
-                Text(job.selectedMasteringProfile.presetTargetText)
+                Text(String(
+                    format: AppLanguageSettings.string("目安: %.1f LUFS / True Peak上限: %.1f dBTP"),
+                    Double(job.selectedMasteringProfile.settings.targetLoudness),
+                    Double(job.selectedMasteringProfile.settings.peakCeilingDB)
+                ))
                     .font(.body.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Text("目標値に必ず合わせるものではなく、仕上げ意図を確認する目安です。")
@@ -888,13 +898,15 @@ struct InspectorSettingsPanel: View {
         shortTitle: String,
         band: WritableKeyPath<MultibandCompressionSettings, BandCompressorSettings>
     ) -> some View {
-        VStack(spacing: 6) {
+        let localizedShortTitle = AppLanguageSettings.string(shortTitle)
+        let localizedGroupTitle = AppLanguageSettings.string(title)
+        return VStack(spacing: 6) {
             titleWithHelp(title, font: .title3.bold(), help: help)
                 .frame(width: DAWKnobMetrics.twoColumnWidth, alignment: .leading)
 
             HStack(alignment: .top, spacing: DAWKnobMetrics.columnSpacing) {
-                compressorThresholdKnob(title: "\(shortTitle) Threshold", groupTitle: title, band: band)
-                compressorRatioKnob(title: "\(shortTitle) Ratio", groupTitle: title, band: band)
+                compressorThresholdKnob(title: "\(localizedShortTitle) Threshold", groupTitle: localizedGroupTitle, band: band)
+                compressorRatioKnob(title: "\(localizedShortTitle) Ratio", groupTitle: localizedGroupTitle, band: band)
             }
             .frame(width: DAWKnobMetrics.twoColumnWidth)
         }
@@ -979,7 +991,11 @@ struct InspectorSettingsPanel: View {
     private func masteringWarningMessages(_ warnings: [String]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(warnings, id: \.self) { warning in
-                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                Label {
+                    AppLocalizedText(warning)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                }
                     .font(.body)
                     .foregroundStyle(VelouraTextColors.orange)
             }
@@ -989,8 +1005,8 @@ struct InspectorSettingsPanel: View {
     private func compressorGroup(title: String, help: SettingHelp?, band: WritableKeyPath<MultibandCompressionSettings, BandCompressorSettings>) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             titleWithHelp(title, font: .title3.bold(), help: help)
-            inspectorSlider(title: "Threshold", help: SettingHelp(title: "\(title) Threshold", reading: "すれっしょるど", description: "コンプレッサーが反応し始める音量です。値を低くするほど、より小さな音から圧縮が始まります。"), valueText: String(format: "%.1f dB", job.editableMasteringSettings.multibandCompression[keyPath: band].thresholdDB), labels: ["深く効く", "標準", "浅く効く"], value: compressorBinding(band: band, field: \.thresholdDB, range: -36 ... -12), range: -36 ... -12, step: 0.1)
-            inspectorSlider(title: "Ratio", help: SettingHelp(title: "\(title) Ratio", reading: "れしお", description: "しきい値を超えた音をどれくらい圧縮するかです。値を上げるほど強く抑えます。"), valueText: String(format: "%.2f", job.editableMasteringSettings.multibandCompression[keyPath: band].ratio), labels: ["自然", "標準", "強く圧縮"], value: compressorBinding(band: band, field: \.ratio, range: 1.1 ... 4.0), range: 1.1 ... 4.0)
+            inspectorSlider(title: "Threshold", help: SettingHelp(title: "\(AppLanguageSettings.string(title)) Threshold", reading: "すれっしょるど", description: "コンプレッサーが反応し始める音量です。値を低くするほど、より小さな音から圧縮が始まります。"), valueText: String(format: "%.1f dB", job.editableMasteringSettings.multibandCompression[keyPath: band].thresholdDB), labels: ["深く効く", "標準", "浅く効く"], value: compressorBinding(band: band, field: \.thresholdDB, range: -36 ... -12), range: -36 ... -12, step: 0.1)
+            inspectorSlider(title: "Ratio", help: SettingHelp(title: "\(AppLanguageSettings.string(title)) Ratio", reading: "れしお", description: "しきい値を超えた音をどれくらい圧縮するかです。値を上げるほど強く抑えます。"), valueText: String(format: "%.2f", job.editableMasteringSettings.multibandCompression[keyPath: band].ratio), labels: ["自然", "標準", "強く圧縮"], value: compressorBinding(band: band, field: \.ratio, range: 1.1 ... 4.0), range: 1.1 ... 4.0)
         }
         .padding(10)
         .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
@@ -1046,7 +1062,7 @@ struct InspectorSettingsPanel: View {
 
             HStack {
                 ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
-                    Text(label)
+                    AppLocalizedText(label)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: scaleAlignment(index: index, count: labels.count))
@@ -1064,7 +1080,7 @@ struct InspectorSettingsPanel: View {
 
     private func titleWithHelp(_ title: String, font: Font, help: SettingHelp?) -> some View {
         HStack(spacing: 6) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(font)
             if let help {
                 TermHelpButton(title: help.title, reading: help.reading, description: help.description)
@@ -1074,12 +1090,16 @@ struct InspectorSettingsPanel: View {
 
     private func stepperButtons(title: String, value: Binding<Float>, range: ClosedRange<Float>, step: Float) -> some View {
         HStack(spacing: 4) {
-            Button("\(title)を下げる", systemImage: "minus") {
+            Button {
                 value.wrappedValue = limited(value.wrappedValue - step, to: range)
+            } label: {
+                Label(String(format: AppLanguageSettings.string("%@を下げる"), AppLanguageSettings.string(title)), systemImage: "minus")
             }
             .labelStyle(.iconOnly)
-            Button("\(title)を上げる", systemImage: "plus") {
+            Button {
                 value.wrappedValue = limited(value.wrappedValue + step, to: range)
+            } label: {
+                Label(String(format: AppLanguageSettings.string("%@を上げる"), AppLanguageSettings.string(title)), systemImage: "plus")
             }
             .labelStyle(.iconOnly)
         }
@@ -1103,7 +1123,7 @@ struct InspectorSettingsPanel: View {
     }
 
     private func resetStatusText(isCustom: Bool) -> some View {
-        Text(isCustom ? "手動調整中です" : "既定値を使用しています")
+        AppLocalizedText(isCustom ? "手動調整中です" : "既定値を使用しています")
             .font(.title3)
             .foregroundStyle(isCustom ? VelouraTextColors.orange : .secondary)
     }

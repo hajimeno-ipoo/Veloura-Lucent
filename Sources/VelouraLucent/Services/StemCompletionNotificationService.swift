@@ -10,11 +10,11 @@ enum StemCompletionNotificationStage: String, CaseIterable, Equatable, Sendable 
     var title: String {
         switch self {
         case .correction:
-            "Stem Modeの補正が完了しました"
+            AppLanguageSettings.string("Stem Modeの補正が完了しました")
         case .remix:
-            "Stem Modeの再ミックスが完了しました"
+            AppLanguageSettings.string("Stem Modeの再ミックスが完了しました")
         case .mastering:
-            "Stem Modeのマスタリングが完了しました"
+            AppLanguageSettings.string("Stem Modeのマスタリングが完了しました")
         }
     }
 
@@ -22,11 +22,26 @@ enum StemCompletionNotificationStage: String, CaseIterable, Equatable, Sendable 
         let modelName = runContract.separationModel.displayName
         return switch self {
         case .correction:
-            "\(modelName)の補正済み\(runContract.stemCount)Stemを確認できます。再ミックスは別操作で開始してください。"
+            String(
+                format: AppLanguageSettings.string("%@の補正済み%ldStemを確認できます。再ミックスは別操作で開始してください。"),
+                locale: AppLanguageSettings.locale,
+                modelName,
+                runContract.stemCount
+            )
         case .remix:
-            "\(modelName)・\(runContract.stemCount)Stemの再ミックス結果を確認できます。マスタリングは別操作で開始してください。"
+            String(
+                format: AppLanguageSettings.string("%@・%ldStemの再ミックス結果を確認できます。マスタリングは別操作で開始してください。"),
+                locale: AppLanguageSettings.locale,
+                modelName,
+                runContract.stemCount
+            )
         case .mastering:
-            "\(modelName)・\(runContract.stemCount)StemのStem Mode最終版を確認できます。"
+            String(
+                format: AppLanguageSettings.string("%@・%ldStemのStem Mode最終版を確認できます。"),
+                locale: AppLanguageSettings.locale,
+                modelName,
+                runContract.stemCount
+            )
         }
     }
 }

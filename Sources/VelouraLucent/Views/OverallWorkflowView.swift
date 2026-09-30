@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OverallWorkflowView: View {
     let stages: [WorkspaceFooterStage]
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -22,6 +23,7 @@ struct OverallWorkflowView: View {
             }
             .frame(maxWidth: .infinity)
         }
+        .environment(\.locale, locale)
     }
 
     private func stageView(_ stage: WorkspaceFooterStage) -> some View {
@@ -30,13 +32,13 @@ struct OverallWorkflowView: View {
                 .font(.title3)
                 .foregroundStyle(stage.state.color)
                 .accessibilityHidden(true)
-            Text(stage.title)
+            AppLocalizedText(stage.title)
                 .font(.title3.bold())
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: 36, alignment: .top)
-            Text(stage.state.label)
+            AppLocalizedText(stage.state.label)
                 .font(.title3)
                 .foregroundStyle(stage.state.color)
                 .lineLimit(1)
@@ -63,9 +65,9 @@ struct OverallWorkflowView: View {
 
     private func accessibilityLabel(for stage: WorkspaceFooterStage) -> String {
         guard stage.state.isActive, let progress = stage.progress else {
-            return "\(stage.title)、\(stage.state.label)"
+            return "\(AppLanguageSettings.string(stage.title))、\(AppLanguageSettings.string(stage.state.label))"
         }
-        return "\(stage.title)、\(stage.state.label)、\(Int((progress * 100).rounded()))パーセント"
+        return "\(AppLanguageSettings.string(stage.title))、\(AppLanguageSettings.string(stage.state.label))、\(Int((progress * 100).rounded()))\(AppLanguageSettings.string("パーセント"))"
     }
 
     private func connectorColor(after stage: WorkspaceFooterStage) -> Color {

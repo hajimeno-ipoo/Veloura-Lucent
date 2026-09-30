@@ -56,7 +56,7 @@ struct ComparisonVideoFrameView: View {
                     element: .role,
                     onPositionChange: onPositionChange
                 ) {
-                    Text(state.activeRoleTitle)
+                    Text(AppLanguageSettings.string(state.activeRoleTitle))
                         .font(displayFont(
                             family: state.displaySettings.roleFontFamily,
                             size: CGFloat(state.displaySettings.roleFontSize)
@@ -121,7 +121,12 @@ struct ComparisonVideoFrameView: View {
         .background(Color.black)
         .clipped()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(state.trackTitle)、\(state.activeRoleTitle)を再生中")
+        .accessibilityLabel(String(
+            format: AppLanguageSettings.string("%@、%@を再生中"),
+            locale: AppLanguageSettings.locale,
+            state.trackTitle,
+            AppLanguageSettings.string(state.activeRoleTitle)
+        ))
     }
 
     private var activeColor: Color {
@@ -401,25 +406,25 @@ private struct ComparisonVideoInspectorValue: Equatable {
         let metrics = info?.metrics
         let fileInfo = info?.fileInfo
         return [
-            Self(label: "音量", value: measurement(metrics?.integratedLoudnessLUFS, decimals: 1, unit: "LUFS")),
-            Self(label: "ピーク", value: measurement(metrics?.truePeakDBFS, decimals: 1, unit: "dBTP")),
-            Self(label: "強弱", value: measurement(metrics?.crestFactorDB, decimals: 1, unit: "dB")),
-            Self(label: "ステレオ幅", value: measurement(metrics?.stereoWidth, decimals: 2, unit: "")),
-            Self(label: "形式", value: fileInfo?.formatName ?? "未取得"),
-            Self(label: "サンプルレート", value: fileInfo?.sampleRateText ?? "未取得"),
-            Self(label: "ビット深度", value: bitDepthText(fileInfo)),
-            Self(label: "チャンネル", value: fileInfo?.channelText ?? "未取得"),
+            Self(label: AppLanguageSettings.string("音量"), value: measurement(metrics?.integratedLoudnessLUFS, decimals: 1, unit: "LUFS")),
+            Self(label: AppLanguageSettings.string("ピーク"), value: measurement(metrics?.truePeakDBFS, decimals: 1, unit: "dBTP")),
+            Self(label: AppLanguageSettings.string("強弱"), value: measurement(metrics?.crestFactorDB, decimals: 1, unit: "dB")),
+            Self(label: AppLanguageSettings.string("ステレオ幅"), value: measurement(metrics?.stereoWidth, decimals: 2, unit: "")),
+            Self(label: AppLanguageSettings.string("形式"), value: fileInfo?.formatName ?? AppLanguageSettings.string("未取得")),
+            Self(label: AppLanguageSettings.string("サンプルレート"), value: fileInfo?.sampleRateText ?? AppLanguageSettings.string("未取得")),
+            Self(label: AppLanguageSettings.string("ビット深度"), value: bitDepthText(fileInfo)),
+            Self(label: AppLanguageSettings.string("チャンネル"), value: fileInfo?.channelText ?? AppLanguageSettings.string("未取得")),
         ]
     }
 
     private static func measurement(_ value: Double?, decimals: Int, unit: String) -> String {
-        guard let value, value.isFinite else { return "未測定" }
+        guard let value, value.isFinite else { return AppLanguageSettings.string("未測定") }
         let number = String(format: "%.*f", decimals, value)
         return unit.isEmpty ? number : "\(number) \(unit)"
     }
 
     private static func bitDepthText(_ fileInfo: AudioFileInfo?) -> String {
-        guard let fileInfo, let bitDepth = fileInfo.bitDepth else { return "未取得" }
+        guard let fileInfo, let bitDepth = fileInfo.bitDepth else { return AppLanguageSettings.string("未取得") }
         return fileInfo.isFloatingPoint ? "\(bitDepth)-bit float" : "\(bitDepth) bit"
     }
 }

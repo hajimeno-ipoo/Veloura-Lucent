@@ -11,6 +11,7 @@ struct LiquidGlassSegmentedPicker<Selection: Hashable>: View {
     var isDisabled = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @State private var hoveredOption: Selection?
     @FocusState private var focusedOption: Selection?
     @Namespace private var glassNamespace
@@ -33,7 +34,8 @@ struct LiquidGlassSegmentedPicker<Selection: Hashable>: View {
             focusedOption = nil
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(title)
+        .accessibilityLabel(AppLanguageSettings.string(title))
+        .environment(\.locale, locale)
     }
 
     @ViewBuilder
@@ -54,7 +56,7 @@ struct LiquidGlassSegmentedPicker<Selection: Hashable>: View {
     }
 
     private func optionLabel(for option: Selection, isSelected: Bool) -> some View {
-        Text(label(option))
+        AppLocalizedText(label(option))
             .font(labelFont)
             .foregroundStyle(isSelected ? LiquidGlassSegmentedPickerStyle.selectedText : Color.secondary)
             .lineLimit(1)
@@ -75,7 +77,7 @@ struct LiquidGlassSegmentedPicker<Selection: Hashable>: View {
                 reduceMotion: reduceMotion
             )
             .contentShape(Capsule())
-            .accessibilityLabel("\(title)、\(label(option))")
+            .accessibilityLabel("\(AppLanguageSettings.string(title))、\(AppLanguageSettings.string(label(option)))")
     }
 
     @MainActor

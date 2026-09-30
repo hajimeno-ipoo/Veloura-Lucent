@@ -16,7 +16,13 @@ struct ProcessingLogJSONExport: Encodable {
         let export = ProcessingLogJSONExport(
             mode: mode,
             exportedAt: exportedAt,
-            sections: sections.map { Section(id: $0.id, title: $0.title, lines: $0.lines) }
+            sections: sections.map {
+                Section(
+                    id: $0.id,
+                    title: AppLanguageSettings.string($0.title),
+                    lines: $0.lines.map(ProcessingLogLineLocalization.string)
+                )
+            }
         )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

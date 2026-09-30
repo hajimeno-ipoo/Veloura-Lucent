@@ -43,8 +43,8 @@ enum CompletionReportDocumentService {
         )
         let resolvedTitle = trackTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
         let inputSectionTitle = resolvedTitle.flatMap { $0.isEmpty ? nil : $0 }
-            .map { "1. 原音「\($0)」の分析" }
-            ?? "1. 原音の分析"
+            .map { CompletionReportLocalization.text("1. 原音「%@」の分析", String(describing: $0)) }
+            ?? AppLanguageSettings.string("1. 原音の分析")
 
         return CompletionReportDocumentBuild(
             summary: summary(
@@ -66,7 +66,7 @@ enum CompletionReportDocumentService {
             comparisonNotes: [alignmentSummary(
                 processed: processedAlignment,
                 mastered: masteredAlignment,
-                middleTitle: mode.middleStageTitle
+                middleTitle: AppLanguageSettings.string(mode.middleStageTitle)
             )],
             sections: [
                 inputSection(
@@ -108,7 +108,7 @@ enum CompletionReportDocumentService {
         mode: CompletionReportMode,
         processedAlignment: Alignment?
     ) -> [String] {
-        let middle = mode.middleStageTitle
+        let middle = AppLanguageSettings.string(mode.middleStageTitle)
         let low = bandChange(reference: input, target: mastered, lower: 20, upper: 150)
         let presence = bandChange(reference: input, target: mastered, lower: 2_000, upper: 10_000)
         let noiseDecreaseCount = noiseReport.rows.filter { ($0.correctionDeltaDB ?? 0) < -0.05 }.count
@@ -116,16 +116,16 @@ enum CompletionReportDocumentService {
         let noiseItemCount = noiseReport.rows.count
         let alignmentText: String
         if let processedAlignment {
-            alignmentText = "入力と\(middle)は、20 ms RMS包絡の時間差が\(milliseconds(processedAlignment.offsetSeconds))、相関が\(plain(processedAlignment.correlation, 3))です。"
+            alignmentText = CompletionReportLocalization.text("入力と%@は、20 ms RMS包絡の時間差が%@、相関が%@です。", String(describing: middle), String(describing: milliseconds(processedAlignment.offsetSeconds)), String(describing: plain(processedAlignment.correlation, 3)))
         } else {
-            alignmentText = "入力と\(middle)の時間差と包絡相関は未測定です。"
+            alignmentText = CompletionReportLocalization.text("入力と%@の時間差と包絡相関は未測定です。", String(describing: middle))
         }
 
         return [
-            "今回のレポートは、入力・\(middle)・最終版を同じ測定方法で比較しています。\(alignmentText)",
-            "入力から\(middle)では、Integrated Loudnessが\(signed(processed.integratedLoudnessLUFS - input.integratedLoudnessLUFS, 2, "LU"))、クレストファクターが\(signed(processed.crestFactorDB - input.crestFactorDB, 2, "dB"))変化しました。ノイズ\(noiseItemCount)項目では減少\(noiseDecreaseCount)項目、増加\(noiseIncreaseCount)項目です。",
-            "入力から最終版の全体音量差を除いた帯域変化は、20〜150 Hzが\(optionalSigned(low, 2, "dB"))、2〜10 kHzが\(optionalSigned(presence, 2, "dB"))です。最終版のTrue Peakは\(format(mastered.truePeakDBFS, 2, "dBTP"))、クリップ検出数は\(mastered.completionReportAnalysis.clippedSampleCount)です。",
-            "音楽的な好みは数値だけでは確定できません。本レポートでは、構造保持、帯域、ダイナミクス、ノイズ、ピーク、ステレオの測定結果を工程ごとに分けて示します。"
+            CompletionReportLocalization.text("今回のレポートは、入力・%@・最終版を同じ測定方法で比較しています。%@", String(describing: middle), String(describing: alignmentText)),
+            CompletionReportLocalization.text("入力から%@では、Integrated Loudnessが%@、クレストファクターが%@変化しました。ノイズ%@項目では減少%@項目、増加%@項目です。", String(describing: middle), String(describing: signed(processed.integratedLoudnessLUFS - input.integratedLoudnessLUFS, 2, "LU")), String(describing: signed(processed.crestFactorDB - input.crestFactorDB, 2, "dB")), String(describing: noiseItemCount), String(describing: noiseDecreaseCount), String(describing: noiseIncreaseCount)),
+            CompletionReportLocalization.text("入力から最終版の全体音量差を除いた帯域変化は、20〜150 Hzが%@、2〜10 kHzが%@です。最終版のTrue Peakは%@、クリップ検出数は%@です。", String(describing: optionalSigned(low, 2, "dB")), String(describing: optionalSigned(presence, 2, "dB")), String(describing: format(mastered.truePeakDBFS, 2, "dBTP")), String(describing: mastered.completionReportAnalysis.clippedSampleCount)),
+            AppLanguageSettings.string("音楽的な好みは数値だけでは確定できません。本レポートでは、構造保持、帯域、ダイナミクス、ノイズ、ピーク、ステレオの測定結果を工程ごとに分けて示します。")
         ]
     }
 
@@ -138,18 +138,18 @@ enum CompletionReportDocumentService {
         masteredFileInfo: AudioFileInfo?
     ) -> [CompletionReportComparisonRow] {
         var rows = [
-            row("duration", "長さ", duration(input.duration), duration(processed.duration), duration(mastered.duration)),
+            row("duration", AppLanguageSettings.string("長さ"), duration(input.duration), duration(processed.duration), duration(mastered.duration)),
             row("loudness", "Integrated Loudness", format(input.integratedLoudnessLUFS, 2, "LUFS"), format(processed.integratedLoudnessLUFS, 2, "LUFS"), format(mastered.integratedLoudnessLUFS, 2, "LUFS")),
             row("lra", "Loudness Range", optional(input.loudnessRangeLU, 2, "LU"), optional(processed.loudnessRangeLU, 2, "LU"), optional(mastered.loudnessRangeLU, 2, "LU")),
             row("true-peak", "True Peak", format(input.truePeakDBFS, 2, "dBTP"), format(processed.truePeakDBFS, 2, "dBTP"), format(mastered.truePeakDBFS, 2, "dBTP")),
-            row("crest", "全体クレストファクター", format(input.crestFactorDB, 2, "dB"), format(processed.crestFactorDB, 2, "dB"), format(mastered.crestFactorDB, 2, "dB")),
-            row("stereo-correlation", "ステレオ相関", plain(input.stereoCorrelation, 3), plain(processed.stereoCorrelation, 3), plain(mastered.stereoCorrelation, 3)),
-            row("low-correlation", "低域150 Hz以下の相関", optional(input.completionReportAnalysis.lowBandStereoCorrelation, 3, ""), optional(processed.completionReportAnalysis.lowBandStereoCorrelation, 3, ""), optional(mastered.completionReportAnalysis.lowBandStereoCorrelation, 3, ""))
+            row("crest", AppLanguageSettings.string("全体クレストファクター"), format(input.crestFactorDB, 2, "dB"), format(processed.crestFactorDB, 2, "dB"), format(mastered.crestFactorDB, 2, "dB")),
+            row("stereo-correlation", AppLanguageSettings.string("ステレオ相関"), plain(input.stereoCorrelation, 3), plain(processed.stereoCorrelation, 3), plain(mastered.stereoCorrelation, 3)),
+            row("low-correlation", AppLanguageSettings.string("低域150 Hz以下の相関"), optional(input.completionReportAnalysis.lowBandStereoCorrelation, 3, ""), optional(processed.completionReportAnalysis.lowBandStereoCorrelation, 3, ""), optional(mastered.completionReportAnalysis.lowBandStereoCorrelation, 3, ""))
         ]
         if let inputFileInfo, let processedFileInfo, let masteredFileInfo {
-            rows.insert(row("sample-rate", "サンプルレート", inputFileInfo.sampleRateText, processedFileInfo.sampleRateText, masteredFileInfo.sampleRateText), at: 1)
-            rows.insert(row("channels", "チャンネル", inputFileInfo.channelText, processedFileInfo.channelText, masteredFileInfo.channelText), at: 2)
-            rows.insert(row("encoding", "形式", inputFileInfo.encodingText, processedFileInfo.encodingText, masteredFileInfo.encodingText), at: 3)
+            rows.insert(row("sample-rate", AppLanguageSettings.string("サンプルレート"), inputFileInfo.sampleRateText, processedFileInfo.sampleRateText, masteredFileInfo.sampleRateText), at: 1)
+            rows.insert(row("channels", AppLanguageSettings.string("チャンネル"), inputFileInfo.channelText, processedFileInfo.channelText, masteredFileInfo.channelText), at: 2)
+            rows.insert(row("encoding", AppLanguageSettings.string("形式"), inputFileInfo.encodingText, processedFileInfo.encodingText, masteredFileInfo.encodingText), at: 3)
         }
         return rows
     }
@@ -160,10 +160,10 @@ enum CompletionReportDocumentService {
     ) -> CompletionReportSection {
         let analysis = input.completionReportAnalysis
         let transitions = analysis.densityTransitionTimes.isEmpty
-            ? "測定上、明確な密度転換点は特定できませんでした。"
-            : "密度変化は\(analysis.densityTransitionTimes.map(time).joined(separator: "、"))付近で検出されました。"
-        let tempo = analysis.estimatedTempoBPM.map { "推定テンポは\(plain($0, 1)) BPM" } ?? "テンポは判定困難"
-        let key = analysis.estimatedKey.map { "推定調性は\($0)" } ?? "調性は判定困難"
+            ? AppLanguageSettings.string("測定上、明確な密度転換点は特定できませんでした。")
+            : CompletionReportLocalization.text("密度変化は%@付近で検出されました。", String(describing: analysis.densityTransitionTimes.map(time).joined(separator: "、")))
+        let tempo = analysis.estimatedTempoBPM.map { CompletionReportLocalization.text("推定テンポは%@ BPM", String(describing: plain($0, 1))) } ?? AppLanguageSettings.string("テンポは判定困難")
+        let key = analysis.estimatedKey.map { CompletionReportLocalization.text("推定調性は%@", String(describing: $0)) } ?? AppLanguageSettings.string("調性は判定困難")
         let strongest = strongestBand(input)
         let weakest = weakestBand(input)
         let dynamicSpan = dynamicsSpan(input)
@@ -173,25 +173,25 @@ enum CompletionReportDocumentService {
             id: "input",
             title: title,
             subsections: [
-                subsection("input-musical", "音楽的な性格", [
-                    "\(tempo)、\(key)です。いずれも解析上の推定で、確定情報ではありません。",
+                subsection("input-musical", AppLanguageSettings.string("音楽的な性格"), [
+                    CompletionReportLocalization.text("%@、%@です。いずれも解析上の推定で、確定情報ではありません。", String(describing: tempo), String(describing: key)),
                     transitions
                 ]),
-                subsection("input-dynamics", "音量とダイナミクス", [
-                    "入力は\(format(input.integratedLoudnessLUFS, 2, "LUFS"))、True Peak \(format(input.truePeakDBFS, 2, "dBTP"))、Loudness Range \(optional(input.loudnessRangeLU, 2, "LU"))です。",
-                    "クレストファクターは\(format(input.crestFactorDB, 2, "dB"))、短時間RMSの95％点と10％点の差は\(optional(dynamicSpan, 2, "dB"))、Peak-to-Loudness Ratioは\(format(peakToLoudnessRatio(input), 2, "dB"))です。"
+                subsection("input-dynamics", AppLanguageSettings.string("音量とダイナミクス"), [
+                    CompletionReportLocalization.text("入力は%@、True Peak %@、Loudness Range %@です。", String(describing: format(input.integratedLoudnessLUFS, 2, "LUFS")), String(describing: format(input.truePeakDBFS, 2, "dBTP")), String(describing: optional(input.loudnessRangeLU, 2, "LU"))),
+                    CompletionReportLocalization.text("クレストファクターは%@、短時間RMSの95％点と10％点の差は%@、Peak-to-Loudness Ratioは%@です。", String(describing: format(input.crestFactorDB, 2, "dB")), String(describing: optional(dynamicSpan, 2, "dB")), String(describing: format(peakToLoudnessRatio(input), 2, "dB")))
                 ]),
-                subsection("input-frequency", "周波数バランス", [
-                    "スペクトル重心は\(format(input.centroidHz, 0, "Hz"))です。",
-                    "全体音量差を除いた帯域比では、最も高い帯域は\(strongest)、最も低い帯域は\(weakest)です。これは帯域構成の説明であり、良し悪しの判定ではありません。"
+                subsection("input-frequency", AppLanguageSettings.string("周波数バランス"), [
+                    CompletionReportLocalization.text("スペクトル重心は%@です。", String(describing: format(input.centroidHz, 0, "Hz"))),
+                    CompletionReportLocalization.text("全体音量差を除いた帯域比では、最も高い帯域は%@、最も低い帯域は%@です。これは帯域構成の説明であり、良し悪しの判定ではありません。", String(describing: strongest), String(describing: weakest))
                 ]),
-                subsection("input-stereo", "ステレオと位相", [
-                    "全体のステレオ相関は\(plain(input.stereoCorrelation, 3))、150 Hz以下は\(optional(analysis.lowBandStereoCorrelation, 3, ""))です。",
-                    "左右波形相関は\(optional(analysis.leftRightWaveformCorrelation, 3, ""))です。全体のSide/Mid比は\(optional(analysis.sideMidRatioDB, 2, "dB"))、150 Hz以下は\(optional(analysis.lowBandSideMidRatioDB, 2, "dB"))です。負の相関区間は\(optionalPercent(negativeRatio))です。"
+                subsection("input-stereo", AppLanguageSettings.string("ステレオと位相"), [
+                    CompletionReportLocalization.text("全体のステレオ相関は%@、150 Hz以下は%@です。", String(describing: plain(input.stereoCorrelation, 3)), String(describing: optional(analysis.lowBandStereoCorrelation, 3, ""))),
+                    CompletionReportLocalization.text("左右波形相関は%@です。全体のSide/Mid比は%@、150 Hz以下は%@です。負の相関区間は%@です。", String(describing: optional(analysis.leftRightWaveformCorrelation, 3, "")), String(describing: optional(analysis.sideMidRatioDB, 2, "dB")), String(describing: optional(analysis.lowBandSideMidRatioDB, 2, "dB")), String(describing: optionalPercent(negativeRatio)))
                 ]),
-                subsection("input-assessment", "原音の評価", [
-                    "入力の特徴は、音量、ダイナミクス、周波数重心、ステレオ相関の実測値から上記の通り確認できます。ノイズ量や帯域の偏りは中間音源との比較で工程別に評価します。",
-                    "制作意図や聴感上の好みは測定だけでは確定できないため、原音の音楽的な合否は断定しません。"
+                subsection("input-assessment", AppLanguageSettings.string("原音の評価"), [
+                    AppLanguageSettings.string("入力の特徴は、音量、ダイナミクス、周波数重心、ステレオ相関の実測値から上記の通り確認できます。ノイズ量や帯域の偏りは中間音源との比較で工程別に評価します。"),
+                    AppLanguageSettings.string("制作意図や聴感上の好みは測定だけでは確定できないため、原音の音楽的な合否は断定しません。")
                 ])
             ]
         )
@@ -205,16 +205,16 @@ enum CompletionReportDocumentService {
         processingSourceName: String?,
         alignment: Alignment?
     ) -> CompletionReportSection {
-        let middle = mode.middleStageTitle
-        let sectionTitle = mode == .stem ? "2. 再ミックス音源の分析" : "2. 補正後音源の分析"
+        let middle = AppLanguageSettings.string(mode.middleStageTitle)
+        let sectionTitle = mode == .stem ? AppLanguageSettings.string("2. 再ミックス音源の分析") : AppLanguageSettings.string("2. 補正後音源の分析")
         let sourceName = processingSourceName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let issueTitle: String
         if mode == .stem {
             issueTitle = sourceName.flatMap { $0.isEmpty ? nil : $0 }
-                .map { "\($0)由来の問題について" }
-                ?? "分離モデル由来の問題について"
+                .map { CompletionReportLocalization.text("%@由来の問題について", String(describing: $0)) }
+                ?? AppLanguageSettings.string("分離モデル由来の問題について")
         } else {
-            issueTitle = "補正による問題について"
+            issueTitle = AppLanguageSettings.string("補正による問題について")
         }
         let lowChanges = bandChangeText(reference: input, target: processed, ranges: [
             ("20〜60 Hz", 20, 60), ("60〜150 Hz", 60, 150), ("150〜300 Hz", 150, 300)
@@ -234,42 +234,42 @@ enum CompletionReportDocumentService {
             id: "processed",
             title: sectionTitle,
             subsections: [
-                subsection("processed-fidelity", "原音の再現性", [
-                    alignment.map { "入力との20 ms RMS包絡の時間差は\(milliseconds($0.offsetSeconds))、相関は\(plain($0.correlation, 3))です。" }
-                        ?? "入力との時間差と包絡相関は未測定です。",
-                    "長さは\(format(input.duration, 2, "秒"))→\(format(processed.duration, 2, "秒"))、ステレオ相関は\(plain(input.stereoCorrelation, 3))→\(plain(processed.stereoCorrelation, 3))です。"
+                subsection("processed-fidelity", AppLanguageSettings.string("原音の再現性"), [
+                    alignment.map { CompletionReportLocalization.text("入力との20 ms RMS包絡の時間差は%@、相関は%@です。", String(describing: milliseconds($0.offsetSeconds)), String(describing: plain($0.correlation, 3))) }
+                        ?? AppLanguageSettings.string("入力との時間差と包絡相関は未測定です。"),
+                    CompletionReportLocalization.text("長さは%@→%@、ステレオ相関は%@→%@です。", String(describing: format(input.duration, 2, AppLanguageSettings.string("秒"))), String(describing: format(processed.duration, 2, AppLanguageSettings.string("秒"))), String(describing: plain(input.stereoCorrelation, 3)), String(describing: plain(processed.stereoCorrelation, 3)))
                 ]),
-                subsection("processed-transient", "トランジェントの変化", [
-                    "Peakは\(format(input.peakDBFS, 2, "dBFS"))→\(format(processed.peakDBFS, 2, "dBFS"))、RMSは\(format(input.rmsDBFS, 2, "dBFS"))→\(format(processed.rmsDBFS, 2, "dBFS"))です。",
-                    "クレストファクターは\(format(input.crestFactorDB, 2, "dB"))→\(format(processed.crestFactorDB, 2, "dB"))、差は\(signed(crestChange, 2, "dB"))です。",
+                subsection("processed-transient", AppLanguageSettings.string("トランジェントの変化"), [
+                    CompletionReportLocalization.text("Peakは%@→%@、RMSは%@→%@です。", String(describing: format(input.peakDBFS, 2, "dBFS")), String(describing: format(processed.peakDBFS, 2, "dBFS")), String(describing: format(input.rmsDBFS, 2, "dBFS")), String(describing: format(processed.rmsDBFS, 2, "dBFS"))),
+                    CompletionReportLocalization.text("クレストファクターは%@→%@、差は%@です。", String(describing: format(input.crestFactorDB, 2, "dB")), String(describing: format(processed.crestFactorDB, 2, "dB")), String(describing: signed(crestChange, 2, "dB"))),
                     crestInterpretation(crestChange, stageTitle: middle)
                 ]),
-                subsection("processed-low", "低域の変化", [
+                subsection("processed-low", AppLanguageSettings.string("低域の変化"), [
                     lowChanges,
-                    "20〜150 Hz全体は、全体音量差を除くと\(optionalSigned(lowTotalChange, 2, "dB"))です。150 Hz以下の相関は\(optional(input.completionReportAnalysis.lowBandStereoCorrelation, 3, ""))→\(optional(processed.completionReportAnalysis.lowBandStereoCorrelation, 3, ""))、Side/Mid比は\(optional(input.completionReportAnalysis.lowBandSideMidRatioDB, 2, "dB"))→\(optional(processed.completionReportAnalysis.lowBandSideMidRatioDB, 2, "dB"))です。",
-                    "低域の量、左右の同相性、中央成分に対する側面成分の比率を分けて表示しているため、低域量の増減だけを位相変化とは扱いません。"
+                    CompletionReportLocalization.text("20〜150 Hz全体は、全体音量差を除くと%@です。150 Hz以下の相関は%@→%@、Side/Mid比は%@→%@です。", String(describing: optionalSigned(lowTotalChange, 2, "dB")), String(describing: optional(input.completionReportAnalysis.lowBandStereoCorrelation, 3, "")), String(describing: optional(processed.completionReportAnalysis.lowBandStereoCorrelation, 3, "")), String(describing: optional(input.completionReportAnalysis.lowBandSideMidRatioDB, 2, "dB")), String(describing: optional(processed.completionReportAnalysis.lowBandSideMidRatioDB, 2, "dB"))),
+                    AppLanguageSettings.string("低域の量、左右の同相性、中央成分に対する側面成分の比率を分けて表示しているため、低域量の増減だけを位相変化とは扱いません。")
                 ]),
-                subsection("processed-high", "中高域の変化", [
+                subsection("processed-high", AppLanguageSettings.string("中高域の変化"), [
                     highChanges,
-                    "2〜10 kHz全体は、全体音量差を除くと\(optionalSigned(presenceChange, 2, "dB"))です。スペクトル重心は\(format(input.centroidHz, 0, "Hz"))→\(format(processed.centroidHz, 0, "Hz"))です。",
-                    "帯域差は全体音量差を除いているため、単純なゲイン変更ではなく、入力に対する帯域構成の移動量を示します。"
+                    CompletionReportLocalization.text("2〜10 kHz全体は、全体音量差を除くと%@です。スペクトル重心は%@→%@です。", String(describing: optionalSigned(presenceChange, 2, "dB")), String(describing: format(input.centroidHz, 0, "Hz")), String(describing: format(processed.centroidHz, 0, "Hz"))),
+                    AppLanguageSettings.string("帯域差は全体音量差を除いているため、単純なゲイン変更ではなく、入力に対する帯域構成の移動量を示します。")
                 ]),
                 subsection(
                     "processed-noise",
-                    "ノイズ除去・補正の評価",
+                    AppLanguageSettings.string("ノイズ除去・補正の評価"),
                     noiseReport.rows.isEmpty
-                        ? ["ノイズ測定は未測定です。"]
+                        ? [AppLanguageSettings.string("ノイズ測定は未測定です。")]
                         : [
-                            "ノイズ\(noiseReport.rows.count)項目の工程別差です。",
-                            "入力から\(middle)では、減少\(noiseDecreaseCount)項目、増加\(noiseIncreaseCount)項目、±0.05 dB以内\(noiseStableCount)項目です。ノイズ量の減少と楽音の保持は別の確認事項として扱います。"
+                            CompletionReportLocalization.text("ノイズ%@項目の工程別差です。", String(describing: noiseReport.rows.count)),
+                            CompletionReportLocalization.text("入力から%@では、減少%@項目、増加%@項目、±0.05 dB以内%@項目です。ノイズ量の減少と楽音の保持は別の確認事項として扱います。", String(describing: middle), String(describing: noiseDecreaseCount), String(describing: noiseIncreaseCount), String(describing: noiseStableCount))
                         ],
                     stageDeltaRows: noiseStageDeltaRows(noiseReport: noiseReport)
                 ),
                 subsection("processed-issues", issueTitle, issueFacts),
-                subsection("processed-assessment", mode == .stem ? "再ミックスの評価" : "補正後音源の評価", [
-                    "入力から\(middle)までのクレスト差は\(signed(crestChange, 2, "dB"))、20〜150 Hz差は\(optionalSigned(lowTotalChange, 2, "dB"))、2〜10 kHz差は\(optionalSigned(presenceChange, 2, "dB"))です。いずれも全体音量の上下と分けて比較しています。",
+                subsection("processed-assessment", mode == .stem ? AppLanguageSettings.string("再ミックスの評価") : AppLanguageSettings.string("補正後音源の評価"), [
+                    CompletionReportLocalization.text("入力から%@までのクレスト差は%@、20〜150 Hz差は%@、2〜10 kHz差は%@です。いずれも全体音量の上下と分けて比較しています。", String(describing: middle), String(describing: signed(crestChange, 2, "dB")), String(describing: optionalSigned(lowTotalChange, 2, "dB")), String(describing: optionalSigned(presenceChange, 2, "dB"))),
                     alignmentInterpretation(alignment, stageTitle: middle),
-                    "測定値で確認できない分離アーティファクト、残響の質感、声や楽器の自然さは試聴しないと判断できません。"
+                    AppLanguageSettings.string("測定値で確認できない分離アーティファクト、残響の質感、声や楽器の自然さは試聴しないと判断できません。")
                 ])
             ]
         )
@@ -305,38 +305,38 @@ enum CompletionReportDocumentService {
 
         return CompletionReportSection(
             id: "mastering",
-            title: "3. マスタリング音源の分析",
+            title: AppLanguageSettings.string("3. マスタリング音源の分析"),
             subsections: [
-                subsection("mastering-loudness", "ラウドネス処理", [
-                    "Integrated Loudnessは\(format(processed.integratedLoudnessLUFS, 2, "LUFS"))→\(format(mastered.integratedLoudnessLUFS, 2, "LUFS"))、True Peakは\(format(processed.truePeakDBFS, 2, "dBTP"))→\(format(mastered.truePeakDBFS, 2, "dBTP"))です。",
-                    "ラウドネス差は\(signed(loudnessChange, 2, "LU"))、True Peak差は\(signed(truePeakChange, 2, "dB"))、RMSは\(format(processed.rmsDBFS, 2, "dBFS"))→\(format(mastered.rmsDBFS, 2, "dBFS"))です。",
+                subsection("mastering-loudness", AppLanguageSettings.string("ラウドネス処理"), [
+                    CompletionReportLocalization.text("Integrated Loudnessは%@→%@、True Peakは%@→%@です。", String(describing: format(processed.integratedLoudnessLUFS, 2, "LUFS")), String(describing: format(mastered.integratedLoudnessLUFS, 2, "LUFS")), String(describing: format(processed.truePeakDBFS, 2, "dBTP")), String(describing: format(mastered.truePeakDBFS, 2, "dBTP"))),
+                    CompletionReportLocalization.text("ラウドネス差は%@、True Peak差は%@、RMSは%@→%@です。", String(describing: signed(loudnessChange, 2, "LU")), String(describing: signed(truePeakChange, 2, "dB")), String(describing: format(processed.rmsDBFS, 2, "dBFS")), String(describing: format(mastered.rmsDBFS, 2, "dBFS"))),
                     loudnessInterpretation(loudnessChange: loudnessChange, truePeakChange: truePeakChange)
                 ]),
-                subsection("mastering-dynamics", "ダイナミクス処理", [
-                    "短時間RMSの95％点と10％点の差は\(optional(processedSpan, 2, "dB"))→\(optional(masteredSpan, 2, "dB"))です。",
-                    "短時間RMS幅の差は\(optionalSigned(spanChange, 2, "dB"))、クレストファクター差は\(signed(crestChange, 2, "dB"))です。Peak-to-Loudness Ratioは\(format(peakToLoudnessRatio(processed), 2, "dB"))→\(format(peakToLoudnessRatio(mastered), 2, "dB"))です。",
+                subsection("mastering-dynamics", AppLanguageSettings.string("ダイナミクス処理"), [
+                    CompletionReportLocalization.text("短時間RMSの95％点と10％点の差は%@→%@です。", String(describing: optional(processedSpan, 2, "dB")), String(describing: optional(masteredSpan, 2, "dB"))),
+                    CompletionReportLocalization.text("短時間RMS幅の差は%@、クレストファクター差は%@です。Peak-to-Loudness Ratioは%@→%@です。", String(describing: optionalSigned(spanChange, 2, "dB")), String(describing: signed(crestChange, 2, "dB")), String(describing: format(peakToLoudnessRatio(processed), 2, "dB")), String(describing: format(peakToLoudnessRatio(mastered), 2, "dB"))),
                     dynamicsInterpretation(spanChange: spanChange, crestChange: crestChange)
                 ]),
-                subsection("mastering-frequency", "周波数バランス", [
+                subsection("mastering-frequency", AppLanguageSettings.string("周波数バランス"), [
                     frequencyChanges,
-                    "20〜150 Hz全体は\(optionalSigned(lowTotalChange, 2, "dB"))、2〜10 kHz全体は\(optionalSigned(presenceChange, 2, "dB"))です。いずれもマスタリング前後の全体音量差を除いた値です。"
+                    CompletionReportLocalization.text("20〜150 Hz全体は%@、2〜10 kHz全体は%@です。いずれもマスタリング前後の全体音量差を除いた値です。", String(describing: optionalSigned(lowTotalChange, 2, "dB")), String(describing: optionalSigned(presenceChange, 2, "dB")))
                 ]),
-                subsection("mastering-high", "高域処理の評価", [
+                subsection("mastering-high", AppLanguageSettings.string("高域処理の評価"), [
                     highChanges,
-                    "高域の良し悪しは増減量だけでは確定できません。刺さり、ヒス、煌びやかさ、空気感は別の性質として試聴確認が必要です。"
+                    AppLanguageSettings.string("高域の良し悪しは増減量だけでは確定できません。刺さり、ヒス、煌びやかさ、空気感は別の性質として試聴確認が必要です。")
                 ]),
-                subsection("mastering-low", "低域保護の評価", [
+                subsection("mastering-low", AppLanguageSettings.string("低域保護の評価"), [
                     lowChanges,
-                    "150 Hz以下の相関は\(optional(processed.completionReportAnalysis.lowBandStereoCorrelation, 3, ""))→\(optional(mastered.completionReportAnalysis.lowBandStereoCorrelation, 3, ""))です。低域量と中央定位を分けて確認できます。"
+                    CompletionReportLocalization.text("150 Hz以下の相関は%@→%@です。低域量と中央定位を分けて確認できます。", String(describing: optional(processed.completionReportAnalysis.lowBandStereoCorrelation, 3, "")), String(describing: optional(mastered.completionReportAnalysis.lowBandStereoCorrelation, 3, "")))
                 ]),
-                subsection("mastering-stereo", "ステレオ処理", [
-                    "全体のSide/Mid比は\(optional(processed.completionReportAnalysis.sideMidRatioDB, 2, "dB"))→\(optional(mastered.completionReportAnalysis.sideMidRatioDB, 2, "dB"))、左右相関は\(plain(processed.stereoCorrelation, 3))→\(plain(mastered.stereoCorrelation, 3))です。",
-                    "Side/Mid比の差は\(optionalSigned(sideMidChange, 2, "dB"))です。負の相関区間は\(optionalPercent(negativeCorrelationRatio(processed)))→\(optionalPercent(negativeCorrelationRatio(mastered)))、150 Hz以下のSide/Mid比は\(optional(processed.completionReportAnalysis.lowBandSideMidRatioDB, 2, "dB"))→\(optional(mastered.completionReportAnalysis.lowBandSideMidRatioDB, 2, "dB"))です。",
-                    "全体幅と低域幅を別々に示すことで、中高域側の広がりと低域の中央定位を混同せず確認できます。"
+                subsection("mastering-stereo", AppLanguageSettings.string("ステレオ処理"), [
+                    CompletionReportLocalization.text("全体のSide/Mid比は%@→%@、左右相関は%@→%@です。", String(describing: optional(processed.completionReportAnalysis.sideMidRatioDB, 2, "dB")), String(describing: optional(mastered.completionReportAnalysis.sideMidRatioDB, 2, "dB")), String(describing: plain(processed.stereoCorrelation, 3)), String(describing: plain(mastered.stereoCorrelation, 3))),
+                    CompletionReportLocalization.text("Side/Mid比の差は%@です。負の相関区間は%@→%@、150 Hz以下のSide/Mid比は%@→%@です。", String(describing: optionalSigned(sideMidChange, 2, "dB")), String(describing: optionalPercent(negativeCorrelationRatio(processed))), String(describing: optionalPercent(negativeCorrelationRatio(mastered))), String(describing: optional(processed.completionReportAnalysis.lowBandSideMidRatioDB, 2, "dB")), String(describing: optional(mastered.completionReportAnalysis.lowBandSideMidRatioDB, 2, "dB"))),
+                    AppLanguageSettings.string("全体幅と低域幅を別々に示すことで、中高域側の広がりと低域の中央定位を混同せず確認できます。")
                 ]),
-                subsection("mastering-peaks", "クリッピングとピーク", [
-                    "最終版のTrue Peakは\(format(mastered.truePeakDBFS, 2, "dBTP"))です。振幅1.0以上のサンプルは\(mastered.completionReportAnalysis.clippedSampleCount)、−0.9 dBFS以上のサンプルは\(mastered.completionReportAnalysis.nearPeakSampleCount)です。",
-                    "数値が0の場合は、今回のサンプル走査では該当するピークを検出していません。"
+                subsection("mastering-peaks", AppLanguageSettings.string("クリッピングとピーク"), [
+                    CompletionReportLocalization.text("最終版のTrue Peakは%@です。振幅1.0以上のサンプルは%@、−0.9 dBFS以上のサンプルは%@です。", String(describing: format(mastered.truePeakDBFS, 2, "dBTP")), String(describing: mastered.completionReportAnalysis.clippedSampleCount), String(describing: mastered.completionReportAnalysis.nearPeakSampleCount)),
+                    AppLanguageSettings.string("数値が0の場合は、今回のサンプル走査では該当するピークを検出していません。")
                 ])
             ]
         )
@@ -351,35 +351,35 @@ enum CompletionReportDocumentService {
         processedAlignment: Alignment?
     ) -> CompletionReportSection {
         let title = mode == .stem
-            ? "ノイズ除去・補正・再ミックス・マスタリングの総合評価"
-            : "ノイズ除去・補正・マスタリングの総合評価"
-        let middleTitle = mode == .stem ? "4ステム分離と再ミックス" : "補正"
+            ? AppLanguageSettings.string("ノイズ除去・補正・再ミックス・マスタリングの総合評価")
+            : AppLanguageSettings.string("ノイズ除去・補正・マスタリングの総合評価")
+        let middleTitle = mode == .stem ? AppLanguageSettings.string("4ステム分離と再ミックス") : AppLanguageSettings.string("補正")
         let noiseDecreaseCount = noiseReport.rows.filter { ($0.correctionDeltaDB ?? 0) < -0.05 }.count
         let noiseIncreaseCount = noiseReport.rows.filter { ($0.correctionDeltaDB ?? 0) > 0.05 }.count
         let noiseItemCount = noiseReport.rows.count
         let processedStructure = processedAlignment.map {
-            "20 ms RMS包絡の相関は\(plain($0.correlation, 3))、時間差は\(milliseconds($0.offsetSeconds))です。"
-        } ?? "入力との包絡相関と時間差は未測定です。"
+            CompletionReportLocalization.text("20 ms RMS包絡の相関は%@、時間差は%@です。", String(describing: plain($0.correlation, 3)), String(describing: milliseconds($0.offsetSeconds)))
+        } ?? AppLanguageSettings.string("入力との包絡相関と時間差は未測定です。")
 
         return CompletionReportSection(
             id: "overall",
             title: title,
             subsections: [
-                subsection("overall-noise", "ノイズ除去", [
-                    "入力から\(mode.middleStageTitle)までのノイズ\(noiseItemCount)項目では、減少\(noiseDecreaseCount)項目、増加\(noiseIncreaseCount)項目です。各帯域の実測差は第2章に表示しています。",
-                    "ノイズの増減と楽音の自然さは同一ではないため、ノイズ量だけで音質の合否は決めません。"
+                subsection("overall-noise", AppLanguageSettings.string("ノイズ除去"), [
+                    CompletionReportLocalization.text("入力から%@までのノイズ%@項目では、減少%@項目、増加%@項目です。各帯域の実測差は第2章に表示しています。", String(describing: AppLanguageSettings.string(mode.middleStageTitle)), String(describing: noiseItemCount), String(describing: noiseDecreaseCount), String(describing: noiseIncreaseCount)),
+                    AppLanguageSettings.string("ノイズの増減と楽音の自然さは同一ではないため、ノイズ量だけで音質の合否は決めません。")
                 ]),
                 subsection("overall-middle", middleTitle, [
                     processedStructure,
-                    "クレストファクターは\(format(input.crestFactorDB, 2, "dB"))→\(format(processed.crestFactorDB, 2, "dB"))、ステレオ相関は\(plain(input.stereoCorrelation, 3))→\(plain(processed.stereoCorrelation, 3))です。"
+                    CompletionReportLocalization.text("クレストファクターは%@→%@、ステレオ相関は%@→%@です。", String(describing: format(input.crestFactorDB, 2, "dB")), String(describing: format(processed.crestFactorDB, 2, "dB")), String(describing: plain(input.stereoCorrelation, 3)), String(describing: plain(processed.stereoCorrelation, 3)))
                 ]),
-                subsection("overall-mastering", "マスタリング", [
-                    "Integrated Loudnessは\(format(processed.integratedLoudnessLUFS, 2, "LUFS"))→\(format(mastered.integratedLoudnessLUFS, 2, "LUFS"))、True Peakは\(format(processed.truePeakDBFS, 2, "dBTP"))→\(format(mastered.truePeakDBFS, 2, "dBTP"))です。",
-                    "最終版のクリップ検出数は\(mastered.completionReportAnalysis.clippedSampleCount)です。帯域、ダイナミクス、ステレオの工程別変化は第3章に表示しています。"
+                subsection("overall-mastering", AppLanguageSettings.string("マスタリング"), [
+                    CompletionReportLocalization.text("Integrated Loudnessは%@→%@、True Peakは%@→%@です。", String(describing: format(processed.integratedLoudnessLUFS, 2, "LUFS")), String(describing: format(mastered.integratedLoudnessLUFS, 2, "LUFS")), String(describing: format(processed.truePeakDBFS, 2, "dBTP")), String(describing: format(mastered.truePeakDBFS, 2, "dBTP"))),
+                    CompletionReportLocalization.text("最終版のクリップ検出数は%@です。帯域、ダイナミクス、ステレオの工程別変化は第3章に表示しています。", String(describing: mastered.completionReportAnalysis.clippedSampleCount))
                 ]),
-                subsection("overall-final", "最終評価", [
-                    "入力、\(mode.middleStageTitle)、最終版の関係は、構造保持、ノイズ、周波数、ダイナミクス、ピーク、ステレオの各測定結果として確認できます。",
-                    "技術的な安全性と音楽的な好みは分けて判断します。測定で確定できない質感、疲れやすさ、声や楽器の自然さについては、同じ音量での試聴が必要です。"
+                subsection("overall-final", AppLanguageSettings.string("最終評価"), [
+                    CompletionReportLocalization.text("入力、%@、最終版の関係は、構造保持、ノイズ、周波数、ダイナミクス、ピーク、ステレオの各測定結果として確認できます。", String(describing: AppLanguageSettings.string(mode.middleStageTitle))),
+                    AppLanguageSettings.string("技術的な安全性と音楽的な好みは分けて判断します。測定で確定できない質感、疲れやすさ、声や楽器の自然さについては、同じ音量での試聴が必要です。")
                 ])
             ]
         )
@@ -391,7 +391,7 @@ enum CompletionReportDocumentService {
         mastered: AudioMetricSnapshot,
         mode: CompletionReportMode
     ) -> [CompletionReportChart] {
-        let stageTitles = ["入力", mode.middleStageTitle, "最終版"]
+        let stageTitles = [AppLanguageSettings.string("入力"), AppLanguageSettings.string(mode.middleStageTitle), AppLanguageSettings.string("最終版")]
         let metrics = [input, processed, mastered]
         var result: [CompletionReportChart] = []
 
@@ -411,9 +411,9 @@ enum CompletionReportDocumentService {
         if rmsSeries.contains(where: { !$0.points.isEmpty }) {
             result.append(CompletionReportChart(
                 id: "rms-400ms",
-                title: "400 ms RMSによる音量推移比較",
+                title: AppLanguageSettings.string("400 ms RMSによる音量推移比較"),
                 kind: .loudnessTimeline,
-                horizontalAxisTitle: "時間（秒）",
+                horizontalAxisTitle: AppLanguageSettings.string("時間（秒）"),
                 verticalAxisTitle: "RMS（dBFS）",
                 series: rmsSeries
             ))
@@ -431,10 +431,10 @@ enum CompletionReportDocumentService {
         if spectrumSeries.contains(where: { !$0.points.isEmpty }) {
             result.append(CompletionReportChart(
                 id: "spectrum-comparison",
-                title: "入力・\(mode.middleStageTitle)・最終版の周波数比較",
+                title: CompletionReportLocalization.text("入力・%@・最終版の周波数比較", String(describing: AppLanguageSettings.string(mode.middleStageTitle))),
                 kind: .spectrumComparison,
-                horizontalAxisTitle: "周波数（Hz）",
-                verticalAxisTitle: "レベル（dB）",
+                horizontalAxisTitle: AppLanguageSettings.string("周波数（Hz）"),
+                verticalAxisTitle: AppLanguageSettings.string("レベル（dB）"),
                 series: spectrumSeries
             ))
         }
@@ -444,13 +444,13 @@ enum CompletionReportDocumentService {
         if !processedDelta.isEmpty || !masteredDelta.isEmpty {
             result.append(CompletionReportChart(
                 id: "spectrum-delta",
-                title: "入力を基準にした周波数差分",
+                title: AppLanguageSettings.string("入力を基準にした周波数差分"),
                 kind: .spectrumDelta,
-                horizontalAxisTitle: "周波数（Hz）",
-                verticalAxisTitle: "入力との差（dB）",
+                horizontalAxisTitle: AppLanguageSettings.string("周波数（Hz）"),
+                verticalAxisTitle: AppLanguageSettings.string("入力との差（dB）"),
                 series: [
-                    CompletionReportChartSeries(id: "delta-processed", title: mode.middleStageTitle, points: processedDelta),
-                    CompletionReportChartSeries(id: "delta-mastered", title: "最終版", points: masteredDelta)
+                    CompletionReportChartSeries(id: "delta-processed", title: AppLanguageSettings.string(mode.middleStageTitle), points: processedDelta),
+                    CompletionReportChartSeries(id: "delta-mastered", title: AppLanguageSettings.string("最終版"), points: masteredDelta)
                 ]
             ))
         }
@@ -467,10 +467,10 @@ enum CompletionReportDocumentService {
         if waveformSeries.contains(where: { !$0.points.isEmpty }) {
             result.append(CompletionReportChart(
                 id: "waveform-comparison",
-                title: "入力・\(mode.middleStageTitle)・最終版の波形比較",
+                title: CompletionReportLocalization.text("入力・%@・最終版の波形比較", String(describing: AppLanguageSettings.string(mode.middleStageTitle))),
                 kind: .waveformComparison,
-                horizontalAxisTitle: "時間（秒）",
-                verticalAxisTitle: "振幅",
+                horizontalAxisTitle: AppLanguageSettings.string("時間（秒）"),
+                verticalAxisTitle: AppLanguageSettings.string("振幅"),
                 series: waveformSeries
             ))
         }
@@ -483,7 +483,7 @@ enum CompletionReportDocumentService {
         noiseReport.rows.map { row in
             CompletionReportStageDeltaRow(
                 id: row.id,
-                title: row.label,
+                title: AppLanguageSettings.string(row.label),
                 inputToProcessedValue: optionalSigned(row.correctionDeltaDB, 2, "dB"),
                 processedToMasteredValue: optionalSigned(row.masteringDeltaDB, 2, "dB")
             )
@@ -497,12 +497,12 @@ enum CompletionReportDocumentService {
     ) -> [String] {
         var facts: [String] = []
         if let alignment {
-            facts.append("時間差は\(milliseconds(alignment.offsetSeconds))、20 ms RMS包絡相関は\(plain(alignment.correlation, 3))です。")
+            facts.append(CompletionReportLocalization.text("時間差は%@、20 ms RMS包絡相関は%@です。", String(describing: milliseconds(alignment.offsetSeconds)), String(describing: plain(alignment.correlation, 3))))
         } else {
-            facts.append("時間差と20 ms RMS包絡相関は未測定です。")
+            facts.append(AppLanguageSettings.string("時間差と20 ms RMS包絡相関は未測定です。"))
         }
-        facts.append("低域相関は\(optional(input.completionReportAnalysis.lowBandStereoCorrelation, 3, ""))→\(optional(processed.completionReportAnalysis.lowBandStereoCorrelation, 3, ""))、負の相関区間は\(optionalPercent(negativeCorrelationRatio(input)))→\(optionalPercent(negativeCorrelationRatio(processed)))です。")
-        facts.append("クリップ検出数は入力\(input.completionReportAnalysis.clippedSampleCount)、処理後\(processed.completionReportAnalysis.clippedSampleCount)です。測定値だけでは水中感、金属的な揺れ、残響分離などは判定できません。")
+        facts.append(CompletionReportLocalization.text("低域相関は%@→%@、負の相関区間は%@→%@です。", String(describing: optional(input.completionReportAnalysis.lowBandStereoCorrelation, 3, "")), String(describing: optional(processed.completionReportAnalysis.lowBandStereoCorrelation, 3, "")), String(describing: optionalPercent(negativeCorrelationRatio(input))), String(describing: optionalPercent(negativeCorrelationRatio(processed)))))
+        facts.append(CompletionReportLocalization.text("クリップ検出数は入力%@、処理後%@です。測定値だけでは水中感、金属的な揺れ、残響分離などは判定できません。", String(describing: input.completionReportAnalysis.clippedSampleCount), String(describing: processed.completionReportAnalysis.clippedSampleCount)))
         return facts
     }
 
@@ -512,9 +512,9 @@ enum CompletionReportDocumentService {
         middleTitle: String
     ) -> String {
         guard let processed, let mastered else {
-            return "3音源の開始位置は未測定です。"
+            return AppLanguageSettings.string("3音源の開始位置は未測定です。")
         }
-        return "入力を基準にした開始位置の差は、\(middleTitle) \(milliseconds(processed.offsetSeconds))、最終版 \(milliseconds(mastered.offsetSeconds))です。"
+        return CompletionReportLocalization.text("入力を基準にした開始位置の差は、%@ %@、最終版 %@です。", String(describing: middleTitle), String(describing: milliseconds(processed.offsetSeconds)), String(describing: milliseconds(mastered.offsetSeconds)))
     }
 
     private static func alignment(
@@ -580,22 +580,22 @@ enum CompletionReportDocumentService {
 
     private static func crestInterpretation(_ delta: Double, stageTitle: String) -> String {
         if delta > 0.05 {
-            return "\(stageTitle)ではRMSに対するピークの比率が増え、瞬間成分が相対的に大きい構造へ変化しています。"
+            return CompletionReportLocalization.text("%@ではRMSに対するピークの比率が増え、瞬間成分が相対的に大きい構造へ変化しています。", String(describing: stageTitle))
         }
         if delta < -0.05 {
-            return "\(stageTitle)ではRMSに対するピークの比率が減り、瞬間成分と平均成分の差が小さい構造へ変化しています。"
+            return CompletionReportLocalization.text("%@ではRMSに対するピークの比率が減り、瞬間成分と平均成分の差が小さい構造へ変化しています。", String(describing: stageTitle))
         }
-        return "\(stageTitle)ではRMSに対するピークの比率が±0.05 dB以内で維持されています。"
+        return CompletionReportLocalization.text("%@ではRMSに対するピークの比率が±0.05 dB以内で維持されています。", String(describing: stageTitle))
     }
 
     private static func alignmentInterpretation(_ alignment: Alignment?, stageTitle: String) -> String {
         guard let alignment else {
-            return "入力と\(stageTitle)の時間整合と包絡の一致度は未測定です。"
+            return CompletionReportLocalization.text("入力と%@の時間整合と包絡の一致度は未測定です。", String(describing: stageTitle))
         }
         if abs(alignment.offsetSeconds) > 0.05 {
-            return "入力と\(stageTitle)には50 msを超える開始位置差があります。包絡相関は\(plain(alignment.correlation, 3))です。"
+            return CompletionReportLocalization.text("入力と%@には50 msを超える開始位置差があります。包絡相関は%@です。", String(describing: stageTitle), String(describing: plain(alignment.correlation, 3)))
         }
-        return "入力と\(stageTitle)の開始位置差は50 ms以内です。包絡相関は\(plain(alignment.correlation, 3))で、曲全体の音量推移の一致度を示します。"
+        return CompletionReportLocalization.text("入力と%@の開始位置差は50 ms以内です。包絡相関は%@で、曲全体の音量推移の一致度を示します。", String(describing: stageTitle), String(describing: plain(alignment.correlation, 3)))
     }
 
     private static func loudnessInterpretation(
@@ -603,12 +603,12 @@ enum CompletionReportDocumentService {
         truePeakChange: Double
     ) -> String {
         if loudnessChange > 0.05, truePeakChange < -0.05 {
-            return "Integrated Loudnessは上がり、True Peakは下がっています。単純な一括ゲインではなく、ピーク制御を含む変化です。"
+            return AppLanguageSettings.string("Integrated Loudnessは上がり、True Peakは下がっています。単純な一括ゲインではなく、ピーク制御を含む変化です。")
         }
         if loudnessChange < -0.05, truePeakChange > 0.05 {
-            return "Integrated Loudnessは下がり、True Peakは上がっています。平均的な音量と最大ピークが異なる方向へ変化しています。"
+            return AppLanguageSettings.string("Integrated Loudnessは下がり、True Peakは上がっています。平均的な音量と最大ピークが異なる方向へ変化しています。")
         }
-        return "Integrated LoudnessとTrue Peakの増減方向を分けて表示し、平均的な音量変化とピーク変化を同一視しない評価にしています。"
+        return AppLanguageSettings.string("Integrated LoudnessとTrue Peakの増減方向を分けて表示し、平均的な音量変化とピーク変化を同一視しない評価にしています。")
     }
 
     private static func dynamicsInterpretation(
@@ -618,24 +618,24 @@ enum CompletionReportDocumentService {
         let spanText: String
         if let spanChange {
             if spanChange > 0.05 {
-                spanText = "短時間の音量幅は広がっています"
+                spanText = AppLanguageSettings.string("短時間の音量幅は広がっています")
             } else if spanChange < -0.05 {
-                spanText = "短時間の音量幅は狭まっています"
+                spanText = AppLanguageSettings.string("短時間の音量幅は狭まっています")
             } else {
-                spanText = "短時間の音量幅は±0.05 dB以内です"
+                spanText = AppLanguageSettings.string("短時間の音量幅は±0.05 dB以内です")
             }
         } else {
-            spanText = "短時間の音量幅は未測定です"
+            spanText = AppLanguageSettings.string("短時間の音量幅は未測定です")
         }
         let crestText: String
         if crestChange > 0.05 {
-            crestText = "ピークと平均成分の差は広がっています"
+            crestText = AppLanguageSettings.string("ピークと平均成分の差は広がっています")
         } else if crestChange < -0.05 {
-            crestText = "ピークと平均成分の差は狭まっています"
+            crestText = AppLanguageSettings.string("ピークと平均成分の差は狭まっています")
         } else {
-            crestText = "ピークと平均成分の差は±0.05 dB以内です"
+            crestText = AppLanguageSettings.string("ピークと平均成分の差は±0.05 dB以内です")
         }
-        return "\(spanText)。一方、\(crestText)。この2つを分けて、曲中の音量差と瞬間ピークの保持を確認します。"
+        return CompletionReportLocalization.text("%@。一方、%@。この2つを分けて、曲中の音量差と瞬間ピークの保持を確認します。", String(describing: spanText), String(describing: crestText))
     }
 
     private static func optionalDifference(_ target: Double?, _ reference: Double?) -> Double? {
@@ -670,13 +670,13 @@ enum CompletionReportDocumentService {
     }
 
     private static func strongestBand(_ metrics: AudioMetricSnapshot) -> String {
-        guard let band = normalizedBands(metrics).max(by: { $0.level < $1.level }) else { return "未測定" }
-        return "\(band.label)（\(band.range)）"
+        guard let band = normalizedBands(metrics).max(by: { $0.level < $1.level }) else { return AppLanguageSettings.string("未測定") }
+        return CompletionReportLocalization.text("%@（%@）", AppLanguageSettings.string(band.label), band.range)
     }
 
     private static func weakestBand(_ metrics: AudioMetricSnapshot) -> String {
-        guard let band = normalizedBands(metrics).min(by: { $0.level < $1.level }) else { return "未測定" }
-        return "\(band.label)（\(band.range)）"
+        guard let band = normalizedBands(metrics).min(by: { $0.level < $1.level }) else { return AppLanguageSettings.string("未測定") }
+        return CompletionReportLocalization.text("%@（%@）", AppLanguageSettings.string(band.label), band.range)
     }
 
     private static func normalizedBands(_ metrics: AudioMetricSnapshot) -> [(label: String, range: String, level: Double)] {
@@ -689,8 +689,12 @@ enum CompletionReportDocumentService {
         ranges: [(String, Double, Double)]
     ) -> String {
         ranges.map { label, lower, upper in
-            "\(label)：\(optionalSigned(bandChange(reference: reference, target: target, lower: lower, upper: upper), 2, "dB"))"
-        }.joined(separator: "／")
+            CompletionReportLocalization.text(
+                "%@：%@",
+                label,
+                optionalSigned(bandChange(reference: reference, target: target, lower: lower, upper: upper), 2, "dB")
+            )
+        }.joined(separator: AppLanguageSettings.string("／"))
     }
 
     private static func bandChange(
@@ -805,22 +809,22 @@ enum CompletionReportDocumentService {
         )
     }
 
-    private static func duration(_ value: Double) -> String { "\(plain(value, 2)) 秒" }
+    private static func duration(_ value: Double) -> String { CompletionReportLocalization.text("%@ 秒", String(describing: plain(value, 2))) }
     private static func time(_ value: Double) -> String { String(format: "%d:%02d", Int(value) / 60, Int(value) % 60) }
     private static func milliseconds(_ seconds: Double) -> String { signed(seconds * 1_000, 0, "ms") }
 
     private static func optionalPercent(_ value: Double?) -> String {
-        guard let value else { return "未測定" }
+        guard let value else { return AppLanguageSettings.string("未測定") }
         return "\(plain(value * 100, 1))%"
     }
 
     private static func optional(_ value: Double?, _ decimals: Int, _ unit: String) -> String {
-        guard let value else { return "未測定" }
+        guard let value else { return AppLanguageSettings.string("未測定") }
         return format(value, decimals, unit)
     }
 
     private static func optionalSigned(_ value: Double?, _ decimals: Int, _ unit: String) -> String {
-        guard let value else { return "未測定" }
+        guard let value else { return AppLanguageSettings.string("未測定") }
         return signed(value, decimals, unit)
     }
 
@@ -836,5 +840,11 @@ enum CompletionReportDocumentService {
 
     private static func plain(_ value: Double, _ decimals: Int) -> String {
         String(format: "%.*f", decimals, value)
+    }
+}
+
+enum CompletionReportLocalization {
+    static func text(_ key: String, _ values: CVarArg...) -> String {
+        String(format: AppLanguageSettings.string(key), locale: AppLanguageSettings.locale, arguments: values)
     }
 }

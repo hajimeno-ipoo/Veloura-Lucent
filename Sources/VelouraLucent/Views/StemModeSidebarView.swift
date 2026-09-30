@@ -80,7 +80,7 @@ struct StemModeSidebarView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3.bold())
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
@@ -115,6 +115,7 @@ private struct StemModeSidebarStemRow: View {
     let rawArtifact: StemAudioArtifact?
     let correctedArtifact: StemAudioArtifact?
     let usedRawFallback: Bool
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -122,7 +123,7 @@ private struct StemModeSidebarStemRow: View {
                 Image(systemName: correctedArtifact == nil ? "circle" : "checkmark.circle.fill")
                     .foregroundStyle(correctedArtifact == nil ? Color.secondary : Color.green)
                     .accessibilityHidden(true)
-                Text(role.stemModeDisplayTitle)
+                AppLocalizedText(role.stemModeDisplayTitle)
                     .font(.title3.bold())
                 Spacer(minLength: 6)
                 if usedRawFallback {
@@ -133,6 +134,7 @@ private struct StemModeSidebarStemRow: View {
             }
 
             Text(statusText)
+                .environment(\.locale, locale)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
@@ -144,13 +146,13 @@ private struct StemModeSidebarStemRow: View {
     private var statusText: String {
         if let correctedArtifact {
             let rate = correctedArtifact.sampleRate / 1_000
-            return "補正済み \(rate.formatted(.number.precision(.fractionLength(1)))) kHz"
+            return String(format: AppLanguageSettings.string("補正済み %@ kHz"), rate.formatted(.number.precision(.fractionLength(1))))
         }
         if let rawArtifact {
             let rate = rawArtifact.sampleRate / 1_000
-            return "raw \(rate.formatted(.number.precision(.fractionLength(1)))) kHz / 補正待ち"
+            return String(format: AppLanguageSettings.string("raw %@ kHz / 補正待ち"), rate.formatted(.number.precision(.fractionLength(1))))
         }
-        return "分離待ち"
+        return AppLanguageSettings.string("分離待ち")
     }
 }
 

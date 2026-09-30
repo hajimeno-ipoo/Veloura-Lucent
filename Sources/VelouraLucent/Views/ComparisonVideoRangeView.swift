@@ -58,9 +58,7 @@ struct ComparisonVideoRangeView: View {
             }
             .frame(height: 66)
 
-            Text(
-                "選択範囲 \(timeText(startTime))〜\(timeText(startTime + selectionDuration))"
-            )
+            Text(AppLanguageSettings.format("選択範囲 %@〜%@", timeText(startTime), timeText(startTime + selectionDuration)))
             .font(.callout.monospacedDigit().weight(.semibold))
             .frame(maxWidth: .infinity, alignment: .center)
         }
@@ -68,7 +66,7 @@ struct ComparisonVideoRangeView: View {
         .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("比較する60秒の範囲")
-        .accessibilityValue("\(timeText(startTime))から\(timeText(startTime + selectionDuration))")
+        .accessibilityValue(AppLanguageSettings.format("%@から%@", timeText(startTime), timeText(startTime + selectionDuration)))
         .accessibilityAdjustableAction { direction in
             let offset: TimeInterval = direction == .increment ? 1 : -1
             onStartTimeChange(startTime + offset)

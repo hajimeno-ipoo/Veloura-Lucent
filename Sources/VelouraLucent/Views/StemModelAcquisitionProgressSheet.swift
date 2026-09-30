@@ -116,15 +116,15 @@ struct StemModelAcquisitionProgressSheet: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.title2)
                 .foregroundStyle(.green)
-                .accessibilityLabel("AIモデル取得完了")
+                .accessibilityLabel(AppLanguageSettings.string("AIモデル取得完了"))
         } else {
             ProgressView()
                 .controlSize(.regular)
-                .accessibilityLabel(
+                .accessibilityLabel(AppLanguageSettings.string(
                     isCancelling
                         ? "AIモデル取得を中断中"
                         : presentation.stageTitle
-                )
+                ))
         }
     }
 
@@ -258,7 +258,7 @@ struct StemModelAcquisitionProgressSheet: View {
 
     private func detailValue(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label)
+            AppLocalizedText(label)
                 .font(.title3)
                 .foregroundStyle(.secondary)
             Text(value)

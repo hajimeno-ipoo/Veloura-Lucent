@@ -1,7 +1,12 @@
+import Foundation
 import Testing
 @testable import VelouraLucent
 
 struct AudioQualityReportServiceTests {
+    init() {
+        UserDefaults.standard.set(AppLanguageSelection.japanese.rawValue, forKey: AppLanguageSettings.key)
+    }
+
     @Test
     func normalMetricsReturnNoItems() throws {
         let input = makeSnapshot(

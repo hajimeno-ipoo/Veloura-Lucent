@@ -148,10 +148,12 @@ private final class MainWorkspaceWindowPresenter {
 @main
 struct VelouraLucentApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @AppStorage(AppLanguageSettings.key) private var languageSelectionRawValue = AppLanguageSelection.system.rawValue
 
     var body: some Scene {
         WindowGroup("Veloura Lucent") {
             VelouraRootView()
+                .environment(\.locale, AppLanguageSettings.locale(for: languageSelectionRawValue))
         }
         .defaultSize(width: 1_380, height: 860)
         .defaultLaunchBehavior(.presented)
@@ -160,16 +162,18 @@ struct VelouraLucentApp: App {
             VelouraCommands()
         }
 
-        Window("Veloura Lucentについて", id: "about") {
+        Window(AppLanguageSettings.string("Veloura Lucentについて"), id: "about") {
             VelouraAboutView()
+                .environment(\.locale, AppLanguageSettings.locale(for: languageSelectionRawValue))
         }
         .defaultSize(width: 760, height: 720)
         .defaultLaunchBehavior(.suppressed)
         .windowResizability(.contentMinSize)
         .restorationBehavior(.disabled)
 
-        Window("比較動画", id: "comparison-video") {
+        Window(AppLanguageSettings.string("比較動画"), id: "comparison-video") {
             ComparisonVideoWindowView(launchStore: .shared)
+                .environment(\.locale, AppLanguageSettings.locale(for: languageSelectionRawValue))
         }
         .defaultSize(width: 1_220, height: 780)
         .defaultLaunchBehavior(.suppressed)

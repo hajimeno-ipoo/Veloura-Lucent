@@ -89,6 +89,7 @@ private struct GraphHoverOverlayModifier: ViewModifier {
 
 private struct GraphHoverReadoutView: View {
     let readout: GraphHoverReadout
+    @Environment(\.locale) private var locale
 
     var body: some View {
         HStack(spacing: 10) {
@@ -100,7 +101,7 @@ private struct GraphHoverReadoutView: View {
                     Circle()
                         .fill(item.color)
                         .frame(width: 6, height: 6)
-                    Text("\(item.label) \(item.value)")
+                    Text("\(AppLanguageSettings.string(item.label)) \(item.value)")
                 }
             }
         }
@@ -110,5 +111,6 @@ private struct GraphHoverReadoutView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .glassEffect(.clear, in: .capsule)
+        .environment(\.locale, locale)
     }
 }

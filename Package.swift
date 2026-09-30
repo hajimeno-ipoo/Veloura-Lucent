@@ -27,6 +27,7 @@ let package = Package(
             ],
             path: "Sources/VelouraLucent",
             resources: [
+                .process("Resources/Localizable.xcstrings"),
                 .process("Resources/AppIcon-1024.png"),
                 .copy("Resources/VelouraLucent.icon"),
                 .process("Resources/Rotary_Knob"),

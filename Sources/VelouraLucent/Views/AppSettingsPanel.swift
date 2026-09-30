@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct AppSettingsPanel: View {
+    @AppStorage(AppLanguageSettings.key) private var languageSelectionRawValue = AppLanguageSelection.system.rawValue
     private let preferences: CompletionNotificationPreferenceProviding
     private let notificationReporter: CompletionNotificationReporting
     @Binding private var windowBackgroundMaterialAmount: Double
@@ -46,6 +47,15 @@ struct AppSettingsPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("アプリ")
                 .font(.title3.bold())
+
+            Picker("言語", selection: $languageSelectionRawValue) {
+                Text("システム設定に従う").tag(AppLanguageSelection.system.rawValue)
+                Text("日本語").tag(AppLanguageSelection.japanese.rawValue)
+                Text("English").tag(AppLanguageSelection.english.rawValue)
+            }
+            .pickerStyle(.radioGroup)
+
+            Divider()
 
             VStack(alignment: .leading, spacing: 6) {
                 LabeledContent {
@@ -93,7 +103,7 @@ struct AppSettingsPanel: View {
 
                 if isWindowBackgroundBlurEnabled {
                     LabeledContent {
-                        Text(windowBackgroundBlurLevel.title)
+                        AppLocalizedText(windowBackgroundBlurLevel.title)
                             .font(.title3)
                             .foregroundStyle(.secondary)
                     } label: {
@@ -109,7 +119,7 @@ struct AppSettingsPanel: View {
                         EmptyView()
                     } tick: { position in
                         SliderTick(position) {
-                            Text(WindowBackgroundBlurLevel.level(for: position).title)
+                            AppLocalizedText(WindowBackgroundBlurLevel.level(for: position).title)
                                 .font(.caption)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.75)
@@ -120,7 +130,7 @@ struct AppSettingsPanel: View {
                     .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
                     .disabled(isWindowFullScreen)
                     .accessibilityLabel("背景のぼかし具合")
-                    .accessibilityValue(windowBackgroundBlurLevel.title)
+                    .accessibilityValue(AppLanguageSettings.string(windowBackgroundBlurLevel.title))
                     .accessibilityHint(backgroundBlurLevelAccessibilityHint)
                     .onChange(of: windowBackgroundBlurLevel) { _, newValue in
                         guard !isEditingWindowBackgroundBlurLevel else { return }
@@ -131,7 +141,7 @@ struct AppSettingsPanel: View {
                     }
                 }
 
-                Text(isWindowBackgroundBlurEnabled
+                AppLocalizedText(isWindowBackgroundBlurEnabled
                      ? "ぼかし具合を5段階で調整します。"
                      : "従来の透明感設定を使用しています。")
                     .font(.body)
@@ -176,45 +186,45 @@ struct AppSettingsPanel: View {
             }
         }
         .alert(
-            "macOSの通知が許可されていません",
+            AppLanguageSettings.string("macOSの通知が許可されていません"),
             isPresented: $isNotificationPermissionGuidePresented
         ) {
-            Button("キャンセル", role: .cancel) {}
-            Button("システム設定を開く") {
+            Button(AppLanguageSettings.string("キャンセル"), role: .cancel) {}
+            Button(AppLanguageSettings.string("システム設定を開く")) {
                 openSystemNotificationSettings()
             }
         } message: {
-            Text("通知を受け取るには、システム設定の「通知」でVeloura Lucentを許可してください。")
+            AppLocalizedText("通知を受け取るには、システム設定の「通知」でVeloura Lucentを許可してください。")
         }
     }
 
     private var backgroundMaterialAccessibilityValue: String {
         let percent = AppAppearanceSettings.windowBackgroundMaterialPercent(windowBackgroundMaterialAmount)
         if percent == 0 {
-            return "0パーセント、現在と同じ完全透明"
+            return AppLanguageSettings.string("0パーセント、現在と同じ完全透明")
         }
-        return "\(percent)パーセント、アプリ全体の背景だけを濃くします"
+        return AppLanguageSettings.format("%dパーセント、アプリ全体の背景だけを濃くします", percent)
     }
 
     private var backgroundMaterialAccessibilityHint: String {
         if isWindowFullScreen {
-            return "フルスクリーン中は変更できません。通常表示に戻すと変更できます。"
+            return AppLanguageSettings.string("フルスクリーン中は変更できません。通常表示に戻すと変更できます。")
         }
-        return "アプリ全体の背景の濃さを変更します。"
+        return AppLanguageSettings.string("アプリ全体の背景の濃さを変更します。")
     }
 
     private var backgroundBlurToggleAccessibilityHint: String {
         if isWindowFullScreen {
-            return "フルスクリーン中は変更できません。通常表示に戻すと変更できます。"
+            return AppLanguageSettings.string("フルスクリーン中は変更できません。通常表示に戻すと変更できます。")
         }
-        return "5段階のぼかし調整を切り替えます。オフでは従来の透明感設定を使用します。"
+        return AppLanguageSettings.string("5段階のぼかし調整を切り替えます。オフでは従来の透明感設定を使用します。")
     }
 
     private var backgroundBlurLevelAccessibilityHint: String {
         if isWindowFullScreen {
-            return "フルスクリーン中は変更できません。通常表示に戻すと変更できます。"
+            return AppLanguageSettings.string("フルスクリーン中は変更できません。通常表示に戻すと変更できます。")
         }
-        return "アプリ全体の背景のぼかし具合を5段階で変更します。"
+        return AppLanguageSettings.string("アプリ全体の背景のぼかし具合を5段階で変更します。")
     }
 
     private var windowBackgroundMaterialAmountBinding: Binding<Double> {
@@ -271,7 +281,7 @@ struct AppSettingsPanel: View {
                 .font(.title3.bold())
 
             LabeledContent {
-                Text(notificationAuthorizationStatus.title)
+                AppLocalizedText(notificationAuthorizationStatus.title)
                     .font(.title3)
                     .foregroundStyle(
                         notificationAuthorizationStatus == .authorized
@@ -322,16 +332,16 @@ struct AppSettingsPanel: View {
         isEnabled: Bool = true
     ) -> some View {
         HStack(spacing: 12) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3)
 
             Spacer(minLength: 12)
 
-            Toggle(title, isOn: isOn)
+            Toggle(AppLanguageSettings.string(title), isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .tint(LiquidGlassSegmentedPickerStyle.switchTint)
-                .accessibilityLabel(title)
+                .accessibilityLabel(AppLanguageSettings.string(title))
         }
         .padding(.vertical, 10)
         .disabled(!isEnabled)

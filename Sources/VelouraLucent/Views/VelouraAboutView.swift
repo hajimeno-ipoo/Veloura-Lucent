@@ -181,7 +181,7 @@ struct VelouraAboutView: View {
             }
         } else {
             Label(
-                loadingErrors[selectedModel] ?? "AIモデル情報を読み込めません。",
+                loadingErrors[selectedModel] ?? AppLanguageSettings.string("AIモデル情報を読み込めません。"),
                 systemImage: "exclamationmark.triangle"
             )
             .foregroundStyle(.red)
@@ -236,10 +236,10 @@ struct VelouraAboutView: View {
 
     private func detailValue(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label)
+            AppLocalizedText(label)
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text(value)
+            AppLocalizedText(value)
                 .font(.body.monospaced())
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
@@ -270,12 +270,12 @@ struct VelouraAboutView: View {
         guard let build = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleVersion"
         ) as? String else {
-            return "バージョン \(trimmed)"
+            return AppLanguageSettings.format("バージョン %@", trimmed)
         }
         let trimmedBuild = build.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedBuild.isEmpty else {
-            return "バージョン \(trimmed)"
+            return AppLanguageSettings.format("バージョン %@", trimmed)
         }
-        return "バージョン \(trimmed)（ビルド \(trimmedBuild)）"
+        return AppLanguageSettings.format("バージョン %@（ビルド %@）", trimmed, trimmedBuild)
     }
 }

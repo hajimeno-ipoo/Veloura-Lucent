@@ -259,6 +259,7 @@ struct StemMasteringService: Sendable {
             let result = StemMasteringResult(
                 finalArtifact: finalArtifact,
                 finalEvaluation: finalEvaluation,
+                reportRequest: request,
                 masteringSettings: request.settings,
                 audioQualityReport: reports.audioQuality,
                 completionReport: reports.completion,

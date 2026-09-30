@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 struct StemWaveformComparisonView: View {
     @Bindable var model: StemModeWorkspaceModel
+    @Environment(\.locale) private var locale
 
     private var preview: AudioPreviewController {
         model.stemPreviewController
@@ -12,7 +13,7 @@ struct StemWaveformComparisonView: View {
     var body: some View {
         AudioWaveformWorkspaceView(
             preview: preview,
-            workspaceTitle: "\(model.availableStemRoles.count) Stem 波形",
+            workspaceTitle: String(format: AppLanguageSettings.string("%d Stem 波形"), model.availableStemRoles.count),
             playbackStatusText: playbackStatusText,
             tracks: [
                 AudioWaveformTrackPresentation(
@@ -20,14 +21,14 @@ struct StemWaveformComparisonView: View {
                     title: "分離直後（raw）",
                     tint: .blue,
                     fileURL: model.selectedRawStemPreviewURL,
-                    accessibilityLabel: "\(model.selectedStemPreviewRole.stemModeDisplayTitle)の分離直後波形"
+                    accessibilityLabel: String(format: AppLanguageSettings.string("%@の分離直後波形"), AppLanguageSettings.string(model.selectedStemPreviewRole.stemModeDisplayTitle))
                 ),
                 AudioWaveformTrackPresentation(
                     target: .corrected,
                     title: "補正後Stem",
                     tint: .green,
                     fileURL: model.selectedCorrectedStemPreviewURL,
-                    accessibilityLabel: "\(model.selectedStemPreviewRole.stemModeDisplayTitle)の補正後波形"
+                    accessibilityLabel: String(format: AppLanguageSettings.string("%@の補正後波形"), AppLanguageSettings.string(model.selectedStemPreviewRole.stemModeDisplayTitle))
                 ),
             ],
             comparisonSummary: "選択中Stemの分離直後と補正後を同じ位置で聴き比べます",
@@ -46,6 +47,7 @@ struct StemWaveformComparisonView: View {
             ]
         )
         .accessibilityElement(children: .contain)
+        .environment(\.locale, locale)
         .onAppear(perform: model.refreshSelectedStemPreviewSources)
         .onChange(of: model.selectedRawStemPreviewURL) {
             model.refreshSelectedStemPreviewSources()
@@ -78,8 +80,8 @@ struct StemWaveformComparisonView: View {
         guard let activeTarget = preview.activeTarget else { return "未再生" }
         let targetTitle = activeTarget == .input ? "raw" : "補正後Stem"
         return switch preview.playbackState(for: activeTarget) {
-        case .playing: "\(targetTitle)を再生中"
-        case .paused: "\(targetTitle)を一時停止中"
+        case .playing: String(format: AppLanguageSettings.string("%@を再生中"), AppLanguageSettings.string(targetTitle))
+        case .paused: String(format: AppLanguageSettings.string("%@を一時停止中"), AppLanguageSettings.string(targetTitle))
         case .stopped: "停止中"
         }
     }

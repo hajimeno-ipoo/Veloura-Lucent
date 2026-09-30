@@ -3,6 +3,7 @@ import SwiftUI
 struct AverageSpectrumComparisonView: View {
     let preview: AudioPreviewController
     let targetTitle: (AudioPreviewTarget) -> String
+    @Environment(\.locale) private var locale
 
     init(
         preview: AudioPreviewController,
@@ -39,14 +40,15 @@ struct AverageSpectrumComparisonView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(spectrumAccessibilityLabel)
         }
+        .environment(\.locale, locale)
     }
 
     private var spectrumAccessibilityLabel: String {
         if spectrumSeries.isEmpty {
-            return "再生中スペクトル。音声を再生すると表示します"
+            return AppLanguageSettings.string("再生中スペクトル。音声を再生すると表示します")
         }
-        let names = spectrumSeries.map(\.name).joined(separator: "、")
-        return "再生中スペクトル。\(names)を表示中です"
+        let names = spectrumSeries.map { AppLanguageSettings.string($0.name) }.joined(separator: ", ")
+        return AppLanguageSettings.format("再生中スペクトル。%@を表示中です", names)
     }
 
     private var spectrumLegend: some View {
@@ -62,7 +64,7 @@ struct AverageSpectrumComparisonView: View {
             Capsule()
                 .fill(color)
                 .frame(width: 18, height: 3)
-            Text(title)
+            AppLocalizedText(title)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -115,6 +117,7 @@ struct AverageSpectrumComparisonView: View {
 
 private struct SpectrumCanvasChart: View {
     let series: [SpectrumSeries]
+    @Environment(\.locale) private var locale
     @State private var hoverLocation: CGPoint?
     @State private var canvasSize: CGSize = .zero
 
@@ -132,6 +135,7 @@ private struct SpectrumCanvasChart: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .environment(\.locale, locale)
 
             Canvas { context, size in
                 let plotRect = plotRect(in: size)
@@ -180,7 +184,7 @@ private struct SpectrumCanvasChart: View {
         let frequency = frequency(atX: hoverLocation.x, in: plotRect)
         let values = series.compactMap { source -> String? in
             guard let point = nearestPoint(in: source, frequency: frequency) else { return nil }
-            return "\(source.name) \(String(format: "%.1f dBFS", point.levelDB))"
+            return "\(AppLanguageSettings.string(source.name)) \(String(format: "%.1f dBFS", point.levelDB))"
         }
         guard !values.isEmpty else { return nil }
         return "\(frequencyReadoutLabel(frequency))  " + values.joined(separator: " / ")

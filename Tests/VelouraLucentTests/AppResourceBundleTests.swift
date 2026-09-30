@@ -7,7 +7,9 @@ struct AppResourceBundleTests {
     func developmentRunUsesSwiftPackageResources() {
         #expect(AppResourceBundle.bundle != nil)
         #expect(AppResourceBundle.url(forResource: "2", withExtension: "png") != nil)
-        #expect(AppResourceBundle.resourceURL?.lastPathComponent == AppResourceBundle.bundleName)
+        #expect(AppResourceBundle.bundle?.url(
+            forResource: "Localizable", withExtension: "strings", subdirectory: "en.lproj"
+        ) != nil)
     }
 
     @Test
@@ -18,12 +20,14 @@ struct AppResourceBundleTests {
         let resourcesURL = appURL.appending(path: "Contents/Resources", directoryHint: .isDirectory)
         let resourceBundleURL = resourcesURL
             .appending(path: AppResourceBundle.bundleName, directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: resourceBundleURL, withIntermediateDirectories: true)
+        let bundleResourcesURL = resourceBundleURL
+            .appending(path: "Contents/Resources", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: bundleResourcesURL, withIntermediateDirectories: true)
         try Data(minimalBundleInfoPlist.utf8).write(
-            to: resourceBundleURL.appending(path: "Info.plist")
+            to: resourceBundleURL.appending(path: "Contents/Info.plist")
         )
         try Data("formal-resource".utf8).write(
-            to: resourceBundleURL.appending(path: "marker.txt")
+            to: bundleResourcesURL.appending(path: "marker.txt")
         )
 
         let resolved = AppResourceBundle.resolve(
@@ -33,6 +37,7 @@ struct AppResourceBundleTests {
         )
 
         #expect(resolved?.bundleURL.standardizedFileURL == resourceBundleURL.standardizedFileURL)
+        #expect(resolved?.resourceURL?.standardizedFileURL == bundleResourcesURL.standardizedFileURL)
         #expect(resolved?.url(forResource: "marker", withExtension: "txt") != nil)
     }
 

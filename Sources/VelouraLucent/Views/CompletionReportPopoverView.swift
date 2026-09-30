@@ -6,7 +6,7 @@ struct CompletionReportPopoverView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 22) {
                 CompletionReportHeaderView(report: report)
                 CompletionReportSummaryView(paragraphs: report.summary)
                 CompletionReportComparisonView(report: report)
@@ -29,8 +29,8 @@ struct CompletionReportPopoverView: View {
                     .padding(.top, 4)
             }
             .padding(24)
-            .velouraTransientOverlayScrollIndicators()
         }
+        .velouraTransientOverlayScrollIndicators()
         .frame(minWidth: 760, idealWidth: 840, maxWidth: 900)
         .frame(minHeight: 620, idealHeight: 740, maxHeight: 780)
     }
@@ -42,14 +42,14 @@ private struct CompletionReportHeaderView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text("完了後レポート")
+                AppLocalizedText("完了後レポート")
                     .font(.title2.bold())
                 Spacer()
-                Text(report.safetyRows.isEmpty ? "測定完了" : "安全確認あり")
+                Text(AppLanguageSettings.string(report.safetyRows.isEmpty ? "測定完了" : "安全確認あり"))
                     .font(.body.bold())
                     .foregroundStyle(report.safetyRows.isEmpty ? Color.secondary : Color.red)
             }
-            Text("入力・\(report.mode.middleStageTitle)・最終版を、同じ測定方法で比較した結果です。")
+            Text(AppLanguageSettings.format("入力・%@・最終版を、同じ測定方法で比較した結果です。", AppLanguageSettings.string(report.mode.middleStageTitle)))
                 .font(.body)
                 .foregroundStyle(.secondary)
         }
@@ -131,7 +131,7 @@ private struct CompletionReportTableText: View {
     }
 
     var body: some View {
-        Text(value)
+        AppLocalizedText(value)
             .font(monospaced ? .body.monospacedDigit() : .body)
             .frame(width: width, alignment: alignment)
             .textSelection(.enabled)
@@ -147,7 +147,7 @@ private struct CompletionReportDocumentSectionView: View {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(section.subsections) { subsection in
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(subsection.title)
+                        AppLocalizedText(subsection.title)
                             .font(.title3.bold())
                         ForEach(Array(subsection.paragraphs.enumerated()), id: \.offset) { _, paragraph in
                             Text(paragraph)
@@ -180,8 +180,8 @@ private struct CompletionReportStageDeltaGrid: View {
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 9) {
                 GridRow {
                     CompletionReportTableText("ノイズ項目", width: 210, alignment: .leading)
-                    CompletionReportTableText("入力→\(middleTitle)", width: 180, alignment: .trailing)
-                    CompletionReportTableText("\(middleTitle)→最終版", width: 180, alignment: .trailing)
+                    CompletionReportTableText(AppLanguageSettings.format("入力→%@", AppLanguageSettings.string(middleTitle)), width: 180, alignment: .trailing)
+                    CompletionReportTableText(AppLanguageSettings.format("%@→最終版", AppLanguageSettings.string(middleTitle)), width: 180, alignment: .trailing)
                 }
                 .font(.body.bold())
 
@@ -219,14 +219,14 @@ private struct CompletionReportChartsView: View {
             VStack(alignment: .leading, spacing: 24) {
                 ForEach(charts) { chart in
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(chart.title)
+                        AppLocalizedText(chart.title)
                             .font(.title3.bold())
                         CompletionReportChartView(chart: chart)
                             .frame(height: 260)
                         HStack {
-                            Text(chart.verticalAxisTitle)
+                            AppLocalizedText(chart.verticalAxisTitle)
                             Spacer()
-                            Text(chart.horizontalAxisTitle)
+                            AppLocalizedText(chart.horizontalAxisTitle)
                         }
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -249,17 +249,17 @@ private struct CompletionReportChartView: View {
                         let upperY = point.y
                         LineMark(
                             x: .value("X", xValue),
-                            y: .value("最大", upperY),
-                            series: .value("波形系列", "\(series.id)-maximum")
+                            y: .value(AppLanguageSettings.string("最大"), upperY),
+                            series: .value(AppLanguageSettings.string("波形系列"), "\(series.id)-maximum")
                         )
-                        .foregroundStyle(by: .value("工程", series.title))
+                        .foregroundStyle(by: .value(AppLanguageSettings.string("工程"), AppLanguageSettings.string(series.title)))
                         .lineStyle(StrokeStyle(lineWidth: 1))
                         LineMark(
                             x: .value("X", xValue),
-                            y: .value("最小", lowerY),
-                            series: .value("波形系列", "\(series.id)-minimum")
+                            y: .value(AppLanguageSettings.string("最小"), lowerY),
+                            series: .value(AppLanguageSettings.string("波形系列"), "\(series.id)-minimum")
                         )
-                        .foregroundStyle(by: .value("工程", series.title))
+                        .foregroundStyle(by: .value(AppLanguageSettings.string("工程"), AppLanguageSettings.string(series.title)))
                         .lineStyle(StrokeStyle(lineWidth: 1))
                     } else {
                         let xValue = horizontalValue(point.x)
@@ -268,13 +268,13 @@ private struct CompletionReportChartView: View {
                             x: .value("X", xValue),
                             y: .value("Y", yValue)
                         )
-                        .foregroundStyle(by: .value("工程", series.title))
+                        .foregroundStyle(by: .value(AppLanguageSettings.string("工程"), AppLanguageSettings.string(series.title)))
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
                     }
                 }
             }
             if chart.kind == .spectrumDelta {
-                RuleMark(y: .value("入力", 0))
+                RuleMark(y: .value(AppLanguageSettings.string("入力"), 0))
                     .foregroundStyle(.secondary)
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
             }
@@ -347,7 +347,7 @@ private struct CompletionReportCard<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3.bold())
             content
         }

@@ -49,6 +49,7 @@ struct AudioWaveformWorkspaceView: View {
     @State private var masteredWaveformHeight = WaveformTrackResizeHandle.defaultHeight
     @State private var maximumWaveformZoomScale = 1.0
     @FocusState private var isWaveformKeyboardFocused: Bool
+    @Environment(\.locale) private var locale
 
     private let waveformTrailingColumnWidth: CGFloat = 140
     private let waveformKeyboardPanStep = 0.1
@@ -206,6 +207,7 @@ struct AudioWaveformWorkspaceView: View {
                 }
             }
         }
+        .environment(\.locale, locale)
         .onChange(of: resetToken) {
             waveformViewport.reset()
             hoveredWaveformProgress = nil
@@ -227,14 +229,35 @@ struct AudioWaveformWorkspaceView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(workspaceTitle)
+            AppLocalizedText(workspaceTitle)
                 .font(.title3.bold())
-            Text(playbackStatusText ?? preview.playbackLabel)
+            Text(localizedPlaybackStatus)
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
         }
+    }
+
+    private var localizedPlaybackStatus: String {
+        if let playbackStatusText {
+            return AppLanguageSettings.string(playbackStatusText)
+        }
+
+        let label = preview.playbackLabel
+        for target in AudioPreviewTarget.allCases {
+            let title = AppLanguageSettings.string(target.rawValue)
+            if label == "\(target.rawValue)を一時停止中" {
+                return AppLanguageSettings.format("%@を一時停止中", title)
+            }
+            if label == "\(target.rawValue)を再生中" {
+                return AppLanguageSettings.format("%@を再生中", title)
+            }
+            for side in ["A", "B"] where label == "\(side) \(target.rawValue)を再生中" {
+                return AppLanguageSettings.format("%@ %@を再生中", side, title)
+            }
+        }
+        return AppLanguageSettings.string(label)
     }
 
     private var comparisonPicker: some View {
@@ -275,7 +298,7 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private var comparisonSummary: some View {
-        Text(comparisonSummaryText)
+        AppLocalizedText(comparisonSummaryText)
             .font(.body)
             .foregroundStyle(.secondary)
             .lineLimit(1)
@@ -379,7 +402,7 @@ struct AudioWaveformWorkspaceView: View {
             )
             .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
             .frame(minWidth: 110, idealWidth: 150, maxWidth: 180)
-            .accessibilityLabel(volumeAccessibilityLabel)
+            .accessibilityLabel(AppLanguageSettings.string(volumeAccessibilityLabel))
             Text("\(Int((preview.playbackVolume * 100).rounded()))%")
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
@@ -399,7 +422,7 @@ struct AudioWaveformWorkspaceView: View {
         .tint(LiquidGlassSegmentedPickerStyle.switchTint)
         .controlSize(.small)
         .fixedSize()
-        .help(loudnessHelp)
+        .help(AppLanguageSettings.string(loudnessHelp))
     }
 
     private var activeComparisonLabel: some View {
@@ -410,7 +433,7 @@ struct AudioWaveformWorkspaceView: View {
                 .fill(displayTint)
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
-            Text("現在 \(activeSideTitle)")
+            Text(AppLanguageSettings.format("現在 %@", AppLanguageSettings.string(activeSideTitle)))
                 .font(.title3.weight(.bold))
                 .foregroundStyle(displayTint)
         }
@@ -419,7 +442,7 @@ struct AudioWaveformWorkspaceView: View {
             .fixedSize()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("現在再生中")
-            .accessibilityValue(activeSideTitle)
+            .accessibilityValue(AppLanguageSettings.string(activeSideTitle))
     }
 
     private var activeComparisonTint: Color {
@@ -446,12 +469,12 @@ struct AudioWaveformWorkspaceView: View {
                 Circle()
                     .fill(tint)
                     .frame(width: 8, height: 8)
-                Text(track.title)
+                AppLocalizedText(track.title)
                     .font(.title3.weight(.semibold))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 if let comparisonSide {
-                    Text(sideTitle(for: comparisonSide))
+                    AppLocalizedText(sideTitle(for: comparisonSide))
                         .font(.body.bold())
                         .foregroundStyle(tint)
                         .padding(.horizontal, 7)
@@ -509,7 +532,7 @@ struct AudioWaveformWorkspaceView: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
                 .disabled(fileURL == nil)
-                .help(fileURL == nil ? "音声ファイルがありません" : "外部プレイヤーで開く")
+                .help(AppLanguageSettings.string(fileURL == nil ? "音声ファイルがありません" : "外部プレイヤーで開く"))
 
                 Button("Finderに表示", systemImage: "folder") {
                     guard let fileURL else { return }
@@ -518,7 +541,7 @@ struct AudioWaveformWorkspaceView: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
                 .disabled(fileURL == nil)
-                .help(fileURL == nil ? "音声ファイルがありません" : "Finderに表示")
+                .help(AppLanguageSettings.string(fileURL == nil ? "音声ファイルがありません" : "Finderに表示"))
             }
         }
         .padding(.horizontal, 12)
@@ -530,7 +553,7 @@ struct AudioWaveformWorkspaceView: View {
             )
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(track.accessibilityLabel)
+        .accessibilityLabel(AppLanguageSettings.string(track.accessibilityLabel))
     }
 
     private var waveformTimeRuler: some View {
@@ -742,6 +765,7 @@ private struct WaveformTransportButton: View {
     let action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @State private var isHovering = false
     @Namespace private var glassNamespace
 
@@ -771,8 +795,9 @@ private struct WaveformTransportButton: View {
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.38 : 1)
         .onHover(perform: updateHover)
-        .help(title)
-        .accessibilityLabel(title)
+        .help(AppLanguageSettings.string(title))
+        .accessibilityLabel(AppLanguageSettings.string(title))
+        .environment(\.locale, locale)
         .accessibilityAddTraits(
             showsSelectedAccessibilityTrait && isSelected ? .isSelected : []
         )
@@ -781,10 +806,10 @@ private struct WaveformTransportButton: View {
     @ViewBuilder
     private var label: some View {
         if let systemImage {
-            Label(title, systemImage: systemImage)
+            Label(AppLanguageSettings.string(title), systemImage: systemImage)
                 .labelStyle(.iconOnly)
         } else {
-            Text(title)
+            AppLocalizedText(title)
         }
     }
 

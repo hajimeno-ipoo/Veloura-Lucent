@@ -103,7 +103,7 @@ struct DAWKnobControl: View {
         .onDisappear(perform: stopKeyRepeat)
         .disabled(!isInteractionEnabled)
         .accessibilityElement()
-        .accessibilityLabel(title)
+        .accessibilityLabel(AppLanguageSettings.string(title))
         .accessibilityValue(valueText)
         .accessibilityAdjustableAction { direction in
             switch direction {
@@ -141,7 +141,7 @@ struct DAWKnobControl: View {
                     .frame(width: 9, height: 9)
                     .accessibilityHidden(true)
 
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3.bold())
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
@@ -162,7 +162,7 @@ struct DAWKnobControl: View {
                 .foregroundStyle(.primary)
 
             if let unitText {
-                Text(unitText)
+                AppLocalizedText(unitText)
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
             }
@@ -178,13 +178,13 @@ struct DAWKnobControl: View {
         ZStack(alignment: .topLeading) {
             stepRailButton(
                 rail: .decrement,
-                label: "\(title)を下げる",
+                label: String(format: AppLanguageSettings.string("%@を下げる"), AppLanguageSettings.string(title)),
                 center: DAWKnobMetrics.decrementRailCenter,
                 delta: -step
             )
             stepRailButton(
                 rail: .increment,
-                label: "\(title)を上げる",
+                label: String(format: AppLanguageSettings.string("%@を上げる"), AppLanguageSettings.string(title)),
                 center: DAWKnobMetrics.incrementRailCenter,
                 delta: step
             )
@@ -231,7 +231,7 @@ struct DAWKnobControl: View {
     }
 
     private func overlayText(_ text: String, font: Font, at point: CGPoint, width: CGFloat = 78) -> some View {
-        Text(text)
+        AppLocalizedText(text)
             .font(font)
             .lineLimit(1)
             .minimumScaleFactor(0.9)

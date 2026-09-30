@@ -17,8 +17,8 @@ struct DisclosureToggleButton: View {
                 .glassEffect(.clear.interactive(), in: Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(title)
+        .accessibilityLabel(AppLanguageSettings.string(title))
         .accessibilityValue(isExpanded ? "開いています" : "閉じています")
-        .accessibilityHint(accessibilityHint)
+        .accessibilityHint(AppLanguageSettings.string(accessibilityHint))
     }
 }

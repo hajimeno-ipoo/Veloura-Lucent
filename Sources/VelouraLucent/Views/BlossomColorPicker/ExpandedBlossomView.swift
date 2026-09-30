@@ -199,8 +199,8 @@ public struct ExpandedBlossomView: View {
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help("最近使った色 \(index + 1)")
-        .accessibilityLabel("最近使った色 \(index + 1)")
+        .help(AppLanguageSettings.format("最近使った色 %d", index + 1))
+        .accessibilityLabel(AppLanguageSettings.format("最近使った色 %d", index + 1))
       }
 
       Spacer(minLength: 0)

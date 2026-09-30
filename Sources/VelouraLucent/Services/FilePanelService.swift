@@ -16,7 +16,7 @@ enum FilePanelService {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.prompt = "開く"
+        panel.prompt = AppLanguageSettings.string("開く")
         panel.begin { response in
             Task { @MainActor in
                 completion(response == .OK ? panel.url : nil)
@@ -40,7 +40,7 @@ enum FilePanelService {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.prompt = "選ぶ"
+        panel.prompt = AppLanguageSettings.string("選ぶ")
         present(panel, attachedTo: parentWindow, completion: completion)
     }
 
@@ -55,7 +55,7 @@ enum FilePanelService {
         panel.nameFieldStringValue = suggestedFileName
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
-        panel.prompt = "書き出し"
+        panel.prompt = AppLanguageSettings.string("書き出し")
         present(panel, attachedTo: parentWindow, completion: completion)
     }
 

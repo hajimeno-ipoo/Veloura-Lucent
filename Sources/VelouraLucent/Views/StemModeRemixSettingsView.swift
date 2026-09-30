@@ -78,7 +78,7 @@ struct StemModeRemixSettingsView: View {
     }
 
     private var remixResetStatus: some View {
-        Text(remixAdjustmentStatusText)
+        AppLocalizedText(remixAdjustmentStatusText)
         .font(.title3)
         .foregroundStyle(
             model.isRemixManualEditingEnabled && !model.manualRemixOverrides.isEmpty
@@ -122,7 +122,7 @@ struct StemModeRemixSettingsView: View {
             title: role.stemModeDisplayTitle,
             summary: "音量、左右位置、共通リバーブへの送信量を調整します。",
             help: SettingHelp(
-                title: "\(role.stemModeDisplayTitle)の再ミックス",
+                title: String(format: AppLanguageSettings.string("%@の再ミックス"), AppLanguageSettings.string(role.stemModeDisplayTitle)),
                 reading: "すてむのさいみっくす",
                 description: "補正済みStemに対して音量、左右位置、共通リバーブへ送る量を調整します。補正処理そのものは変更しません。"
             ),
@@ -205,7 +205,7 @@ struct StemModeRemixSettingsView: View {
             help: SettingHelp(
                 title: "Stem間の衝突回避",
                 reading: "すてむかんのしょうとつかいひ",
-                description: "ドラムとベース、ボーカルと\(accompanimentTitle)が同じ帯域で同時に強く鳴る区間だけ、後者の対象帯域を一時的に下げます。曲全体へ固定EQはかけません。"
+                description: AppLanguageSettings.format("ドラムとベース、ボーカルと%@が同じ帯域で同時に強く鳴る区間だけ、後者の対象帯域を一時的に下げます。曲全体へ固定EQはかけません。", AppLanguageSettings.string(accompanimentTitle))
             ),
             initiallyExpanded: false
         ) {
@@ -246,28 +246,28 @@ struct StemModeRemixSettingsView: View {
 
             if let plan {
                 evidenceText(
-                    "ボーカル／\(accompanimentTitle)衝突",
+                    AppLanguageSettings.format("ボーカル／%@衝突", AppLanguageSettings.string(accompanimentTitle)),
                     value: plan.vocalsAccompanimentCollision
                 )
                 automaticDecisionText(
                     plan.settings.masking.vocalsToAccompanimentEnabled
-                        ? "自動判断: 衝突区間だけ\(accompanimentTitle)側を回避"
+                        ? AppLanguageSettings.format("自動判断: 衝突区間だけ%@側を回避", AppLanguageSettings.string(accompanimentTitle))
                         : "自動判断: 回避を行う衝突量ではないため無効"
                 )
             }
             collisionAvoidanceControl(
-                title: "ボーカルに対する\(accompanimentTitle)回避",
+                title: AppLanguageSettings.format("ボーカルに対する%@回避", AppLanguageSettings.string(accompanimentTitle)),
                 isEnabled: effective.masking.vocalsToAccompanimentEnabled,
                 setEnabled: { value in
                     apply { try model.setVocalsToAccompanimentMaskingEnabled(value) }
                 }
             ) {
                 remixKnob(
-                    title: "\(accompanimentTitle)回避量",
+                    title: AppLanguageSettings.format("%@回避量", AppLanguageSettings.string(accompanimentTitle)),
                     help: SettingHelp(
-                        title: "\(accompanimentTitle)回避量",
+                        title: AppLanguageSettings.format("%@回避量", AppLanguageSettings.string(accompanimentTitle)),
                         reading: "ばんそうかいひりょう",
-                        description: "ボーカルの存在帯域と同時に衝突した区間だけ、\(accompanimentTitle)側へ共通の時間制御を適用して対象帯域を下げます。曲全体の音量は下げません。"
+                        description: AppLanguageSettings.format("ボーカルの存在帯域と同時に衝突した区間だけ、%@側へ共通の時間制御を適用して対象帯域を下げます。曲全体の音量は下げません。", AppLanguageSettings.string(accompanimentTitle))
                     ),
                     value: effective.masking.vocalsToAccompanimentAmount,
                     valueText: percentText,
@@ -287,7 +287,7 @@ struct StemModeRemixSettingsView: View {
     private func reverbCard(effective: StemRemixSettings) -> some View {
         SettingsDisclosureCard(
             title: "共通リバーブ",
-            summary: "\(model.availableStemRoles.count)Stemで一つの空間を共有し、Stemごとに送る量だけを変えます。",
+            summary: AppLanguageSettings.format("%d Stemで一つの空間を共有し、Stemごとに送る量だけを変えます。", model.availableStemRoles.count),
             help: SettingHelp(
                 title: "共通リバーブ",
                 reading: "きょうつうりばーぶ",
@@ -323,9 +323,9 @@ struct StemModeRemixSettingsView: View {
                         description: "共通リバーブの残響が消えるまでの長さです。短くすると空間が引き締まり、長くすると余韻が残ります。"
                     ),
                     value: effective.reverbDecaySeconds,
-                    valueText: { String(format: "%.2f 秒", $0) },
+                    valueText: { AppLanguageSettings.format("%.2f 秒", $0) },
                     displayValueText: { String(format: "%.2f", $0) },
-                    unitText: "秒",
+                    unitText: AppLanguageSettings.string("秒"),
                     labels: ["短い", "標準", "長い"],
                     range: 0.25...4,
                     step: 0.01,
@@ -353,7 +353,7 @@ struct StemModeRemixSettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3.bold())
                 Spacer()
                 Toggle(
@@ -411,7 +411,7 @@ struct StemModeRemixSettingsView: View {
     }
 
     private func evidenceText(_ title: String, value: Float) -> some View {
-        Text("\(title): \(percentText(value))")
+        Text(AppLanguageSettings.format("%@: %@", AppLanguageSettings.string(title), percentText(value)))
             .font(.body.monospacedDigit())
             .foregroundStyle(.secondary)
     }
@@ -424,19 +424,19 @@ struct StemModeRemixSettingsView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(
                 String(
-                    format: "gain根拠: rawとの差 %+.2f dB → 自動値 %+.1f dB",
+                    format: AppLanguageSettings.string("gain根拠: rawとの差 %+.2f dB → 自動値 %+.1f dB"),
                     plan.gainEvidenceDB[role, default: 0],
                     automatic.gainDB
                 )
             )
             Text(
-                "pan根拠: 左右差 \(panText(plan.panEvidence[role, default: 0])) → "
+                AppLanguageSettings.format("pan根拠: 左右差 %@ → ", panText(plan.panEvidence[role, default: 0]))
                     + (automatic.pan == 0
-                        ? "自動配置変更の条件を満たさないため中央"
-                        : "自動値 \(panText(automatic.pan))")
+                        ? AppLanguageSettings.string("自動配置変更の条件を満たさないため中央")
+                        : AppLanguageSettings.format("自動値 %@", panText(automatic.pan)))
             )
             Text(
-                "reverb根拠: raw空間成分の減少 \(percentText(plan.reverbLossEvidence[role, default: 0])) → Send \(percentText(automatic.reverbSend))"
+                AppLanguageSettings.format("reverb根拠: raw空間成分の減少 %@ → Send %@", percentText(plan.reverbLossEvidence[role, default: 0]), percentText(automatic.reverbSend))
             )
         }
         .font(.body.monospacedDigit())
@@ -445,13 +445,13 @@ struct StemModeRemixSettingsView: View {
     }
 
     private func automaticDecisionText(_ value: String) -> some View {
-        Text(value)
+        AppLocalizedText(value)
             .font(.body)
             .foregroundStyle(.secondary)
     }
 
     private func panText(_ value: Float) -> String {
-        if abs(value) < 0.005 { return "中央" }
+        if abs(value) < 0.005 { return AppLanguageSettings.string("中央") }
         return value < 0
             ? String(format: "L %.0f%%", abs(value) * 100)
             : String(format: "R %.0f%%", value * 100)
@@ -474,7 +474,7 @@ struct StemModeRemixSettingsView: View {
             try operation()
         } catch {
             model.presentControllerFailure(
-                title: "再ミックス設定を変更できません",
+                title: AppLanguageSettings.string("再ミックス設定を変更できません"),
                 message: error.localizedDescription
             )
         }

@@ -256,7 +256,7 @@ struct WaveformZoomControls: View {
                 .help("波形の表示範囲を連続的に調整します")
                 .accessibilityLabel("波形の拡大率")
                 .accessibilityValue(
-                    String(format: "%.1f倍", viewport.zoomScale)
+                    AppLanguageSettings.format("%.1f倍", viewport.zoomScale)
                 )
 
                 zoomButton(
@@ -315,8 +315,8 @@ struct WaveformZoomControls: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
-        .accessibilityLabel(title)
-        .help(title)
+        .accessibilityLabel(AppLanguageSettings.string(title))
+        .help(AppLanguageSettings.string(title))
     }
 }
 

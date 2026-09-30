@@ -68,7 +68,7 @@ private struct ComparisonVideoPlaybackControls: View {
                     .contentShape(.circle)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(model.isPreviewPlaying ? "一時停止" : "再生")
+            .accessibilityLabel(AppLanguageSettings.string(model.isPreviewPlaying ? "一時停止" : "再生"))
 
             Text(timeText(model.outputTime))
                 .monospacedDigit()
@@ -105,7 +105,7 @@ private struct ComparisonVideoPlaybackControls: View {
             .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
             .frame(width: 96)
             .accessibilityLabel("音量")
-            .accessibilityValue("\(Int((model.previewVolume * 100).rounded()))パーセント")
+            .accessibilityValue(AppLanguageSettings.format("%dパーセント", Int((model.previewVolume * 100).rounded())))
         }
         .font(.body)
         .padding(.horizontal, 14)

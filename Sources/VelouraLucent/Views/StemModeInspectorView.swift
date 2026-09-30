@@ -133,13 +133,13 @@ private struct StemModeAnalysisModeSettings: View {
                 isDisabled: model.session.isCorrectionProcessing
             )
 
-            Text(model.selectedAnalysisMode.summary)
+            AppLocalizedText(model.selectedAnalysisMode.summary)
                 .foregroundStyle(
                     model.selectedAnalysisMode == .experimentalMetal
                         ? VelouraTextColors.orange
                         : .secondary
                 )
-            Text(model.selectedAnalysisMode.resolvedSummary)
+            AppLocalizedText(model.selectedAnalysisMode.resolvedSummary)
                 .font(.body)
                 .foregroundStyle(
                     model.selectedAnalysisMode.resolvedMode == .experimentalMetal
@@ -239,11 +239,11 @@ struct StemModeInspectorAnalysisPanel: View {
     private func unavailableDescription(_ selection: InspectorAudioSelection) -> String {
         switch selection {
         case .input:
-            "音声を選ぶと解析結果を表示します。"
+            AppLanguageSettings.string("音声を選ぶと解析結果を表示します。")
         case .corrected:
-            "\(processedTitle)の解析が完了すると表示します。"
+            AppLanguageSettings.format("%@の解析が完了すると表示します。", AppLanguageSettings.string(processedTitle))
         case .mastered:
-            "マスタリングが完了すると表示します。"
+            AppLanguageSettings.string("マスタリングが完了すると表示します。")
         }
     }
 
@@ -274,13 +274,13 @@ struct StemModeInspectorAnalysisPanel: View {
                         .font(.body)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("\(issues.count)件あります。")
+                    Text(AppLanguageSettings.format("%ld件あります。", issues.count))
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
-                        Text("\(issue.subject): \(issue.detail)")
+                        Text(issue.subject + ": " + StemDiagnosticLocalization.issueDetail(issue.detail))
                             .font(.body)
                             .foregroundStyle(.secondary)
                     }

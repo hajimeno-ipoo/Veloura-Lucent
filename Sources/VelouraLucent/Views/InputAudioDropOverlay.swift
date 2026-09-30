@@ -72,10 +72,10 @@ struct InputAudioDropOverlay: View {
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(kind.tint)
 
-                Text(kind.title)
+                AppLocalizedText(kind.title)
                     .font(.title2.weight(.semibold))
 
-                Text(kind.message)
+                AppLocalizedText(kind.message)
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -85,6 +85,6 @@ struct InputAudioDropOverlay: View {
         .padding(18)
         .shadow(color: .black.opacity(0.18), radius: 22, y: 10)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(kind.title)
+        .accessibilityLabel(AppLanguageSettings.string(kind.title))
     }
 }

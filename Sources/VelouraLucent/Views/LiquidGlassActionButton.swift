@@ -58,10 +58,14 @@ struct LiquidGlassActionButton: View {
     @ViewBuilder
     private var labelContent: some View {
         if let systemImage {
-            Label(title, systemImage: systemImage)
+            Label {
+                AppLocalizedText(title)
+            } icon: {
+                Image(systemName: systemImage)
+            }
                 .labelStyle(.titleAndIcon)
         } else {
-            Text(title)
+            AppLocalizedText(title)
         }
     }
 

@@ -16,11 +16,11 @@ struct ProcessingModeToolbarPicker: View {
             isDisabled: isDisabled
         )
         .frame(width: 220)
-        .accessibilityLabel("処理モード")
-        .accessibilityHint(
+        .accessibilityLabel(AppLanguageSettings.string("処理モード"))
+        .accessibilityHint(AppLanguageSettings.string(
             isDisabled
                 ? "現在の処理が完了してから切り替えられます"
                 : "通常補正とStem Modeを切り替えます"
-        )
+        ))
     }
 }

@@ -9,6 +9,7 @@ struct LiquidGlassTabBar<Selection: Hashable>: View {
     var isDisabled = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @FocusState private var focusedOption: Selection?
     @Namespace private var glassNamespace
 
@@ -30,7 +31,8 @@ struct LiquidGlassTabBar<Selection: Hashable>: View {
             focusedOption = nil
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(title)
+        .accessibilityLabel(AppLanguageSettings.string(title))
+        .environment(\.locale, locale)
     }
 
     @ViewBuilder
@@ -63,7 +65,7 @@ struct LiquidGlassTabBar<Selection: Hashable>: View {
 
     @ViewBuilder
     private func tabLabel(for option: Selection, isSelected: Bool) -> some View {
-        Text(label(option))
+        AppLocalizedText(label(option))
             .font(.callout)
             .foregroundStyle(isSelected ? .primary : .secondary)
             .lineLimit(1)
@@ -78,7 +80,7 @@ struct LiquidGlassTabBar<Selection: Hashable>: View {
                     reduceMotion: reduceMotion
                 )
             )
-            .accessibilityLabel("\(title)、\(label(option))")
+            .accessibilityLabel("\(AppLanguageSettings.string(title))、\(AppLanguageSettings.string(label(option)))")
     }
 
     @MainActor

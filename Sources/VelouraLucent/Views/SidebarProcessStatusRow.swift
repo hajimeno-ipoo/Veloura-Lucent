@@ -14,6 +14,7 @@ struct SidebarProcessStatusRow: View {
     let steps: [SidebarProcessStepDisplay]
     let tint: Color
     let now: Date
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -21,7 +22,7 @@ struct SidebarProcessStatusRow: View {
                 HStack(spacing: 7) {
                     Image(systemName: statusIcon)
                         .accessibilityHidden(true)
-                    Text(title)
+                    AppLocalizedText(title)
                         .lineLimit(1)
                         .minimumScaleFactor(0.9)
                         .layoutPriority(1)
@@ -37,14 +38,14 @@ struct SidebarProcessStatusRow: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(currentStatusText)
+                AppLocalizedText(currentStatusText)
                     .font(.title3)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
 
                 if let displayedActiveStepDetail {
-                    Text(displayedActiveStepDetail)
+                    AppLocalizedText(displayedActiveStepDetail)
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -61,8 +62,8 @@ struct SidebarProcessStatusRow: View {
                     .frame(minWidth: 30, alignment: .trailing)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(title)の進捗")
-            .accessibilityValue("\(Int((min(max(progress, 0), 1) * 100).rounded()))パーセント")
+            .accessibilityLabel(String(format: AppLanguageSettings.string("%@の進捗"), AppLanguageSettings.string(title)))
+            .accessibilityValue(String(format: AppLanguageSettings.string("%dパーセント"), Int((min(max(progress, 0), 1) * 100).rounded())))
 
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(steps) { step in
@@ -74,6 +75,7 @@ struct SidebarProcessStatusRow: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
+        .environment(\.locale, locale)
     }
 
     private var statusIcon: String {
@@ -97,7 +99,9 @@ struct SidebarProcessStatusRow: View {
     }
 
     private var currentStatusText: String {
-        activeStepTitle.map { "\($0)を実行中" } ?? status
+        activeStepTitle.map {
+            AppLanguageSettings.format("%@を実行中", ProcessingDetailLocalization.stepTitle($0))
+        } ?? status
     }
 
     private var displayedActiveStepDetail: String? {
@@ -109,7 +113,7 @@ struct SidebarProcessStatusRow: View {
         else {
             return nil
         }
-        return detail
+        return ProcessingDetailLocalization.string(detail)
     }
 
     private var elapsedText: String? {
@@ -210,6 +214,7 @@ enum SidebarProcessStepState {
 private struct SidebarProcessStepRow: View {
     let step: SidebarProcessStepDisplay
     let tint: Color
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -220,7 +225,7 @@ private struct SidebarProcessStepRow: View {
                     .frame(width: 12)
                     .accessibilityHidden(true)
 
-                Text(step.title)
+                Text(ProcessingDetailLocalization.stepTitle(step.title))
                     .font(.body)
                     .foregroundStyle(step.state.color(tint: tint))
                     .lineLimit(1)
@@ -229,7 +234,7 @@ private struct SidebarProcessStepRow: View {
 
                 if step.showsTransientStatus,
                    let shortLabel = step.state.shortLabel {
-                    Text(shortLabel)
+                    AppLocalizedText(shortLabel)
                         .font(.body)
                         .foregroundStyle(step.state.color(tint: tint))
                         .lineLimit(1)
@@ -245,7 +250,7 @@ private struct SidebarProcessStepRow: View {
             if step.showsTransientStatus,
                step.state == .active,
                let detail = step.detail {
-                Text(detail)
+                Text(ProcessingDetailLocalization.string(detail))
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -255,15 +260,16 @@ private struct SidebarProcessStepRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+        .environment(\.locale, locale)
     }
 
     private var accessibilityLabel: String {
         if let shortLabel = step.state.shortLabel {
-            return "\(step.title)、\(shortLabel)"
+            return AppLanguageSettings.format("%@、%@", ProcessingDetailLocalization.stepTitle(step.title), AppLanguageSettings.string(shortLabel))
         }
         if step.state == .completed {
-            return "\(step.title)、完了"
+            return AppLanguageSettings.format("%@、%@", ProcessingDetailLocalization.stepTitle(step.title), AppLanguageSettings.string("完了"))
         }
-        return "\(step.title)、待機"
+        return AppLanguageSettings.format("%@、%@", ProcessingDetailLocalization.stepTitle(step.title), AppLanguageSettings.string("待機"))
     }
 }

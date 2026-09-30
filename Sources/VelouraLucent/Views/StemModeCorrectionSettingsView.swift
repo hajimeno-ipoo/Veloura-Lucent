@@ -42,7 +42,7 @@ struct StemModeCorrectionSettingsView: View {
             )
             .accessibilityHint("選択中Stemの補正上限を決める出発点です")
 
-            Text(model.selectedDenoiseStrength.summary)
+            AppLocalizedText(model.selectedDenoiseStrength.summary)
                 .font(.body)
                 .foregroundStyle(.secondary)
 
@@ -138,7 +138,7 @@ struct StemModeCorrectionSettingsView: View {
     }
 
     private var customStatus: some View {
-        Text(model.isUsingCustomCorrectionSettings ? "手動調整中です" : "既定値を使用しています")
+        AppLocalizedText(model.isUsingCustomCorrectionSettings ? "手動調整中です" : "既定値を使用しています")
             .font(.title3)
             .foregroundStyle(
                 model.isUsingCustomCorrectionSettings

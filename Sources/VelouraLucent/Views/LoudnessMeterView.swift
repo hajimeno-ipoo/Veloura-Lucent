@@ -4,6 +4,7 @@ struct LoudnessMeterView: View {
     let snapshot: LiveLoudnessMeterSnapshot
     let targetLoudnessLUFS: Double
     let truePeakCeilingDBTP: Double
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -15,7 +16,7 @@ struct LoudnessMeterView: View {
                     minimum: -60,
                     maximum: 0,
                     referenceValue: targetLoudnessLUFS,
-                    referenceLabel: "目標",
+                    referenceLabel: AppLanguageSettings.string("目標"),
                     warningThreshold: targetLoudnessLUFS + 2.0,
                     tickValues: [0, -10, -14, -18, -23, -40, -60]
                 )
@@ -26,7 +27,7 @@ struct LoudnessMeterView: View {
                     minimum: -60,
                     maximum: 0,
                     referenceValue: targetLoudnessLUFS,
-                    referenceLabel: "目標",
+                    referenceLabel: AppLanguageSettings.string("目標"),
                     warningThreshold: targetLoudnessLUFS + 2.0,
                     tickValues: [0, -10, -14, -18, -23, -40, -60]
                 )
@@ -37,7 +38,7 @@ struct LoudnessMeterView: View {
                     minimum: -60,
                     maximum: 0,
                     referenceValue: targetLoudnessLUFS,
-                    referenceLabel: "目標",
+                    referenceLabel: AppLanguageSettings.string("目標"),
                     warningThreshold: targetLoudnessLUFS + 1.0,
                     tickValues: [0, -10, -14, -18, -23, -40, -60]
                 )
@@ -48,7 +49,7 @@ struct LoudnessMeterView: View {
                     minimum: -12,
                     maximum: 1,
                     referenceValue: truePeakCeilingDBTP,
-                    referenceLabel: "上限",
+                    referenceLabel: AppLanguageSettings.string("上限"),
                     warningThreshold: truePeakCeilingDBTP,
                     tickValues: [1, 0, -1, -3, -6, -12]
                 )
@@ -56,8 +57,8 @@ struct LoudnessMeterView: View {
             .frame(maxWidth: .infinity, alignment: .center)
 
             HStack(spacing: 12) {
-                referenceText("目標", value: targetLoudnessLUFS, unit: "LUFS")
-                referenceText("上限", value: truePeakCeilingDBTP, unit: "dBTP")
+                referenceText(AppLanguageSettings.string("目標"), value: targetLoudnessLUFS, unit: "LUFS")
+                referenceText(AppLanguageSettings.string("上限"), value: truePeakCeilingDBTP, unit: "dBTP")
             }
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -67,6 +68,7 @@ struct LoudnessMeterView: View {
         .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
+        .environment(\.locale, locale)
     }
 
     private func referenceText(_ label: String, value: Double, unit: String) -> some View {
@@ -74,11 +76,11 @@ struct LoudnessMeterView: View {
     }
 
     private var accessibilityDescription: String {
-        "ラウドネスメーター。Momentary \(accessibilityValue(snapshot.momentaryLUFS)) LUFS、Short-Term \(accessibilityValue(snapshot.shortTermLUFS)) LUFS、Integrated \(accessibilityValue(snapshot.integratedLUFS)) LUFS、True Peak \(accessibilityValue(snapshot.truePeakDBTP)) dBTP。"
+        AppLanguageSettings.format("ラウドネスメーター。Momentary %@ LUFS、Short-Term %@ LUFS、Integrated %@ LUFS、True Peak %@ dBTP。", accessibilityValue(snapshot.momentaryLUFS), accessibilityValue(snapshot.shortTermLUFS), accessibilityValue(snapshot.integratedLUFS), accessibilityValue(snapshot.truePeakDBTP))
     }
 
     private func accessibilityValue(_ value: Double?) -> String {
-        value.map(format) ?? "未測定"
+        value.map(format) ?? AppLanguageSettings.string("未測定")
     }
 
     private func format(_ value: Double) -> String {

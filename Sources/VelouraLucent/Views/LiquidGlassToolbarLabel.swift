@@ -8,6 +8,7 @@ struct LiquidGlassToolbarLabel: View {
     let effectID: String
     let namespace: Namespace.ID
     let reduceMotion: Bool
+    @Environment(\.locale) private var locale
 
     var body: some View {
         if isCancellation {
@@ -19,7 +20,8 @@ struct LiquidGlassToolbarLabel: View {
     }
 
     private var toolbarLabel: some View {
-        Label(title, systemImage: systemImage)
+        Label(AppLanguageSettings.string(title), systemImage: systemImage)
+            .environment(\.locale, locale)
             .labelStyle(.titleAndIcon)
             .font(.body)
             .fixedSize()

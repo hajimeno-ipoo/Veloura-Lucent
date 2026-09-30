@@ -28,7 +28,7 @@ struct SettingsDisclosureCard<Content: View>: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text(summary)
+                    AppLocalizedText(summary)
                         .font(.body)
                         .foregroundStyle(.secondary)
                     content
@@ -51,7 +51,7 @@ struct SettingsDisclosureCard<Content: View>: View {
         HStack(spacing: 8) {
             disclosureButton
 
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3.bold())
                 .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
 

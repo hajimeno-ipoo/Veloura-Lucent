@@ -329,3 +329,45 @@ extension StemModeProcessStepProgress {
         return detail
     }
 }
+
+extension StemRoleProtectedComponent {
+    var stemModeDisplayTitle: String {
+        switch self {
+        case .vocalsBreath: "息"
+        case .vocalsConsonants: "子音"
+        case .vocalsSibilance: "サ行"
+        case .vocalsFormant: "フォルマント"
+        case .vocalsHarmonics: "倍音"
+        case .vocalsCore: "声の芯"
+        case .drumsAttack: "アタック"
+        case .drumsTransient: "トランジェント"
+        case .drumsCymbalDecay: "シンバルの余韻"
+        case .bassFundamental: "基音"
+        case .bassHarmonics: "倍音"
+        case .bassMainsRegionPitchContent: "50／60 Hz付近の音程成分"
+        case .bassLowPhase: "低域位相"
+        case .otherReverb: "残響"
+        case .otherAmbience: "アンビエンス"
+        case .otherSpace: "空間"
+        case .otherStereo: "ステレオ感"
+        case .guitarAttack: "ピッキング・アタック"
+        case .guitarHarmonics: "調波・音色本体"
+        case .guitarInharmonicity: "非調波性"
+        case .guitarHighDetail: "高域ディテール"
+        case .guitarDecay: "帯域別の余韻"
+        case .guitarStereoSide: "ステレオ幅"
+        case .guitarStereoCorrelation: "左右相関"
+        case .pianoAttack: "ハンマー・アタック"
+        case .pianoPartials: "部分音"
+        case .pianoInharmonicity: "非調波性"
+        case .pianoLowDecay: "低域の余韻"
+        case .pianoMidDecay: "中域の余韻"
+        case .pianoHighDecay: "高域の余韻"
+        case .pianoDoubleDecay: "二段減衰"
+        case .pianoLowBandBalance: "低域バランス"
+        case .pianoMidBandBalance: "中域バランス"
+        case .pianoStereoSide: "ステレオ幅"
+        case .pianoStereoCorrelation: "左右相関"
+        }
+    }
+}

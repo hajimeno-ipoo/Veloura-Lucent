@@ -8,6 +8,7 @@ import SwiftUI
 /// silently switch back to Stem Mode after that acquisition completes.
 @MainActor
 struct VelouraRootView: View {
+    @AppStorage(AppLanguageSettings.key) private var languageSelectionRawValue = AppLanguageSelection.system.rawValue
     @State private var runtime: VelouraAppRuntime
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
     @State private var isInspectorPresented = true
@@ -49,6 +50,7 @@ struct VelouraRootView: View {
         )
 
         workspaceShell
+        .environment(\.locale, AppLanguageSettings.locale(for: languageSelectionRawValue))
         .environment(\.velouraIsFullScreen, isWindowFullScreen)
         .frame(
             minWidth: minimumWindowWidth,
@@ -341,11 +343,15 @@ struct VelouraRootView: View {
     ) -> String {
         let target = preview.comparisonTarget(for: side)
         let title = switch target {
-        case .input: "入力"
+        case .input: AppLanguageSettings.string("入力")
         case .corrected: commandActions.processedAudioTitle
-        case .mastered: "最終版"
+        case .mastered: AppLanguageSettings.string("最終版")
         }
-        return "\(title)を再生"
+        return String(
+            format: AppLanguageSettings.string("%@を再生"),
+            locale: AppLanguageSettings.locale,
+            title
+        )
     }
 
     private var stemPlaybackPresentationState: VelouraStemPlaybackPresentationState? {
@@ -359,9 +365,9 @@ struct VelouraRootView: View {
                     model.previewController,
                     model.remixPreviewController,
                 ],
-                sideACommandTitle: "rawを再生",
-                sideBCommandTitle: "補正後を再生",
-                comparisonSwitchCommandTitle: "raw／補正後切替",
+                sideACommandTitle: AppLanguageSettings.string("rawを再生"),
+                sideBCommandTitle: AppLanguageSettings.string("補正後を再生"),
+                comparisonSwitchCommandTitle: AppLanguageSettings.string("raw／補正後切替"),
                 allowsComparisonPairSelection: false
             ),
             remixComparison: VelouraPlaybackPresentationState(
@@ -370,9 +376,9 @@ struct VelouraRootView: View {
                     model.previewController,
                     model.stemPreviewController,
                 ],
-                sideACommandTitle: "補正後を再生",
-                sideBCommandTitle: "再ミックスを再生",
-                comparisonSwitchCommandTitle: "補正後／再ミックス切替",
+                sideACommandTitle: AppLanguageSettings.string("補正後を再生"),
+                sideBCommandTitle: AppLanguageSettings.string("再ミックスを再生"),
+                comparisonSwitchCommandTitle: AppLanguageSettings.string("補正後／再ミックス切替"),
                 allowsComparisonPairSelection: false
             )
         )
@@ -519,7 +525,7 @@ struct VelouraRootView: View {
 
         return VelouraCommandActions(
             processingMode: .standard,
-            processedAudioTitle: "補正後",
+            processedAudioTitle: AppLanguageSettings.string("補正後"),
             canSwitchProcessingMode: !runtime.isModeSwitchDisabled,
             canChooseInput: !job.isProcessing && !job.isMastering,
             canRunCorrection: job.inputFile != nil
@@ -537,13 +543,13 @@ struct VelouraRootView: View {
             exportActions: [
                 VelouraExportCommandAction(
                     id: "standard-corrected",
-                    title: "補正済み",
+                    title: AppLanguageSettings.string("補正済み"),
                     isEnabled: job.hasExistingOutput && !job.isProcessing,
                     perform: actions.exportCorrectedAudio
                 ),
                 VelouraExportCommandAction(
                     id: "standard-mastered",
-                    title: "マスタリング済み",
+                    title: AppLanguageSettings.string("マスタリング済み"),
                     isEnabled: job.hasExistingMasteredOutput && !job.isMastering,
                     perform: actions.exportMasteredAudio
                 ),
@@ -565,8 +571,8 @@ struct VelouraRootView: View {
         return VelouraCommandActions(
             processingMode: .stem,
             processedAudioTitle: model.remixedPreviewArtifact == nil
-                ? "補正後"
-                : "Stem再ミックス",
+                ? AppLanguageSettings.string("補正後")
+                : AppLanguageSettings.string("Stem再ミックス"),
             stemCount: model.availableStemRoles.count,
             canSwitchProcessingMode: !runtime.isModeSwitchDisabled,
             canChooseInput: model.canChooseInput,

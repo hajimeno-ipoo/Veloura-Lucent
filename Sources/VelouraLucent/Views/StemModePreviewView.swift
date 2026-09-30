@@ -8,6 +8,7 @@ import SwiftUI
 @MainActor
 struct StemModePreviewView: View {
     @Bindable var model: StemModeWorkspaceModel
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -17,7 +18,7 @@ struct StemModePreviewView: View {
                 correctedFileURL: model.correctedRemixPreviewArtifact?.fileURL,
                 masteredFileURL: model.finalPreviewArtifact?.fileURL,
                 correctedTitle: waveformProcessedTitle,
-                correctedAccessibilityLabel: "\(waveformProcessedTitle)の波形",
+                correctedAccessibilityLabel: AppLanguageSettings.format("%@の波形", AppLanguageSettings.string(waveformProcessedTitle)),
                 playbackStatusText: mainPlaybackStatusText,
                 comparisonPairLabel: comparisonPairLabel,
                 comparisonPairSummary: comparisonPairSummary,
@@ -55,15 +56,16 @@ struct StemModePreviewView: View {
             }
 
             if model.isAnalyzingInput || model.isAnalyzingDisplayAudio {
-                ProgressView(model.isAnalyzingInput ? "入力音源を解析しています" : "スペクトログラムを解析しています")
+                ProgressView(AppLanguageSettings.string(model.isAnalyzingInput ? "入力音源を解析しています" : "スペクトログラムを解析しています"))
                     .controlSize(.small)
             } else if let error = model.inputAnalysisError ?? model.displayAnalysisError {
-                Label("表示用解析の一部を取得できませんでした: \(error)", systemImage: "exclamationmark.triangle")
+                Label(AppLanguageSettings.format("表示用解析の一部を取得できませんでした: %@", error), systemImage: "exclamationmark.triangle")
                     .font(.body)
                     .foregroundStyle(.orange)
             }
         }
         .accessibilityElement(children: .contain)
+        .environment(\.locale, locale)
         .onDisappear(perform: model.stopPreviewPlayback)
     }
 
@@ -84,10 +86,10 @@ struct StemModePreviewView: View {
     private func centralAnalysisTargetTitle(_ target: AudioPreviewTarget) -> String {
         let preview = centralAnalysisPreviewController
         if preview === model.stemPreviewController {
-            let role = model.selectedStemPreviewRole.stemModeDisplayTitle
+            let role = AppLanguageSettings.string(model.selectedStemPreviewRole.stemModeDisplayTitle)
             return switch target {
-            case .input: "\(role) raw"
-            case .corrected: "\(role) 補正後"
+            case .input: String(format: AppLanguageSettings.string("%@ raw"), role)
+            case .corrected: String(format: AppLanguageSettings.string("%@ 補正後"), role)
             case .mastered: "最終版"
             }
         }
@@ -108,9 +110,9 @@ struct StemModePreviewView: View {
         let title = targetTitle(activeTarget)
         return switch model.previewController.playbackState(for: activeTarget) {
         case .playing:
-            "\(title)を再生中"
+            String(format: AppLanguageSettings.string("%@を再生中"), AppLanguageSettings.string(title))
         case .paused:
-            "\(title)を一時停止中"
+            String(format: AppLanguageSettings.string("%@を一時停止中"), AppLanguageSettings.string(title))
         case .stopped:
             "停止中"
         }
@@ -130,7 +132,7 @@ struct StemModePreviewView: View {
     private func comparisonPairLabel(_ pair: AudioComparisonPair) -> String {
         switch pair {
         case .inputVsCorrected:
-            "入力 vs \(processedTitle)"
+            String(format: AppLanguageSettings.string("入力 vs %@"), AppLanguageSettings.string(processedTitle))
         case .inputVsMastered:
             "入力 vs 最終版"
         case .correctedVsMastered:
@@ -141,11 +143,11 @@ struct StemModePreviewView: View {
     private func comparisonPairSummary(_ pair: AudioComparisonPair) -> String {
         switch pair {
         case .inputVsCorrected:
-            "入力と\(processedTitle)を聴き比べます"
+            String(format: AppLanguageSettings.string("入力と%@を聴き比べます"), AppLanguageSettings.string(processedTitle))
         case .inputVsMastered:
             "最初の音と最終版をそのまま聴き比べます"
         case .correctedVsMastered:
-            "\(processedTitle)とマスタリング後を聴き比べます"
+            String(format: AppLanguageSettings.string("%@とマスタリング後を聴き比べます"), AppLanguageSettings.string(processedTitle))
         }
     }
 }

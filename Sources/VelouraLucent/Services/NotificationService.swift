@@ -9,9 +9,9 @@ enum CompletionNotificationDomain: String, Sendable, Equatable {
     var notificationTitle: String {
         switch self {
         case .correction:
-            return "補正が完了しました"
+            return AppLanguageSettings.string("補正が完了しました")
         case .mastering:
-            return "マスタリングが完了しました"
+            return AppLanguageSettings.string("マスタリングが完了しました")
         }
     }
 }
@@ -28,15 +28,15 @@ enum CompletionNotificationItem: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .standardCorrection:
-            "通常補正"
+            AppLanguageSettings.string("通常補正")
         case .standardMastering:
-            "通常マスタリング"
+            AppLanguageSettings.string("通常マスタリング")
         case .stemCorrection:
-            "Stem Mode補正"
+            AppLanguageSettings.string("Stem Mode補正")
         case .stemRemix:
-            "Stem Mode再ミックス"
+            AppLanguageSettings.string("Stem Mode再ミックス")
         case .stemMastering:
-            "Stem Modeマスタリング"
+            AppLanguageSettings.string("Stem Modeマスタリング")
         }
     }
 }
@@ -63,13 +63,13 @@ enum CompletionNotificationAuthorizationStatus: Sendable, Equatable {
     var title: String {
         switch self {
         case .unknown:
-            "確認中"
+            AppLanguageSettings.string("確認中")
         case .notDetermined:
-            "未確認"
+            AppLanguageSettings.string("未確認")
         case .denied:
-            "未許可"
+            AppLanguageSettings.string("未許可")
         case .authorized:
-            "許可済み"
+            AppLanguageSettings.string("許可済み")
         }
     }
 }
@@ -196,7 +196,7 @@ final class NotificationService: CompletionNotificationReporting {
 
         let content = UNMutableNotificationContent()
         content.title = domain.notificationTitle
-        content.body = "Veloura Lucentでの処理が完了しました。"
+        content.body = AppLanguageSettings.string("Veloura Lucentでの処理が完了しました。")
         content.sound = .default
 
         let request = UNNotificationRequest(

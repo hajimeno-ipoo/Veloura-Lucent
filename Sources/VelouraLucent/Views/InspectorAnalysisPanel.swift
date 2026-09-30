@@ -110,7 +110,7 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(emptyStateTitle(state, selection: selectedAudio))
                             .font(.title3.bold())
-                        Text(unavailableDescription(selectedAudio))
+                        AppLocalizedText(unavailableDescription(selectedAudio))
                             .font(.body)
                             .foregroundStyle(.secondary)
                     }
@@ -163,7 +163,10 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
                 title: "ステレオ幅",
                 value: String(format: "%.2f", metrics.stereoWidth),
                 color: .primary,
-                help: "左右への広がり具合です。入力、\(processedTitle)、最終版を切り替えて変化を確認します。"
+                help: AppLanguageSettings.format(
+                    "左右への広がり具合です。入力、%@、最終版を切り替えて変化を確認します。",
+                    AppLanguageSettings.string(processedTitle)
+                )
             )
         }
     }
@@ -176,7 +179,7 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 5) {
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -205,8 +208,8 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
         }
         .help(
             completionReport == nil
-                ? "最終版と必要な解析が揃うと開けます"
-                : "音量、ノイズ、高域保持の完了後レポートを開きます"
+                ? AppLanguageSettings.string("最終版と必要な解析が揃うと開けます")
+                : AppLanguageSettings.string("音量、ノイズ、高域保持の完了後レポートを開きます")
         )
         .popover(isPresented: $isCompletionReportPresented, arrowEdge: .leading) {
             if let completionReport {
@@ -232,7 +235,10 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
 
     private var truePeakHelp: String {
         if selectedAudio == .mastered {
-            return "書き出しや再生で歪む可能性を見る最大ピークです。今回の設定上限は \(String(format: "%.1f", peakCeilingDB)) dBTP です。"
+            return AppLanguageSettings.format(
+                "書き出しや再生で歪む可能性を見る最大ピークです。今回の設定上限は %.1f dBTP です。",
+                peakCeilingDB
+            )
         }
         return "書き出しや再生で歪む可能性を見る最大ピークです。入力と処理途中の値は、最終版の設定上限による合否判定には使いません。"
     }
@@ -244,15 +250,15 @@ struct InspectorAnalysisPanelContent<AdditionalContent: View>: View {
         let title = selectionTitle(selection)
         switch state {
         case .notSelected:
-            return "\(title)は未選択です"
+            return AppLanguageSettings.format("%@は未選択です", AppLanguageSettings.string(title))
         case .idle:
-            return "\(title)は未解析です"
+            return AppLanguageSettings.format("%@は未解析です", AppLanguageSettings.string(title))
         case .running:
-            return "\(title)を解析中です"
+            return AppLanguageSettings.format("%@を解析中です", AppLanguageSettings.string(title))
         case .completed:
-            return "\(title)の解析結果を表示できません"
+            return AppLanguageSettings.format("%@の解析結果を表示できません", AppLanguageSettings.string(title))
         case .failed:
-            return "\(title)の解析に失敗しました"
+            return AppLanguageSettings.format("%@の解析に失敗しました", AppLanguageSettings.string(title))
         }
     }
 

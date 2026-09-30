@@ -6,6 +6,7 @@ struct SpectrogramComparisonView: View {
     let corrected: SpectrogramSnapshot?
     let mastered: SpectrogramSnapshot?
     let correctedTitle: String
+    @Environment(\.locale) private var locale
 
     init(
         input: SpectrogramSnapshot?,
@@ -27,7 +28,7 @@ struct SpectrogramComparisonView: View {
                 TermHelpButton(
                     title: "スペクトログラム",
                     reading: "すぺくとろぐらむ",
-                    description: "横方向が時間、縦方向が周波数です。色は入力、\(correctedTitle)、最終版で共通の表示dBを示します。赤に近いほど強く、青や黒に近いほど弱い成分です。"
+                    description: AppLanguageSettings.format("横方向が時間、縦方向が周波数です。色は入力、%@、最終版で共通の表示dBを示します。赤に近いほど強く、青や黒に近いほど弱い成分です。", AppLanguageSettings.string(correctedTitle))
                 )
                 Spacer()
             }
@@ -48,6 +49,7 @@ struct SpectrogramComparisonView: View {
             .padding(8)
             .velouraAdaptiveGlass(in: .rect(cornerRadius: 16))
         }
+        .environment(\.locale, locale)
     }
 
     private func spectrogramRow(title: String, snapshot: SpectrogramSnapshot?, tint: Color, sharedDuration: Double?) -> some View {
@@ -56,7 +58,7 @@ struct SpectrogramComparisonView: View {
                 Circle()
                     .fill(tint)
                     .frame(width: 8, height: 8)
-                Text(title)
+                AppLocalizedText(title)
                     .font(.callout.weight(.semibold))
             }
             .frame(width: 78, alignment: .leading)
@@ -92,7 +94,7 @@ struct SpectrogramComparisonView: View {
                         .border(Color.black.opacity(0.08))
                 }
                 .frame(height: 94)
-                .accessibilityLabel("\(title)のスペクトログラム")
+                .accessibilityLabel(AppLanguageSettings.format("%@のスペクトログラム", AppLanguageSettings.string(title)))
                 .graphHoverOverlay { time, frequency in
                     spectrogramHoverReadout(
                         title: title,
@@ -103,7 +105,7 @@ struct SpectrogramComparisonView: View {
                     )
                 }
             } else {
-                Text(unavailableText(for: title))
+                AppLocalizedText(unavailableText(for: title))
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 94)
@@ -226,7 +228,7 @@ struct SpectrogramComparisonView: View {
             return "音声を選ぶと表示します"
         }
         if title == correctedTitle {
-            return "\(correctedTitle)の準備が完了すると表示します"
+            return AppLanguageSettings.format("%@の準備が完了すると表示します", AppLanguageSettings.string(correctedTitle))
         }
         return "マスタリングが完了すると表示します"
     }

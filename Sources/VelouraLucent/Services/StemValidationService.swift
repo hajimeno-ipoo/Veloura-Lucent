@@ -44,6 +44,143 @@ struct StemValidationFailure: Equatable, Sendable {
     let detail: String
 }
 
+/// Translates only diagnostic message shapes emitted by this app. Unknown error text stays intact.
+enum StemDiagnosticLocalization {
+    static func issueDetail(_ detail: String) -> String {
+        translate(detail, templates: [
+            "期待: %@、実際: %@",
+            "期待フレーム: %@、実際: %@",
+            "channel 0: %@、実際: %@",
+            "期待sample rateは0より大きい有限値が必要です（実際: %@）",
+            "Stem Modeの検証契約はstereo 2 channelです（実際: %@）",
+            "band energy測定値が重複しています（実際: %@）",
+            "noise測定値が重複しています（実際: %@）",
+            "AudioComparisonServiceの分析に失敗しました: %@"
+        ])
+    }
+
+    static func reason(_ reason: String) -> String {
+        let exact = AppLanguageSettings.string(reason)
+        if exact != reason { return exact }
+
+        if reason.hasPrefix("Stem補正: ") || reason.hasPrefix("再ミックス安全確認: ") {
+            return reason.components(separatedBy: " / ").map { part in
+                for prefix in ["Stem補正: ", "再ミックス安全確認: "] where part.hasPrefix(prefix) {
+                    return AppLanguageSettings.format(
+                        prefix + "%@",
+                        self.reason(String(part.dropFirst(prefix.count)))
+                    )
+                }
+                return part
+            }.joined(separator: " / ")
+        }
+
+        if let components = capture(reason, template: "共通の補正判定: %@。%@") {
+            return AppLanguageSettings.format(
+                "共通の補正判定: %@。%@",
+                AppLanguageSettings.string(components[0]),
+                AppLanguageSettings.string(components[1])
+            )
+        }
+        for template in [
+            "既存の補正後高域保持を使用し、%@",
+            "既存の処理前後mud増加guardを使用し、%@",
+            "今回のStem自身との相対比較で%@を保護するため、問題区間のDSP差分だけを弱化",
+            "今回のStem自身との相対比較で%@を保護するため、そのDSPだけをスキップして処理直前Stemを維持"
+        ] {
+            if let components = capture(reason, template: template) {
+                return AppLanguageSettings.format(template, localizedComponents(components[0]))
+            }
+        }
+        if let components = capture(reason, template: "bass低域処理を個別guard: %@") {
+            let bassParts = components[0].components(separatedBy: "、ランブル除去=")
+            let results = bassParts.count == 2
+                ? [bassParts[0], "ランブル除去=" + bassParts[1]]
+                : [components[0]]
+            let items = results.map { item in
+                guard let separator = item.range(of: "=") else { return item }
+                let name = String(item[..<separator.lowerBound])
+                let result = String(item[separator.upperBound...])
+                return AppLanguageSettings.format(
+                    "%@=%@",
+                    AppLanguageSettings.string(name),
+                    translatedBassResult(result)
+                )
+            }
+            return AppLanguageSettings.format(
+                "bass低域処理を個別guard: %@",
+                items.joined(separator: AppLanguageSettings.string("、"))
+            )
+        }
+        return translate(reason, templates: [
+            "当該DSPだけをスキップし、処理直前Stemを維持: %@",
+            "役割別guardを安全に完了できないため、音を変更せず処理直前Stemを維持: %@",
+            "%@のStem補正計画に全工程が揃っていません。",
+            "%@のStem補正計画で%@が重複しています。",
+            "%@のStem補正計画で%@の判断理由がありません。",
+            "%@のStem補正がユーザー設定の上限を超えています（%@）。",
+            "Stem補正の役割が一致しません（期待: %@、実際: %@）。",
+            "%@のStem補正にraw Stem解析結果が渡されていません。",
+            "%@のStem補正に必要な共通解析結果がありません。",
+            "%@の%@がStem補正後の構造契約を満たす音声を生成できません。",
+            "Stem Modeに%@がありません。",
+            "Stem Modeの%@構造検証に失敗しました（%@件）。",
+            "Stem工程失敗後の未完成ファイルを削除できませんでした（元の失敗: %@、削除失敗: %@）。"
+        ])
+    }
+
+    private static func translatedBassResult(_ result: String) -> String {
+        let exact = AppLanguageSettings.string(result)
+        if exact != result { return exact }
+        for template in ["%@保護のため弱化", "%@保護のためスキップ"] {
+            if let components = capture(result, template: template) {
+                return AppLanguageSettings.format(template, localizedComponents(components[0]))
+            }
+        }
+        return result
+    }
+
+    private static func localizedComponents(_ text: String) -> String {
+        text.components(separatedBy: "、")
+            .map(AppLanguageSettings.string)
+            .joined(separator: AppLanguageSettings.string("、"))
+    }
+
+    private static func translate(_ source: String, templates: [String]) -> String {
+        let exact = AppLanguageSettings.string(source)
+        if exact != source { return exact }
+        for template in templates {
+            if let arguments = capture(source, template: template) {
+                return String(
+                    format: AppLanguageSettings.string(template),
+                    locale: AppLanguageSettings.locale,
+                    arguments: arguments.map { AppLanguageSettings.string($0) as CVarArg }
+                )
+            }
+        }
+        return source
+    }
+
+    private static func capture(_ source: String, template: String) -> [String]? {
+        let parts = template.components(separatedBy: "%@")
+        guard parts.count > 1, source.hasPrefix(parts[0]) else { return nil }
+        var remaining = source.dropFirst(parts[0].count)
+        var values: [String] = []
+        for (index, part) in parts.dropFirst().enumerated() {
+            if part.isEmpty && index == parts.count - 2 {
+                values.append(String(remaining))
+                remaining = remaining[remaining.endIndex...]
+            } else if let range = remaining.range(of: part) {
+                values.append(String(remaining[..<range.lowerBound]))
+                remaining = remaining[range.upperBound...]
+            } else {
+                return nil
+            }
+        }
+        return remaining.isEmpty ? values : nil
+    }
+}
+
 struct StemValidationMeasurement: Equatable, Sendable, Identifiable {
     let id: String
     let value: Double

@@ -17,6 +17,7 @@ FINAL_APP_BUNDLE="$DIST_DIR/$DISPLAY_NAME.app"
 FINAL_APP_BINARY="$FINAL_APP_BUNDLE/Contents/MacOS/$BUILD_PRODUCT_NAME"
 LEGACY_APP_BUNDLE="$DIST_DIR/SpectralLifter.app"
 APP_LOCALIZATION_SOURCE="$ROOT_DIR/Resources/ja.lproj"
+EN_APP_LOCALIZATION_SOURCE="$ROOT_DIR/Resources/en.lproj"
 ICON_SOURCE="$ROOT_DIR/Resources/AppIcon-1024.png"
 ICON_COMPOSER_SOURCE="$ROOT_DIR/Resources/VelouraLucent.icon"
 ICON_COMPOSER_NAME="VelouraLucent"
@@ -31,6 +32,7 @@ APP_RESOURCES=""
 APP_BINARY=""
 INFO_PLIST=""
 TARGET_RESOURCE_BUNDLE=""
+TARGET_RESOURCE_BUNDLE_RESOURCES=""
 TARGET_RESOURCE_BUNDLE_INFO=""
 STAGED_METALLIB=""
 MLX_RESOURCE_BUNDLE=""
@@ -117,8 +119,9 @@ initialize_staging_paths() {
   APP_BINARY="$APP_MACOS/$BUILD_PRODUCT_NAME"
   INFO_PLIST="$APP_CONTENTS/Info.plist"
   TARGET_RESOURCE_BUNDLE="$APP_RESOURCES/$RESOURCE_BUNDLE_NAME"
-  TARGET_RESOURCE_BUNDLE_INFO="$TARGET_RESOURCE_BUNDLE/Info.plist"
-  STAGED_METALLIB="$TARGET_RESOURCE_BUNDLE/StemModels/MLX/mlx.metallib"
+  TARGET_RESOURCE_BUNDLE_RESOURCES="$TARGET_RESOURCE_BUNDLE/Contents/Resources"
+  TARGET_RESOURCE_BUNDLE_INFO="$TARGET_RESOURCE_BUNDLE/Contents/Info.plist"
+  STAGED_METALLIB="$TARGET_RESOURCE_BUNDLE_RESOURCES/StemModels/MLX/mlx.metallib"
   MLX_RESOURCE_BUNDLE="$APP_RESOURCES/mlx-swift_Cmlx.bundle"
   MLX_BUNDLE_CONTENTS="$MLX_RESOURCE_BUNDLE/Contents"
   MLX_BUNDLE_RESOURCES="$MLX_BUNDLE_CONTENTS/Resources"
@@ -356,14 +359,14 @@ stage_stem_runtime_assets() {
     die "SwiftPM resource bundle is missing: $TARGET_RESOURCE_BUNDLE"
   verify_asset "$STAGED_METALLIB" "$METALLIB_BYTES" "$METALLIB_SHA256"
 
-  [[ ! -e "$TARGET_RESOURCE_BUNDLE/StemModels/htdemucs/htdemucs.safetensors" ]] ||
+  [[ ! -e "$TARGET_RESOURCE_BUNDLE_RESOURCES/StemModels/htdemucs/htdemucs.safetensors" ]] ||
     die "downloadable AI model weights must not be packaged in the application"
-  [[ ! -e "$TARGET_RESOURCE_BUNDLE/StemModels/htdemucs/htdemucs_config.json" ]] ||
+  [[ ! -e "$TARGET_RESOURCE_BUNDLE_RESOURCES/StemModels/htdemucs/htdemucs_config.json" ]] ||
     die "downloadable AI model configuration must not be packaged in the application"
 
   mkdir -p "$MLX_BUNDLE_RESOURCES"
   /bin/mv "$STAGED_METALLIB" "$PACKAGED_METALLIB"
-  /bin/rmdir "$TARGET_RESOURCE_BUNDLE/StemModels/MLX"
+  /bin/rmdir "$TARGET_RESOURCE_BUNDLE_RESOURCES/StemModels/MLX"
   write_target_resource_bundle_info
   write_mlx_resource_bundle_info
 }
@@ -378,15 +381,15 @@ verify_packaged_stem_layout() {
     -print -quit | /usr/bin/grep -q .; then
     die "downloadable AI model assets must not be present in the packaged application"
   fi
-  [[ -f "$TARGET_RESOURCE_BUNDLE/ThirdPartyNotices/README.md" ]] ||
+  [[ -f "$TARGET_RESOURCE_BUNDLE_RESOURCES/ThirdPartyNotices/README.md" ]] ||
     die "Stem Mode third-party notices are missing from the packaged app"
-  /usr/bin/diff -qr \
+  /usr/bin/diff -qr -x .DS_Store \
     "$ROOT_DIR/Sources/VelouraLucent/Resources/ThirdPartyNotices" \
-    "$TARGET_RESOURCE_BUNDLE/ThirdPartyNotices" >/dev/null ||
+    "$TARGET_RESOURCE_BUNDLE_RESOURCES/ThirdPartyNotices" >/dev/null ||
     die "packaged third-party notices differ from the verified source inventory"
   /usr/bin/cmp -s \
     "$ROOT_DIR/Sources/VelouraLucent/Resources/StemModels/stem-model-manifest.json" \
-    "$TARGET_RESOURCE_BUNDLE/StemModels/stem-model-manifest.json" ||
+    "$TARGET_RESOURCE_BUNDLE_RESOURCES/StemModels/stem-model-manifest.json" ||
     die "packaged Stem Mode manifest differs from the verified source manifest"
   /usr/bin/plutil -lint "$TARGET_RESOURCE_BUNDLE_INFO" "$MLX_BUNDLE_INFO" >/dev/null
 
@@ -401,9 +404,18 @@ verify_packaged_stem_layout() {
 
 verify_packaged_layout() {
   local app_root_entry_count=""
+  local language=""
 
   verify_packaged_stem_layout
   /usr/bin/plutil -lint "$INFO_PLIST" >/dev/null
+  for language in ja en; do
+    [[ -f "$APP_RESOURCES/$language.lproj/Localizable.strings" ]] ||
+      die "packaged app localization is missing: $language"
+    /usr/bin/cmp -s \
+      "$TARGET_RESOURCE_BUNDLE_RESOURCES/$language.lproj/Localizable.strings" \
+      "$APP_RESOURCES/$language.lproj/Localizable.strings" ||
+      die "app localization differs from the SwiftPM resource bundle: $language"
+  done
   app_root_entry_count="$(
     /usr/bin/find "$APP_BUNDLE" -mindepth 1 -maxdepth 1 -print |
       /usr/bin/wc -l |
@@ -633,13 +645,15 @@ RESOURCE_BUNDLE="$BUILD_DIR/$RESOURCE_BUNDLE_NAME"
 
 [[ -f "$BUILD_BINARY" ]] || die "built executable is missing: $BUILD_BINARY"
 [[ -d "$RESOURCE_BUNDLE" ]] || die "built SwiftPM resource bundle is missing: $RESOURCE_BUNDLE"
+[[ -d "$RESOURCE_BUNDLE/Contents/Resources" ]] ||
+  die "built SwiftPM resource bundle has no Contents/Resources: $RESOURCE_BUNDLE"
 
 initialize_staging_paths
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 prepare_icon_composer_source
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
-/usr/bin/ditto "$RESOURCE_BUNDLE" "$TARGET_RESOURCE_BUNDLE"
+/usr/bin/ditto "$RESOURCE_BUNDLE/Contents" "$TARGET_RESOURCE_BUNDLE/Contents"
 stage_stem_runtime_assets
 generate_app_icon_assets
 if [[ -f "$ICON_SOURCE" ]]; then
@@ -651,6 +665,16 @@ fi
 if [[ -d "$APP_LOCALIZATION_SOURCE" ]]; then
   cp -R "$APP_LOCALIZATION_SOURCE" "$APP_RESOURCES/ja.lproj"
 fi
+if [[ -d "$EN_APP_LOCALIZATION_SOURCE" ]]; then
+  cp -R "$EN_APP_LOCALIZATION_SOURCE" "$APP_RESOURCES/en.lproj"
+fi
+for language in ja en; do
+  [[ -f "$TARGET_RESOURCE_BUNDLE_RESOURCES/$language.lproj/Localizable.strings" ]] ||
+    die "SwiftPM localization is missing: $language"
+  mkdir -p "$APP_RESOURCES/$language.lproj"
+  cp "$TARGET_RESOURCE_BUNDLE_RESOURCES/$language.lproj/Localizable.strings" \
+    "$APP_RESOURCES/$language.lproj/Localizable.strings"
+done
 
 ICON_PLIST_BLOCK=""
 if [[ -d "$ICON_COMPOSER_SOURCE" ]]; then
@@ -681,6 +705,7 @@ cat >"$INFO_PLIST" <<PLIST
   <key>CFBundleLocalizations</key>
   <array>
     <string>ja</string>
+    <string>en</string>
   </array>
 ${ICON_PLIST_BLOCK}
   <key>CFBundlePackageType</key>

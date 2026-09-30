@@ -12,6 +12,7 @@ struct StemModelManagementSection: View {
     let isDisabled: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @State private var isSeparationHelpPresented = false
     @State private var presentedConfirmation: StemModelDownloadConfirmation?
     @State private var confirmationErrorMessage: String?
@@ -66,7 +67,7 @@ struct StemModelManagementSection: View {
                     onAction: performRecoveryAction
                 )
                 .alert(
-                    downloadConfirmationTitle,
+                    AppLanguageSettings.string(downloadConfirmationTitle),
                     isPresented: downloadConfirmationIsPresented,
                     presenting: presentedConfirmation
                 ) { confirmation in
@@ -76,15 +77,15 @@ struct StemModelManagementSection: View {
                     Button("キャンセル", role: .cancel) {
                         cancelPendingConfirmation()
                     }
-                    Button(presentation.affirmativeTitle) {
+                    Button(AppLanguageSettings.string(presentation.affirmativeTitle)) {
                         confirmAcquisition()
                     }
                 } message: { confirmation in
-                    Text(
+                    Text(AppLanguageSettings.string(
                         DownloadConfirmationPresentation(
                             confirmation: confirmation
                         ).alertMessage
-                    )
+                    ))
                 }
             }
 
@@ -106,7 +107,7 @@ struct StemModelManagementSection: View {
                     confirmModelRemoval(model)
                 }
             } message: { model in
-                Text("「\(model.displayName)」を削除します。再利用には再取得が必要です。")
+                Text(AppLanguageSettings.format("「%@」を削除します。再利用には再取得が必要です。", model.displayName))
             }
         }
         .transaction { transaction in
@@ -133,6 +134,7 @@ struct StemModelManagementSection: View {
             Text(deletionErrorMessage ?? "")
         }
         .accessibilityElement(children: .contain)
+        .environment(\.locale, locale)
     }
 
     private var currentPresentation: Presentation {
@@ -163,7 +165,7 @@ struct StemModelManagementSection: View {
 
     private var downloadConfirmationTitle: String {
         guard let presentedConfirmation else {
-            return "AIモデルを取得しますか？"
+            return AppLanguageSettings.string("AIモデルを取得しますか？")
         }
         return DownloadConfirmationPresentation(
             confirmation: presentedConfirmation
@@ -218,19 +220,12 @@ struct StemModelManagementSection: View {
         let roles = modelPresentation?.runContract.separationModel == selectedModel
             ? modelPresentation?.runContract.activeRoles ?? profile.sourceOrder
             : profile.sourceOrder
-        let outputDescription = "\(roles.count)Stem（\(roles.map(\.stemModeDisplayTitle).joined(separator: "、"))）"
+        let outputDescription = AppLanguageSettings.format("%dStem（%@）", roles.count, roles.map { AppLanguageSettings.string($0.stemModeDisplayTitle) }.joined(separator: AppLanguageSettings.string("、")))
         if selectedModel == .bsRoformerSW {
-            return """
-            モデル　\(modelName)
-            revision　\(revision)
-            方式　STFT／62帯域分割／時間・周波数RoFormer
-            出力　\(outputDescription)
-            設定（固定）　STFT FFT / hop / window　2048 / 512 / 2048
-            　　　　　　帯域 / 周波数ビン　　　 62 / 1025
-            　　　　　　推論チャンク　　　　　 801フレーム
-            　　　　　　短音源 / ステップ　　　 10秒未満: 256フレーム / 8秒
-            　　　　　　dim / depth / heads　　 256 / 12 / 8
-            """
+            return AppLanguageSettings.format(
+                "モデル　%@\nrevision　%@\n方式　STFT／62帯域分割／時間・周波数RoFormer\n出力　%@\n設定（固定）　STFT FFT / hop / window　2048 / 512 / 2048\n　　　　　　帯域 / 周波数ビン　　　 62 / 1025\n　　　　　　推論チャンク　　　　　 801フレーム\n　　　　　　短音源 / ステップ　　　 10秒未満: 256フレーム / 8秒\n　　　　　　dim / depth / heads　　 256 / 12 / 8",
+                modelName, revision, outputDescription
+            )
         }
 
         let displayedSettings = settings ?? StemSeparationSettings(
@@ -246,25 +241,20 @@ struct StemModelManagementSection: View {
         let splitAndSegment =
             "\(displayedSettings.split ? "true" : "false") / \(segmentText(displayedSettings))"
         let seed = displayedSettings.seed?.formatted(.number.grouping(.never))
-            ?? "入力選択後に生成"
+            ?? AppLanguageSettings.string("入力選択後に生成")
         let batchSizeAndSeed = "\(displayedSettings.batchSize) / \(seed)"
-        return """
-        モデル　\(modelName)
-        revision　\(revision)
-        方式　Demucs v4
-        出力　\(outputDescription)
-        設定　shifts / overlap　\(shiftsAndOverlap)
-        　　　split / segment　\(splitAndSegment)
-        　　　batch size / run seed　\(batchSizeAndSeed)
-        """
+        return AppLanguageSettings.format(
+            "モデル　%@\nrevision　%@\n方式　Demucs v4\n出力　%@\n設定　shifts / overlap　%@\n　　　split / segment　%@\n　　　batch size / run seed　%@",
+            modelName, revision, outputDescription, shiftsAndOverlap, splitAndSegment, batchSizeAndSeed
+        )
     }
 
     private func segmentText(_ settings: StemSeparationSettings) -> String {
         switch settings.segmentLength {
         case .modelContract:
-            "\(StemSeparationSettings.verifiedModelContractSegmentSeconds.formatted(.number.precision(.fractionLength(1))))秒"
+            AppLanguageSettings.format("%@秒", StemSeparationSettings.verifiedModelContractSegmentSeconds.formatted(.number.precision(.fractionLength(1))))
         case .seconds(let seconds):
-            "\(seconds.formatted(.number.precision(.fractionLength(1))))秒"
+            AppLanguageSettings.format("%@秒", seconds.formatted(.number.precision(.fractionLength(1))))
         }
     }
 
@@ -383,7 +373,7 @@ extension StemModelManagementSection {
                     title: "このMacではStem Modeを実行できません",
                     statusText: "利用不可",
                     message: "Stem ModeはApple Silicon専用です。現在の実行アーキテクチャではAIモデルを取得せず、通常モードだけを利用できます。",
-                    detail: "実行アーキテクチャ: \(processArchitecture)",
+                    detail: AppLanguageSettings.format("実行アーキテクチャ: %@", processArchitecture),
                     symbolName: "cpu",
                     tone: .warning,
                     isChecking: false,
@@ -575,8 +565,8 @@ extension StemModelManagementSection {
                 manifest: manifest
             )
             return ProgressPresentation(
-                stageTitle: stageTitle,
-                stageDetail: stageDetail,
+                stageTitle: AppLanguageSettings.string(stageTitle),
+                stageDetail: AppLanguageSettings.string(stageDetail),
                 phase: progress.phase,
                 overallFraction: overallFraction,
                 receivedBytes: receivedBytes,
@@ -702,12 +692,12 @@ private extension StemModelManagementSection {
 
         var body: some View {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3.bold())
                     .foregroundStyle(color)
-                Text(emphasis)
+                AppLocalizedText(emphasis)
                     .font(.title3.weight(.semibold))
-                Text(detail)
+                AppLocalizedText(detail)
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -763,14 +753,14 @@ private extension StemModelManagementSection {
         var body: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Stem分離モデルの詳しい比較")
+                    AppLocalizedText("Stem分離モデルの詳しい比較")
                         .font(.title3.bold())
 
                     HelpSection(title: "仕組み") {
                         selectedModelDescription
                     }
 
-                    HelpSection(title: "\(selectedModel.displayName)の特徴") {
+                    HelpSection(title: AppLanguageSettings.format("%@の特徴", selectedModel.displayName)) {
                         HelpBulletList(items: selectedModelFeatures)
                     }
 
@@ -778,7 +768,7 @@ private extension StemModelManagementSection {
                         ComparisonTable()
                     }
 
-                    Text("分離結果は、楽曲、録音状態、音の重なり方によって変わります。")
+                    AppLocalizedText("分離結果は、楽曲、録音状態、音の重なり方によって変わります。")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .padding(10)
@@ -786,7 +776,7 @@ private extension StemModelManagementSection {
                         .velouraAdaptiveGlass(in: .rect(cornerRadius: 12))
 
                     HelpSection(title: "選択中モデルの詳細情報") {
-                        Text(separationInformation)
+                    Text(separationInformation)
                             .font(.body.monospaced())
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
@@ -840,7 +830,7 @@ private extension StemModelManagementSection {
 
         var body: some View {
             VStack(alignment: .leading, spacing: 10) {
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3.bold())
                 content
             }
@@ -853,9 +843,9 @@ private extension StemModelManagementSection {
 
         var body: some View {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3.bold())
-                Text(description)
+                AppLocalizedText(description)
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -874,7 +864,7 @@ private extension StemModelManagementSection {
                             .font(.system(size: 8))
                             .foregroundStyle(.secondary)
                             .accessibilityHidden(true)
-                        Text(item)
+                        AppLocalizedText(item)
                             .font(.body)
                     }
                     .accessibilityElement(children: .combine)
@@ -894,7 +884,7 @@ private extension StemModelManagementSection {
         var body: some View {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
-                    Text("比較する点")
+                    AppLocalizedText("比較する点")
                     Text("HTDemucs")
                     Text("BS-RoFormer-SW")
                 }
@@ -904,9 +894,9 @@ private extension StemModelManagementSection {
 
                 ForEach(rows, id: \.0) { row in
                     GridRow(alignment: .top) {
-                        Text(row.0).fontWeight(.semibold)
-                        Text(row.1)
-                        Text(row.2)
+                        AppLocalizedText(row.0).fontWeight(.semibold)
+                        AppLocalizedText(row.1)
+                        AppLocalizedText(row.2)
                     }
                     .font(.body)
                     Divider().gridCellColumns(3)
@@ -932,7 +922,7 @@ private extension StemModelManagementSection {
                                 .foregroundStyle(toneColor)
                                 .accessibilityHidden(true)
                         }
-                        Text(presentation.statusText)
+                        AppLocalizedText(presentation.statusText)
                             .font(.title3)
                             .fontWeight(.semibold)
                             .foregroundStyle(toneColor)
@@ -940,15 +930,15 @@ private extension StemModelManagementSection {
                 }
                 .font(.title3)
 
-                Text(presentation.title)
+                AppLocalizedText(presentation.title)
                     .font(.title3.bold())
-                Text(presentation.message)
+                AppLocalizedText(presentation.message)
                     .font(.body)
                     .foregroundStyle(.secondary)
 
                 if let detail = presentation.detail {
                     LabeledContent {
-                        Text(detail)
+                        AppLocalizedText(detail)
                             .font(.body)
                             .multilineTextAlignment(.trailing)
                             .textSelection(.enabled)
@@ -1016,7 +1006,7 @@ private extension StemModelManagementSection {
                     action: action
                 )
                 .keyboardShortcut(.defaultAction)
-                .help(presentation.help)
+                .help(AppLanguageSettings.string(presentation.help))
             } else {
                 LiquidGlassActionButton(
                     title: presentation.title,
@@ -1024,7 +1014,7 @@ private extension StemModelManagementSection {
                     layout: .inspectorWide,
                     action: action
                 )
-                .help(presentation.help)
+                .help(AppLanguageSettings.string(presentation.help))
             }
         }
     }
@@ -1042,11 +1032,11 @@ private extension StemModelManagementSection {
                 action: action
             )
             .foregroundStyle(.red)
-            .help(
+            .help(AppLanguageSettings.string(
                 isDisabled
                     ? "選択中モデルに削除できる取得データがないか、モデル操作・Stem処理が進行中です。"
                     : "選択中モデルの取得データを削除する確認を開きます。"
-            )
+            ))
             .accessibilityHint("もう一方のモデルと作成済み音声は削除しません。")
         }
     }

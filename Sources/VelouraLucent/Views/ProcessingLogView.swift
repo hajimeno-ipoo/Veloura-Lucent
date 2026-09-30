@@ -9,6 +9,7 @@ struct ProcessingLogSection: Identifiable {
 
 struct ProcessingLogView: View {
     let sections: [ProcessingLogSection]
+    @Environment(\.locale) private var locale
 
     init(
         correctionLines: [String],
@@ -61,16 +62,17 @@ struct ProcessingLogView: View {
                 )
             }
         }
+        .environment(\.locale, locale)
     }
 
     private func logCard(title: String, lines: [String], placeholder: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.headline)
 
             Group {
                 if lines.isEmpty {
-                    Text(placeholder)
+                    AppLocalizedText(placeholder)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -79,7 +81,7 @@ struct ProcessingLogView: View {
                 } else {
                     LazyVStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                            Text(line)
+                            Text(ProcessingLogLineLocalization.string(line))
                                 .font(.callout.monospaced())
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)

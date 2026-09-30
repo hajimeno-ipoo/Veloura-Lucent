@@ -10,6 +10,7 @@ struct WorkspaceToolbarView: View {
     @State private var highlightedTarget: LiquidGlassToolbarTarget?
     @Environment(\.openWindow) private var openWindow
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @Namespace private var glassNamespace
 
     var body: some View {
@@ -24,6 +25,7 @@ struct WorkspaceToolbarView: View {
             comparisonVideoButton
         }
         .padding(.top, 6)
+        .environment(\.locale, locale)
     }
 
     private var actionGroup: some View {
@@ -53,7 +55,7 @@ struct WorkspaceToolbarView: View {
                 }
                 .buttonStyle(.plain)
                 .onHover { updateHighlight(.runCorrection, isHovering: $0) }
-                .help(correctionHelp)
+                .help(AppLanguageSettings.string(correctionHelp))
                 .disabled(isCorrectionDisabled)
 
                 if commandActions.processingMode == .stem {
@@ -69,11 +71,11 @@ struct WorkspaceToolbarView: View {
                     }
                     .buttonStyle(.plain)
                     .onHover { updateHighlight(.runRemix, isHovering: $0) }
-                    .help(
+                    .help(AppLanguageSettings.string(
                         commandActions.isRemixRunning
                             ? "Stem再ミックスをキャンセルします"
                             : commandActions.remixHelp
-                    )
+                    ))
                     .disabled(
                         commandActions.isRemixRunning
                             ? !commandActions.canCancelRemix
@@ -93,7 +95,7 @@ struct WorkspaceToolbarView: View {
                 }
                 .buttonStyle(.plain)
                 .onHover { updateHighlight(.runMastering, isHovering: $0) }
-                .help(masteringHelp)
+                .help(AppLanguageSettings.string(masteringHelp))
                 .disabled(isMasteringDisabled)
             }
             .padding(4)
@@ -105,7 +107,7 @@ struct WorkspaceToolbarView: View {
     private var exportMenu: some View {
         Menu {
             ForEach(AudioExportFormat.allCases) { format in
-                Menu(format.menuTitle) {
+                Menu("\(AppLanguageSettings.string(format.title)) (\(AppLanguageSettings.string(format.detail)))") {
                     exportMenuContent(format: format)
                 }
             }
@@ -118,7 +120,7 @@ struct WorkspaceToolbarView: View {
         .velouraAdaptiveGlass(in: .capsule, interactive: true)
         .onHover { updateHighlight(.export, isHovering: $0) }
         .accessibilityLabel("書き出し")
-        .help(exportHelp)
+        .help(AppLanguageSettings.string(exportHelp))
     }
 
     private var comparisonVideoButton: some View {
@@ -144,7 +146,7 @@ struct WorkspaceToolbarView: View {
         .velouraAdaptiveGlass(in: .capsule, interactive: true)
         .onHover { updateHighlight(.comparisonVideo, isHovering: $0) }
         .accessibilityLabel("比較動画を作成")
-        .help(comparisonVideoHelp)
+        .help(AppLanguageSettings.string(comparisonVideoHelp))
         .disabled(!comparisonVideoLaunch.isReady)
     }
 
@@ -164,7 +166,7 @@ struct WorkspaceToolbarView: View {
             if exportAction.startsSection {
                 Divider()
             }
-            Button(exportAction.title) {
+            Button(AppLanguageSettings.string(exportAction.title)) {
                 exportAction.perform(format)
             }
             .disabled(!exportAction.isEnabled)

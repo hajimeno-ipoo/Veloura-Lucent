@@ -38,28 +38,32 @@ struct VelouraCommandActions {
 
     var correctionCommandTitle: String {
         if isCorrectionCancelling {
-            return "キャンセル中..."
+            return AppLanguageSettings.string("キャンセル中...")
         }
-        return isCorrectionRunning ? "補正をキャンセル" : "補正を実行"
+        return AppLanguageSettings.string(isCorrectionRunning ? "補正をキャンセル" : "補正を実行")
     }
 
     var masteringCommandTitle: String {
         if isMasteringCancelling {
-            return "キャンセル中..."
+            return AppLanguageSettings.string("キャンセル中...")
         }
-        return isMasteringRunning ? "マスタリングをキャンセル" : "マスタリングを実行"
+        return AppLanguageSettings.string(isMasteringRunning ? "マスタリングをキャンセル" : "マスタリングを実行")
     }
 
     var remixCommandTitle: String {
         if isRemixCancelling {
-            return "キャンセル中..."
+            return AppLanguageSettings.string("キャンセル中...")
         }
-        return isRemixRunning ? "再ミックスをキャンセル" : "再ミックスを実行"
+        return AppLanguageSettings.string(isRemixRunning ? "再ミックスをキャンセル" : "再ミックスを実行")
     }
 
     var remixHelp: String {
-        let count = stemCount.map(String.init) ?? "全"
-        return "補正済み\(count)Stemを自動値と手動上書きで再ミックスします"
+        let count = stemCount.map(String.init) ?? AppLanguageSettings.string("全")
+        return String(
+            format: AppLanguageSettings.string("補正済み%@Stemを自動値と手動上書きで再ミックスします"),
+            locale: AppLanguageSettings.locale,
+            count
+        )
     }
 
 }
@@ -71,11 +75,11 @@ struct VelouraWorkspaceChromeActions {
     let toggleInspector: @MainActor () -> Void
 
     var sidebarCommandTitle: String {
-        isSidebarPresented ? "サイドバーを隠す" : "サイドバーを表示"
+        AppLanguageSettings.string(isSidebarPresented ? "サイドバーを隠す" : "サイドバーを表示")
     }
 
     var inspectorCommandTitle: String {
-        isInspectorPresented ? "設定を隠す" : "設定を表示"
+        AppLanguageSettings.string(isInspectorPresented ? "設定を隠す" : "設定を表示")
     }
 }
 
@@ -172,9 +176,9 @@ struct VelouraPlaybackPresentationState {
     init(
         preview: AudioPreviewController,
         playbackInterlocks: [AudioPreviewController],
-        sideACommandTitle: String = "Aを再生",
-        sideBCommandTitle: String = "Bを再生",
-        comparisonSwitchCommandTitle: String = "A/B切替",
+        sideACommandTitle: String = AppLanguageSettings.string("Aを再生"),
+        sideBCommandTitle: String = AppLanguageSettings.string("Bを再生"),
+        comparisonSwitchCommandTitle: String = AppLanguageSettings.string("A/B切替"),
         allowsComparisonPairSelection: Bool = true
     ) {
         self.preview = preview
@@ -194,7 +198,7 @@ struct VelouraPlaybackPresentationState {
     var isLoudnessMatchingEnabled: Bool { preview.isLoudnessMatchedComparisonEnabled }
 
     var playbackCommandTitle: String {
-        isPlaybackRunning ? "一時停止" : "再生"
+        AppLanguageSettings.string(isPlaybackRunning ? "一時停止" : "再生")
     }
 
     func togglePlayback() {
@@ -306,6 +310,7 @@ struct VelouraCommands: Commands {
     @FocusedValue(\.velouraKeyboardShortcutManagerPresentation) private var keyboardShortcutManagerPresentation
     @FocusedValue(\.velouraCommandsSuspended) private var commandsSuspended
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(AppLanguageSettings.key) private var languageSelectionRawValue = AppLanguageSelection.system.rawValue
     private let shortcutSettings: KeyboardShortcutSettings
 
     init(shortcutSettings: KeyboardShortcutSettings = .shared) {
@@ -313,33 +318,43 @@ struct VelouraCommands: Commands {
     }
 
     private var processedAudioTitle: String {
-        actions?.processedAudioTitle ?? "補正後"
+        localized(actions?.processedAudioTitle ?? "補正後")
+    }
+
+    private func localized(_ key: String) -> String {
+        // Reading AppStorage makes the Commands body refresh as soon as the language changes.
+        _ = languageSelectionRawValue
+        return AppLanguageSettings.string(key)
+    }
+
+    private func localizedFormat(_ key: String, _ arguments: CVarArg...) -> String {
+        String(format: localized(key), locale: AppLanguageSettings.locale, arguments: arguments)
     }
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
-            Button("Veloura Lucentについて", systemImage: "info.circle") {
+            Button(localized("Veloura Lucentについて"), systemImage: "info.circle") {
                 openWindow(id: "about")
             }
 
             Divider()
 
-            Button("キーボード操作…", systemImage: "keyboard") {
+            Button(localized("キーボード操作…"), systemImage: "keyboard") {
                 keyboardShortcutManagerPresentation?.wrappedValue = true
             }
             .disabled(commandsAreSuspended || keyboardShortcutManagerPresentation == nil)
         }
 
         CommandGroup(after: .newItem) {
-            Button("音声ファイルを開く…", systemImage: "waveform.badge.plus") {
+            Button(localized("音声ファイルを開く…"), systemImage: "waveform.badge.plus") {
                 actions?.chooseInputAudio()
             }
             .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .chooseInputAudio))
             .disabled(commandsAreSuspended || actions?.canChooseInput != true)
         }
 
-        CommandMenu("処理") {
-            Button(actions?.correctionCommandTitle ?? "補正を実行") {
+        CommandMenu(localized("処理")) {
+            Button(actions?.correctionCommandTitle ?? localized("補正を実行")) {
                 if actions?.isCorrectionRunning == true {
                     actions?.cancelCorrection()
                 } else {
@@ -353,7 +368,7 @@ struct VelouraCommands: Commands {
             )
 
             if actions?.processingMode == .stem {
-                Button(actions?.remixCommandTitle ?? "再ミックスを実行") {
+                Button(actions?.remixCommandTitle ?? localized("再ミックスを実行")) {
                     if actions?.isRemixRunning == true {
                         actions?.cancelRemix()
                     } else {
@@ -368,7 +383,7 @@ struct VelouraCommands: Commands {
                 )
             }
 
-            Button(actions?.masteringCommandTitle ?? "マスタリングを実行") {
+            Button(actions?.masteringCommandTitle ?? localized("マスタリングを実行")) {
                 if actions?.isMasteringRunning == true {
                     actions?.cancelMastering()
                 } else {
@@ -382,14 +397,14 @@ struct VelouraCommands: Commands {
             )
         }
 
-        CommandMenu("再生") {
+        CommandMenu(localized("再生")) {
             if let stemPlaybackState {
-                Menu("入力／\(processedAudioTitle)／最終版") {
+                Menu(localizedFormat("入力／%@／最終版", processedAudioTitle)) {
                     primaryComparisonPlaybackCommands()
                 }
 
-                Menu("\(stemPlaybackState.selectedStemTitle)：raw／補正後") {
-                    Menu("再生するStem") {
+                Menu(localizedFormat("%@：raw／補正後", localized(stemPlaybackState.selectedStemTitle))) {
+                    Menu(localized("再生するStem")) {
                         stemPreviewRoleButtons()
                     }
 
@@ -398,7 +413,7 @@ struct VelouraCommands: Commands {
                     fixedComparisonPlaybackCommands(stemPlaybackState.stemComparison)
                 }
 
-                Menu("補正後／再ミックス") {
+                Menu(localized("補正後／再ミックス")) {
                     fixedComparisonPlaybackCommands(stemPlaybackState.remixComparison)
                 }
             } else {
@@ -407,14 +422,14 @@ struct VelouraCommands: Commands {
         }
 
         CommandGroup(after: .importExport) {
-            Menu("書き出し") {
+            Menu(localized("書き出し")) {
                 ForEach(AudioExportFormat.allCases) { format in
-                    Menu(format.menuTitle) {
+                    Menu(localizedFormat("%@（%@）", localized(format.title), localized(format.detail))) {
                         ForEach(actions?.exportActions ?? []) { exportAction in
                             if exportAction.startsSection {
                                 Divider()
                             }
-                            Button(exportAction.title) {
+                            Button(localized(exportAction.title)) {
                                 exportAction.perform(format)
                             }
                             .disabled(commandsAreSuspended || !exportAction.isEnabled)
@@ -427,14 +442,14 @@ struct VelouraCommands: Commands {
         }
 
         CommandGroup(after: .sidebar) {
-            Menu("モード") {
+            Menu(localized("モード")) {
                 processingModeButton(
-                    title: "通常補正",
+                    title: localized("通常補正"),
                     mode: .standard,
                     shortcutAction: .selectStandardMode
                 )
                 processingModeButton(
-                    title: "Stem Mode",
+                    title: localized("Stem Mode"),
                     mode: .stem,
                     shortcutAction: .selectStemMode
                 )
@@ -443,14 +458,14 @@ struct VelouraCommands: Commands {
 
             Divider()
 
-            Menu("中央表示") {
-                Button("基本表示") {
+            Menu(localized("中央表示")) {
+                Button(localized("基本表示")) {
                     workspaceDisplaySelection?.wrappedValue = .basic
                 }
                 .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .showBasicDisplay))
                 .disabled(commandsAreSuspended || workspaceDisplaySelection == nil)
 
-                Button("詳細解析") {
+                Button(localized("詳細解析")) {
                     workspaceDisplaySelection?.wrappedValue = .detailedAnalysis
                 }
                 .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .showDetailedAnalysis))
@@ -458,7 +473,7 @@ struct VelouraCommands: Commands {
 
                 Divider()
 
-                Button("詳細ログ") {
+                Button(localized("詳細ログ")) {
                     workspaceDisplaySelection?.wrappedValue = .fullLog
                 }
                 .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .showFullLog))
@@ -466,27 +481,27 @@ struct VelouraCommands: Commands {
             }
             .disabled(commandsAreSuspended)
 
-            Menu("右側設定") {
+            Menu(localized("右側設定")) {
                 inspectorSectionButton(
-                    title: "補正",
+                    title: localized("補正"),
                     shortcutAction: .showCorrectionSettings,
                     isDisabled: inspectorSettingsState == nil,
                     perform: { inspectorSettingsState?.show(.correction) }
                 )
                 inspectorSectionButton(
-                    title: "再ミックス",
+                    title: localized("再ミックス"),
                     shortcutAction: .showRemixSettings,
                     isDisabled: inspectorSettingsState?.isStemMode != true,
                     perform: { inspectorSettingsState?.show(.remix) }
                 )
                 inspectorSectionButton(
-                    title: "マスタリング",
+                    title: localized("マスタリング"),
                     shortcutAction: .showMasteringSettings,
                     isDisabled: inspectorSettingsState == nil,
                     perform: { inspectorSettingsState?.show(.mastering) }
                 )
                 inspectorSectionButton(
-                    title: "アプリ",
+                    title: localized("アプリ"),
                     shortcutAction: .showAppSettings,
                     isDisabled: inspectorSettingsState == nil,
                     perform: { inspectorSettingsState?.show(.app) }
@@ -494,9 +509,9 @@ struct VelouraCommands: Commands {
             }
             .disabled(commandsAreSuspended)
 
-            Menu("解析結果") {
+            Menu(localized("解析結果")) {
                 inspectorSectionButton(
-                    title: "入力",
+                    title: localized("入力"),
                     shortcutAction: .showInputAnalysis,
                     isDisabled: inspectorAnalysisState == nil,
                     perform: { inspectorAnalysisState?.show(.input) }
@@ -508,7 +523,7 @@ struct VelouraCommands: Commands {
                     perform: { inspectorAnalysisState?.show(.corrected) }
                 )
                 inspectorSectionButton(
-                    title: "最終版",
+                    title: localized("最終版"),
                     shortcutAction: .showMasteredAnalysis,
                     isDisabled: inspectorAnalysisState == nil,
                     perform: { inspectorAnalysisState?.show(.mastered) }
@@ -517,7 +532,7 @@ struct VelouraCommands: Commands {
                 Divider()
 
                 inspectorSectionButton(
-                    title: "完了後レポート",
+                    title: localized("完了後レポート"),
                     shortcutAction: .showCompletionReport,
                     isDisabled: inspectorAnalysisState?.canShowCompletionReport != true,
                     perform: { inspectorAnalysisState?.showCompletionReport() }
@@ -525,20 +540,20 @@ struct VelouraCommands: Commands {
             }
             .disabled(commandsAreSuspended)
 
-            Menu("波形") {
-                Button("縮小") {
+            Menu(localized("波形")) {
+                Button(localized("縮小")) {
                     waveformState?.zoomOut()
                 }
                 .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .zoomWaveformOut))
                 .disabled(commandsAreSuspended || waveformState?.canZoomOut != true)
 
-                Button("拡大") {
+                Button(localized("拡大")) {
                     waveformState?.zoomIn()
                 }
                 .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .zoomWaveformIn))
                 .disabled(commandsAreSuspended || waveformState?.canZoomIn != true)
 
-                Button("全体表示") {
+                Button(localized("全体表示")) {
                     waveformState?.showWholeWaveform()
                 }
                 .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .showWholeWaveform))
@@ -549,14 +564,14 @@ struct VelouraCommands: Commands {
             Divider()
 
             Button(
-                chromeActions?.sidebarCommandTitle ?? "サイドバーを表示"
+                localized(chromeActions?.sidebarCommandTitle ?? "サイドバーを表示")
             ) {
                 chromeActions?.toggleSidebar()
             }
             .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .toggleSidebar))
             .disabled(commandsAreSuspended || chromeActions == nil)
 
-            Button(chromeActions?.inspectorCommandTitle ?? "設定を表示") {
+            Button(localized(chromeActions?.inspectorCommandTitle ?? "設定を表示")) {
                 chromeActions?.toggleInspector()
             }
             .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .toggleInspector))
@@ -603,25 +618,25 @@ struct VelouraCommands: Commands {
 
     @ViewBuilder
     private func primaryComparisonPlaybackCommands() -> some View {
-        Button(playbackState?.sideACommandTitle ?? "Aを再生") {
+        Button(localized(playbackState?.sideACommandTitle ?? "Aを再生")) {
             playbackState?.playComparisonSideA()
         }
         .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .playSideA))
         .disabled(commandsAreSuspended || playbackState?.canPlayComparisonSideA != true)
 
-        Button(playbackState?.playbackCommandTitle ?? "再生") {
+        Button(localized(playbackState?.playbackCommandTitle ?? "再生")) {
             playbackState?.togglePlayback()
         }
         .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .togglePlayback))
         .disabled(commandsAreSuspended || playbackState?.canTogglePlayback != true)
 
-        Button("停止") {
+        Button(localized("停止")) {
             playbackState?.stopPlayback()
         }
         .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .stopPlayback))
         .disabled(commandsAreSuspended || playbackState?.canStopPlayback != true)
 
-        Button(playbackState?.sideBCommandTitle ?? "Bを再生") {
+        Button(localized(playbackState?.sideBCommandTitle ?? "Bを再生")) {
             playbackState?.playComparisonSideB()
         }
         .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .playSideB))
@@ -629,7 +644,7 @@ struct VelouraCommands: Commands {
 
         Divider()
 
-        Button(playbackState?.comparisonSwitchCommandTitle ?? "A/B切替") {
+        Button(localized(playbackState?.comparisonSwitchCommandTitle ?? "A/B切替")) {
             playbackState?.toggleComparisonSide()
         }
         .keyboardShortcut(shortcutSettings.keyboardShortcut(for: .toggleComparisonSide))
@@ -637,8 +652,8 @@ struct VelouraCommands: Commands {
 
         Button(
             playbackState?.isLoudnessMatchingEnabled == true
-                ? "ラウドネス合わせをオフ"
-                : "ラウドネス合わせをオン"
+                ? localized("ラウドネス合わせをオフ")
+                : localized("ラウドネス合わせをオン")
         ) {
             playbackState?.toggleLoudnessMatching()
         }
@@ -648,19 +663,19 @@ struct VelouraCommands: Commands {
         if playbackState?.allowsComparisonPairSelection == true {
             Divider()
 
-            Menu("比較対象") {
+            Menu(localized("比較対象")) {
                 comparisonPairButton(
-                    title: "入力と\(processedAudioTitle)",
+                    title: localizedFormat("入力と%@", processedAudioTitle),
                     pair: .inputVsCorrected,
                     shortcutAction: .compareInputCorrected
                 )
                 comparisonPairButton(
-                    title: "入力と最終版",
+                    title: localized("入力と最終版"),
                     pair: .inputVsMastered,
                     shortcutAction: .compareInputMastered
                 )
                 comparisonPairButton(
-                    title: "\(processedAudioTitle)と最終版",
+                    title: localizedFormat("%@と最終版", processedAudioTitle),
                     pair: .correctedVsMastered,
                     shortcutAction: .compareCorrectedMastered
                 )
@@ -675,9 +690,9 @@ struct VelouraCommands: Commands {
                 stemSelectionState?.selectPreviewStem(role)
             } label: {
                 if stemSelectionState?.isPreviewStemSelected(role) == true {
-                    Label(role.stemModeDisplayTitle, systemImage: "checkmark")
+                    Label(localized(role.stemModeDisplayTitle), systemImage: "checkmark")
                 } else {
-                    Text(role.stemModeDisplayTitle)
+                    Text(localized(role.stemModeDisplayTitle))
                 }
             }
         }
@@ -687,37 +702,37 @@ struct VelouraCommands: Commands {
     private func fixedComparisonPlaybackCommands(
         _ state: VelouraPlaybackPresentationState
     ) -> some View {
-        Button(state.sideACommandTitle) {
+        Button(localized(state.sideACommandTitle)) {
             state.playComparisonSideA()
         }
         .disabled(commandsAreSuspended || !state.canPlayComparisonSideA)
 
-        Button(state.playbackCommandTitle) {
+        Button(localized(state.playbackCommandTitle)) {
             state.togglePlayback()
         }
         .disabled(commandsAreSuspended || !state.canTogglePlayback)
 
-        Button("停止") {
+        Button(localized("停止")) {
             state.stopPlayback()
         }
         .disabled(commandsAreSuspended || !state.canStopPlayback)
 
-        Button(state.sideBCommandTitle) {
+        Button(localized(state.sideBCommandTitle)) {
             state.playComparisonSideB()
         }
         .disabled(commandsAreSuspended || !state.canPlayComparisonSideB)
 
         Divider()
 
-        Button(state.comparisonSwitchCommandTitle) {
+        Button(localized(state.comparisonSwitchCommandTitle)) {
             state.toggleComparisonSide()
         }
         .disabled(commandsAreSuspended || !state.canToggleComparisonSide)
 
         Button(
             state.isLoudnessMatchingEnabled
-                ? "ラウドネス合わせをオフ"
-                : "ラウドネス合わせをオン"
+                ? localized("ラウドネス合わせをオフ")
+                : localized("ラウドネス合わせをオン")
         ) {
             state.toggleLoudnessMatching()
         }

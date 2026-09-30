@@ -82,13 +82,19 @@ enum AudioQualityReportService {
         if loudnessDrop >= 1.0 {
             if stageName == "補正後" {
                 items.append(.info(
-                    "補正後は音量を作らないため音量が下がっています",
-                    "平均音量が \(format(loudnessDrop)) LU 下がっています。最終版で戻る場合は問題として扱いません。補正後と最終版を聴き比べてください。"
+                    AppLanguageSettings.string("補正後は音量を作らないため音量が下がっています"),
+                    localizedFormat(
+                        "平均音量が %@ LU 下がっています。最終版で戻る場合は問題として扱いません。補正後と最終版を聴き比べてください。",
+                        format(loudnessDrop)
+                    )
                 ))
             } else {
                 items.append(.caution(
-                    "\(stageName)の音量感が下がっています",
-                    "平均音量が \(format(loudnessDrop)) LU 下がっています。音量感が意図に合うか聴き比べてください。"
+                    localizedFormat("%@の音量感が下がっています", AppLanguageSettings.string(stageName)),
+                    localizedFormat(
+                        "平均音量が %@ LU 下がっています。音量感が意図に合うか聴き比べてください。",
+                        format(loudnessDrop)
+                    )
                 ))
             }
         }
@@ -97,13 +103,19 @@ enum AudioQualityReportService {
             let headroom = peakCeilingDB - target.truePeakDBFS
             if headroom < 0 {
                 items.append(.warning(
-                    "\(stageName)のピークが設定上限を超えています",
-                    "True Peak が \(format(target.truePeakDBFS)) dBTP、設定上限が \(format(peakCeilingDB)) dBTP です。音割れがないか\(stageName)を試聴してください。"
+                    localizedFormat("%@のピークが設定上限を超えています", AppLanguageSettings.string(stageName)),
+                    localizedFormat(
+                        "True Peak が %@ dBTP、設定上限が %@ dBTP です。音割れがないか%@を試聴してください。",
+                        format(target.truePeakDBFS), format(peakCeilingDB), AppLanguageSettings.string(stageName)
+                    )
                 ))
             } else if headroom < 0.3 {
                 items.append(.caution(
-                    "\(stageName)のピークが設定上限に近づいています",
-                    "True Peak が \(format(target.truePeakDBFS)) dBTP、設定上限までの余裕が \(format(headroom)) dB です。\(stageName)を試聴してください。"
+                    localizedFormat("%@のピークが設定上限に近づいています", AppLanguageSettings.string(stageName)),
+                    localizedFormat(
+                        "True Peak が %@ dBTP、設定上限までの余裕が %@ dB です。%@を試聴してください。",
+                        format(target.truePeakDBFS), format(headroom), AppLanguageSettings.string(stageName)
+                    )
                 ))
             }
         }
@@ -113,21 +125,21 @@ enum AudioQualityReportService {
         let widthChange = target.stereoWidth - reference.stereoWidth
         if abs(widthChange) >= 0.20 {
             items.append(.caution(
-                "\(stageName)のステレオ幅が大きく変わっています",
-                "Stereo Width が \(formatSigned(widthChange)) 変化しています。"
+                localizedFormat("%@のステレオ幅が大きく変わっています", AppLanguageSettings.string(stageName)),
+                localizedFormat("Stereo Width が %@ 変化しています。", formatSigned(widthChange))
             ))
         }
 
         let crestChange = target.crestFactorDB - reference.crestFactorDB
         if crestChange <= -3.0 {
             items.append(.caution(
-                "\(stageName)の音の起伏が小さくなっています",
-                "Crest Factor が \(format(abs(crestChange))) dB 下がっています。"
+                localizedFormat("%@の音の起伏が小さくなっています", AppLanguageSettings.string(stageName)),
+                localizedFormat("Crest Factor が %@ dB 下がっています。", format(abs(crestChange)))
             ))
         } else if crestChange >= 4.0 {
             items.append(.caution(
-                "\(stageName)の音の起伏が大きく変わっています",
-                "Crest Factor が \(format(crestChange)) dB 上がっています。"
+                localizedFormat("%@の音の起伏が大きく変わっています", AppLanguageSettings.string(stageName)),
+                localizedFormat("Crest Factor が %@ dB 上がっています。", format(crestChange))
             ))
         }
 
@@ -141,15 +153,21 @@ enum AudioQualityReportService {
 
         if loudnessDrop >= 1.5 {
             items.append(.caution(
-                "最終版の音量感が低めです",
-                "入力より平均音量が \(format(loudnessDrop)) LU 下がっています。最終版の音量感が意図に合うか聴き比べてください。"
+                AppLanguageSettings.string("最終版の音量感が低めです"),
+                localizedFormat(
+                    "入力より平均音量が %@ LU 下がっています。最終版の音量感が意図に合うか聴き比べてください。",
+                    format(loudnessDrop)
+                )
             ))
         }
 
         if loudnessIncrease >= 4.0 {
             items.append(.caution(
-                "最終版の音量感が大きく上がっています",
-                "入力より平均音量が \(format(loudnessIncrease)) LU 上がっています。聴き疲れしないか、入力と最終版を聴き比べてください。"
+                AppLanguageSettings.string("最終版の音量感が大きく上がっています"),
+                localizedFormat(
+                    "入力より平均音量が %@ LU 上がっています。聴き疲れしないか、入力と最終版を聴き比べてください。",
+                    format(loudnessIncrease)
+                )
             ))
         }
 
@@ -197,23 +215,33 @@ enum AudioQualityReportService {
         let severity: AudioQualityReportSeverity = sharedSeverity == .warning ? .warning : .caution
         let isIncrease = delta >= 0
         let amount = abs(delta)
-        let direction = isIncrease ? "増えています" : "下がっています"
+        let direction = AppLanguageSettings.string(isIncrease ? "増えています" : "下がっています")
         let listeningPoint: String
         if rule.id == "mud" {
-            listeningPoint = "こもりや暗さにつながっていないか"
+            listeningPoint = AppLanguageSettings.string("こもりや暗さにつながっていないか")
         } else if isIncrease {
             listeningPoint = rule.id == "generatedUltraHigh"
-                ? "不要な超高域成分が増えていないか"
-                : "刺さりやザラつきがないか"
+                ? AppLanguageSettings.string("不要な超高域成分が増えていないか")
+                : AppLanguageSettings.string("刺さりやザラつきがないか")
         } else {
-            listeningPoint = "抜け感、息感、空気感が弱くなっていないか"
+            listeningPoint = AppLanguageSettings.string("抜け感、息感、空気感が弱くなっていないか")
         }
 
         return AudioQualityReportItem(
             severity: severity,
-            title: "\(stageName)の\(rule.label)が\(direction)",
-            detail: "全体音量差を除いた\(rule.range) が \(format(amount)) dB \(direction)。\(listeningPoint)聴き比べてください。"
+            title: localizedFormat(
+                "%@の%@が%@",
+                AppLanguageSettings.string(stageName), AppLanguageSettings.string(rule.label), direction
+            ),
+            detail: localizedFormat(
+                "全体音量差を除いた%@ が %@ dB %@。%@聴き比べてください。",
+                AppLanguageSettings.string(rule.range), format(amount), direction, listeningPoint
+            )
         )
+    }
+
+    private static func localizedFormat(_ key: String, _ arguments: CVarArg...) -> String {
+        String(format: AppLanguageSettings.string(key), locale: AppLanguageSettings.locale, arguments: arguments)
     }
 
     private static func format(_ value: Double) -> String {

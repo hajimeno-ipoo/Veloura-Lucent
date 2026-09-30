@@ -47,9 +47,13 @@ enum AudioAnalysisMode: String, CaseIterable, Identifiable, Equatable, Sendable 
     var resolvedSummary: String {
         let resolved = resolvedMode
         if self == resolved {
-            return "使用中: \(resolved.title)"
+            return AppLanguageSettings.format("使用中: %@", AppLanguageSettings.string(resolved.title))
         }
-        return "使用中: \(resolved.title)（\(title)から自動切替）"
+        return AppLanguageSettings.format(
+            "使用中: %@（%@から自動切替）",
+            AppLanguageSettings.string(resolved.title),
+            AppLanguageSettings.string(title)
+        )
     }
 
     var logDescription: String {

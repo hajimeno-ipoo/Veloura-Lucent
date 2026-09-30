@@ -29,6 +29,7 @@ struct KeyboardShortcutManagementView: View {
     @State private var selectedTab: KeyboardOperationTab = .editable
     @State private var editingAction: VelouraShortcutAction?
     @State private var validationMessage: String?
+    @Environment(\.locale) private var locale
 
     private let completionButtonTint = Color(
         red: 92 / 255,
@@ -145,6 +146,7 @@ struct KeyboardShortcutManagementView: View {
         .velouraAdaptiveGlass(in: .rect(cornerRadius: 24))
         .shadow(color: .black.opacity(0.18), radius: 30, y: 14)
         .accessibilityElement(children: .contain)
+        .environment(\.locale, locale)
     }
 
     private var header: some View {
@@ -244,7 +246,7 @@ struct KeyboardShortcutManagementView: View {
         let isEditing = editingAction == action
 
         return HStack(spacing: 12) {
-            Text(actionTitle)
+            AppLocalizedText(actionTitle)
                 .font(.system(size: 16, weight: .regular))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(1)
@@ -267,7 +269,7 @@ struct KeyboardShortcutManagementView: View {
                     }
                     .buttonStyle(.plain)
                     .velouraAdaptiveGlass(in: Circle(), interactive: true)
-                    .accessibilityLabel("\(actionTitle)のショートカットを変更")
+                    .accessibilityLabel(AppLanguageSettings.format("%@のショートカットを変更", AppLanguageSettings.string(actionTitle)))
                     .help("ショートカットを設定・変更")
 
                     Button {
@@ -282,14 +284,14 @@ struct KeyboardShortcutManagementView: View {
                     .buttonStyle(.plain)
                     .velouraAdaptiveGlass(in: Circle(), interactive: true)
                     .disabled(settings.shortcut(for: action) == nil)
-                    .accessibilityLabel("\(actionTitle)のショートカットを削除")
+                    .accessibilityLabel(AppLanguageSettings.format("%@のショートカットを削除", AppLanguageSettings.string(actionTitle)))
                     .help("ショートカットを削除")
 
                     Button {
                         if let conflict = settings.reset(action) {
                             let shortcutText = action.defaultShortcut?.displayText
-                                ?? "初期ショートカット"
-                            validationMessage = "\(shortcutText)は「\(title(for: conflict))」で使用されています。"
+                                ?? AppLanguageSettings.string("初期ショートカット")
+                            validationMessage = AppLanguageSettings.format("%@は「%@」で使用されています。", shortcutText, AppLanguageSettings.string(title(for: conflict)))
                             return
                         }
                         validationMessage = nil
@@ -302,7 +304,7 @@ struct KeyboardShortcutManagementView: View {
                     .buttonStyle(.plain)
                     .velouraAdaptiveGlass(in: Circle(), interactive: true)
                     .disabled(settings.isUsingDefaultShortcut(for: action))
-                    .accessibilityLabel("\(actionTitle)のショートカットを初期設定へ戻す")
+                    .accessibilityLabel(AppLanguageSettings.format("%@のショートカットを初期設定へ戻す", AppLanguageSettings.string(actionTitle)))
                     .help("この操作だけ初期設定へ戻す")
                 }
                 .frame(width: 164)
@@ -329,7 +331,7 @@ struct KeyboardShortcutManagementView: View {
                 .padding(.horizontal, 10)
                 .frame(height: 34)
                 .background(Color.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
-                .accessibilityLabel("\(title(for: action))のショートカット入力待ち")
+                .accessibilityLabel(AppLanguageSettings.format("%@のショートカット入力待ち", AppLanguageSettings.string(title(for: action))))
 
                 Button {
                     editingAction = nil
@@ -343,7 +345,7 @@ struct KeyboardShortcutManagementView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(title(for: action))の変更をキャンセル")
+                .accessibilityLabel(AppLanguageSettings.format("%@の変更をキャンセル", AppLanguageSettings.string(title(for: action))))
                 .help("ショートカットの変更をキャンセル")
             }
         } else if let shortcut = settings.shortcut(for: action) {
@@ -375,11 +377,11 @@ struct KeyboardShortcutManagementView: View {
                             shortcutCategoryCard {
                                 ForEach(group.operations) { operation in
                                     HStack(spacing: 12) {
-                                        Text(operation.operation)
+                                        AppLocalizedText(operation.operation)
                                             .font(.system(size: 16, weight: .regular))
                                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                                        Text(operation.keys)
+                                        AppLocalizedText(operation.keys)
                                             .font(.system(size: 20, weight: .regular))
                                             .frame(width: 260, alignment: .leading)
                                     }
@@ -457,7 +459,7 @@ struct KeyboardShortcutManagementView: View {
     }
 
     private func sectionHeader(_ title: String) -> some View {
-        Text(title)
+        AppLocalizedText(title)
             .font(.title3.bold())
             .padding(.horizontal, 18)
             .padding(.vertical, 7)
@@ -474,15 +476,15 @@ struct KeyboardShortcutManagementView: View {
         for action: VelouraShortcutAction
     ) {
         guard shortcut.isAllowed else {
-            validationMessage = "文字キー単独、Tab、およびReturn・矢印キー単独は設定できません。"
+            validationMessage = AppLanguageSettings.string("文字キー単独、Tab、およびReturn・矢印キー単独は設定できません。")
             return
         }
         if let fixedOperation = settings.fixedOperationConflict(for: shortcut) {
-            validationMessage = "\(shortcut.displayText)はmacOS標準の「\(fixedOperation)」で使用されています。"
+            validationMessage = AppLanguageSettings.format("%@はmacOS標準の「%@」で使用されています。", shortcut.displayText, AppLanguageSettings.string(fixedOperation))
             return
         }
         if let conflict = settings.conflictingAction(for: shortcut, excluding: action) {
-            validationMessage = "\(shortcut.displayText)は「\(title(for: conflict))」で使用されています。"
+            validationMessage = AppLanguageSettings.format("%@は「%@」で使用されています。", shortcut.displayText, AppLanguageSettings.string(title(for: conflict)))
             return
         }
 
@@ -492,7 +494,17 @@ struct KeyboardShortcutManagementView: View {
     }
 
     private func title(for action: VelouraShortcutAction) -> String {
-        action.title(processedAudioTitle: processedAudioTitle)
+        let processed = AppLanguageSettings.string(processedAudioTitle)
+        switch action {
+        case .compareInputCorrected:
+            return AppLanguageSettings.format("入力と%@を比較", processed)
+        case .compareCorrectedMastered:
+            return AppLanguageSettings.format("%@と最終版を比較", processed)
+        case .showCorrectedAnalysis:
+            return AppLanguageSettings.format("%@の解析結果", processed)
+        default:
+            return action.title(processedAudioTitle: processedAudioTitle)
+        }
     }
 }
 

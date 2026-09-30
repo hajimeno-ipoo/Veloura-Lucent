@@ -8,6 +8,7 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
     var maxWidth: CGFloat = 360
     var isDisabled = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @FocusState private var focusedOption: Selection?
     @Namespace private var glassNamespace
 
@@ -29,7 +30,8 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
             focusedOption = nil
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(title)
+        .accessibilityLabel(AppLanguageSettings.string(title))
+        .environment(\.locale, locale)
     }
 
     @ViewBuilder
@@ -61,7 +63,7 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
     }
 
     private func segmentLabel(for option: Selection, isSelected: Bool) -> some View {
-        Text(label(option))
+        AppLocalizedText(label(option))
             .font(.callout)
             .foregroundStyle(isSelected ? Color.accentColor : .primary)
             .lineLimit(1)
@@ -77,7 +79,7 @@ struct LiquidGlassSegmentedControl<Selection: Hashable>: View {
                     reduceMotion: reduceMotion
                 )
             )
-            .accessibilityLabel("\(title)、\(label(option))")
+            .accessibilityLabel("\(AppLanguageSettings.string(title))、\(AppLanguageSettings.string(label(option)))")
     }
 
     @MainActor

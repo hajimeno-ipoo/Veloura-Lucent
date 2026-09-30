@@ -1,7 +1,12 @@
+import Foundation
 import Testing
 @testable import VelouraLucent
 
 struct NoiseCheckReportServiceTests {
+    init() {
+        UserDefaults.standard.set(AppLanguageSelection.japanese.rawValue, forKey: AppLanguageSettings.key)
+    }
+
     @Test
     func reportShowsInputCorrectedMasteredAndDeltas() throws {
         let input = snapshot(hiss: -58, sibilance: 10, shimmer: -58, mud: -5, hum: 8, rumble: -34, room: -40)

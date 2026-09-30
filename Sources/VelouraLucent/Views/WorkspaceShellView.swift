@@ -226,9 +226,9 @@ struct WorkspaceFixedHeaderView<DisplayPicker: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.largeTitle.bold())
-            Text(summary)
+            AppLocalizedText(summary)
                 .foregroundStyle(.secondary)
 
             displayPicker

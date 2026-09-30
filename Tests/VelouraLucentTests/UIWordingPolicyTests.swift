@@ -51,8 +51,8 @@ struct UIWordingPolicyTests {
         #expect(source.contains("ForEach(report.sections)"))
         #expect(source.contains("CompletionReportStageDeltaGrid"))
         #expect(source.contains("Grid(alignment: .leading"))
-        #expect(source.contains("入力→\\(middleTitle)"))
-        #expect(source.contains("\\(middleTitle)→最終版"))
+        #expect(source.contains("AppLanguageSettings.format(\"入力→%@\""))
+        #expect(source.contains("AppLanguageSettings.format(\"%@→最終版\""))
         #expect(source.contains("report.safetyRows.isEmpty"))
         #expect(source.contains("minWidth: 760"))
         #expect(!source.contains("調整候補"))
@@ -166,7 +166,7 @@ struct UIWordingPolicyTests {
         #expect(!source.contains("comparisonVideoLaunch"))
         #expect(source.contains("WaveformTransportButton(\n                    title: switchButtonTitle"))
         #expect(source.contains("isDisabled: comparisonFileURL(for: .a) == nil\n                        || comparisonFileURL(for: .b) == nil"))
-        #expect(source.contains("Text(\"現在 \\(activeSideTitle)\")"))
+        #expect(source.contains("AppLanguageSettings.format(\"現在 %@\""))
         #expect(source.contains(".velouraAdaptiveGlass(in: .capsule, interactive: true)"))
         #expect(source.contains("private var activeComparisonTint: Color"))
         #expect(!source.contains("loudnessComparisonToggle\n                activeComparisonLabel"))
@@ -561,8 +561,8 @@ struct UIWordingPolicyTests {
         #expect(source.contains("DAWKnobStepRail("))
         #expect(source.contains("width: DAWKnobMetrics.stepRailHitSize.width"))
         #expect(source.contains("height: DAWKnobMetrics.stepRailHitSize.height"))
-        #expect(source.contains("label: \"\\(title)を下げる\""))
-        #expect(source.contains("label: \"\\(title)を上げる\""))
+        #expect(source.contains("AppLanguageSettings.string(\"%@を下げる\")"))
+        #expect(source.contains("AppLanguageSettings.string(\"%@を上げる\")"))
         #expect(source.contains("TermHelpButton(title: help.title"))
         #expect(!source.contains("fixedArtworkImage"))
         #expect(!source.contains("transparentStepButton"))
@@ -585,10 +585,10 @@ struct UIWordingPolicyTests {
             "Sources/VelouraLucent/Views/KeyboardShortcutManagementView.swift",
         ])
 
-        #expect(commands.contains("CommandMenu(\"再生\")"))
-        #expect(commands.contains("Menu(\"モード\")"))
-        #expect(commands.contains("title: \"通常補正\""))
-        #expect(commands.contains("title: \"Stem Mode\""))
+        #expect(commands.contains("CommandMenu(localized(\"再生\"))"))
+        #expect(commands.contains("Menu(localized(\"モード\"))"))
+        #expect(commands.contains("title: localized(\"通常補正\")"))
+        #expect(commands.contains("title: localized(\"Stem Mode\")"))
         #expect(commands.contains("actions?.selectProcessingMode(mode)"))
         #expect(commands.contains("ForEach(actions?.exportActions ?? [])"))
         #expect(commands.contains("if exportAction.startsSection"))
@@ -605,12 +605,12 @@ struct UIWordingPolicyTests {
         #expect(commands.contains("playbackState?.comparisonSwitchCommandTitle"))
         #expect(commands.contains("if playbackState?.allowsComparisonPairSelection == true"))
         #expect(commands.contains("@FocusedValue(\\.velouraStemPlaybackPresentationState)"))
-        #expect(commands.contains("Menu(\"入力／\\(processedAudioTitle)／最終版\")"))
-        #expect(commands.contains("Menu(\"\\(stemPlaybackState.selectedStemTitle)：raw／補正後\")"))
-        #expect(commands.contains("Menu(\"補正後／再ミックス\")"))
+        #expect(commands.contains("Menu(localizedFormat(\"入力／%@／最終版\""))
+        #expect(commands.contains("Menu(localizedFormat(\"%@：raw／補正後\""))
+        #expect(commands.contains("Menu(localized(\"補正後／再ミックス\"))"))
         #expect(commands.contains("fixedComparisonPlaybackCommands(stemPlaybackState.stemComparison)"))
         #expect(commands.contains("fixedComparisonPlaybackCommands(stemPlaybackState.remixComparison)"))
-        #expect(commands.contains("Menu(\"再生するStem\")"))
+        #expect(commands.contains("Menu(localized(\"再生するStem\"))"))
         #expect(commands.contains("stemSelectionState?.selectPreviewStem(role)"))
         #expect(commands.contains("stemSelectionState?.isPreviewStemSelected(role)"))
         #expect(!commands.contains("CommandMenu(\"Stem\")"))
@@ -623,8 +623,8 @@ struct UIWordingPolicyTests {
         #expect(root.contains("\\.velouraCommandsSuspended"))
         #expect(root.contains("isKeyboardShortcutManagerPresented"))
         #expect(root.contains("processedAudioTitle: commandActions.processedAudioTitle"))
-        #expect(commands.contains("title: \"入力と\\(processedAudioTitle)\""))
-        #expect(commands.contains("title: \"\\(processedAudioTitle)と最終版\""))
+        #expect(commands.contains("title: localizedFormat(\"入力と%@\""))
+        #expect(commands.contains("title: localizedFormat(\"%@と最終版\""))
         #expect(commands.contains("title: processedAudioTitle"))
         #expect(!commands.contains("title: \"入力と補正後\""))
         #expect(shortcutManager.contains("action.title(processedAudioTitle: processedAudioTitle)"))
@@ -638,10 +638,10 @@ struct UIWordingPolicyTests {
             "if isEditing {\n                Color.clear.frame(width: 164, height: 1)"
         ))
         #expect(shortcutManager.contains(
-            "Text(actionTitle)\n                .font(.system(size: 16, weight: .regular))"
+            "AppLocalizedText(actionTitle)\n                .font(.system(size: 16, weight: .regular))"
         ))
         #expect(shortcutManager.contains(
-            "Text(operation.operation)\n                                            .font(.system(size: 16, weight: .regular))"
+            "AppLocalizedText(operation.operation)\n                                            .font(.system(size: 16, weight: .regular))"
         ))
         #expect(!shortcutManager.contains(".weight(.bold)"))
         #expect(!shortcutManager.contains(".weight(.semibold)"))
@@ -650,7 +650,7 @@ struct UIWordingPolicyTests {
             "Text(shortcut.displayText)\n                .font(.system(size: 20, weight: .regular))"
         ))
         #expect(shortcutManager.contains(
-            "Text(operation.keys)\n                                            .font(.system(size: 20, weight: .regular))"
+            "AppLocalizedText(operation.keys)\n                                            .font(.system(size: 20, weight: .regular))"
         ))
         #expect(!shortcutManager.contains("\"xmark\""))
         #expect(shortcutManager.contains("変更をキャンセル"))
@@ -681,8 +681,8 @@ struct UIWordingPolicyTests {
         #expect(!shortcutManager.contains("Space  /  Return"))
         #expect(toolbar.contains("ForEach(commandActions.exportActions)"))
         #expect(toolbar.contains("if exportAction.startsSection"))
-        #expect(root.contains("title: \"補正済み\""))
-        #expect(root.contains("title: \"マスタリング済み\""))
+        #expect(root.contains("title: AppLanguageSettings.string(\"補正済み\")"))
+        #expect(root.contains("title: AppLanguageSettings.string(\"マスタリング済み\")"))
         #expect(toolbar.contains("補正済みまたはマスタリング済みの音源を書き出します"))
         #expect(preview.contains("func toggleComparisonPlayback()"))
         #expect(waveform.contains("preview.toggleComparisonPlayback()"))
@@ -731,7 +731,7 @@ struct UIWordingPolicyTests {
         #expect(toolbar.contains("isCancellation: isMasteringRunning"))
         #expect(label.contains("if isCancellation"))
         #expect(label.contains("toolbarLabel\n                .foregroundStyle(.red)"))
-        #expect(label.contains("Label(title, systemImage: systemImage)"))
+        #expect(label.contains("Label(AppLanguageSettings.string(title), systemImage: systemImage)"))
     }
 
     @Test
@@ -786,15 +786,19 @@ struct UIWordingPolicyTests {
     }
 
     @Test
-    func appBundleDeclaresJapaneseAsItsLocalization() throws {
+    func appBundleDeclaresJapaneseAndEnglishLocalizations() throws {
         let package = try combinedSource(["Package.swift"])
         let buildScript = try combinedSource(["script/build_and_run.sh"])
         let packageScript = try combinedSource(["script/package_local_dmg.sh"])
         let localizedInfo = try combinedSource(["Resources/ja.lproj/InfoPlist.strings"])
+        let englishInfo = try combinedSource(["Resources/en.lproj/InfoPlist.strings"])
+        let catalog = try combinedSource(["Sources/VelouraLucent/Resources/Localizable.xcstrings"])
 
         #expect(package.contains("defaultLocalization: \"ja\""))
+        #expect(package.contains(".process(\"Resources/Localizable.xcstrings\")"))
         #expect(buildScript.contains("<key>CFBundleDevelopmentRegion</key>\n  <string>ja</string>"))
         #expect(buildScript.contains("<key>CFBundleLocalizations</key>"))
+        #expect(buildScript.contains("<string>ja</string>\n    <string>en</string>"))
         #expect(buildScript.contains("<key>LSMultipleInstancesProhibited</key>\n  <true/>"))
         #expect(buildScript.contains("PRODUCTION_BUNDLE_ID=\"com.codex.VelouraLucent\""))
         #expect(buildScript.contains("PROJECT_BUNDLE_ID=\"com.codex.VelouraLucent.project\""))
@@ -820,7 +824,18 @@ struct UIWordingPolicyTests {
         #expect(!buildScript.contains("pkill -TERM -x"))
         #expect(!buildScript.contains("pkill -KILL -x"))
         #expect(buildScript.contains("cp -R \"$APP_LOCALIZATION_SOURCE\" \"$APP_RESOURCES/ja.lproj\""))
+        #expect(buildScript.contains("cp -R \"$EN_APP_LOCALIZATION_SOURCE\" \"$APP_RESOURCES/en.lproj\""))
+        #expect(buildScript.contains("$APP_RESOURCES/$language.lproj/Localizable.strings"))
         #expect(localizedInfo.contains("\"CFBundleDisplayName\" = \"Veloura Lucent\";"))
+        #expect(englishInfo.contains("\"CFBundleDisplayName\" = \"Veloura Lucent\";"))
+        let catalogObject = try #require(
+            JSONSerialization.jsonObject(with: Data(catalog.utf8)) as? [String: Any]
+        )
+        #expect(catalogObject["sourceLanguage"] as? String == "ja")
+        let catalogStrings = try #require(catalogObject["strings"] as? [String: Any])
+        let languagePicker = try #require(catalogStrings["言語"] as? [String: Any])
+        let localizations = try #require(languagePicker["localizations"] as? [String: Any])
+        #expect(localizations["en"] != nil)
     }
 
     @Test
@@ -945,7 +960,7 @@ struct UIWordingPolicyTests {
         #expect(source.contains(".frame(maxWidth: maxWidth, alignment: .leading)"))
         #expect(source.contains("var maxWidth: CGFloat = 360"))
         #expect(source.contains(".padding(.horizontal, 12)"))
-        #expect(source.contains(".accessibilityLabel(title)"))
+        #expect(source.contains(".accessibilityLabel(AppLanguageSettings.string(title))"))
         #expect(source.contains(".accessibilityValue(isSelected ? \"選択中\" : \"未選択\")"))
         #expect(!source.contains("LiquidGlassTabBar("))
         #expect(!source.contains("LiquidGlassSegmentedControl("))
@@ -1189,8 +1204,8 @@ struct UIWordingPolicyTests {
         #expect(source.contains("FrequencyBandDisplayComparison("))
         #expect(source.contains("Text(\"入力を基準にした差分\")"))
         #expect(source.contains("Text(\"入力 0.00 dB\")"))
-        #expect(source.contains("Text(\"帯域減少 "))
-        #expect(source.contains("Text(\"帯域増加 "))
+        #expect(source.contains("AppLanguageSettings.string(\"帯域減少 %@\")"))
+        #expect(source.contains("AppLanguageSettings.string(\"帯域増加 %@\")"))
         #expect(source.contains("masteredDeltaFromInput: comparison.masteredDeltaFromInput"))
         #expect(source.contains("deltaDB: row.correctionDelta"))
         #expect(source.contains("deltaDB: row.masteredDeltaFromInput"))

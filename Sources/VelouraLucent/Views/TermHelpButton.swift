@@ -7,6 +7,7 @@ struct TermHelpButton: View {
     let systemImage: String
     @State private var isPresented = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @Namespace private var glassNamespace
 
     init(
@@ -40,16 +41,18 @@ struct TermHelpButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(title)の説明")
-        .help("\(title)の説明を表示します")
+        .accessibilityLabel(String(format: AppLanguageSettings.string("%@の説明"), AppLanguageSettings.string(title)))
+        .help(String(format: AppLanguageSettings.string("%@の説明を表示します"), AppLanguageSettings.string(title)))
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3.bold())
-                Text(reading)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                Text(description)
+                if locale.identifier.hasPrefix("ja") {
+                    Text(reading)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                AppLocalizedText(description)
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -59,5 +62,6 @@ struct TermHelpButton: View {
             .glassEffectID("term-help", in: glassNamespace)
             .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
         }
+        .environment(\.locale, locale)
     }
 }

@@ -52,8 +52,10 @@ struct WaveformTrackResizeHandle: View {
                         self.dragStartHeight = nil
                     }
             )
-            .accessibilityLabel("\(title)の波形トラックの高さ")
-            .accessibilityValue("\(Int(height.rounded()))ポイント")
+            .accessibilityLabel(AppLanguageSettings.format(
+                "%@の波形トラックの高さ", AppLanguageSettings.string(title)
+            ))
+            .accessibilityValue(AppLanguageSettings.format("%ldポイント", Int(height.rounded())))
             .accessibilityAdjustableAction { direction in
                 switch direction {
                 case .increment:

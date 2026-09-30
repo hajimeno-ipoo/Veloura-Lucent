@@ -4,6 +4,7 @@ import SwiftUI
 struct ComparisonVideoDisplaySettingsView: View {
     @Bindable var model: ComparisonVideoWindowModel
     let parentWindow: NSWindow?
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -14,6 +15,7 @@ struct ComparisonVideoDisplaySettingsView: View {
             visualizerSettings
             backgroundSettings
         }
+        .environment(\.locale, locale)
     }
 
     private var titleSettings: some View {
@@ -201,9 +203,13 @@ struct ComparisonVideoDisplaySettingsView: View {
                     model.setInspectorAspectRatio(aspectRatio)
                 } label: {
                     if aspectRatio == model.displaySettings.inspectorAspectRatio {
-                        Label(aspectRatio.title, systemImage: "checkmark")
+                        Label {
+                            AppLocalizedText(aspectRatio.title)
+                        } icon: {
+                            Image(systemName: "checkmark")
+                        }
                     } else {
-                        Text(aspectRatio.title)
+                        AppLocalizedText(aspectRatio.title)
                     }
                 }
             }
@@ -212,7 +218,7 @@ struct ComparisonVideoDisplaySettingsView: View {
                 Text("情報表示の比率")
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                Text(model.displaySettings.inspectorAspectRatio.title)
+                AppLocalizedText(model.displaySettings.inspectorAspectRatio.title)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption)
                     .accessibilityHidden(true)
@@ -226,7 +232,7 @@ struct ComparisonVideoDisplaySettingsView: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .accessibilityLabel("情報表示の比率")
-        .accessibilityValue(model.displaySettings.inspectorAspectRatio.title)
+        .accessibilityValue(AppLanguageSettings.string(model.displaySettings.inspectorAspectRatio.title))
     }
 
     private var inspectorSizeText: String {
@@ -396,7 +402,7 @@ struct ComparisonVideoDisplaySettingsView: View {
         fadeOutEnabled: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3.weight(.semibold))
 
             HStack(spacing: 24) {
@@ -414,7 +420,7 @@ struct ComparisonVideoDisplaySettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3)
 
                 Spacer(minLength: 12)
@@ -433,7 +439,7 @@ struct ComparisonVideoDisplaySettingsView: View {
                     .foregroundStyle(.secondary)
 
                 Stepper(
-                    "\(title)を微調整",
+                    AppLanguageSettings.format("%@を微調整", AppLanguageSettings.string(title)),
                     value: value,
                     in: ComparisonVideoDisplaySettings.fadeDurationRange,
                     step: 0.1
@@ -448,8 +454,8 @@ struct ComparisonVideoDisplaySettingsView: View {
                 step: 0.1
             )
             .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
-            .accessibilityLabel(title)
-            .accessibilityValue("\(value.wrappedValue.formatted(.number.precision(.fractionLength(1))))秒")
+            .accessibilityLabel(AppLanguageSettings.string(title))
+            .accessibilityValue(AppLanguageSettings.format("%@秒", value.wrappedValue.formatted(.number.precision(.fractionLength(1)))))
         }
         .padding(.vertical, 12)
     }
@@ -460,7 +466,7 @@ struct ComparisonVideoDisplaySettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3)
 
                 Spacer(minLength: 12)
@@ -475,7 +481,7 @@ struct ComparisonVideoDisplaySettingsView: View {
                 .modifier(ComparisonVideoInputFieldModifier(width: 76))
 
                 Stepper(
-                    "\(title)を微調整",
+                    AppLanguageSettings.format("%@を微調整", AppLanguageSettings.string(title)),
                     value: value,
                     in: ComparisonVideoDisplaySettings.visualizerDimensionRange,
                     step: 0.01
@@ -490,7 +496,7 @@ struct ComparisonVideoDisplaySettingsView: View {
                 step: 0.01
             )
             .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
-            .accessibilityLabel("ビジュアライザーの\(title)")
+            .accessibilityLabel(AppLanguageSettings.format("ビジュアライザーの%@", AppLanguageSettings.string(title)))
             .accessibilityValue(
                 value.wrappedValue.formatted(
                     .number.precision(.fractionLength(2))
@@ -612,7 +618,7 @@ struct ComparisonVideoDisplaySettingsView: View {
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text(title)
+                AppLocalizedText(title)
                     .font(.title3)
 
                 Spacer(minLength: 12)
@@ -631,7 +637,7 @@ struct ComparisonVideoDisplaySettingsView: View {
                     .foregroundStyle(.secondary)
 
                 Stepper(
-                    "\(title)を微調整",
+                    AppLanguageSettings.format("%@を微調整", AppLanguageSettings.string(title)),
                     value: percentage,
                     in: range,
                     step: 1
@@ -646,10 +652,10 @@ struct ComparisonVideoDisplaySettingsView: View {
                 step: 1
             )
             .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
-            .accessibilityLabel("ビジュアライザーの\(title)")
+            .accessibilityLabel(AppLanguageSettings.format("ビジュアライザーの%@", AppLanguageSettings.string(title)))
             .accessibilityValue("\(Int(percentage.wrappedValue.rounded()))%")
 
-            Text(helpText)
+            AppLocalizedText(helpText)
                 .font(.body)
                 .foregroundStyle(.secondary)
         }
@@ -657,9 +663,9 @@ struct ComparisonVideoDisplaySettingsView: View {
 
     private func labeledTextField(title: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3)
-            TextField(title, text: text)
+            TextField(AppLanguageSettings.string(title), text: text)
                 .font(.title3)
                 .controlSize(.large)
                 .modifier(ComparisonVideoInputFieldModifier())
@@ -674,7 +680,7 @@ struct ComparisonVideoDisplaySettingsView: View {
         setColor: @escaping (NSColor) -> Void
     ) -> some View {
         HStack(spacing: 12) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3)
 
             Spacer(minLength: 12)
@@ -693,7 +699,7 @@ struct ComparisonVideoDisplaySettingsView: View {
                 width: BlossomConstants.collapsedSwatchSize,
                 height: BlossomConstants.collapsedSwatchSize
             )
-            .accessibilityLabel(title)
+            .accessibilityLabel(AppLanguageSettings.string(title))
         }
         .padding(.vertical, 12)
     }
@@ -728,10 +734,10 @@ struct ComparisonVideoDisplaySettingsView: View {
             }
         } label: {
             HStack(spacing: 8) {
-                Text(title)
+                AppLocalizedText(title)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                Text(selection.wrappedValue ?? "システム")
+                Text(AppLanguageSettings.string(selection.wrappedValue ?? "システム"))
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption)
@@ -746,8 +752,8 @@ struct ComparisonVideoDisplaySettingsView: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .padding(.vertical, 12)
-        .accessibilityLabel(title)
-        .accessibilityValue(selection.wrappedValue ?? "システム")
+        .accessibilityLabel(AppLanguageSettings.string(title))
+        .accessibilityValue(AppLanguageSettings.string(selection.wrappedValue ?? "システム"))
     }
 
     private static let availableFontFamilies = NSFontManager.shared.availableFontFamilies.sorted {
@@ -779,7 +785,7 @@ struct ComparisonVideoDisplaySettingsView: View {
             Slider(value: value, in: 24...300, step: 1)
                 .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
                 .accessibilityLabel("フォントサイズ")
-                .accessibilityValue("\(Int(value.wrappedValue))ポイント")
+                .accessibilityValue(AppLanguageSettings.format("%dポイント", Int(value.wrappedValue)))
         }
         .padding(.vertical, 12)
     }
@@ -793,7 +799,7 @@ struct ComparisonVideoDisplaySettingsView: View {
             positionAxisControl(title: "水平位置", value: horizontal)
             positionAxisControl(title: "垂直位置", value: vertical)
 
-            Text(helpText)
+            AppLocalizedText(helpText)
                 .font(.body)
                 .foregroundStyle(.secondary)
         }
@@ -804,13 +810,13 @@ struct ComparisonVideoDisplaySettingsView: View {
         let normalizedValue = normalizedPositionBinding(value)
 
         return HStack(spacing: 10) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3)
                 .frame(width: 76, alignment: .leading)
 
             Slider(value: normalizedValue, in: 0...1, step: 0.01)
                 .tint(LiquidGlassSegmentedPickerStyle.sliderTint)
-                .accessibilityLabel(title)
+                .accessibilityLabel(AppLanguageSettings.string(title))
                 .accessibilityValue(normalizedPositionText(normalizedValue.wrappedValue))
 
             TextField(
@@ -823,14 +829,14 @@ struct ComparisonVideoDisplaySettingsView: View {
             .modifier(ComparisonVideoInputFieldModifier(width: 76))
 
             Stepper(
-                "\(title)を微調整",
+                AppLanguageSettings.format("%@を微調整", AppLanguageSettings.string(title)),
                 value: normalizedValue,
                 in: 0...1,
                 step: 0.01
             )
             .labelsHidden()
             .fixedSize()
-            .accessibilityLabel("\(title)を微調整")
+            .accessibilityLabel(AppLanguageSettings.format("%@を微調整", AppLanguageSettings.string(title)))
             .accessibilityValue(normalizedPositionText(normalizedValue.wrappedValue))
         }
     }
@@ -848,7 +854,7 @@ struct ComparisonVideoDisplaySettingsView: View {
 
     private func customAspectField(title: String, value: Binding<Double>) -> some View {
         HStack(spacing: 7) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3)
             TextField(
                 title,
@@ -895,7 +901,7 @@ struct ComparisonVideoSettingsSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
+            AppLocalizedText(title)
                 .font(.title3.bold())
 
             VStack(alignment: .leading, spacing: 0) {

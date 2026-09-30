@@ -7,6 +7,7 @@ struct VectorScopeView: View {
     @State private var displayMode: VectorScopeDisplayMode = .polarSample
     @State private var levelDetectionMode: VectorScopeLevelDetectionMode = .rms
     @State private var contentWidth: CGFloat = 0
+    @Environment(\.locale) private var locale
 
     private let horizontalLayoutMinimumWidth: CGFloat = 1_024
 
@@ -61,6 +62,7 @@ struct VectorScopeView: View {
             }
         }
         .accessibilityElement(children: .contain)
+        .environment(\.locale, locale)
     }
 
     private var usesHorizontalLayout: Bool {
@@ -85,7 +87,7 @@ struct VectorScopeView: View {
                 }
             }
 
-            Text(scopeDescription)
+            AppLocalizedText(scopeDescription)
                 .font(.body)
                 .foregroundStyle(.secondary)
 
@@ -130,7 +132,7 @@ struct VectorScopeView: View {
                 )
                 Spacer()
                 if let activeTarget {
-                    Text(targetTitle(activeTarget))
+                    AppLocalizedText(targetTitle(activeTarget))
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(targetColor(activeTarget))
                 }
@@ -181,11 +183,11 @@ struct VectorScopeView: View {
     private var scopeDescription: String {
         switch displayMode {
         case .polarSample:
-            return "Polar Sample: 45度安全ライン内は同相、外側は位相ずれを示します。"
+            return AppLanguageSettings.string("Polar Sample: 45度安全ライン内は同相、外側は位相ずれを示します。")
         case .polarLevel:
-            return "Polar Level: 線の角度でステレオ位置を確認します。\(levelDetectionMode.description)"
+            return AppLanguageSettings.format("Polar Level: 線の角度でステレオ位置を確認します。%@", AppLanguageSettings.string(levelDetectionMode.description))
         case .lissajous:
-            return "Lissajous: 縦=同相 / 横=逆相 / 斜め=左右偏り。"
+            return AppLanguageSettings.string("Lissajous: 縦=同相 / 横=逆相 / 斜め=左右偏り。")
         }
     }
 
@@ -194,30 +196,30 @@ struct VectorScopeView: View {
         case .unavailable:
             return nil
         case .mono:
-            return "モノラル音源のため、左右の関係は表示しません"
+            return AppLanguageSettings.string("モノラル音源のため、左右の関係は表示しません")
         case .stereo:
             return snapshot.points.isEmpty
                 && snapshot.polarSamplePoints.isEmpty
                 && snapshot.polarLevelLinesByDetectionMode.values.allSatisfy { $0.isEmpty }
-                ? "音声信号を待っています"
+                ? AppLanguageSettings.string("音声信号を待っています")
                 : nil
         case let .multichannel(channelCount):
-            return "\(channelCount)チャンネル音源はベクトルスコープ未対応です"
+            return AppLanguageSettings.format("%dチャンネル音源はベクトルスコープ未対応です", channelCount)
         }
     }
 
     private var accessibilityDescription: String {
         guard activeTarget != nil else {
-            return "ベクトルスコープ。停止中です"
+            return AppLanguageSettings.string("ベクトルスコープ。停止中です")
         }
         if let statusMessage {
-            return "ベクトルスコープ。\(statusMessage)"
+            return AppLanguageSettings.format("ベクトルスコープ。%@", statusMessage)
         }
-        let targetName = activeTarget.map(targetTitle) ?? "音源"
+        let targetName = activeTarget.map { AppLanguageSettings.string(targetTitle($0)) } ?? AppLanguageSettings.string("音源")
         if displayMode == .polarLevel {
-            return "ベクトルスコープ。\(targetName)の\(displayMode.title)、\(levelDetectionMode.title)を表示中です"
+            return AppLanguageSettings.format("ベクトルスコープ。%@の%@、%@を表示中です", targetName, AppLanguageSettings.string(displayMode.title), AppLanguageSettings.string(levelDetectionMode.title))
         }
-        return "ベクトルスコープ。\(targetName)の\(displayMode.title)を表示中です"
+        return AppLanguageSettings.format("ベクトルスコープ。%@の%@を表示中です", targetName, AppLanguageSettings.string(displayMode.title))
     }
 
     private func targetColor(_ target: AudioPreviewTarget) -> Color {
@@ -449,6 +451,7 @@ private struct VectorScopePlot: View {
 
 private struct CorrelationMeterView: View {
     let value: Double?
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(spacing: 6) {
@@ -492,13 +495,14 @@ private struct CorrelationMeterView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
         }
+        .environment(\.locale, locale)
     }
 
     private func correlationScaleLabel(value: String, meaning: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(value)
                 .font(.callout.monospacedDigit())
-            Text(meaning)
+            AppLocalizedText(meaning)
                 .font(.callout)
         }
         .foregroundStyle(.secondary)
@@ -506,9 +510,9 @@ private struct CorrelationMeterView: View {
 
     private var accessibilityLabel: String {
         guard let value else {
-            return "相関メーター。未測定です。プラス1は同相、0は注意、マイナス1は逆相です。"
+            return AppLanguageSettings.string("相関メーター。未測定です。プラス1は同相、0は注意、マイナス1は逆相です。")
         }
-        return String(format: "相関メーター。現在値 %.2f。プラス1は同相、0は注意、マイナス1は逆相です。", value)
+        return AppLanguageSettings.format("相関メーター。現在値 %.2f。プラス1は同相、0は注意、マイナス1は逆相です。", value)
     }
 }
 

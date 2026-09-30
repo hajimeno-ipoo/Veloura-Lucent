@@ -16,6 +16,7 @@ struct ComparisonVideoWindowView: View {
     private var windowBackgroundBlurLevel =
         AppAppearanceSettings.defaultWindowBackgroundBlurLevel
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.locale) private var locale
 
     var body: some View {
         @Bindable var model = model
@@ -31,7 +32,7 @@ struct ComparisonVideoWindowView: View {
             VStack(spacing: 0) {
                 WorkspaceFixedHeaderView(
                     title: "比較動画",
-                    summary: "60秒の範囲を選び、15秒ごとに音源を切り替えます。"
+                    summary: AppLanguageSettings.string("60秒の範囲を選び、15秒ごとに音源を切り替えます。")
                 ) {
                     EmptyView()
                 }
@@ -91,6 +92,7 @@ struct ComparisonVideoWindowView: View {
         .onDisappear {
             model.close()
         }
+        .environment(\.locale, locale)
     }
 
     private func sourceSelection(model: ComparisonVideoWindowModel) -> some View {
@@ -148,10 +150,10 @@ struct ComparisonVideoWindowView: View {
             }
         } label: {
             HStack(spacing: 8) {
-                Text(title)
+                AppLocalizedText(title)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                Text(selectedSource.map(sourceLabel) ?? "選択してください")
+                Text(selectedSource.map(sourceLabel) ?? AppLanguageSettings.string("選択してください"))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Image(systemName: "chevron.up.chevron.down")
@@ -166,12 +168,12 @@ struct ComparisonVideoWindowView: View {
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityValue(selectedSource.map(sourceLabel) ?? "未選択")
+        .accessibilityLabel(AppLanguageSettings.string(title))
+        .accessibilityValue(selectedSource.map(sourceLabel) ?? AppLanguageSettings.string("未選択"))
     }
 
     private func sourceLabel(_ source: ComparisonVideoSource) -> String {
-        "\(source.trackTitle)　\(source.roleTitle)"
+        "\(source.trackTitle)　\(AppLanguageSettings.string(source.roleTitle))"
     }
 
     @ViewBuilder
@@ -268,7 +270,7 @@ struct ComparisonVideoWindowView: View {
             .accessibilityElement(children: .combine)
             .fixedSize(horizontal: true, vertical: false)
         } else if let message = model.message {
-            Text(message)
+            Text(AppLanguageSettings.string(message))
                 .font(.body)
                 .foregroundStyle(
                     message == "動画を書き出しました。" ? .green : .secondary

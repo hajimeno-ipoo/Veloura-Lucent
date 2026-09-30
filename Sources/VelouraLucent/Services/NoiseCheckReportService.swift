@@ -60,9 +60,9 @@ enum NoiseCheckReportService {
 
             return NoiseCheckRow(
                 id: definition.id,
-                label: definition.label,
-                measurementDescription: definition.measurementDescription,
-                displayDescription: definition.displayDescription,
+                label: AppLanguageSettings.string(definition.label),
+                measurementDescription: AppLanguageSettings.string(definition.measurementDescription),
+                displayDescription: AppLanguageSettings.string(definition.displayDescription),
                 unitLabel: definition.unitLabel,
                 displayScale: definition.displayScale,
                 input: inputValue,
@@ -141,31 +141,31 @@ enum NoiseCheckReportService {
     }
 
     private static func correctionEffectText(_ delta: Double?) -> String {
-        guard let delta else { return "補正: 未実行" }
+        guard let delta else { return AppLanguageSettings.string("補正: 未実行") }
         if delta <= -3.0 {
-            return "\(formatDelta(delta)) 大きく改善"
+            return localizedFormat("%@ 大きく改善", formatDelta(delta))
         }
         if delta <= -1.0 {
-            return "\(formatDelta(delta)) 改善"
+            return localizedFormat("%@ 改善", formatDelta(delta))
         }
         if delta < 1.0 {
-            return "\(formatDelta(delta)) ほぼ維持"
+            return localizedFormat("%@ ほぼ維持", formatDelta(delta))
         }
-        return "\(formatDelta(delta)) 増加"
+        return localizedFormat("%@ 増加", formatDelta(delta))
     }
 
     private static func masteringEffectText(_ delta: Double?, warningDelta: Double) -> String {
-        guard let delta else { return "仕上げ: 未実行" }
+        guard let delta else { return AppLanguageSettings.string("仕上げ: 未実行") }
         if delta <= -1.0 {
-            return "\(formatDelta(delta)) さらに改善"
+            return localizedFormat("%@ さらに改善", formatDelta(delta))
         }
         if delta < 0.5 {
-            return "\(formatDelta(delta)) 維持"
+            return localizedFormat("%@ 維持", formatDelta(delta))
         }
         if delta < warningDelta {
-            return "\(formatDelta(delta)) 少し戻り"
+            return localizedFormat("%@ 少し戻り", formatDelta(delta))
         }
-        return "\(formatDelta(delta)) 戻りあり"
+        return localizedFormat("%@ 戻りあり", formatDelta(delta))
     }
 
     private static func summaryText(
@@ -177,43 +177,43 @@ enum NoiseCheckReportService {
         warningDelta: Double
     ) -> String {
         let current = mastered ?? corrected ?? input
-        guard let current else { return "未測定" }
+        guard let current else { return AppLanguageSettings.string("未測定") }
 
         if let input, current.levelDB >= input.levelDB + 1.0 {
-            return "原音より悪化"
+            return AppLanguageSettings.string("原音より悪化")
         }
         if let input, current.levelDB <= input.levelDB - 6.0 {
             if let masteringDelta, masteringDelta >= warningDelta {
-                return "原音より大幅に低い / 戻りあり"
+                return AppLanguageSettings.string("原音より大幅に低い / 戻りあり")
             }
             if let masteringDelta, masteringDelta >= 0.5 {
-                return "原音より大幅に低い / 少し戻りあり"
+                return AppLanguageSettings.string("原音より大幅に低い / 少し戻りあり")
             }
-            return "原音より大幅に低い"
+            return AppLanguageSettings.string("原音より大幅に低い")
         }
         if let input, current.levelDB <= input.levelDB - 1.0 {
             if let masteringDelta, masteringDelta >= warningDelta {
-                return "原音より低い / 戻りあり"
+                return AppLanguageSettings.string("原音より低い / 戻りあり")
             }
             if let masteringDelta, masteringDelta >= 0.5 {
-                return "原音より低い / 少し戻りあり"
+                return AppLanguageSettings.string("原音より低い / 少し戻りあり")
             }
-            return "原音より低い"
+            return AppLanguageSettings.string("原音より低い")
         }
         if let correctionDelta, abs(correctionDelta) < 1.0, masteringDelta.map({ abs($0) < 1.0 }) != false {
-            return "悪化なし"
+            return AppLanguageSettings.string("悪化なし")
         }
         if current.severity == .low {
-            return "目立つ問題なし"
+            return AppLanguageSettings.string("目立つ問題なし")
         }
         return noiseCheckSeveritySummary(current.severity)
     }
 
     private static func noiseCheckSeveritySummary(_ severity: NoiseCheckSeverity) -> String {
         switch severity {
-        case .low: return "目立つ問題なし"
-        case .caution: return "少し目立つ"
-        case .warning: return "目立つ"
+        case .low: return AppLanguageSettings.string("目立つ問題なし")
+        case .caution: return AppLanguageSettings.string("少し目立つ")
+        case .warning: return AppLanguageSettings.string("目立つ")
         }
     }
 
@@ -566,13 +566,19 @@ enum NoiseCheckReportService {
             return NoiseCheckAction(
                 id: id,
                 stage: stage,
-                title: title,
+                title: AppLanguageSettings.string(title),
                 currentValue: formatPercent(current),
                 recommendedValue: formatPercent(recommended),
                 changeValue: formatPercentChange(recommended - current),
-                reason: "\(reasonPrefix)（根拠: \(formatDelta(delta ?? targetReduction))）",
-                expectedEffect: "\(expectedEffect)（目安: \(formatReduction(targetReduction * 0.65))）",
-                caution: caution
+                reason: localizedFormat(
+                    "%@（根拠: %@）",
+                    AppLanguageSettings.string(reasonPrefix), formatDelta(delta ?? targetReduction)
+                ),
+                expectedEffect: localizedFormat(
+                    "%@（目安: %@）",
+                    AppLanguageSettings.string(expectedEffect), formatReduction(targetReduction * 0.65)
+                ),
+                caution: AppLanguageSettings.string(caution)
             )
         }
     }
@@ -595,13 +601,19 @@ enum NoiseCheckReportService {
             return NoiseCheckAction(
                 id: id,
                 stage: .mastering,
-                title: title,
+                title: AppLanguageSettings.string(title),
                 currentValue: format(current),
                 recommendedValue: format(recommended),
                 changeValue: formatSigned(recommended - current),
-                reason: "\(reasonPrefix)（根拠: \(formatDelta(delta ?? targetReduction))）",
-                expectedEffect: "\(expectedEffect)（目安: \(formatReduction(targetReduction * 0.65))）",
-                caution: caution
+                reason: localizedFormat(
+                    "%@（根拠: %@）",
+                    AppLanguageSettings.string(reasonPrefix), formatDelta(delta ?? targetReduction)
+                ),
+                expectedEffect: localizedFormat(
+                    "%@（目安: %@）",
+                    AppLanguageSettings.string(expectedEffect), formatReduction(targetReduction * 0.65)
+                ),
+                caution: AppLanguageSettings.string(caution)
             )
         }
     }
@@ -650,7 +662,11 @@ enum NoiseCheckReportService {
     }
 
     private static func formatReduction(_ value: Double) -> String {
-        String(format: "%.1f dB低下", max(0, value))
+        String(format: AppLanguageSettings.string("%.1f dB低下"), locale: AppLanguageSettings.locale, max(0, value))
+    }
+
+    private static func localizedFormat(_ key: String, _ arguments: CVarArg...) -> String {
+        String(format: AppLanguageSettings.string(key), locale: AppLanguageSettings.locale, arguments: arguments)
     }
 }
 

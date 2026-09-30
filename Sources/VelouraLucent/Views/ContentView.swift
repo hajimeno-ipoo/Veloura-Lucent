@@ -526,8 +526,8 @@ private struct TitlebarSidebarToggleButton: View {
         .opacity(isAvailable ? 1 : 0)
         .allowsHitTesting(isAvailable)
         .accessibilityHidden(!isAvailable)
-        .accessibilityLabel(isPresented ? "サイドバーを隠す" : "サイドバーを表示")
-        .help("左側のサイドバーを表示または非表示にします")
+        .accessibilityLabel(AppLanguageSettings.string(isPresented ? "サイドバーを隠す" : "サイドバーを表示"))
+        .help(AppLanguageSettings.string("左側のサイドバーを表示または非表示にします"))
     }
 
     private var isPresented: Bool {
@@ -719,8 +719,8 @@ private struct TitlebarInspectorToggleButton: View {
         .opacity(isAvailable ? 1 : 0)
         .allowsHitTesting(isAvailable)
         .accessibilityHidden(!isAvailable)
-        .accessibilityLabel(isPresented ? "設定を隠す" : "設定を表示")
-        .help("右側の設定パネルを表示または非表示にします")
+        .accessibilityLabel(AppLanguageSettings.string(isPresented ? "設定を隠す" : "設定を表示"))
+        .help(AppLanguageSettings.string("右側の設定パネルを表示または非表示にします"))
     }
 }
 

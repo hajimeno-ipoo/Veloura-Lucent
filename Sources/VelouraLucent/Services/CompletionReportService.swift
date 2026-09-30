@@ -132,7 +132,7 @@ enum CompletionReportService {
             highFrequencyRows: highFrequencyRows(input: input, corrected: corrected, mastered: mastered),
             lowFrequencyRows: lowFrequencyRows(input: input, corrected: corrected, mastered: mastered),
             qualityRows: qualityRows(from: qualityReport),
-            reminder: "数値は確認材料です。音楽的な良し悪しは目標値だけで決めず、入力・中間段階・最終版を同じ音量で聴き比べて判断してください。",
+            reminder: AppLanguageSettings.string("数値は確認材料です。音楽的な良し悪しは目標値だけで決めず、入力・中間段階・最終版を同じ音量で聴き比べて判断してください。"),
             mode: mode,
             summary: document.summary,
             comparisonRows: document.comparisonRows,
@@ -154,13 +154,13 @@ enum CompletionReportService {
     ) -> [CompletionReportRow] {
         var rows: [CompletionReportRow] = []
         if !mastered.integratedLoudnessLUFS.isFinite || !mastered.truePeakDBFS.isFinite {
-            rows.append(CompletionReportRow(id: "invalid", title: "測定値異常", value: "要確認", detail: "最終版に有限でない測定値があります。", severity: .warning))
+            rows.append(CompletionReportRow(id: "invalid", title: AppLanguageSettings.string("測定値異常"), value: AppLanguageSettings.string("要確認"), detail: AppLanguageSettings.string("最終版に有限でない測定値があります。"), severity: .warning))
         }
         if mastered.truePeakDBFS > peakCeilingDB {
-            rows.append(CompletionReportRow(id: "peak-over", title: "True Peak上限超過", value: format(mastered.truePeakDBFS, decimals: 2, unit: "dBTP"), detail: "設定上限 \(format(peakCeilingDB, decimals: 2, unit: "dBTP"))を超えています。", severity: .warning))
+            rows.append(CompletionReportRow(id: "peak-over", title: AppLanguageSettings.string("True Peak上限超過"), value: format(mastered.truePeakDBFS, decimals: 2, unit: "dBTP"), detail: CompletionReportLocalization.text("設定上限 %@を超えています。", String(describing: format(peakCeilingDB, decimals: 2, unit: "dBTP"))), severity: .warning))
         }
         if let offset = masteredOffsetSeconds, abs(offset) > 0.05 {
-            rows.append(CompletionReportRow(id: "time-offset", title: "開始位置のずれ", value: milliseconds(offset), detail: "入力と最終版の包絡波形から50 msを超える時間差を検出しました。", severity: .warning))
+            rows.append(CompletionReportRow(id: "time-offset", title: AppLanguageSettings.string("開始位置のずれ"), value: milliseconds(offset), detail: AppLanguageSettings.string("入力と最終版の包絡波形から50 msを超える時間差を検出しました。"), severity: .warning))
         }
         return rows
     }
@@ -196,23 +196,23 @@ enum CompletionReportService {
         return [
             CompletionReportRow(
                 id: "loudness",
-                title: "最終LUFS",
+                title: AppLanguageSettings.string("最終LUFS"),
                 value: format(mastered.integratedLoudnessLUFS, decimals: 1, unit: "LUFS"),
-                detail: "目安 \(format(Double(settings.targetLoudness), decimals: 1, unit: "LUFS")) / 目安との差 \(formatSigned(targetDelta, decimals: 1, unit: "LU"))",
+                detail: CompletionReportLocalization.text("目安 %@ / 目安との差 %@", String(describing: format(Double(settings.targetLoudness), decimals: 1, unit: "LUFS")), String(describing: formatSigned(targetDelta, decimals: 1, unit: "LU"))),
                 severity: abs(targetDelta) >= 2.0 ? .caution : .normal
             ),
             CompletionReportRow(
                 id: "truePeak",
                 title: "True Peak",
                 value: format(mastered.truePeakDBFS, decimals: 2, unit: "dBTP"),
-                detail: "上限 \(format(Double(settings.peakCeilingDB), decimals: 1, unit: "dBTP")) / 余裕 \(formatSigned(peakHeadroom, decimals: 2, unit: "dB"))",
+                detail: CompletionReportLocalization.text("上限 %@ / 余裕 %@", String(describing: format(Double(settings.peakCeilingDB), decimals: 1, unit: "dBTP")), String(describing: formatSigned(peakHeadroom, decimals: 2, unit: "dB"))),
                 severity: peakHeadroom < 0 ? .warning : peakHeadroom < 0.3 ? .caution : .normal
             ),
             CompletionReportRow(
                 id: "loudnessChange",
-                title: "音量変化",
-                value: "入力差 \(formatSigned(inputDelta, decimals: 1, unit: "LU"))",
-                detail: "入力→補正後 \(formatSigned(correctionDelta, decimals: 1, unit: "LU")) / 補正後→最終版 \(formatSigned(masteringDelta, decimals: 1, unit: "LU"))",
+                title: AppLanguageSettings.string("音量変化"),
+                value: CompletionReportLocalization.text("入力差 %@", String(describing: formatSigned(inputDelta, decimals: 1, unit: "LU"))),
+                detail: CompletionReportLocalization.text("入力→補正後 %@ / 補正後→最終版 %@", String(describing: formatSigned(correctionDelta, decimals: 1, unit: "LU")), String(describing: formatSigned(masteringDelta, decimals: 1, unit: "LU"))),
                 severity: abs(inputDelta) >= 4.0 ? .caution : .normal
             )
         ]
@@ -233,9 +233,9 @@ enum CompletionReportService {
             return [
                 CompletionReportRow(
                     id: "noise-empty",
-                    title: "ノイズ",
-                    value: "未測定",
-                    detail: "ノイズ測定結果がありません。",
+                    title: AppLanguageSettings.string("ノイズ"),
+                    value: AppLanguageSettings.string("未測定"),
+                    detail: AppLanguageSettings.string("ノイズ測定結果がありません。"),
                     severity: .caution
                 )
             ]
@@ -284,9 +284,9 @@ enum CompletionReportService {
         else {
             return CompletionReportRow(
                 id: "high-\(rule.id)",
-                title: rule.label,
-                value: "未測定",
-                detail: "\(rule.range)の測定結果がありません。",
+                title: AppLanguageSettings.string(rule.label),
+                value: AppLanguageSettings.string("未測定"),
+                detail: CompletionReportLocalization.text("%@の測定結果がありません。", String(describing: rule.range)),
                 severity: .caution
             )
         }
@@ -298,9 +298,9 @@ enum CompletionReportService {
 
         return CompletionReportRow(
             id: "high-\(rule.id)",
-            title: rule.label,
+            title: AppLanguageSettings.string(rule.label),
             value: format(masteredValue, decimals: 2, unit: "dB"),
-            detail: "\(rule.range) / 全体音量差を除いた入力差 \(formatSigned(inputDelta, decimals: 2, unit: "dB")) / 処理差 \(formatSigned(correctionDelta, decimals: 2, unit: "dB")) / 仕上げ差 \(formatSigned(masteringDelta, decimals: 2, unit: "dB"))",
+            detail: CompletionReportLocalization.text("%@ / 全体音量差を除いた入力差 %@ / 処理差 %@ / 仕上げ差 %@", String(describing: rule.range), String(describing: formatSigned(inputDelta, decimals: 2, unit: "dB")), String(describing: formatSigned(correctionDelta, decimals: 2, unit: "dB")), String(describing: formatSigned(masteringDelta, decimals: 2, unit: "dB"))),
             severity: severity
         )
     }
@@ -332,9 +332,9 @@ enum CompletionReportService {
 
             return CompletionReportRow(
                 id: "low-\(rule.id)",
-                title: "\(rule.label)（\(rule.range)）",
-                value: "入力比 \(formatSigned(inputDelta, decimals: 2, unit: "dB"))",
-                detail: "入力→補正後 \(formatSigned(correctionDelta, decimals: 2, unit: "dB")) / 補正後→最終版 \(formatSigned(masteringDelta, decimals: 2, unit: "dB"))",
+                title: CompletionReportLocalization.text("%@（%@）", AppLanguageSettings.string(rule.label), rule.range),
+                value: CompletionReportLocalization.text("入力比 %@", String(describing: formatSigned(inputDelta, decimals: 2, unit: "dB"))),
+                detail: CompletionReportLocalization.text("入力→補正後 %@ / 補正後→最終版 %@", String(describing: formatSigned(correctionDelta, decimals: 2, unit: "dB")), String(describing: formatSigned(masteringDelta, decimals: 2, unit: "dB"))),
                 severity: completionSeverity(from: severity)
             )
         }
@@ -389,11 +389,11 @@ enum CompletionReportService {
     private static func qualitySeverityText(_ severity: AudioQualityReportSeverity) -> String {
         switch severity {
         case .info:
-            return "確認"
+            return AppLanguageSettings.string("確認")
         case .caution:
-            return "注意"
+            return AppLanguageSettings.string("注意")
         case .warning:
-            return "警告"
+            return AppLanguageSettings.string("警告")
         }
     }
 

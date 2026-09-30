@@ -497,15 +497,49 @@ struct StemModeStemEvaluationPresentation: Identifiable, Sendable {
 }
 
 struct StemModeQualityReports: Sendable {
-    let audioQuality: AudioQualityReport
-    let completion: CompletionReport
-    let noiseCheck: NoiseCheckReport
+    private let storedAudioQuality: AudioQualityReport
+    private let storedCompletion: CompletionReport
+    private let storedNoiseCheck: NoiseCheckReport
+    private let masteringResult: StemMasteringResult?
     let masteringSettings: MasteringSettings
 
+    var audioQuality: AudioQualityReport {
+        regeneratedReports?.audioQuality ?? storedAudioQuality
+    }
+
+    var completion: CompletionReport {
+        regeneratedReports?.completion ?? storedCompletion
+    }
+
+    var noiseCheck: NoiseCheckReport {
+        regeneratedReports?.noiseCheck ?? storedNoiseCheck
+    }
+
+    /// Rebuilds report wording from the completed run's measurements and settings.
+    /// This does not load or process audio when the app language changes.
+    private var regeneratedReports: StemMasteringReports? {
+        guard let masteringResult else { return nil }
+        let request = masteringResult.reportRequest
+        return try? StemMasteringService.reconstructReports(
+            canonicalInputEvaluation: request.canonicalReference.evaluation,
+            masteringInputEvaluation: request.masteringInput.evaluation,
+            finalEvaluation: masteringResult.finalEvaluation,
+            canonicalInputArtifact: request.canonicalReference.artifact,
+            masteringInputArtifact: request.masteringInput.artifact,
+            finalArtifact: masteringResult.finalArtifact,
+            sourceDisplayName: request.sourceDisplayName,
+            sourceFileInfo: request.sourceFileInfo,
+            separationModelDisplayName: request.separationModelDisplayName,
+            reportContext: request.reportContext,
+            settings: request.settings
+        )
+    }
+
     init(masteringResult: StemMasteringResult) {
-        audioQuality = masteringResult.audioQualityReport
-        completion = masteringResult.completionReport
-        noiseCheck = masteringResult.noiseCheckReport
+        storedAudioQuality = masteringResult.audioQualityReport
+        storedCompletion = masteringResult.completionReport
+        storedNoiseCheck = masteringResult.noiseCheckReport
+        self.masteringResult = masteringResult
         masteringSettings = masteringResult.masteringSettings
     }
 
@@ -515,9 +549,10 @@ struct StemModeQualityReports: Sendable {
         noiseCheck: NoiseCheckReport,
         masteringSettings: MasteringSettings
     ) {
-        self.audioQuality = audioQuality
-        self.completion = completion
-        self.noiseCheck = noiseCheck
+        storedAudioQuality = audioQuality
+        storedCompletion = completion
+        storedNoiseCheck = noiseCheck
+        masteringResult = nil
         self.masteringSettings = masteringSettings
     }
 }
