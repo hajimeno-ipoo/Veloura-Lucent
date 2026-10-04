@@ -811,7 +811,7 @@ struct UIWordingPolicyTests {
         #expect(!buildScript.contains("DEVELOPMENT_OUTPUT_DIR="))
         #expect(packageScript.contains("\"$ROOT_DIR/script/build_and_run.sh\" --package"))
         #expect(packageScript.contains("APP_BUNDLE=\"$DIST_DIR/$DISPLAY_NAME.app\""))
-        #expect(buildScript.contains("APP_VERSION=\"${VELOURA_APP_VERSION:-1.1.1}\""))
+        #expect(buildScript.contains("APP_VERSION=\"${VELOURA_APP_VERSION:-1.1.5}\""))
         #expect(buildScript.contains("/bin/date -u +%Y%m%d%H%M%S"))
         #expect(buildScript.contains("\"$MODE\" == \"package\" || \"$MODE\" == \"--package\""))
         #expect(buildScript.contains("git -C \"$ROOT_DIR\" rev-list --count HEAD"))
