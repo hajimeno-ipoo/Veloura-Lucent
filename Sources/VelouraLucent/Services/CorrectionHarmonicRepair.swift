@@ -32,19 +32,19 @@ struct CorrectionHarmonicRepair: Sendable {
 
         let channels = mapChannelsConcurrently(signal.channels) { channel in
             let folded = foldover(channel: channel, sampleRate: signal.sampleRate, cutoff: cutoff, mix: foldoverMix)
-            let excited = channel.map { tanhf($0 * 2.8) - tanhf($0 * 1.1) }
+            let excited = NonlinearOversampling.process(channel) { tanhf($0 * 2.8) - tanhf($0 * 1.1) }
             let presence = SpectralDSP.lowPass(SpectralDSP.highPass(excited, cutoff: cutoff, sampleRate: signal.sampleRate), cutoff: 13_500, sampleRate: signal.sampleRate)
             let air = SpectralDSP.highPass(excited, cutoff: 13_500, sampleRate: signal.sampleRate)
             let body = SpectralDSP.lowPass(channel, cutoff: 4_000, sampleRate: signal.sampleRate)
             let transient = SpectralDSP.highPass(zip(channel, body).map(-), cutoff: 2_500, sampleRate: signal.sampleRate)
-            return channel.indices.map {
-                let mixed = channel[$0]
+            let mixed = channel.indices.map {
+                channel[$0]
                     + folded[$0]
                     + presence[$0] * baseGain
                     + air[$0] * airGain
                     + transient[$0] * transientBoost
-                return tanhf(mixed * 0.98)
             }
+            return NonlinearOversampling.process(mixed) { tanhf($0 * 0.98) }
         }
         let repaired = AudioSignal(channels: channels, sampleRate: signal.sampleRate)
         return GeneratedHighFrequencyDeltaLimiter.preserveOriginalUltraHigh(

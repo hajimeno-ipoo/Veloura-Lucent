@@ -26,16 +26,17 @@ struct MasteringAirEnhancer {
         }
 
         let channels = mapChannelsConcurrently(signal.channels) { channel in
-            let excited = channel.map { tanhf($0 * 2.4) - tanhf($0 * 1.08) }
+            let excited = NonlinearOversampling.process(channel) { tanhf($0 * 2.4) - tanhf($0 * 1.08) }
             let presence = SpectralDSP.lowPass(
                 SpectralDSP.highPass(excited, cutoff: 5_500, sampleRate: signal.sampleRate),
                 cutoff: 10_000,
                 sampleRate: signal.sampleRate
             )
             let air = SpectralDSP.highPass(excited, cutoff: 10_000, sampleRate: signal.sampleRate)
-            return channel.indices.map { index in
-                tanhf(channel[index] + presence[index] * amount * 0.45 + air[index] * amount)
+            let mixed = channel.indices.map { index in
+                channel[index] + presence[index] * amount * 0.45 + air[index] * amount
             }
+            return NonlinearOversampling.process(mixed) { tanhf($0) }
         }
 
         let result = GeneratedHighFrequencyDeltaLimiter.preserveOriginalUltraHigh(

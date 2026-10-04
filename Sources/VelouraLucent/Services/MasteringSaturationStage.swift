@@ -4,9 +4,10 @@ extension MasteringProcessor {
     func applySaturation(signal: AudioSignal, amount: Float) -> AudioSignal {
         let drive = 1 + amount * 2.8
         let mix = min(max(amount * 0.75, 0), 0.4)
+        guard mix > 0 else { return signal }
 
         let channels = signal.channels.map { channel in
-            channel.map { sample in
+            NonlinearOversampling.process(channel) { sample in
                 let saturated = tanhf(sample * drive)
                 return sample * (1 - mix) + saturated * mix
             }
