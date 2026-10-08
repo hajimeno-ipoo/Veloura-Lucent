@@ -15,13 +15,11 @@ struct StemModePreviewView: View {
             AudioWaveformWorkspaceView(
                 preview: model.previewController,
                 inputFileURL: model.inputPreviewURL,
-                correctedFileURL: model.correctedRemixPreviewArtifact?.fileURL,
+                correctedFileURL: model.correctedPureSumPreviewArtifact?.fileURL,
                 masteredFileURL: model.finalPreviewArtifact?.fileURL,
                 correctedTitle: waveformProcessedTitle,
                 correctedAccessibilityLabel: AppLanguageSettings.format("%@の波形", AppLanguageSettings.string(waveformProcessedTitle)),
                 playbackStatusText: mainPlaybackStatusText,
-                comparisonPairLabel: comparisonPairLabel,
-                comparisonPairSummary: comparisonPairSummary,
                 comparisonPairPickerMaxWidth: 440,
                 playbackInterlocks: [
                     model.stemPreviewController,
@@ -76,7 +74,7 @@ struct StemModePreviewView: View {
     }
 
     private var waveformProcessedTitle: String {
-        "再ミックス"
+        "補正後"
     }
 
     private var centralAnalysisPreviewController: AudioPreviewController {
@@ -123,31 +121,10 @@ struct StemModePreviewView: View {
         case .input:
             "入力"
         case .corrected:
-            processedTitle
+            "補正後"
         case .mastered:
             "最終版"
         }
     }
 
-    private func comparisonPairLabel(_ pair: AudioComparisonPair) -> String {
-        switch pair {
-        case .inputVsCorrected:
-            String(format: AppLanguageSettings.string("入力 vs %@"), AppLanguageSettings.string(processedTitle))
-        case .inputVsMastered:
-            "入力 vs 最終版"
-        case .correctedVsMastered:
-            "再ミックスvs最終版"
-        }
-    }
-
-    private func comparisonPairSummary(_ pair: AudioComparisonPair) -> String {
-        switch pair {
-        case .inputVsCorrected:
-            String(format: AppLanguageSettings.string("入力と%@を聴き比べます"), AppLanguageSettings.string(processedTitle))
-        case .inputVsMastered:
-            "最初の音と最終版をそのまま聴き比べます"
-        case .correctedVsMastered:
-            String(format: AppLanguageSettings.string("%@とマスタリング後を聴き比べます"), AppLanguageSettings.string(processedTitle))
-        }
-    }
 }

@@ -197,11 +197,11 @@ enum VelouraShortcutAction: String, CaseIterable, Codable, Identifiable {
         case .playSideB: "Bを再生"
         case .toggleComparisonSide: "A/B切替"
         case .toggleLoudnessMatching: "ラウドネス合わせ"
-        case .compareInputCorrected: "入力と\(processedAudioTitle)を比較"
+        case .compareInputCorrected: "入力と補正後を比較"
         case .compareInputMastered: "入力と最終版を比較"
-        case .compareCorrectedMastered: "\(processedAudioTitle)と最終版を比較"
-        case .selectStandardMode: "通常補正"
-        case .selectStemMode: "Stem Mode"
+        case .compareCorrectedMastered: "補正後と最終版を比較"
+        case .selectStandardMode: ProcessingMode.standard.title
+        case .selectStemMode: ProcessingMode.stem.title
         case .showBasicDisplay: "基本表示"
         case .showDetailedAnalysis: "詳細解析"
         case .showFullLog: "詳細ログ"

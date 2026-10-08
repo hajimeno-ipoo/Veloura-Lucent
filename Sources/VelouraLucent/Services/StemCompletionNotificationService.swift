@@ -10,11 +10,11 @@ enum StemCompletionNotificationStage: String, CaseIterable, Equatable, Sendable 
     var title: String {
         switch self {
         case .correction:
-            AppLanguageSettings.string("Stem Modeの補正が完了しました")
+            AppLanguageSettings.string("ステムの補正が完了しました")
         case .remix:
-            AppLanguageSettings.string("Stem Modeの再ミックスが完了しました")
+            AppLanguageSettings.string("ステムの再ミックスが完了しました")
         case .mastering:
-            AppLanguageSettings.string("Stem Modeのマスタリングが完了しました")
+            AppLanguageSettings.string("ステムのマスタリングが完了しました")
         }
     }
 
@@ -37,7 +37,7 @@ enum StemCompletionNotificationStage: String, CaseIterable, Equatable, Sendable 
             )
         case .mastering:
             String(
-                format: AppLanguageSettings.string("%@・%ldStemのStem Mode最終版を確認できます。"),
+                format: AppLanguageSettings.string("%@・%ldStemのステム最終版を確認できます。"),
                 locale: AppLanguageSettings.locale,
                 modelName,
                 runContract.stemCount

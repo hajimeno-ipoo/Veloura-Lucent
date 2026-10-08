@@ -176,17 +176,17 @@ struct KeyboardShortcutSettingsTests {
         )
     }
 
-    @Test("Stem再ミックス後は比較対象と解析結果の表示名を切り替える")
+    @Test("再ミックス後も比較対象は補正後に固定し、解析結果だけ現在の音源名を使う")
     func usesCurrentProcessedAudioTitle() {
         #expect(
             VelouraShortcutAction.compareInputCorrected.title(
                 processedAudioTitle: "Stem再ミックス"
-            ) == "入力とStem再ミックスを比較"
+            ) == "入力と補正後を比較"
         )
         #expect(
             VelouraShortcutAction.compareCorrectedMastered.title(
                 processedAudioTitle: "Stem再ミックス"
-            ) == "Stem再ミックスと最終版を比較"
+            ) == "補正後と最終版を比較"
         )
         #expect(
             VelouraShortcutAction.showCorrectedAnalysis.title(

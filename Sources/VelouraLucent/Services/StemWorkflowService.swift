@@ -146,12 +146,12 @@ enum StemWorkflowServiceError: LocalizedError, Equatable, Sendable {
 
     var errorDescription: String? {
         switch self {
-        case .missingStem(let role): "Stem Modeに\(role.rawValue)がありません。"
-        case .runContractMismatch: "Stem Modeの実行契約が検証済みモデル契約と一致しません。"
+        case .missingStem(let role): "ステムに\(role.rawValue)がありません。"
+        case .runContractMismatch: "ステムの実行契約が検証済みモデル契約と一致しません。"
         case .correctionIncomplete: "契約対象の補正済みStemが揃っていないため、次の工程を開始できません。"
         case .remixIncomplete: "検証済みのStem再ミックスがないため、マスタリングを開始できません。"
         case let .validationFailed(phase, failures):
-            "Stem Modeの\(phase.rawValue)構造検証に失敗しました（\(failures.count)件）。"
+            "ステムの\(phase.rawValue)構造検証に失敗しました（\(failures.count)件）。"
         case let .cleanupFailed(originalFailure, failures):
             "Stem工程失敗後の未完成ファイルを削除できませんでした（元の失敗: \(originalFailure)、削除失敗: \(failures.joined(separator: "; "))）。"
         }
@@ -1250,7 +1250,7 @@ struct StemWorkflowService: Sendable {
         }
         await eventHandler(.artifactCommitted(runID: request.runID, artifact: mastering.finalArtifact))
         try await progress(request.runID, .mastering, 1, "既存マスタリング完了", eventHandler)
-        try await progress(request.runID, .finalizeMaster, 1, "Stem Mode最終版解析・保存完了", eventHandler)
+        try await progress(request.runID, .finalizeMaster, 1, "ステム最終版解析・保存完了", eventHandler)
         return StemWorkflowResult(
             runID: request.runID,
             runContract: correction.runContract,

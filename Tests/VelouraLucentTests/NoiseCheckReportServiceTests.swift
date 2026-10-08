@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import VelouraLucent
 
+@MainActor
 struct NoiseCheckReportServiceTests {
     init() {
         UserDefaults.standard.set(AppLanguageSelection.japanese.rawValue, forKey: AppLanguageSettings.key)

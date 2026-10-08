@@ -119,29 +119,29 @@ enum StemModelAcquisitionError: Error, Equatable, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .authorizationIssuerMismatch:
-            return "Stem Modeの取得確認が別の取得サービスから発行されています。"
+            return "ステムの取得確認が別の取得サービスから発行されています。"
         case .authorizationAlreadyUsed(let operationIdentifier):
-            return "Stem Modeのモデル取得確認は既に使用済みです: \(operationIdentifier)"
+            return "ステムのモデル取得確認は既に使用済みです: \(operationIdentifier)"
         case .authorizationAssetSetMismatch(let expected, let actual):
-            return "Stem Modeの取得確認とモデル一式が一致しません（期待: \(expected)、実際: \(actual)）。"
+            return "ステムの取得確認とモデル一式が一致しません（期待: \(expected)、実際: \(actual)）。"
         case .authorizationPurposeMismatch(let expected, let actual):
-            return "Stem Modeの取得確認目的が一致しません（期待: \(expected.rawValue)、実際: \(actual.rawValue)）。"
+            return "ステムの取得確認目的が一致しません（期待: \(expected.rawValue)、実際: \(actual.rawValue)）。"
         case .authorizationManifestMismatch(let assetSetIdentifier):
-            return "Stem Modeの取得確認後にmanifestが変更されました: \(assetSetIdentifier)"
+            return "ステムの取得確認後にmanifestが変更されました: \(assetSetIdentifier)"
         case .manifestDoesNotRequireExplicitConfirmation:
-            return "Stem Modeのmanifestに明示確認必須の取得方針がありません。"
+            return "ステムのmanifestに明示確認必須の取得方針がありません。"
         case .invalidDownloadableAssetSet:
-            return "Stem Modeの取得対象はweightsとconfigの2資産でなければなりません。"
+            return "ステムの取得対象はweightsとconfigの2資産でなければなりません。"
         case .invalidDownloadByteTotal:
-            return "Stem Modeの取得容量を安全に集計できません。"
+            return "ステムの取得容量を安全に集計できません。"
         case .operationAlreadyInProgress(let activeOperationIdentifier):
-            return "別のStem Modeモデル取得が進行中です: \(activeOperationIdentifier)"
+            return "別のステムモデル取得が進行中です: \(activeOperationIdentifier)"
         case .operationNotActive(let requested, let active):
-            return "Stem Modeの取得操作が進行中ではありません（要求: \(requested)、進行中: \(active?.uuidString ?? "なし")）。"
+            return "ステムの取得操作が進行中ではありません（要求: \(requested)、進行中: \(active?.uuidString ?? "なし")）。"
         case .operationCannotBeCancelledDuringActivation(let operationIdentifier):
-            return "Stem Modeのモデルを原子的に有効化しているため、この時点では中断できません: \(operationIdentifier)"
+            return "ステムのモデルを原子的に有効化しているため、この時点では中断できません: \(operationIdentifier)"
         case .stagedAssetURLMismatch(let kind, let expected, let actual):
-            return "Stem Modeの取得済み資産パスが一致しません: \(kind.rawValue)（期待: \(expected)、実際: \(actual)）"
+            return "ステムの取得済み資産パスが一致しません: \(kind.rawValue)（期待: \(expected)、実際: \(actual)）"
         case .revisionEvidenceMismatch(
             let kind,
             let expectedHeader,
@@ -149,15 +149,15 @@ enum StemModelAcquisitionError: Error, Equatable, LocalizedError, Sendable {
             let expectedRevision,
             let actualRevision
         ):
-            return "Stem ModeのRevision証拠が一致しません: \(kind.rawValue)（header: \(expectedHeader)/\(actualHeader)、revision: \(expectedRevision)/\(actualRevision)）"
+            return "ステムのRevision証拠が一致しません: \(kind.rawValue)（header: \(expectedHeader)/\(actualHeader)、revision: \(expectedRevision)/\(actualRevision)）"
         case .cancelled(let operationIdentifier):
-            return "Stem Modeのモデル取得を中断しました: \(operationIdentifier)"
+            return "ステムのモデル取得を中断しました: \(operationIdentifier)"
         case .stagingCleanupFailed(
             let operationIdentifier,
             let originalFailure,
             let cleanupFailure
         ):
-            return "Stem Modeの取得失敗後に一時資産を削除できませんでした: \(operationIdentifier)（元の失敗: \(originalFailure)、削除失敗: \(cleanupFailure)）"
+            return "ステムの取得失敗後に一時資産を削除できませんでした: \(operationIdentifier)（元の失敗: \(originalFailure)、削除失敗: \(cleanupFailure)）"
         }
     }
 }

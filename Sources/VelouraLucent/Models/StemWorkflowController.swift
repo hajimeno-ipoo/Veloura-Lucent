@@ -18,25 +18,25 @@ enum StemWorkflowControllerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .workspaceUnavailable:
-            "Stem Mode専用画面の状態を準備できていません。"
+            "ステム専用画面の状態を準備できていません。"
         case .workflowAlreadyActive:
-            "別のStem Mode処理が進行中です。"
+            "別のステム処理が進行中です。"
         case .remixNotReady:
             "契約対象の補正済みStemと補正後が確定していないため、再ミックスを開始できません。"
         case .masteringNotReady:
             "検証済みStem再ミックスが確定していないため、マスタリングを開始できません。"
         case .modelOperationInProgress:
-            "AIモデルの取得・削除・再検証が進行中のため、Stem Mode処理を開始できません。"
+            "AIモデルの取得・削除・再検証が進行中のため、ステム処理を開始できません。"
         case .validatedResourcesUnavailable:
-            "右サイドのStem分離で使用可能と確認されたStem Mode資産がありません。"
+            "右サイドのStem分離で使用可能と確認されたステム資産がありません。"
         case let .eventRunMismatch(expected, actual):
-            "Stem Modeの処理IDが一致しません（現在: \(expected.uuidString)、受信: \(actual.uuidString)）。"
+            "ステムの処理IDが一致しません（現在: \(expected.uuidString)、受信: \(actual.uuidString)）。"
         case .artifactIsNotValidated(let identifier):
             "成果物「\(identifier)」は現在の音声検証を通過していないため、書き出しません。"
         case .artifactIsNotExportable(let kind):
             "成果物「\(kind.stemModeDisplayTitle)」はユーザー書き出し対象ではありません。"
         case .unsafeExportDestination(let path):
-            "Stem Modeの内部一時保存先や内部成果物へは書き出せません（\(path)）。"
+            "ステムの内部一時保存先や内部成果物へは書き出せません（\(path)）。"
         }
     }
 }
@@ -1133,7 +1133,7 @@ final class StemWorkflowController {
                 updatePreviewSourcesFromValidatedArtifacts()
             } catch let sessionError {
                 workspaceModel?.presentControllerFailure(
-                    title: "Stem Mode処理を停止しました",
+                    title: "ステム処理を停止しました",
                     message: "\(error.localizedDescription)\n表示状態の記録にも失敗しました: \(sessionError.localizedDescription)"
                 )
                 finishStoppedRun()
@@ -1141,7 +1141,7 @@ final class StemWorkflowController {
             }
         }
         workspaceModel?.presentControllerFailure(
-            title: "Stem Mode処理を停止しました",
+            title: "ステム処理を停止しました",
             message: session.lastError?.message ?? error.localizedDescription
         )
         finishStoppedRun()

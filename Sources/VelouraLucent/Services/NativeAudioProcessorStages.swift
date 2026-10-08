@@ -191,6 +191,9 @@ extension NativeAudioProcessor {
                 prediction: repairPrediction
             )
         }
+        if signal.frameCount > 1 {
+            context.logger?.log("高域修復/Oversampling: 4倍処理を適用")
+        }
         saveDiagnostic(repaired, to: context.diagnosticOutputDirectory, order: 4, id: "harmonicRepair", label: "高域補完後", logger: context.logger)
         return repaired
     }

@@ -12,7 +12,7 @@ struct StemRemixComparisonView: View {
     var body: some View {
         AudioWaveformWorkspaceView(
             preview: preview,
-            workspaceTitle: "補正後／再ミックス A/B",
+            workspaceTitle: "補正後／再ミックス",
             tracks: [
                 AudioWaveformTrackPresentation(
                     target: .input,
@@ -29,12 +29,12 @@ struct StemRemixComparisonView: View {
                     accessibilityLabel: "再ミックスの波形"
                 ),
             ],
-            comparisonSummary: "Aは補正後、Bは現在の再ミックスです",
-            sideAButtonTitle: "補正後を再生",
-            sideBButtonTitle: "再ミックスを再生",
-            switchButtonTitle: "補正後／再ミックス切替",
-            activeSideATitle: "補正後",
-            activeSideBTitle: "再ミックス",
+            comparisonSummary: "補正後と再ミックスを聴き比べます",
+            sideAButtonTitle: "Aを再生",
+            sideBButtonTitle: "Bを再生",
+            switchButtonTitle: "A/B切替",
+            activeSideATitle: "A",
+            activeSideBTitle: "B",
             volumeAccessibilityLabel: "再ミックス比較音量",
             loudnessHelp: "補正後と再ミックスの音量差を試聴時だけ揃えます",
             resetToken: resetToken,

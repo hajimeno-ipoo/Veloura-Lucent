@@ -289,7 +289,7 @@ final class StemModeWorkspaceModel {
         previewArtifacts.first(where: { $0.kind == .remixed48000 })
     }
 
-    /// 既存の入力／処理後／最終版previewでは、再ミックスがあればそれを優先します。
+    /// 詳細解析とレポートでは、再ミックスがあればそれを優先します。
     var correctedRemixPreviewArtifact: StemAudioArtifact? {
         remixedPreviewArtifact ?? correctedPureSumPreviewArtifact
     }
@@ -348,7 +348,7 @@ final class StemModeWorkspaceModel {
         guard canChooseInput else {
             presentError(
                 title: "入力を変更できません",
-                message: "Stem Mode処理の実行中は入力音源を変更できません。"
+                message: "ステム処理の実行中は入力音源を変更できません。"
             )
             return
         }
@@ -464,29 +464,29 @@ final class StemModeWorkspaceModel {
     func beginCorrection() async {
         guard let selectedInputURL else {
             presentError(
-                title: "Stem Modeを開始できません",
+                title: "ステムを開始できません",
                 message: "先に入力音源を選択してください。"
             )
             return
         }
         guard let separationSettings else {
             presentError(
-                title: "Stem Modeを開始できません",
+                title: "ステムを開始できません",
                 message: "承認済みの本番分離設定がまだ準備されていません。"
             )
             return
         }
         guard modelPresentation != nil else {
             presentError(
-                title: "Stem Modeを開始できません",
+                title: "ステムを開始できません",
                 message: "検証済みactiveモデルの情報がまだ準備されていません。"
             )
             return
         }
         guard canRunCorrection else {
             presentError(
-                title: "Stem Modeを開始できません",
-                message: "入力確認または別のStem Mode処理が進行中です。"
+                title: "ステムを開始できません",
+                message: "入力確認または別のステム処理が進行中です。"
             )
             return
         }
@@ -533,7 +533,7 @@ final class StemModeWorkspaceModel {
             replacePreviewSources(previousPreviewArtifacts)
             replaceDisplayAnalysisSources(previousDisplayAnalysisArtifacts)
             presentError(
-                title: "Stem Modeを開始できません",
+                title: "ステムを開始できません",
                 message: error.localizedDescription
             )
         }
@@ -998,16 +998,20 @@ final class StemModeWorkspaceModel {
     private func replacePreviewSources(_ artifacts: [StemAudioArtifact]) {
         let previousPureSum = correctedPureSumPreviewArtifact
         let previousRemix = remixedPreviewArtifact
-        let previousCorrected = correctedRemixPreviewArtifact
         let previousFinal = finalPreviewArtifact
         previewArtifacts = artifacts
 
         if previousPureSum != correctedPureSumPreviewArtifact
-            || previousRemix != remixedPreviewArtifact
-            || previousCorrected != correctedRemixPreviewArtifact
             || previousFinal != finalPreviewArtifact {
             preparePreviewSources()
+        }
+        if previousPureSum != correctedPureSumPreviewArtifact
+            || previousRemix != remixedPreviewArtifact {
             prepareRemixPreviewSources()
+        }
+        if previousPureSum != correctedPureSumPreviewArtifact
+            || previousRemix != remixedPreviewArtifact
+            || previousFinal != finalPreviewArtifact {
             synchronizeDisplaySpectrograms()
         }
     }
@@ -1035,12 +1039,12 @@ final class StemModeWorkspaceModel {
     private func preparePreviewSources() {
         previewController.stopPlayback()
         previewController.setComparisonPair(
-            finalPreviewArtifact == nil && correctedRemixPreviewArtifact != nil
+            finalPreviewArtifact == nil && correctedPureSumPreviewArtifact != nil
                 ? .inputVsCorrected
                 : .inputVsMastered
         )
         previewController.preparePreview(
-            for: correctedRemixPreviewArtifact?.fileURL,
+            for: correctedPureSumPreviewArtifact?.fileURL,
             target: .corrected
         )
         previewController.preparePreview(

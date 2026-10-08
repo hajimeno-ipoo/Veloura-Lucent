@@ -80,47 +80,47 @@ enum StemModelAssetValidationError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .manifestMissing(let path):
-            return "Stem Modeのモデルmanifestが見つかりません: \(path)"
+            return "ステムのモデルmanifestが見つかりません: \(path)"
         case .manifestUnreadable(let path, let reason):
-            return "Stem Modeのモデルmanifestを読み込めません: \(path)（\(reason)）"
+            return "ステムのモデルmanifestを読み込めません: \(path)（\(reason)）"
         case .contractMismatch(let field, let expected, let actual):
-            return "Stem Modeのモデル契約が一致しません: \(field)（期待: \(expected)、実際: \(actual)）"
+            return "ステムのモデル契約が一致しません: \(field)（期待: \(expected)、実際: \(actual)）"
         case .duplicateRuntimePin(let name):
-            return "Stem Modeの依存関係が重複しています: \(name)"
+            return "ステムの依存関係が重複しています: \(name)"
         case .duplicateAsset(let kind):
-            return "Stem Modeの資産定義が重複しています: \(kind.rawValue)"
+            return "ステムの資産定義が重複しています: \(kind.rawValue)"
         case .duplicateRedirectHost(let host):
-            return "Stem Modeの許可済みredirect hostが重複しています: \(host)"
+            return "ステムの許可済みredirect hostが重複しています: \(host)"
         case .unsafeRelativePath(let field, let path):
-            return "Stem Modeの相対パスが安全ではありません: \(field)（\(path)）"
+            return "ステムの相対パスが安全ではありません: \(field)（\(path)）"
         case .invalidDownloadURL(let kind, let value):
-            return "Stem Modeの取得URLが無効です: \(kind.rawValue)（\(value)）"
+            return "ステムの取得URLが無効です: \(kind.rawValue)（\(value)）"
         case .disallowedDownloadHost(let kind, let host):
-            return "Stem Modeで許可されていない取得先です: \(kind.rawValue)（\(host)）"
+            return "ステムで許可されていない取得先です: \(kind.rawValue)（\(host)）"
         case .downloadURLMissingRevision(let kind, let revision):
-            return "Stem Modeの取得URLに固定Revisionが含まれていません: \(kind.rawValue)（\(revision)）"
+            return "ステムの取得URLに固定Revisionが含まれていません: \(kind.rawValue)（\(revision)）"
         case .directoryMissing(let path):
-            return "Stem Modeのモデルディレクトリが見つかりません: \(path)"
+            return "ステムのモデルディレクトリが見つかりません: \(path)"
         case .directoryNotDirectory(let path):
-            return "Stem Modeのモデル保存先がディレクトリではありません: \(path)"
+            return "ステムのモデル保存先がディレクトリではありません: \(path)"
         case .assetMissing(let kind, let path):
-            return "Stem Modeに必要なモデル資産が見つかりません: \(kind.rawValue)（\(path)）"
+            return "ステムに必要なモデル資産が見つかりません: \(kind.rawValue)（\(path)）"
         case .bundledRuntimeMissing(let path):
-            return "Stem Modeに必要な同梱MLX実行資産が見つかりません: \(path)"
+            return "ステムに必要な同梱MLX実行資産が見つかりません: \(path)"
         case .assetSymbolicLink(let kind, let path):
-            return "Stem Modeの資産にsymbolic linkは使用できません: \(kind?.rawValue ?? "directory")（\(path)）"
+            return "ステムの資産にsymbolic linkは使用できません: \(kind?.rawValue ?? "directory")（\(path)）"
         case .assetNotRegularFile(let kind, let path):
-            return "Stem Modeの資産が通常ファイルではありません: \(kind?.rawValue ?? "directory")（\(path)）"
+            return "ステムの資産が通常ファイルではありません: \(kind?.rawValue ?? "directory")（\(path)）"
         case .assetUnreadable(let kind, let path, let reason):
-            return "Stem Modeの資産を読み込めません: \(kind.rawValue)（\(path)、\(reason)）"
+            return "ステムの資産を読み込めません: \(kind.rawValue)（\(path)、\(reason)）"
         case .assetSizeMismatch(let kind, let path, let expected, let actual):
-            return "Stem Modeの資産サイズが一致しません: \(kind.rawValue)（\(path)、期待: \(expected)、実際: \(actual)）"
+            return "ステムの資産サイズが一致しません: \(kind.rawValue)（\(path)、期待: \(expected)、実際: \(actual)）"
         case .assetChecksumMismatch(let kind, let path, let expected, let actual):
-            return "Stem Modeの資産checksumが一致しません: \(kind.rawValue)（\(path)、期待: \(expected)、実際: \(actual)）"
+            return "ステムの資産checksumが一致しません: \(kind.rawValue)（\(path)、期待: \(expected)、実際: \(actual)）"
         case .unexpectedInstallationEntry(let path):
-            return "Stem Modeのモデル保存先に未承認の項目があります: \(path)"
+            return "ステムのモデル保存先に未承認の項目があります: \(path)"
         case .modelConfigurationInvalid(let path, let field, let expected, let actual):
-            return "Stem Modeのモデル設定が一致しません: \(path):\(field)（期待: \(expected)、実際: \(actual)）"
+            return "ステムのモデル設定が一致しません: \(path):\(field)（期待: \(expected)、実際: \(actual)）"
         }
     }
 }

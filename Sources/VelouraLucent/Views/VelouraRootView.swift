@@ -344,7 +344,7 @@ struct VelouraRootView: View {
         let target = preview.comparisonTarget(for: side)
         let title = switch target {
         case .input: AppLanguageSettings.string("入力")
-        case .corrected: commandActions.processedAudioTitle
+        case .corrected: AppLanguageSettings.string("補正後")
         case .mastered: AppLanguageSettings.string("最終版")
         }
         return String(

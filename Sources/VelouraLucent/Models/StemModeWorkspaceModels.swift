@@ -222,7 +222,7 @@ enum StemModeWorkspaceSettingsError: LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .settingsCannotChangeDuringRun:
-            "Stem Mode処理の実行中は設定を変更できません。"
+            "ステム処理の実行中は設定を変更できません。"
         case .remixInputRequired:
             "入力音源を選んでから再ミックス設定を変更してください。"
         case .remixManualModeRequired:

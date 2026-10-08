@@ -1681,18 +1681,18 @@
         }
       }
     },
-    "%@・%ldStemのStem Mode最終版を確認できます。": {
+    "%@・%ldStemのステム最終版を確認できます。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Review the Stem Mode final version from %@ (%ld stems)."
+            "value": "Review the Stem final version from %@ (%ld stems)."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@・%ldStemのStem Mode最終版を確認できます。"
+            "value": "%@・%ldStemのステム最終版を確認できます。"
           }
         }
       }
@@ -3153,34 +3153,34 @@
         }
       }
     },
-    "AIモデルの取得は開始しません。この状態が続く場合は、アプリを正規配布物から再インストールしてください。通常モードは利用できます。": {
+    "AIモデルの取得は開始しません。この状態が続く場合は、アプリを正規配布物から再インストールしてください。スタンダードモードは利用できます。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The AI model download will not start. If this continues, reinstall the app from the official distribution. Normal Mode is available."
+            "value": "The AI model download will not start. If this continues, reinstall the app from the official distribution. Standard is available."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "AIモデルの取得は開始しません。この状態が続く場合は、アプリを正規配布物から再インストールしてください。通常モードは利用できます。"
+            "value": "AIモデルの取得は開始しません。この状態が続く場合は、アプリを正規配布物から再インストールしてください。スタンダードモードは利用できます。"
           }
         }
       }
     },
-    "AIモデルの取得は開始しません。通常モードへ切り替えることもできます。": {
+    "AIモデルの取得は開始しません。スタンダードモードへ切り替えることもできます。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The AI model download will not start. You can switch to Normal Mode."
+            "value": "The AI model download will not start. You can switch to Standard."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "AIモデルの取得は開始しません。通常モードへ切り替えることもできます。"
+            "value": "AIモデルの取得は開始しません。スタンダードモードへ切り替えることもできます。"
           }
         }
       }
@@ -3201,18 +3201,18 @@
         }
       }
     },
-    "AIモデルの取得・削除・再検証が進行中のため、Stem Mode処理を開始できません。": {
+    "AIモデルの取得・削除・再検証が進行中のため、ステム処理を開始できません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode cannot start while an AI model is being acquired, removed, or verified."
+            "value": "Stem cannot start while an AI model is being acquired, removed, or verified."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "AIモデルの取得・削除・再検証が進行中のため、Stem Mode処理を開始できません。"
+            "value": "AIモデルの取得・削除・再検証が進行中のため、ステム処理を開始できません。"
           }
         }
       }
@@ -4177,167 +4177,167 @@
         }
       }
     },
-    "Stem Mode": {
+    "ステム": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ステム"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stem"
+          }
+        }
+      }
+    },
+    "ステムに%@がありません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode"
+            "value": "%@ is missing from Stem."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode"
+            "value": "ステムに%@がありません。"
           }
         }
       }
     },
-    "Stem Modeに%@がありません。": {
+    "ステムの%@構造検証に失敗しました（%@件）。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ is missing from Stem Mode."
+            "value": "Stem %@ structure validation failed (%@ issues)."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeに%@がありません。"
+            "value": "ステムの%@構造検証に失敗しました（%@件）。"
           }
         }
       }
     },
-    "Stem Modeの%@構造検証に失敗しました（%@件）。": {
+    "ステムのマスタリングが完了しました": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode %@ structure validation failed (%@ issues)."
+            "value": "Stem mastering is complete"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeの%@構造検証に失敗しました（%@件）。"
+            "value": "ステムのマスタリングが完了しました"
           }
         }
       }
     },
-    "Stem Modeのマスタリングが完了しました": {
+    "ステムのモデルを利用できます": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode mastering is complete"
+            "value": "Stem models are ready"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeのマスタリングが完了しました"
+            "value": "ステムのモデルを利用できます"
           }
         }
       }
     },
-    "Stem Modeのモデルを利用できます": {
+    "ステムの再ミックスが完了しました": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode models are ready"
+            "value": "Stem remix is complete"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeのモデルを利用できます"
+            "value": "ステムの再ミックスが完了しました"
           }
         }
       }
     },
-    "Stem Modeの再ミックスが完了しました": {
+    "ステムの完了には最終版生成工程の完了が必要です。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode remix is complete"
+            "value": "The final master stage must finish before Stem can complete."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeの再ミックスが完了しました"
+            "value": "ステムの完了には最終版生成工程の完了が必要です。"
           }
         }
       }
     },
-    "Stem Modeの完了には最終版生成工程の完了が必要です。": {
+    "ステムの実行契約が検証済みモデル契約と一致しません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The final master stage must finish before Stem Mode can complete."
+            "value": "Stem run contract does not match the validated model contract."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeの完了には最終版生成工程の完了が必要です。"
+            "value": "ステムの実行契約が検証済みモデル契約と一致しません。"
           }
         }
       }
     },
-    "Stem Modeの実行契約が検証済みモデル契約と一致しません。": {
+    "ステムの検証契約はstereo 2 channelです（実際: %@）": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode run contract does not match the validated model contract."
+            "value": "Stem validation requires two stereo channels (actual: %@)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeの実行契約が検証済みモデル契約と一致しません。"
+            "value": "ステムの検証契約はstereo 2 channelです（実際: %@）"
           }
         }
       }
     },
-    "Stem Modeの検証契約はstereo 2 channelです（実際: %@）": {
+    "ステムの補正が完了しました": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode validation requires two stereo channels (actual: %@)"
+            "value": "Stem correction is complete"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeの検証契約はstereo 2 channelです（実際: %@）"
+            "value": "ステムの補正が完了しました"
           }
         }
       }
     },
-    "Stem Modeの補正が完了しました": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stem Mode correction is complete"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stem Modeの補正が完了しました"
-          }
-        }
-      }
-    },
-    "Stem Modeの補正完了には契約対象の補正済みStemと補正後の検証・保存完了が必要です。": {
+    "ステムの補正完了には契約対象の補正済みStemと補正後の検証・保存完了が必要です。": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -4348,295 +4348,295 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeの補正完了には契約対象の補正済みStemと補正後の検証・保存完了が必要です。"
+            "value": "ステムの補正完了には契約対象の補正済みStemと補正後の検証・保存完了が必要です。"
           }
         }
       }
     },
-    "Stem ModeはApple Silicon専用です。現在の実行アーキテクチャではAIモデルを取得せず、通常モードだけを利用できます。": {
+    "ステムはApple Silicon専用です。現在の実行アーキテクチャではAIモデルを取得せず、スタンダードモードだけを利用できます。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode requires Apple Silicon. With the current architecture, AI models cannot be downloaded; only Normal Mode is available."
+            "value": "Stem requires Apple Silicon. With the current architecture, AI models cannot be downloaded; only Standard is available."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem ModeはApple Silicon専用です。現在の実行アーキテクチャではAIモデルを取得せず、通常モードだけを利用できます。"
+            "value": "ステムはApple Silicon専用です。現在の実行アーキテクチャではAIモデルを取得せず、スタンダードモードだけを利用できます。"
           }
         }
       }
     },
-    "Stem Modeを使うには、固定RevisionのAIモデル2資産が必要です。取得を承認するまでネットワーク通信は開始しません。": {
+    "ステムを使うには、固定RevisionのAIモデル2資産が必要です。取得を承認するまでネットワーク通信は開始しません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode requires two AI model assets at a pinned revision. No network connection starts until you approve the download."
+            "value": "Stem requires two AI model assets at a pinned revision. No network connection starts until you approve the download."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeを使うには、固定RevisionのAIモデル2資産が必要です。取得を承認するまでネットワーク通信は開始しません。"
+            "value": "ステムを使うには、固定RevisionのAIモデル2資産が必要です。取得を承認するまでネットワーク通信は開始しません。"
           }
         }
       }
     },
-    "Stem Modeを開始できません": {
+    "ステムを開始できません": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cannot start Stem Mode"
+            "value": "Cannot start Stem"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeを開始できません"
+            "value": "ステムを開始できません"
           }
         }
       }
     },
-    "Stem Modeマスタリング": {
+    "ステムマスタリング": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode mastering"
+            "value": "Stem mastering"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Modeマスタリング"
+            "value": "ステムマスタリング"
           }
         }
       }
     },
-    "Stem Mode再ミックス": {
+    "ステム再ミックス": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode remix"
+            "value": "Stem remix"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode再ミックス"
+            "value": "ステム再ミックス"
           }
         }
       }
     },
-    "Stem Mode処理が完了しました。": {
+    "ステム処理が完了しました。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode processing complete."
+            "value": "Stem processing complete."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode処理が完了しました。"
+            "value": "ステム処理が完了しました。"
           }
         }
       }
     },
-    "Stem Mode処理の実行中は入力音源を変更できません。": {
+    "ステム処理の実行中は入力音源を変更できません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The input audio cannot be changed while a Stem Mode run is active."
+            "value": "The input audio cannot be changed while a Stem run is active."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode処理の実行中は入力音源を変更できません。"
+            "value": "ステム処理の実行中は入力音源を変更できません。"
           }
         }
       }
     },
-    "Stem Mode処理を停止しました": {
+    "ステム処理を停止しました": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode run stopped"
+            "value": "Stem run stopped"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode処理を停止しました"
+            "value": "ステム処理を停止しました"
           }
         }
       }
     },
-    "Stem Mode専用画面の状態を準備できていません。": {
+    "ステム専用画面の状態を準備できていません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The Stem Mode workspace is not ready."
+            "value": "The Stem workspace is not ready."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode専用画面の状態を準備できていません。"
+            "value": "ステム専用画面の状態を準備できていません。"
           }
         }
       }
     },
-    "Stem Mode成果物の種類が表示状態と一致しません。": {
+    "ステム成果物の種類が表示状態と一致しません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The Stem Mode artifact type does not match the display state."
+            "value": "The Stem artifact type does not match the display state."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode成果物の種類が表示状態と一致しません。"
+            "value": "ステム成果物の種類が表示状態と一致しません。"
           }
         }
       }
     },
-    "Stem Mode最終版": {
+    "ステム最終版": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode final master"
+            "value": "Stem final master"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode最終版"
+            "value": "ステム最終版"
           }
         }
       }
     },
-    "Stem Mode最終版を保存します": {
+    "ステム最終版を保存します": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saving Stem Mode final audio"
+            "value": "Saving Stem final audio"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode最終版を保存します"
+            "value": "ステム最終版を保存します"
           }
         }
       }
     },
-    "Stem Mode最終版を検証します": {
+    "ステム最終版を検証します": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Validating Stem Mode final audio"
+            "value": "Validating Stem final audio"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode最終版を検証します"
+            "value": "ステム最終版を検証します"
           }
         }
       }
     },
-    "Stem Mode最終版を生成しました": {
+    "ステム最終版を生成しました": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode final master generated"
+            "value": "Stem final master generated"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode最終版を生成しました"
+            "value": "ステム最終版を生成しました"
           }
         }
       }
     },
-    "Stem Mode最終版を解析しました": {
+    "ステム最終版を解析しました": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode final master analyzed"
+            "value": "Stem final master analyzed"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode最終版を解析しました"
+            "value": "ステム最終版を解析しました"
           }
         }
       }
     },
-    "Stem Mode最終版を解析・ノイズ測定します": {
+    "ステム最終版を解析・ノイズ測定します": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Analyzing and measuring noise in Stem Mode final audio"
+            "value": "Analyzing and measuring noise in Stem final audio"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode最終版を解析・ノイズ測定します"
+            "value": "ステム最終版を解析・ノイズ測定します"
           }
         }
       }
     },
-    "Stem Mode補正": {
+    "ステム補正": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode correction"
+            "value": "Stem correction"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode補正"
+            "value": "ステム補正"
           }
         }
       }
     },
-    "Stem Mode資産を確認中": {
+    "ステム資産を確認中": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Checking Stem Mode assets"
+            "value": "Checking Stem assets"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode資産を確認中"
+            "value": "ステム資産を確認中"
           }
         }
       }
@@ -6657,18 +6657,18 @@
         }
       }
     },
-    "このMacではStem Modeを実行できません": {
+    "このMacではステムを実行できません": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stem Mode cannot run on this Mac"
+            "value": "Stem cannot run on this Mac"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このMacではStem Modeを実行できません"
+            "value": "このMacではステムを実行できません"
           }
         }
       }
@@ -7489,18 +7489,18 @@
         }
       }
     },
-    "アプリ同梱のMLX実行資産に問題があります。AIモデルの再取得では修復できないため、Stem推論は開始しません。通常モードを利用するか、アプリを正規配布物から再インストールしてください。": {
+    "アプリ同梱のMLX実行資産に問題があります。AIモデルの再取得では修復できないため、Stem推論は開始しません。スタンダードモードを利用するか、アプリを正規配布物から再インストールしてください。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The bundled MLX runtime assets have a problem. Redownloading the AI model will not repair them, so Stem inference cannot start. Use Normal Mode or reinstall the app from the official distribution."
+            "value": "The bundled MLX runtime assets have a problem. Redownloading the AI model will not repair them, so Stem inference cannot start. Use Standard or reinstall the app from the official distribution."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "アプリ同梱のMLX実行資産に問題があります。AIモデルの再取得では修復できないため、Stem推論は開始しません。通常モードを利用するか、アプリを正規配布物から再インストールしてください。"
+            "value": "アプリ同梱のMLX実行資産に問題があります。AIモデルの再取得では修復できないため、Stem推論は開始しません。スタンダードモードを利用するか、アプリを正規配布物から再インストールしてください。"
           }
         }
       }
@@ -15681,6 +15681,22 @@
         }
       }
     },
+    "倍音/Oversampling: 4倍処理を適用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Harmonics/Oversampling: 4x oversampling applied"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "倍音/Oversampling: 4倍処理を適用"
+          }
+        }
+      }
+    },
     "倍音修復 %@": {
       "localizations": {
         "en": {
@@ -16401,6 +16417,38 @@
         }
       }
     },
+    "入力と補正後を聴き比べます": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare the input with the corrected audio."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "入力と補正後を聴き比べます"
+          }
+        }
+      }
+    },
+    "入力と最終版を聴き比べます": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare the input with the final version."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "入力と最終版を聴き比べます"
+          }
+        }
+      }
+    },
     "入力にも存在し、補正後に一部増加": {
       "localizations": {
         "en": {
@@ -16737,18 +16785,18 @@
         }
       }
     },
-    "入力確認または別のStem Mode処理が進行中です。": {
+    "入力確認または別のステム処理が進行中です。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Input inspection or another Stem Mode run is in progress."
+            "value": "Input inspection or another Stem run is in progress."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "入力確認または別のStem Mode処理が進行中です。"
+            "value": "入力確認または別のステム処理が進行中です。"
           }
         }
       }
@@ -18689,6 +18737,22 @@
         }
       }
     },
+    "分離直後（raw）と補正後Stemを聴き比べます": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare the raw stem with the corrected stem."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分離直後（raw）と補正後Stemを聴き比べます"
+          }
+        }
+      }
+    },
     "分離結果の検証が完了しました": {
       "localizations": {
         "en": {
@@ -18785,18 +18849,18 @@
         }
       }
     },
-    "別のStem Mode処理が進行中です。": {
+    "別のステム処理が進行中です。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Another Stem Mode run is in progress."
+            "value": "Another Stem run is in progress."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "別のStem Mode処理が進行中です。"
+            "value": "別のステム処理が進行中です。"
           }
         }
       }
@@ -19617,18 +19681,18 @@
         }
       }
     },
-    "右サイドのStem分離で使用可能と確認されたStem Mode資産がありません。": {
+    "右サイドのStem分離で使用可能と確認されたステム資産がありません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No usable Stem Mode assets were confirmed in Stem separation on the right."
+            "value": "No usable Stem assets were confirmed in Stem separation on the right."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "右サイドのStem分離で使用可能と確認されたStem Mode資産がありません。"
+            "value": "右サイドのStem分離で使用可能と確認されたステム資産がありません。"
           }
         }
       }
@@ -19713,18 +19777,18 @@
         }
       }
     },
-    "同梱manifestが正しくないため、AIモデルの取得は開始できません。通常モードは引き続き利用できます。": {
+    "同梱manifestが正しくないため、AIモデルの取得は開始できません。スタンダードモードは引き続き利用できます。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The bundled manifest is invalid, so the AI model download cannot start. Normal Mode remains available."
+            "value": "The bundled manifest is invalid, so the AI model download cannot start. Standard remains available."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "同梱manifestが正しくないため、AIモデルの取得は開始できません。通常モードは引き続き利用できます。"
+            "value": "同梱manifestが正しくないため、AIモデルの取得は開始できません。スタンダードモードは引き続き利用できます。"
           }
         }
       }
@@ -20673,18 +20737,18 @@
         }
       }
     },
-    "完了・失敗したStem Mode処理は更新できません。": {
+    "完了・失敗したステム処理は更新できません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A completed or failed Stem Mode run cannot be updated."
+            "value": "A completed or failed Stem run cannot be updated."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "完了・失敗したStem Mode処理は更新できません。"
+            "value": "完了・失敗したステム処理は更新できません。"
           }
         }
       }
@@ -21217,18 +21281,18 @@
         }
       }
     },
-    "対象となるStem Mode処理がありません。": {
+    "対象となるステム処理がありません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "There is no applicable Stem Mode run."
+            "value": "There is no applicable Stem run."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "対象となるStem Mode処理がありません。"
+            "value": "対象となるステム処理がありません。"
           }
         }
       }
@@ -22817,18 +22881,18 @@
         }
       }
     },
-    "接続が戻るまで待機しています。通常モードの利用は妨げません。": {
+    "接続が戻るまで待機しています。スタンダードモードの利用は妨げません。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Waiting for the connection to return. Normal Mode remains available."
+            "value": "Waiting for the connection to return. Standard remains available."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "接続が戻るまで待機しています。通常モードの利用は妨げません。"
+            "value": "接続が戻るまで待機しています。スタンダードモードの利用は妨げません。"
           }
         }
       }
@@ -26977,6 +27041,22 @@
         }
       }
     },
+    "空気感/Oversampling: 4倍処理を適用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Air/Oversampling: 4x oversampling applied"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空気感/Oversampling: 4倍処理を適用"
+          }
+        }
+      }
+    },
     "空気感と煌びやかさも少し下がります": {
       "localizations": {
         "en": {
@@ -28705,18 +28785,18 @@
         }
       }
     },
-    "補正後、再ミックス、またはStem Mode最終版を解析しています。": {
+    "補正後、再ミックス、またはステム最終版を解析しています。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Analyzing corrected audio, remix, or the final Stem Mode version."
+            "value": "Analyzing corrected audio, remix, or the final Stem version."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "補正後、再ミックス、またはStem Mode最終版を解析しています。"
+            "value": "補正後、再ミックス、またはステム最終版を解析しています。"
           }
         }
       }
@@ -28749,6 +28829,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "補正後と再ミックスの音量差を試聴時だけ揃えます"
+          }
+        }
+      }
+    },
+    "補正後と再ミックスを聴き比べます": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare the corrected audio with the remix."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "補正後と再ミックスを聴き比べます"
+          }
+        }
+      }
+    },
+    "補正後と最終版を聴き比べます": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare the corrected audio with the final version."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "補正後と最終版を聴き比べます"
           }
         }
       }
@@ -29309,22 +29421,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "補正後／再ミックス"
-          }
-        }
-      }
-    },
-    "補正後／再ミックス A/B": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Corrected / Remix A/B"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "補正後／再ミックス A/B"
           }
         }
       }
@@ -30577,7 +30673,7 @@
         }
       }
     },
-    "通常マスタリング": {
+    "スタンダードマスタリング": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -30588,12 +30684,12 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "通常マスタリング"
+            "value": "スタンダードマスタリング"
           }
         }
       }
     },
-    "通常モード": {
+    "スタンダードモード": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -30604,12 +30700,12 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "通常モード"
+            "value": "スタンダードモード"
           }
         }
       }
     },
-    "通常補正": {
+    "スタンダード補正": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -30620,23 +30716,23 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "通常補正"
+            "value": "スタンダード補正"
           }
         }
       }
     },
-    "通常補正とStem Modeを切り替えます": {
+    "スタンダード補正とステムを切り替えます": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Switch between standard correction and Stem Mode"
+            "value": "Switch between standard correction and Stem"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "通常補正とStem Modeを切り替えます"
+            "value": "スタンダード補正とステムを切り替えます"
           }
         }
       }
@@ -31937,18 +32033,18 @@
         }
       }
     },
-    "音声を選ぶと、入力、補正後または再ミックス、Stem Mode最終版の詳細解析を表示します。": {
+    "音声を選ぶと、入力、補正後または再ミックス、ステム最終版の詳細解析を表示します。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Select audio to view detailed analysis of the input, corrected audio or remix, and final Stem Mode version."
+            "value": "Select audio to view detailed analysis of the input, corrected audio or remix, and final Stem version."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "音声を選ぶと、入力、補正後または再ミックス、Stem Mode最終版の詳細解析を表示します。"
+            "value": "音声を選ぶと、入力、補正後または再ミックス、ステム最終版の詳細解析を表示します。"
           }
         }
       }
@@ -32801,6 +32897,22 @@
         }
       }
     },
+    "高域修復/Oversampling: 4倍処理を適用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "High frequency repair/Oversampling: 4x oversampling applied"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高域修復/Oversampling: 4倍処理を適用"
+          }
+        }
+      }
+    },
     "高域倍音修復": {
       "localizations": {
         "en": {
@@ -32881,18 +32993,18 @@
         }
       }
     },
-    "高域戻りガードを通常マスタリングでは使わない": {
+    "高域戻りガードをスタンダードマスタリングでは使わない": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "High frequency return guard is not used in normal mastering"
+            "value": "High frequency return guard is not used in Standard mastering"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "高域戻りガードを通常マスタリングでは使わない"
+            "value": "高域戻りガードをスタンダードマスタリングでは使わない"
           }
         }
       }
@@ -33053,6 +33165,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "／"
+          }
+        }
+      }
+    },
+    "スタンダード": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スタンダード"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        }
+      }
+    },
+    "Veloura Lucent — ステム": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Veloura Lucent — ステム"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Veloura Lucent — Stem"
+          }
+        }
+      }
+    },
+    "スタンダードとステムを切り替えます": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スタンダードとステムを切り替えます"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch between Standard and Stem."
+          }
+        }
+      }
+    },
+    "入力と補正後を比較": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare input with corrected"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "入力と補正後を比較"
+          }
+        }
+      }
+    },
+    "補正後と最終版を比較": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare corrected with final master"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "補正後と最終版を比較"
           }
         }
       }

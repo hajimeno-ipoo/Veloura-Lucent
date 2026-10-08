@@ -1589,7 +1589,7 @@ struct ComparisonVideoTests {
         #expect(source.contains("green: 203 / 255"))
         #expect(source.contains("blue: 250 / 255"))
         #expect(source.contains(".stroke(waveformColor, lineWidth: 1)"))
-        #expect(source.contains("選択範囲 \\(timeText(startTime))〜"))
+        #expect(source.contains("AppLanguageSettings.format(\"選択範囲 %@〜%@\", timeText(startTime), timeText(startTime + selectionDuration))"))
         #expect(!source.contains(".stroke(.secondary.opacity(0.68), lineWidth: 1)"))
     }
 
@@ -1787,7 +1787,11 @@ struct ComparisonVideoTests {
     #expect(!model.isExpanded)
 
     presenter.dismiss()
-    try await Task.sleep(for: .milliseconds(400))
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(2))
+    while parentWindow.childWindows?.isEmpty == false, clock.now < deadline {
+      try await Task.sleep(for: .milliseconds(10))
+    }
     #expect(parentWindow.childWindows?.isEmpty == true)
   }
 

@@ -351,7 +351,7 @@ extension StemModelManagementSection {
             switch inspectionState {
             case .checking:
                 return Presentation(
-                    title: "Stem Mode資産を確認中",
+                    title: "ステム資産を確認中",
                     statusText: "確認中",
                     message: "AIモデル、固定Revision、SHA-256、同梱MLX実行資産をローカルだけで確認しています。",
                     detail: nil,
@@ -370,9 +370,9 @@ extension StemModelManagementSection {
         private static func make(inspection: StemModelLocalInspection) -> Self {
             if case .unsupported(let processArchitecture) = inspection.platform {
                 return Presentation(
-                    title: "このMacではStem Modeを実行できません",
+                    title: "このMacではステムを実行できません",
                     statusText: "利用不可",
-                    message: "Stem ModeはApple Silicon専用です。現在の実行アーキテクチャではAIモデルを取得せず、通常モードだけを利用できます。",
+                    message: "ステムはApple Silicon専用です。現在の実行アーキテクチャではAIモデルを取得せず、スタンダードモードだけを利用できます。",
                     detail: AppLanguageSettings.format("実行アーキテクチャ: %@", processArchitecture),
                     symbolName: "cpu",
                     tone: .warning,
@@ -386,7 +386,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "モデル定義を検証できません",
                     statusText: "要確認",
-                    message: "同梱manifestが正しくないため、AIモデルの取得は開始できません。通常モードは引き続き利用できます。",
+                    message: "同梱manifestが正しくないため、AIモデルの取得は開始できません。スタンダードモードは引き続き利用できます。",
                     detail: message,
                     symbolName: "doc.badge.ellipsis",
                     tone: .error,
@@ -401,7 +401,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "MLX実行資産を検証できません",
                     statusText: "要確認",
-                    message: "アプリ同梱のMLX実行資産に問題があります。AIモデルの再取得では修復できないため、Stem推論は開始しません。通常モードを利用するか、アプリを正規配布物から再インストールしてください。",
+                    message: "アプリ同梱のMLX実行資産に問題があります。AIモデルの再取得では修復できないため、Stem推論は開始しません。スタンダードモードを利用するか、アプリを正規配布物から再インストールしてください。",
                     detail: message,
                     symbolName: "shippingbox.and.arrow.backward",
                     tone: .error,
@@ -413,7 +413,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "MLX実行資産の状態を確認できません",
                     statusText: "未確認",
-                    message: "AIモデルの取得は開始しません。この状態が続く場合は、アプリを正規配布物から再インストールしてください。通常モードは利用できます。",
+                    message: "AIモデルの取得は開始しません。この状態が続く場合は、アプリを正規配布物から再インストールしてください。スタンダードモードは利用できます。",
                     detail: nil,
                     symbolName: "shippingbox",
                     tone: .warning,
@@ -430,7 +430,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "AIモデルの状態を確認できません",
                     statusText: "未確認",
-                    message: "AIモデルの取得は開始しません。通常モードへ切り替えることもできます。",
+                    message: "AIモデルの取得は開始しません。スタンダードモードへ切り替えることもできます。",
                     detail: nil,
                     symbolName: "questionmark.folder",
                     tone: .warning,
@@ -442,7 +442,7 @@ extension StemModelManagementSection {
                 return Presentation(
                     title: "AIモデルが必要です",
                     statusText: "未取得",
-                    message: "Stem Modeを使うには、固定RevisionのAIモデル2資産が必要です。取得を承認するまでネットワーク通信は開始しません。",
+                    message: "ステムを使うには、固定RevisionのAIモデル2資産が必要です。取得を承認するまでネットワーク通信は開始しません。",
                     detail: nil,
                     symbolName: "arrow.down.circle",
                     tone: .warning,
@@ -464,7 +464,7 @@ extension StemModelManagementSection {
                 )
             case .ready:
                 return Presentation(
-                    title: "Stem Modeのモデルを利用できます",
+                    title: "ステムのモデルを利用できます",
                     statusText: "利用可能",
                     message: "AIモデル2資産と同梱MLX実行資産は検証済みです。再取得は必要ありません。",
                     detail: nil,
@@ -539,7 +539,7 @@ extension StemModelManagementSection {
                 stageDetail = "検証済みactive世代は維持し、取得途中のstagingだけを安全に片付けています。"
             } else if progress.isWaitingForConnectivity {
                 stageTitle = "ネットワーク接続を待っています"
-                stageDetail = "接続が戻るまで待機しています。通常モードの利用は妨げません。"
+                stageDetail = "接続が戻るまで待機しています。スタンダードモードの利用は妨げません。"
             } else {
                 switch progress.phase {
                 case .preparing:
@@ -916,7 +916,7 @@ private extension StemModelManagementSection {
                         if presentation.isChecking {
                             ProgressView()
                                 .controlSize(.small)
-                                .accessibilityLabel("Stem Mode資産を確認中")
+                                .accessibilityLabel("ステム資産を確認中")
                         } else {
                             Image(systemName: presentation.symbolName)
                                 .foregroundStyle(toneColor)

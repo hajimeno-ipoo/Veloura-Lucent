@@ -549,6 +549,7 @@ struct StemWorkflowControllerTests {
         #expect(remixed.kind == .remixed48000)
         #expect(workspace.remixPreviewController.cardState(for: .input).sourceURL == pureSum.fileURL)
         #expect(workspace.remixPreviewController.cardState(for: .corrected).sourceURL == remixed.fileURL)
+        #expect(workspace.previewController.cardState(for: .corrected).sourceURL == pureSum.fileURL)
         #expect(workspace.remixAnalysisPresentation?.processedRemixEvaluation?.purpose == .remix)
         #expect(session.recentActivityEvents.filter { $0.domain == .correction }.map(\.title) == [
             "補正処理が完了しました",
@@ -567,7 +568,7 @@ struct StemWorkflowControllerTests {
         #expect(session.state == .readyForMastering(runID: currentRunID))
         #expect(workspace.correctedRemixPreviewArtifact == remixed)
         #expect(workspace.finalPreviewArtifact == nil)
-        #expect(workspace.previewController.cardState(for: .corrected).sourceURL == remixed.fileURL)
+        #expect(workspace.previewController.cardState(for: .corrected).sourceURL == pureSum.fileURL)
     }
 
     @Test

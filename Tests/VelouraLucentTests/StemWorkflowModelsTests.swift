@@ -6,8 +6,8 @@ struct StemWorkflowModelsTests {
     @Test
     func processingModesKeepStandardAndStemAsSeparateChoices() {
         #expect(ProcessingMode.allCases == [.standard, .stem])
-        #expect(ProcessingMode.standard.title == "通常補正")
-        #expect(ProcessingMode.stem.title == "Stem Mode")
+        #expect(ProcessingMode.standard.title == "スタンダード")
+        #expect(ProcessingMode.stem.title == "ステム")
     }
 
     @Test

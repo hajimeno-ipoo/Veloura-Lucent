@@ -44,6 +44,9 @@ struct MasteringAirEnhancer {
             processed: AudioSignal(channels: channels, sampleRate: signal.sampleRate)
         )
         let after = MasteringSignalMath.bandRMSDB(signal: result, lower: 10_000, upper: 20_000)
+        if signal.frameCount > 1 {
+            logger?.log("空気感/Oversampling: 4倍処理を適用")
+        }
         logger?.log(
             "高域調整/Air: 処理前 \(String(format: "%.2f", before)) dB / "
                 + "適用量 \(String(format: "%+.2f", after - before)) dB / "

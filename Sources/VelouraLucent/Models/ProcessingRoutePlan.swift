@@ -241,7 +241,7 @@ struct MasteringRoutePlan: Sendable, Equatable {
             .loudness: ProcessingRouteDecision(action: .run, reason: "最終音量は必須工程", riskLevel: .high),
             .highReturnGuard: highReturnNeedsGuard
                 ? ProcessingRouteDecision(action: .run, reason: "刺さりと高域戻りが同時に強い", riskLevel: .medium)
-                : ProcessingRouteDecision(action: .skip, reason: "高域戻りガードを通常マスタリングでは使わない", riskLevel: .low),
+                : ProcessingRouteDecision(action: .skip, reason: "高域戻りガードをスタンダードマスタリングでは使わない", riskLevel: .low),
             .noiseReturnGuard: noiseReturnLooksClean
                 ? ProcessingRouteDecision(action: .light, reason: "入口測定で問題なければ早期終了する", riskLevel: .medium)
                 : ProcessingRouteDecision(action: .run, reason: "ノイズ戻りを通常確認する", riskLevel: .medium)

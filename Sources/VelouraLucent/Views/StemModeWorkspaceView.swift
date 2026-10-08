@@ -151,7 +151,7 @@ struct StemModeMainWorkspaceView<AnalysisPanel: View>: View {
 
     private var fixedHeader: some View {
         WorkspaceFixedHeaderView(
-            title: "Veloura Lucent — Stem Mode",
+            title: "Veloura Lucent — ステム",
             summary: "4／6Stem分離・Stem別補正を基準に、再ミックスと既存マスタリングを独立して実行します"
         ) {
             LiquidGlassSegmentedPicker(

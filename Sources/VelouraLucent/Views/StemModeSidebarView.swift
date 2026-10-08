@@ -34,7 +34,7 @@ struct StemModeSidebarView: View {
                         tint: .green
                     )
                     SidebarFileRow(
-                        title: "Stem Mode最終版",
+                        title: "ステム最終版",
                         systemImage: "waveform.path.ecg.rectangle",
                         fileURL: model.finalPreviewArtifact?.fileURL,
                         fileInfo: fileInfo(for: model.finalPreviewArtifact),

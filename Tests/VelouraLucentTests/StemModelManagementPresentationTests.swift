@@ -50,7 +50,7 @@ struct StemModelManagementPresentationTests {
             )
         )
 
-        #expect(presentation.title == "Stem Modeのモデルを利用できます")
+        #expect(presentation.title == "ステムのモデルを利用できます")
         #expect(presentation.statusText == "利用可能")
         #expect(presentation.actions.isEmpty)
         #expect(presentation.visibleActions == [.initialDownload])
@@ -112,7 +112,7 @@ struct StemModelManagementPresentationTests {
             inspectionState: .loaded(inspection)
         )
 
-        #expect(presentation.title == "このMacではStem Modeを実行できません")
+        #expect(presentation.title == "このMacではステムを実行できません")
         #expect(presentation.detail == "実行アーキテクチャ: x86_64")
         #expect(!presentation.allowsModelDownload)
         #expect(presentation.actions.isEmpty)

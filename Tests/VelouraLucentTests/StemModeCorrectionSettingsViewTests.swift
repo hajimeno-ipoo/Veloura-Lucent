@@ -69,21 +69,23 @@ struct StemModeCorrectionSettingsViewTests {
         #expect(mastering.contains("SettingsDisclosureCard("))
         #expect(mastering.contains("DAWKnobControl("))
         #expect(mastering.contains("initiallyExpanded: true"))
-        #expect(mastering.contains("model.selectedMasteringProfile.presetTargetText"))
+        #expect(mastering.contains("model.selectedMasteringProfile.settings.targetLoudness"))
         #expect(mastering.contains("profile.menuTitle"))
         #expect(standard.contains("profile.menuTitle"))
         #expect(mastering.contains(
             "Text(model.selectedMasteringProfile.summary)\n                .font(.body)"
         ))
-        #expect(mastering.contains(
-            "Text(model.selectedMasteringProfile.presetTargetText)\n                .font(.body.monospacedDigit())"
-        ))
+        #expect(mastering.contains("format: AppLanguageSettings.string(\"目安: %.1f LUFS / True Peak上限: %.1f dBTP\")"))
+        #expect(mastering.contains("Double(model.selectedMasteringProfile.settings.targetLoudness)"))
+        #expect(mastering.contains("Double(model.selectedMasteringProfile.settings.peakCeilingDB)"))
+        #expect(mastering.contains("Text(String(\n                format: AppLanguageSettings.string(\"目安: %.1f LUFS / True Peak上限: %.1f dBTP\"),\n                Double(model.selectedMasteringProfile.settings.targetLoudness),\n                Double(model.selectedMasteringProfile.settings.peakCeilingDB)\n            ))\n                .font(.body.monospacedDigit())"))
         #expect(standard.contains(
             "Text(job.selectedMasteringProfile.summary)\n                    .font(.body)"
         ))
-        #expect(standard.contains(
-            "Text(job.selectedMasteringProfile.presetTargetText)\n                    .font(.body.monospacedDigit())"
-        ))
+        #expect(standard.contains("format: AppLanguageSettings.string(\"目安: %.1f LUFS / True Peak上限: %.1f dBTP\")"))
+        #expect(standard.contains("Double(job.selectedMasteringProfile.settings.targetLoudness)"))
+        #expect(standard.contains("Double(job.selectedMasteringProfile.settings.peakCeilingDB)"))
+        #expect(standard.contains("Text(String(\n                    format: AppLanguageSettings.string(\"目安: %.1f LUFS / True Peak上限: %.1f dBTP\"),\n                    Double(job.selectedMasteringProfile.settings.targetLoudness),\n                    Double(job.selectedMasteringProfile.settings.peakCeilingDB)\n                ))\n                    .font(.body.monospacedDigit())"))
         #expect(mastering.contains("LiquidGlassActionButton("))
         #expect(!mastering.contains("StemModeSettingSlider("))
         #expect(!mastering.contains("DisclosureGroup("))

@@ -77,6 +77,8 @@ struct MasteringPipelineTests {
         #expect(FileManager.default.fileExists(atPath: output.path()))
         #expect(output.lastPathComponent.contains("song_lifter_mastered"))
         #expect(logs.values.contains("解析モード: マスタリングCPU"))
+        #expect(logs.values.filter { $0 == "倍音/Oversampling: 4倍処理を適用" }.count == 1)
+        #expect(logs.values.filter { $0 == "空気感/Oversampling: 4倍処理を適用" }.count == 1)
         #expect(logs.values.contains { $0.hasPrefix("解析/STFT+帯域集計") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("解析/ラウドネス: ") && $0.hasSuffix("秒") })
         #expect(logs.values.contains { $0.hasPrefix("解析/トゥルーピーク: ") && $0.hasSuffix("秒") })
@@ -107,7 +109,7 @@ struct MasteringPipelineTests {
             summedStages += try #require(parsedDuration(prefix: prefix, from: logs.values))
         }
         #expect(total + 0.10 >= summedStages)
-        #expect(logs.values.contains("高域戻りガード: 早期終了 - 高域戻りガードを通常マスタリングでは使わない"))
+        #expect(logs.values.contains("高域戻りガード: 早期終了 - 高域戻りガードをスタンダードマスタリングでは使わない"))
         #expect(logs.values.contains(MasteringStep.noiseReturnGuard.rawValue))
 
         let written = try AVAudioFile(forReading: output)

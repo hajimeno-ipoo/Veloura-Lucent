@@ -42,9 +42,9 @@ enum StemMasteringError: Error, Equatable, LocalizedError, Sendable {
         case .finalArtifactAlreadyExists(let path):
             "Stem最終成果物がすでに存在します（\(path)）。"
         case .temporaryOutputMissing(let path):
-            "通常モードのマスタリング一時出力が見つかりません（\(path)）。"
+            "スタンダードモードのマスタリング一時出力が見つかりません（\(path)）。"
         case .unsafeTemporaryOutputURL(let path):
-            "通常モードのマスタリング一時出力が入力または最終成果物と重複しています（\(path)）。"
+            "スタンダードモードのマスタリング一時出力が入力または最終成果物と重複しています（\(path)）。"
         case .invalidReportContext:
             "Stem最終報告のrun契約と役割別実行記録が一致しません。"
         case .reportUnavailable(let kind):

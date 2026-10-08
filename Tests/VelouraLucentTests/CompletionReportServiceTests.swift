@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import VelouraLucent
 
+@MainActor
 struct CompletionReportServiceTests {
     init() {
         // Existing report assertions describe the Japanese presentation explicitly.

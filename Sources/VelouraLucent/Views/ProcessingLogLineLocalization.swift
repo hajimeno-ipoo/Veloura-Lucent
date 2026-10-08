@@ -6,6 +6,9 @@ enum ProcessingLogLineLocalization {
     // Some diagnostic lines combine fixed Japanese labels with measured values.
     // Match their fixed fragments once, then resolve each match through the catalog.
     private static let fragmentKeys: [String] = [
+        "高域修復/Oversampling: 4倍処理を適用",
+        "倍音/Oversampling: 4倍処理を適用",
+        "空気感/Oversampling: 4倍処理を適用",
         "読み込み", "原音参照読み込み", "低域ノイズ", "ノイズ除去", "サ行保護", "通常高域戻し",
         "再解析", "解析補助", "高域修復", "シマー制限", "補正後高域保持", "低中域残り確認",
         "低中域残り", "候補選定", "低域位相確認", "低域位相", "ピーク保護", "書き出し",
@@ -16,7 +19,7 @@ enum ProcessingLogLineLocalization {
         "high shelf設定と入力帯域差から算出", "入力の高域不足から算出しサ行区間を除外",
         "高域不足と既存の倍音設定から算出", "空気感の補正が必要", "直前再測定",
         "中域", "高域", "ラウドネス方針", "聴きやすく整える", "目安差", "適用",
-        "早期終了", "高域戻りガードを通常マスタリングでは使わない",
+        "早期終了", "高域戻りガードをスタンダードマスタリングでは使わない",
         "高域保持基準", "最終ノイズ上限", "高域保持（音声処理1回）", "最終音量復帰",
         "最終ノイズ確認", "最終低中域保護", "最終音量上限", "秒", "区間",
         "自動", "実験Metal", "入力にも存在し、補正後に一部増加",

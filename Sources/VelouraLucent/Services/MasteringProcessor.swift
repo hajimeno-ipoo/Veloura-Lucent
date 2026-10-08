@@ -75,7 +75,7 @@ struct MasteringProcessor {
             logger?.start(.saturate)
             logger?.log(MasteringStep.saturate.rawValue)
             current = measure(label: "倍音", logger: logger, progressStep: .saturate) {
-                applySaturation(signal: current, amount: effectiveSaturation(settings.saturationAmount, dynamicsRetention: dynamicsRetention, finishingIntensity: finishingIntensity))
+                applySaturation(signal: current, amount: effectiveSaturation(settings.saturationAmount, dynamicsRetention: dynamicsRetention, finishingIntensity: finishingIntensity), logger: logger)
             }
         }
         saveDiagnostic(current, to: diagnosticOutputDirectory, order: 4, id: "saturate", label: "倍音調整後", logger: logger)

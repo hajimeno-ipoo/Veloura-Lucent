@@ -61,33 +61,33 @@ enum StemMixError: LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .duplicateRole(let role):
-            return "Stem Modeの再ミックス入力に\(role.rawValue)が重複しています。"
+            return "ステムの再ミックス入力に\(role.rawValue)が重複しています。"
         case .missingRole(let role):
-            return "Stem Modeの再ミックス入力に\(role.rawValue)がありません。"
+            return "ステムの再ミックス入力に\(role.rawValue)がありません。"
         case .unexpectedRole(let role):
-            return "Stem Modeの再ミックス入力に契約外の\(role.rawValue)があります。"
+            return "ステムの再ミックス入力に契約外の\(role.rawValue)があります。"
         case .invalidRoleContract:
-            return "Stem Modeの検証役割と純粋加算順が一致しません。"
+            return "ステムの検証役割と純粋加算順が一致しません。"
         case .invalidSampleRate(let role):
-            return "Stem Modeの\(role.rawValue)に有効なサンプルレートがありません。"
+            return "ステムの\(role.rawValue)に有効なサンプルレートがありません。"
         case .missingChannels(let role):
-            return "Stem Modeの\(role.rawValue)に音声チャンネルがありません。"
+            return "ステムの\(role.rawValue)に音声チャンネルがありません。"
         case .emptyFrames(let role):
-            return "Stem Modeの\(role.rawValue)に音声フレームがありません。"
+            return "ステムの\(role.rawValue)に音声フレームがありません。"
         case .unevenChannelFrameCount(let role, let channelIndex, let expected, let actual):
-            return "Stem Modeの\(role.rawValue)内でチャンネル長が一致しません（channel \(channelIndex)、期待: \(expected)、実際: \(actual)）。"
+            return "ステムの\(role.rawValue)内でチャンネル長が一致しません（channel \(channelIndex)、期待: \(expected)、実際: \(actual)）。"
         case .sampleRateMismatch(let role, let expected, let actual):
-            return "Stem Modeの\(role.rawValue)のサンプルレートが一致しません（期待: \(expected)、実際: \(actual)）。"
+            return "ステムの\(role.rawValue)のサンプルレートが一致しません（期待: \(expected)、実際: \(actual)）。"
         case .channelCountMismatch(let role, let expected, let actual):
-            return "Stem Modeの\(role.rawValue)のチャンネル数が一致しません（期待: \(expected)、実際: \(actual)）。"
+            return "ステムの\(role.rawValue)のチャンネル数が一致しません（期待: \(expected)、実際: \(actual)）。"
         case .frameCountMismatch(let role, let expected, let actual):
-            return "Stem Modeの\(role.rawValue)のフレーム数が一致しません（期待: \(expected)、実際: \(actual)）。"
+            return "ステムの\(role.rawValue)のフレーム数が一致しません（期待: \(expected)、実際: \(actual)）。"
         case .nonFiniteSample(let role, let channelIndex, let frameIndex):
-            return "Stem Modeの\(role.rawValue)にNaNまたはInfinityがあります（channel \(channelIndex)、frame \(frameIndex)）。"
+            return "ステムの\(role.rawValue)にNaNまたはInfinityがあります（channel \(channelIndex)、frame \(frameIndex)）。"
         case .nonFiniteMixedSample(let channelIndex, let frameIndex):
-            return "Stem Modeのraw再ミックスで有限値を維持できませんでした（channel \(channelIndex)、frame \(frameIndex)）。"
+            return "ステムのraw再ミックスで有限値を維持できませんでした（channel \(channelIndex)、frame \(frameIndex)）。"
         case .nonFinitePeakMeasurement:
-            return "Stem Modeの純粋加算再ミックスで有限なピーク値を測定できませんでした。"
+            return "ステムの純粋加算再ミックスで有限なピーク値を測定できませんでした。"
         }
     }
 }

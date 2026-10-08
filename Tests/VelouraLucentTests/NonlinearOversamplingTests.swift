@@ -4,6 +4,33 @@ import Testing
 
 struct NonlinearOversamplingTests {
     @Test
+    func logsOnlyAppliedOversamplingWithoutChangingAudio() {
+        let samples = tone(frequency: 1_000, amplitude: 0.2, rate: 48_000)
+        let signal = AudioSignal(channels: [samples, samples], sampleRate: 48_000)
+        let processor = MasteringProcessor()
+        let saturationLog = OversamplingLogRecorder()
+        let unchanged = processor.applySaturation(signal: signal, amount: 0, logger: saturationLog)
+        #expect(unchanged.channels == signal.channels)
+        #expect(saturationLog.messages.isEmpty)
+        let saturated = processor.applySaturation(signal: signal, amount: 0.09, logger: saturationLog)
+        #expect(saturationLog.messages == ["倍音/Oversampling: 4倍処理を適用"])
+        #expect(saturated.channels == processor.applySaturation(signal: signal, amount: 0.09).channels)
+
+        let airLog = OversamplingLogRecorder()
+        var settings = MasteringProfile.streaming.settings
+        settings.saturationAmount = 0
+        let noDeficit = MasteringSpectralSummary(lowBandLevelDB: -20, midBandLevelDB: -20, highBandLevelDB: -20, harshnessScore: 0)
+        let air = MasteringAirEnhancer()
+        let bypassed = air.process(signal: signal, spectralSummary: noDeficit, settings: settings, finishingIntensity: 0.5, logger: airLog)
+        #expect(bypassed.channels == signal.channels)
+        #expect(!airLog.messages.contains { $0.contains("Oversampling") })
+        let deficit = MasteringSpectralSummary(lowBandLevelDB: -28, midBandLevelDB: -10, highBandLevelDB: -34, harshnessScore: 0)
+        let enhanced = air.process(signal: signal, spectralSummary: deficit, settings: settings, finishingIntensity: 0.5, logger: airLog)
+        #expect(airLog.messages.filter { $0 == "空気感/Oversampling: 4倍処理を適用" }.count == 1)
+        #expect(enhanced.channels == air.process(signal: signal, spectralSummary: deficit, settings: settings, finishingIntensity: 0.5, logger: nil).channels)
+    }
+
+    @Test
     func saturationRemovesFoldedThirdHarmonicAtProcessingRates() {
         for rate in [44_100.0, 48_000.0] {
             let input = tone(frequency: 11_000, amplitude: 0.8, rate: rate)
@@ -92,6 +119,14 @@ struct NonlinearOversamplingTests {
         for offset in 1...64 {
             #expect(abs(output[128 - offset] - output[128 + offset]) < 2e-6)
         }
+    }
+}
+
+private final class OversamplingLogRecorder: AudioProcessingLogger {
+    var messages: [String] = []
+
+    func log(_ message: String) {
+        messages.append(message)
     }
 }
 

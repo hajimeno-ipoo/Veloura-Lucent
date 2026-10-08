@@ -3,6 +3,9 @@ import AVFoundation
 import Testing
 @testable import VelouraLucent
 
+// These tests exercise the same system audio output device. Running them together
+// competes for real-time rendering and can exhaust a short fixture before a switch.
+@Suite(.serialized)
 @MainActor
 struct AudioPreviewControllerTests {
     @Test
@@ -216,7 +219,10 @@ struct AudioPreviewControllerTests {
         }
 
         controller.startPlayback(for: fixture.inputURL, target: .input)
-        try await Task.sleep(for: .milliseconds(150))
+        let didAdvanceBeforeSwitch = await waitUntil {
+            controller.cardState(for: .input).playbackPosition > 0.05
+        }
+        try #require(didAdvanceBeforeSwitch)
 
         let before = controller.playbackDiagnosticState()
         let engineBefore = try #require(before.engineIdentifier)

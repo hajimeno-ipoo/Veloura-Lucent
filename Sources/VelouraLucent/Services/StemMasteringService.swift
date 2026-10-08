@@ -199,7 +199,7 @@ struct StemMasteringService: Sendable {
             }
             try Task.checkCancellation()
 
-            logHandler("Stem Mode最終版を保存します")
+            logHandler("ステム最終版を保存します")
             let finalArtifact = try await artifactStore.save(
                 signal: masteredSignal,
                 id: "stem-final-\(request.runID.uuidString.lowercased())",
@@ -207,7 +207,7 @@ struct StemMasteringService: Sendable {
                 to: finalURL
             )
             publishedFinalURL = finalURL
-            logHandler("Stem Mode最終版を検証します")
+            logHandler("ステム最終版を検証します")
             _ = try await artifactStore.validate(
                 artifact: finalArtifact,
                 expectedURL: finalURL,
@@ -220,7 +220,7 @@ struct StemMasteringService: Sendable {
             )
             try Task.checkCancellation()
 
-            logHandler("Stem Mode最終版を解析・ノイズ測定します")
+            logHandler("ステム最終版を解析・ノイズ測定します")
             let evaluationRequest = StemAudioEvaluationRequest(
                 purpose: .finalMaster,
                 includeAudioAnalyzerSnapshot: true,

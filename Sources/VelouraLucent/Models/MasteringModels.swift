@@ -367,11 +367,11 @@ enum AudioComparisonPair: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .inputVsCorrected:
-            return "補正でどれだけ整ったかを聴き比べます"
+            return "入力と補正後を聴き比べます"
         case .inputVsMastered:
-            return "最初の音と最終版をそのまま聴き比べます"
+            return "入力と最終版を聴き比べます"
         case .correctedVsMastered:
-            return "マスタリングでどれだけ仕上がったかを聴き比べます"
+            return "補正後と最終版を聴き比べます"
         }
     }
 

@@ -28,15 +28,15 @@ enum CompletionNotificationItem: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .standardCorrection:
-            AppLanguageSettings.string("通常補正")
+            AppLanguageSettings.string("スタンダード補正")
         case .standardMastering:
-            AppLanguageSettings.string("通常マスタリング")
+            AppLanguageSettings.string("スタンダードマスタリング")
         case .stemCorrection:
-            AppLanguageSettings.string("Stem Mode補正")
+            AppLanguageSettings.string("ステム補正")
         case .stemRemix:
-            AppLanguageSettings.string("Stem Mode再ミックス")
+            AppLanguageSettings.string("ステム再ミックス")
         case .stemMastering:
-            AppLanguageSettings.string("Stem Modeマスタリング")
+            AppLanguageSettings.string("ステムマスタリング")
         }
     }
 }

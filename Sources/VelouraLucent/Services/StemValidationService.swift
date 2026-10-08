@@ -52,7 +52,7 @@ enum StemDiagnosticLocalization {
             "期待フレーム: %@、実際: %@",
             "channel 0: %@、実際: %@",
             "期待sample rateは0より大きい有限値が必要です（実際: %@）",
-            "Stem Modeの検証契約はstereo 2 channelです（実際: %@）",
+            "ステムの検証契約はstereo 2 channelです（実際: %@）",
             "band energy測定値が重複しています（実際: %@）",
             "noise測定値が重複しています（実際: %@）",
             "AudioComparisonServiceの分析に失敗しました: %@"
@@ -123,8 +123,8 @@ enum StemDiagnosticLocalization {
             "%@のStem補正にraw Stem解析結果が渡されていません。",
             "%@のStem補正に必要な共通解析結果がありません。",
             "%@の%@がStem補正後の構造契約を満たす音声を生成できません。",
-            "Stem Modeに%@がありません。",
-            "Stem Modeの%@構造検証に失敗しました（%@件）。",
+            "ステムに%@がありません。",
+            "ステムの%@構造検証に失敗しました（%@件）。",
             "Stem工程失敗後の未完成ファイルを削除できませんでした（元の失敗: %@、削除失敗: %@）。"
         ])
     }
@@ -1081,7 +1081,7 @@ struct StemValidationService: Sendable {
                 StemValidationFailure(
                     check: .channelCount,
                     subject: "validation-contract",
-                    detail: "Stem Modeの検証契約はstereo 2 channelです（実際: \(expectedChannelCount)）"
+                    detail: "ステムの検証契約はstereo 2 channelです（実際: \(expectedChannelCount)）"
                 )
             ]
         }

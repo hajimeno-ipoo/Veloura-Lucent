@@ -7,24 +7,26 @@ struct ExportFileNameTests {
 
     @Test
     func audioNamesUseSongModeAndResult() {
+        let standardName = AppLanguageSettings.string("スタンダード")
+        let stemName = AppLanguageSettings.string("ステム")
         #expect(ExportFileName.audio(
             inputURL: inputURL,
             mode: .standard,
             result: "補正",
             format: .deliveryWAV
-        ) == "夜の曲.v2_通常_補正.wav")
+        ) == "夜の曲.v2_\(standardName)_補正.wav")
         #expect(ExportFileName.audio(
             inputURL: inputURL,
             mode: .standard,
             result: "マスタリング",
             format: .sharingAAC
-        ) == "夜の曲.v2_通常_マスタリング.m4a")
+        ) == "夜の曲.v2_\(standardName)_マスタリング.m4a")
         #expect(ExportFileName.audio(
             inputURL: inputURL,
             mode: .stem,
             result: "再ミックス",
             format: .highQualityWAV
-        ) == "夜の曲.v2_ステム_再ミックス.wav")
+        ) == "夜の曲.v2_\(stemName)_再ミックス.wav")
     }
 
     @Test
@@ -41,9 +43,11 @@ struct ExportFileNameTests {
 
     @Test
     func logNamesReplaceOnlyTheAppNameWithTheSongName() {
+        let standardName = AppLanguageSettings.string("スタンダード")
+        let stemName = AppLanguageSettings.string("ステム")
         #expect(ExportFileName.processingLog(inputURL: inputURL, mode: .standard)
-            == "夜の曲.v2 処理ログ - 通常.json")
+            == "夜の曲.v2 処理ログ - \(standardName).json")
         #expect(ExportFileName.processingLog(inputURL: inputURL, mode: .stem)
-            == "夜の曲.v2 処理ログ - Stem Mode.json")
+            == "夜の曲.v2 処理ログ - \(stemName).json")
     }
 }

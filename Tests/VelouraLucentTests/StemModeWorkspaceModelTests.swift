@@ -182,7 +182,7 @@ struct StemModeWorkspaceModelTests {
 
         await model.beginCorrection()
 
-        #expect(model.presentedError?.title == "Stem Modeを開始できません")
+        #expect(model.presentedError?.title == "ステムを開始できません")
         #expect(!model.isStartingRun)
     }
 
@@ -731,7 +731,7 @@ struct StemModeWorkspaceModelTests {
         #expect(model.stemPreviewController.activeTarget == nil)
     }
 
-    @Test("中央解析表示はStem Mode内で再生中の試聴欄を参照する")
+    @Test("中央解析表示はステム内で再生中の試聴欄を参照する")
     func centralAnalysisDisplayFollowsTheActivePreviewController() {
         let recorder = WorkspaceActionRecorder()
         let model = makeModel(recorder: recorder)
@@ -1250,6 +1250,33 @@ struct StemModeWorkspaceModelTests {
         #expect(model.previewController.cardState(for: .input).sourceURL == input.fileURL)
         #expect(model.previewController.cardState(for: .corrected).sourceURL == correctedRemix.fileURL)
         #expect(model.previewController.cardState(for: .mastered).sourceURL == nil)
+    }
+
+    @Test("再ミックスの追加・再実行でも上段の補正後音声と比較状態を維持する")
+    func remixChangesOnlyTheDedicatedComparisonAndKeepsPrimaryCorrectedSource() async {
+        let recorder = WorkspaceActionRecorder()
+        let model = makeModel(recorder: recorder)
+        let input = makeArtifact(id: "input", kind: .input44100)
+        let corrected = makeArtifact(id: "pure-sum", kind: .correctedPureSum48000)
+        let final = makeArtifact(id: "final", kind: .finalMaster)
+        let remix = makeArtifact(id: "remix", kind: .remixed48000)
+        let rerun = makeArtifact(id: "remix-rerun", kind: .remixed48000)
+        await model.inspectInput(input.fileURL)
+        model.updatePreviewSources(from: [input, corrected, final])
+        defer { model.updatePreviewSources(from: []) }
+        model.previewController.setComparisonPair(.correctedVsMastered)
+        model.previewController.activeTarget = .corrected
+
+        for currentRemix in [remix, rerun] {
+            model.updatePreviewSources(from: [input, corrected, currentRemix, final])
+
+            #expect(model.previewController.cardState(for: .corrected).sourceURL == corrected.fileURL)
+            #expect(model.previewController.comparisonPair == .correctedVsMastered)
+            #expect(model.previewController.activeTarget == .corrected)
+            #expect(model.remixPreviewController.cardState(for: .input).sourceURL == corrected.fileURL)
+            #expect(model.remixPreviewController.cardState(for: .corrected).sourceURL == currentRemix.fileURL)
+            #expect(model.correctedRemixPreviewArtifact == currentRemix)
+        }
     }
 
     @Test

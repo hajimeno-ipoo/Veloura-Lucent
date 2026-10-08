@@ -68,13 +68,15 @@ struct AudioProcessingPipelineTests {
         let inputURL = tempDirectory.appending(path: "input.wav")
 
         try makeTestTone(at: inputURL)
+        let logs = LogCollector()
 
         let output = try await AudioProcessingService().process(
             inputFile: inputURL,
             denoiseStrength: .strong
-        ) { _ in }
+        ) { logs.append($0) }
 
         #expect(FileManager.default.fileExists(atPath: output.path()))
+        #expect(logs.values.filter { $0 == "高域修復/Oversampling: 4倍処理を適用" }.count == 1)
         #expect(output.lastPathComponent.contains("input_lifter"))
         let written = try AVAudioFile(forReading: output)
         #expect(written.length > 0)

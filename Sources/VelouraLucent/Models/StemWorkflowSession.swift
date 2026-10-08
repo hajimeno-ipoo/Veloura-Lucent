@@ -19,27 +19,27 @@ enum StemWorkflowSessionError: LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .runAlreadyActive(let runID):
-            return "別のStem Mode処理が実行中です（セッション: \(runID.uuidString)）。"
+            return "別のステム処理が実行中です（セッション: \(runID.uuidString)）。"
         case .noActiveRun:
-            return "対象となるStem Mode処理がありません。"
+            return "対象となるステム処理がありません。"
         case .runMismatch(let expected, let actual):
-            return "Stem Mode処理の識別子が一致しません（現在: \(expected.uuidString)、受信: \(actual.uuidString)）。"
+            return "ステム処理の識別子が一致しません（現在: \(expected.uuidString)、受信: \(actual.uuidString)）。"
         case .runIsTerminal:
-            return "完了・失敗したStem Mode処理は更新できません。"
+            return "完了・失敗したステム処理は更新できません。"
         case .artifactIdentifierMismatch(let expected, let actual):
-            return "Stem Mode成果物の識別子が一致しません（表示: \(expected)、成果物: \(actual)）。"
+            return "ステム成果物の識別子が一致しません（表示: \(expected)、成果物: \(actual)）。"
         case .artifactKindMismatch:
-            return "Stem Mode成果物の種類が表示状態と一致しません。"
+            return "ステム成果物の種類が表示状態と一致しません。"
         case .artifactOutsideRunContract(let description):
-            return "現在のモデル契約に含まれないStem Mode成果物は反映しません（\(description)）。"
+            return "現在のモデル契約に含まれないステム成果物は反映しません（\(description)）。"
         case .progressOutsideRunContract(let identifier):
             return "現在のモデル契約に含まれない進捗工程は反映しません（\(identifier)）。"
         case .validationOutsideRunContract(let description):
             return "現在のモデル契約に含まれない検証結果は反映しません（\(description)）。"
         case .completionRequiresCompletedExport:
-            return "Stem Modeの完了には最終版生成工程の完了が必要です。"
+            return "ステムの完了には最終版生成工程の完了が必要です。"
         case .correctionCompletionRequiresCorrectedStems:
-            return "Stem Modeの補正完了には契約対象の補正済みStemと補正後の検証・保存完了が必要です。"
+            return "ステムの補正完了には契約対象の補正済みStemと補正後の検証・保存完了が必要です。"
         case .remixRequiresCorrectionCompletion:
             return "契約対象の補正済みStemと補正後が揃った現在セッションだけ再ミックスを開始できます。"
         case .masteringRequiresRemixCompletion:
@@ -326,7 +326,7 @@ final class StemWorkflowSession {
         appendMetricActivity(
             timestamp: timestamp,
             domain: .mastering,
-            title: "Stem Mode最終版を解析しました",
+            title: "ステム最終版を解析しました",
             metrics: metrics
         )
     }
@@ -1024,7 +1024,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             domain: .mastering,
             title: "マスタリングが完了しました",
-            detail: "Stem Mode最終版を生成しました",
+            detail: "ステム最終版を生成しました",
             progress: 1
         )
         appendLogUnchecked(
@@ -1032,7 +1032,7 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .info,
             step: .finalizeMaster,
-            message: "Stem Mode処理が完了しました。"
+            message: "ステム処理が完了しました。"
         )
     }
 

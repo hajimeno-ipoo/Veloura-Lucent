@@ -36,43 +36,43 @@ enum StemModelInstallationStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .stagingDirectoryAlreadyExists(let path):
-            return "Stem Modeの一時保存先が既に存在します: \(path)"
+            return "ステムの一時保存先が既に存在します: \(path)"
         case .stagingDirectoryMissing(let path):
-            return "Stem Modeの一時保存先が見つかりません: \(path)"
+            return "ステムの一時保存先が見つかりません: \(path)"
         case .generationAlreadyExists(let path):
-            return "Stem Modeのモデル世代が既に存在します: \(path)"
+            return "ステムのモデル世代が既に存在します: \(path)"
         case .storePathSymbolicLink(let path):
-            return "Stem Modeの保存先にsymbolic linkは使用できません: \(path)"
+            return "ステムの保存先にsymbolic linkは使用できません: \(path)"
         case .storePathNotDirectory(let path):
-            return "Stem Modeの保存先がディレクトリではありません: \(path)"
+            return "ステムの保存先がディレクトリではありません: \(path)"
         case .activePointerNotRegularFile(let path):
-            return "Stem Modeのactive pointerが通常ファイルではありません: \(path)"
+            return "ステムのactive pointerが通常ファイルではありません: \(path)"
         case .activePointerUnreadable(let path, let reason):
-            return "Stem Modeのactive pointerを読み込めません: \(path)（\(reason)）"
+            return "ステムのactive pointerを読み込めません: \(path)（\(reason)）"
         case .activePointerMismatch(let field, let expected, let actual):
-            return "Stem Modeのactive pointerが一致しません: \(field)（期待: \(expected)、実際: \(actual)）"
+            return "ステムのactive pointerが一致しません: \(field)（期待: \(expected)、実際: \(actual)）"
         case .receiptMissing(let path):
-            return "Stem Modeのモデルreceiptが見つかりません: \(path)"
+            return "ステムのモデルreceiptが見つかりません: \(path)"
         case .receiptUnreadable(let path, let reason):
-            return "Stem Modeのモデルreceiptを読み込めません: \(path)（\(reason)）"
+            return "ステムのモデルreceiptを読み込めません: \(path)（\(reason)）"
         case .receiptMismatch(let field, let expected, let actual):
-            return "Stem Modeのモデルreceiptが一致しません: \(field)（期待: \(expected)、実際: \(actual)）"
+            return "ステムのモデルreceiptが一致しません: \(field)（期待: \(expected)、実際: \(actual)）"
         case .sourceEvidenceMissing(let kind):
-            return "Stem Modeの取得元証拠がありません: \(kind.rawValue)"
+            return "ステムの取得元証拠がありません: \(kind.rawValue)"
         case .sourceEvidenceDuplicate(let kind):
-            return "Stem Modeの取得元証拠が重複しています: \(kind.rawValue)"
+            return "ステムの取得元証拠が重複しています: \(kind.rawValue)"
         case .sourceEvidenceUnexpectedKind(let kind):
-            return "Stem Modeの取得元証拠に対象外の資産があります: \(kind.rawValue)"
+            return "ステムの取得元証拠に対象外の資産があります: \(kind.rawValue)"
         case .sourceEvidenceStableURLMismatch(let kind, let expected):
-            return "Stem Modeのstable URL証拠が一致しません: \(kind.rawValue)（期待: \(expected)）"
+            return "ステムのstable URL証拠が一致しません: \(kind.rawValue)（期待: \(expected)）"
         case .sourceEvidenceHeaderMismatch(let kind, let expected, let actual):
-            return "Stem ModeのRevision header証拠が一致しません: \(kind.rawValue)（期待: \(expected)、実際: \(actual)）"
+            return "ステムのRevision header証拠が一致しません: \(kind.rawValue)（期待: \(expected)、実際: \(actual)）"
         case .sourceEvidenceRevisionMismatch(let kind, let expected, let actual):
-            return "Stem ModeのRevision証拠が一致しません: \(kind.rawValue)（期待: \(expected)、実際: \(actual)）"
+            return "ステムのRevision証拠が一致しません: \(kind.rawValue)（期待: \(expected)、実際: \(actual)）"
         case .crossVolumeActivation(let stagingPath, let versionsPath):
-            return "Stem Modeのモデルを原子的に有効化できない保存場所です: \(stagingPath) → \(versionsPath)"
+            return "ステムのモデルを原子的に有効化できない保存場所です: \(stagingPath) → \(versionsPath)"
         case .fileOperationFailed(let operation, let path, let reason):
-            return "Stem Modeのファイル操作に失敗しました: \(operation)（\(path)、\(reason)）"
+            return "ステムのファイル操作に失敗しました: \(operation)（\(path)、\(reason)）"
         }
     }
 }

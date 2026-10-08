@@ -9,9 +9,9 @@ enum ProcessingMode: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .standard:
-            return "通常補正"
+            return "スタンダード"
         case .stem:
-            return "Stem Mode"
+            return "ステム"
         }
     }
 }

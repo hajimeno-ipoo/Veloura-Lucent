@@ -88,7 +88,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
                 }
             ),
             emptyTitle: "入力2mixは未解析です",
-            emptyDescription: "音声を選ぶと、入力、補正後または再ミックス、Stem Mode最終版の詳細解析を表示します。",
+            emptyDescription: "音声を選ぶと、入力、補正後または再ミックス、ステム最終版の詳細解析を表示します。",
             correctedTitle: processedTitle
         )
     }
@@ -104,7 +104,7 @@ struct StemModeDetailedAnalysisWorkspaceView: View {
             return "入力2mixを解析しています。"
         }
         if model.isAnalyzingDisplayAudio {
-            return "補正後、再ミックス、またはStem Mode最終版を解析しています。"
+            return "補正後、再ミックス、またはステム最終版を解析しています。"
         }
         return nil
     }

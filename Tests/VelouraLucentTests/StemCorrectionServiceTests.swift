@@ -92,7 +92,7 @@ struct StemCorrectionServiceTests {
             )
             #expect(record.action == plannedAction)
             #expect(!record.reason.isEmpty)
-            #expect(!record.reason.contains("通常モード"))
+            #expect(!record.reason.contains("スタンダードモード"))
             switch (record.action, record.outcome) {
             case (.skip, .notEvaluatedForSkippedStage),
                  (.run, .completed),
@@ -145,8 +145,9 @@ struct StemCorrectionServiceTests {
             $0.contains("補正後mud guard") && $0.contains("既存の処理前後mud増加guardを使用")
         })
         #expect(humanReadableLines.contains("ノイズを除去します"))
+        #expect(humanReadableLines.filter { $0 == "高域修復/Oversampling: 4倍処理を適用" }.count == 1)
         #expect(guardLines.count == StemCorrectionStage.allCases.count)
-        #expect(!humanReadableLines.contains { $0.contains("通常モード") })
+        #expect(!humanReadableLines.contains { $0.contains("スタンダードモード") })
         #expect(!humanReadableLines.contains { $0.contains("今回のStem自身との相対比較") })
         #expect(!humanReadableLines.contains { line in
             StemCorrectionStage.allCases.contains { line.contains($0.rawValue) }

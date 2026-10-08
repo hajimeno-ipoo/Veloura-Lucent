@@ -497,9 +497,9 @@ struct KeyboardShortcutManagementView: View {
         let processed = AppLanguageSettings.string(processedAudioTitle)
         switch action {
         case .compareInputCorrected:
-            return AppLanguageSettings.format("入力と%@を比較", processed)
+            return AppLanguageSettings.string("入力と補正後を比較")
         case .compareCorrectedMastered:
-            return AppLanguageSettings.format("%@と最終版を比較", processed)
+            return AppLanguageSettings.string("補正後と最終版を比較")
         case .showCorrectedAnalysis:
             return AppLanguageSettings.format("%@の解析結果", processed)
         default:

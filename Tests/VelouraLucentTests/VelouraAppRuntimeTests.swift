@@ -94,7 +94,7 @@ struct VelouraAppRuntimeTests {
         )
 
         #expect(appSource.components(separatedBy: "VelouraRootView()").count - 1 == 2)
-        #expect(appSource.contains("Window(\"Veloura Lucentについて\", id: \"about\")"))
+        #expect(appSource.contains("Window(AppLanguageSettings.string(\"Veloura Lucentについて\"), id: \"about\")"))
         #expect(commandsSource.contains("CommandGroup(replacing: .appInfo)"))
         #expect(commandsSource.contains("openWindow(id: \"about\")"))
         #expect(rootSource.contains("StemModelAcquisitionProgressSheet("))
@@ -202,7 +202,7 @@ struct VelouraAppRuntimeTests {
         #expect(runtime.stemWorkspaceModel.stemPreviewController.activeTarget == nil)
     }
 
-    @Test("モデル取得中でも明示した通常モード切替を許可し取得を継続する")
+    @Test("モデル取得中でも明示したスタンダードモード切替を許可し取得を継続する")
     func explicitStandardSelectionKeepsApprovedAcquisitionRunning() async throws {
         let fixture = try VelouraAppRuntimeFixture()
         let inspector = RuntimeStemModelInspector(inspection: fixture.inspection)
@@ -243,7 +243,7 @@ struct VelouraAppRuntimeTests {
         try await waitForRuntimeCondition { manager.operationState == .idle }
     }
 
-    @Test("通常補正またはマスタリング実行中は従来どおりモード切替を禁止する")
+    @Test("スタンダード補正またはマスタリング実行中は従来どおりモード切替を禁止する")
     func standardProcessingAndMasteringStillDisableModeSwitch() {
         let actions = ProcessingActions(
             notificationReporter: NoOpCompletionNotificationReporter.shared

@@ -554,7 +554,7 @@ struct StemWorkflowSessionTests {
 
         #expect(session.recentActivityEvents.suffix(2).map(\.title) == [
             "マスタリングが完了しました",
-            "Stem Mode最終版を解析しました",
+            "ステム最終版を解析しました",
         ])
     }
 

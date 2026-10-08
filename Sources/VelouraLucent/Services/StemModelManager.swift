@@ -138,31 +138,31 @@ enum StemModelManagerError: LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case let .unsupportedPlatform(processArchitecture):
-            return "Stem ModeはApple Silicon専用です。現在の実行アーキテクチャは\(processArchitecture)です。通常モードは引き続き利用できます。"
+            return "ステムはApple Silicon専用です。現在の実行アーキテクチャは\(processArchitecture)です。スタンダードモードは引き続き利用できます。"
         case .resourcesStillChecking:
-            return "Stem Modeのローカル資産を確認中です。"
+            return "ステムのローカル資産を確認中です。"
         case .manifestUnavailable:
-            return "Stem Modeの同梱manifestを検証できないため、モデル取得を開始できません。"
+            return "ステムの同梱manifestを検証できないため、モデル取得を開始できません。"
         case .runtimeCannotBeRepairedByModelDownload:
             return "同梱MLX実行資産の問題は、AIモデルの再取得では修復できません。"
         case .recoveryActionUnavailable(let action):
-            return "現在のStem Mode資産状態では、この復旧操作を実行できません: \(action.rawValue)"
+            return "現在のステム資産状態では、この復旧操作を実行できません: \(action.rawValue)"
         case .acquisitionAlreadyInProgress:
-            return "Stem Modeのモデル取得または確認が既に進行中です。"
+            return "ステムのモデル取得または確認が既に進行中です。"
         case .noPendingConfirmation:
-            return "Stem Modeのモデル取得確認がありません。"
+            return "ステムのモデル取得確認がありません。"
         case .confirmationNoLongerMatchesCurrentManifest:
-            return "表示したStem Modeモデル取得内容が現在の検証済みmanifestと一致しないため、取得を開始できません。"
+            return "表示したステムモデル取得内容が現在の検証済みmanifestと一致しないため、取得を開始できません。"
         case .invalidDownloadByteTotal:
-            return "Stem Modeのモデル取得容量を安全に集計できません。"
+            return "ステムのモデル取得容量を安全に集計できません。"
         case .acquiredAssetsDidNotBecomeReady:
-            return "取得後の再検証でStem Modeのモデル資産を有効化できませんでした。"
+            return "取得後の再検証でステムのモデル資産を有効化できませんでした。"
         case .modelOperationAlreadyInProgress:
-            return "Stem Modeのモデル操作が既に進行中です。"
+            return "ステムのモデル操作が既に進行中です。"
         case .modelRemovalUnavailable:
-            return "選択中のStem Modeモデルには削除できる取得データがありません。"
+            return "選択中のステムモデルには削除できる取得データがありません。"
         case .selectedModelChanged:
-            return "削除確認後に選択中のStem Modeモデルが変わったため、削除を中止しました。"
+            return "削除確認後に選択中のステムモデルが変わったため、削除を中止しました。"
         }
     }
 }

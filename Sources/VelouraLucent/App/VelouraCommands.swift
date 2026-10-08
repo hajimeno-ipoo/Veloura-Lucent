@@ -399,7 +399,7 @@ struct VelouraCommands: Commands {
 
         CommandMenu(localized("再生")) {
             if let stemPlaybackState {
-                Menu(localizedFormat("入力／%@／最終版", processedAudioTitle)) {
+                Menu(localizedFormat("入力／%@／最終版", localized("補正後"))) {
                     primaryComparisonPlaybackCommands()
                 }
 
@@ -444,12 +444,12 @@ struct VelouraCommands: Commands {
         CommandGroup(after: .sidebar) {
             Menu(localized("モード")) {
                 processingModeButton(
-                    title: localized("通常補正"),
+                    title: localized(ProcessingMode.standard.title),
                     mode: .standard,
                     shortcutAction: .selectStandardMode
                 )
                 processingModeButton(
-                    title: localized("Stem Mode"),
+                    title: localized(ProcessingMode.stem.title),
                     mode: .stem,
                     shortcutAction: .selectStemMode
                 )
@@ -665,7 +665,7 @@ struct VelouraCommands: Commands {
 
             Menu(localized("比較対象")) {
                 comparisonPairButton(
-                    title: localizedFormat("入力と%@", processedAudioTitle),
+                    title: localizedFormat("入力と%@", localized("補正後")),
                     pair: .inputVsCorrected,
                     shortcutAction: .compareInputCorrected
                 )
@@ -675,7 +675,7 @@ struct VelouraCommands: Commands {
                     shortcutAction: .compareInputMastered
                 )
                 comparisonPairButton(
-                    title: localizedFormat("%@と最終版", processedAudioTitle),
+                    title: localizedFormat("%@と最終版", localized("補正後")),
                     pair: .correctedVsMastered,
                     shortcutAction: .compareCorrectedMastered
                 )
