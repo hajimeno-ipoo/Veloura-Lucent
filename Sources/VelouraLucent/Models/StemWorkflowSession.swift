@@ -611,7 +611,11 @@ final class StemWorkflowSession {
         )
     }
 
-    func completeCorrection(runID: UUID, at timestamp: Date = Date()) throws {
+    func completeCorrection(
+        runID: UUID,
+        at timestamp: Date = Date(),
+        continuesAutomatically: Bool = false
+    ) throws {
         try requireMutableRun(runID)
         guard let runContract else { throw StemWorkflowSessionError.noActiveRun }
         let validKinds = Set(artifactStates.compactMap { state -> StemArtifactKind? in
@@ -652,7 +656,9 @@ final class StemWorkflowSession {
             timestamp: timestamp,
             level: .info,
             step: .validateCorrectedPureSum,
-            message: "補正済み\(runContract.stemCount)Stemと補正後を一時保存しました。再ミックスは別操作で開始します。"
+            message: continuesAutomatically
+                ? "補正済み\(runContract.stemCount)Stemと補正後を一時保存しました。再ミックスへ自動で進みます。"
+                : "補正済み\(runContract.stemCount)Stemと補正後を一時保存しました。再ミックスは別操作で開始します。"
         )
     }
 

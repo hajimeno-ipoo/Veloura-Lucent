@@ -155,6 +155,7 @@ struct StemModeStartRequest: Sendable {
     let masteringProfile: MasteringProfile
     let masteringSettings: MasteringSettings
     let analysisMode: StemAudioAnalysisMode
+    let continueToMastering: Bool
 
     init(
         inputURL: URL,
@@ -162,7 +163,8 @@ struct StemModeStartRequest: Sendable {
         correctionSettings: StemRoleCorrectionSettings,
         masteringProfile: MasteringProfile,
         masteringSettings: MasteringSettings,
-        analysisMode: StemAudioAnalysisMode = .auto
+        analysisMode: StemAudioAnalysisMode = .auto,
+        continueToMastering: Bool = false
     ) {
         self.inputURL = inputURL
         self.separationSettings = separationSettings
@@ -170,6 +172,7 @@ struct StemModeStartRequest: Sendable {
         self.masteringProfile = masteringProfile
         self.masteringSettings = masteringSettings
         self.analysisMode = analysisMode
+        self.continueToMastering = continueToMastering
     }
 }
 

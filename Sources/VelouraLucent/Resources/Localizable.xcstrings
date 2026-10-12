@@ -1,6 +1,54 @@
 {
   "sourceLanguage": "ja",
   "strings": {
+    "補正済み%@Stemと補正後を一時保存しました。再ミックスへ自動で進みます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved %@ corrected stems and the corrected mix temporarily. Continuing to remix automatically."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "補正済み%@Stemと補正後を一時保存しました。再ミックスへ自動で進みます。"
+          }
+        }
+      }
+    },
+    "スタンダードは補正から、ステムは補正・再ミックスから、マスタリングまで順に実行します。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard runs correction then mastering. Stem runs correction, remix, then mastering."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スタンダードは補正から、ステムは補正・再ミックスから、マスタリングまで順に実行します。"
+          }
+        }
+      }
+    },
+    "補正後、マスタリングまで続けて実行": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue from correction through mastering"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "補正後、マスタリングまで続けて実行"
+          }
+        }
+      }
+    },
     " / 復帰理由 %@": {
       "localizations": {
         "en": {

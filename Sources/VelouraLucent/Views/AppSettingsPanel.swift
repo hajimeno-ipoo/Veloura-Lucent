@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AppSettingsPanel: View {
     @AppStorage(AppLanguageSettings.key) private var languageSelectionRawValue = AppLanguageSelection.system.rawValue
+    @AppStorage(VelouraAppRuntime.continueToMasteringKey) private var continueToMastering = false
     private let preferences: CompletionNotificationPreferenceProviding
     private let notificationReporter: CompletionNotificationReporting
     @Binding private var windowBackgroundMaterialAmount: Double
@@ -54,6 +55,17 @@ struct AppSettingsPanel: View {
                 Text("English").tag(AppLanguageSelection.english.rawValue)
             }
             .pickerStyle(.radioGroup)
+
+            Divider()
+
+            Toggle("補正後、マスタリングまで続けて実行", isOn: $continueToMastering)
+                .font(.title3)
+                .toggleStyle(.switch)
+                .tint(LiquidGlassSegmentedPickerStyle.switchTint)
+
+            Text("スタンダードは補正から、ステムは補正・再ミックスから、マスタリングまで順に実行します。")
+                .font(.body)
+                .foregroundStyle(.secondary)
 
             Divider()
 

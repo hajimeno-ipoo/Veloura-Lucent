@@ -6,6 +6,82 @@ import Testing
 
 @MainActor
 struct ProcessingActionsTests {
+    @Test(arguments: [false, true])
+    func correctionContinuesToMasteringOnlyWhenRequested(_ continues: Bool) async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputURL = directory.appending(path: "continuation.wav")
+        let samples = (0..<24_000).map { index in
+            Float(0.1 * sin(2 * Double.pi * 440 * Double(index) / 48_000))
+        }
+        try AudioFileService.saveAudio(
+            AudioSignal(channels: [samples, samples], sampleRate: 48_000),
+            to: inputURL
+        )
+        let actions = ProcessingActions(notificationReporter: NoOpCompletionNotificationReporter.shared)
+        defer { actions.shutdown() }
+        defer {
+            if continues && !actions.job.hasExistingMasteredOutput {
+                print("Automatic mastering state:", actions.job.statusMessage, actions.job.masteringStatusMessage,
+                      actions.canStartMastering, actions.job.isAnalyzingDisplayAnalysis,
+                      actions.job.logText, actions.job.masteringLogText)
+            }
+        }
+        actions.job.prepareForSelection(inputURL)
+        let masteringSettings = actions.job.editableMasteringSettings
+
+        actions.startCorrectionProcessing(continueToMastering: continues)
+        try await waitUntil {
+            actions.presentedError != nil || (
+                actions.job.hasExistingOutput
+                    && !actions.job.isAnalyzingDisplayAnalysis
+                    && (continues ? actions.job.hasExistingMasteredOutput : true)
+            )
+        }
+
+        #expect(actions.presentedError == nil)
+        #expect(actions.job.hasExistingOutput)
+        #expect(actions.job.canUseCorrectedAnalysisForMastering)
+        #expect(actions.job.hasExistingMasteredOutput == continues)
+        #expect(!actions.job.isMastering)
+        if continues {
+            #expect(actions.job.appliedMasteringSettings == masteringSettings)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func unsuccessfulCorrectionDoesNotStartAutomaticMastering(_ cancel: Bool) async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let actions = ProcessingActions(notificationReporter: NoOpCompletionNotificationReporter.shared)
+        defer { actions.shutdown() }
+        actions.job.prepareForSelection(directory.appending(path: "missing.wav"))
+
+        actions.startCorrectionProcessing(continueToMastering: true)
+        if cancel { actions.cancelCorrectionProcessing() }
+        try await waitUntil { !actions.job.isProcessing }
+
+        #expect(!actions.job.isMastering)
+        #expect(!actions.job.hasExistingMasteredOutput)
+        #expect(actions.job.masteringStartedAt == nil)
+        if cancel {
+            #expect(actions.job.logText.contains("補正処理をキャンセルしました"))
+        } else {
+            #expect(actions.presentedError != nil)
+        }
+        if let output = actions.job.masteredOutputFile {
+            #expect(!FileManager.default.fileExists(atPath: output.path))
+        }
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(120)
+        while !condition(), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(condition(), "処理が制限時間内に完了しませんでした")
+    }
+
     @Test
     func availabilityFollowsProcessingState() {
         let actions = ProcessingActions(notificationReporter: NoOpCompletionNotificationReporter.shared)

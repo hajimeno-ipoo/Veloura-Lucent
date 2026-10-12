@@ -40,7 +40,8 @@ final class DisplayAnalysisCoordinator {
         includePreview: Bool,
         includeMasteringAnalysis: Bool,
         correctionAnalysisMode: AudioAnalysisMode?,
-        logHandler: (@Sendable (String) -> Void)? = nil
+        logHandler: (@Sendable (String) -> Void)? = nil,
+        onCompletion: (@MainActor () -> Void)? = nil
     ) {
         tasks[target]?.cancel()
         tasks[target] = Task { [weak self] in
@@ -53,6 +54,8 @@ final class DisplayAnalysisCoordinator {
                 correctionAnalysisMode: correctionAnalysisMode,
                 logHandler: logHandler
             )
+            guard !Task.isCancelled else { return }
+            onCompletion?()
         }
     }
 

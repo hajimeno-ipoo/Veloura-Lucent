@@ -721,14 +721,14 @@ struct ComparisonVideoDisplaySettingsView: View {
 
             Divider()
 
-            ForEach(Self.availableFontFamilies, id: \.self) { family in
+            ForEach(Self.availableFontFamilies, id: \.family) { font in
                 Button {
-                    selection.wrappedValue = family
+                    selection.wrappedValue = font.family
                 } label: {
-                    if selection.wrappedValue == family {
-                        Label(family, systemImage: "checkmark")
+                    if selection.wrappedValue == font.family {
+                        Label(font.displayName, systemImage: "checkmark")
                     } else {
-                        Text(family)
+                        Text(font.displayName)
                     }
                 }
             }
@@ -737,7 +737,7 @@ struct ComparisonVideoDisplaySettingsView: View {
                 AppLocalizedText(title)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                Text(AppLanguageSettings.string(selection.wrappedValue ?? "システム"))
+                Text(fontFamilyDisplayName(selection.wrappedValue))
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption)
@@ -753,11 +753,18 @@ struct ComparisonVideoDisplaySettingsView: View {
         .buttonStyle(.plain)
         .padding(.vertical, 12)
         .accessibilityLabel(AppLanguageSettings.string(title))
-        .accessibilityValue(AppLanguageSettings.string(selection.wrappedValue ?? "システム"))
+        .accessibilityValue(fontFamilyDisplayName(selection.wrappedValue))
     }
 
-    private static let availableFontFamilies = NSFontManager.shared.availableFontFamilies.sorted {
-        $0.localizedStandardCompare($1) == .orderedAscending
+    private static let availableFontFamilies = NSFontManager.shared.availableFontFamilies.map { family in
+        (family: family, displayName: NSFontManager.shared.localizedName(forFamily: family, face: nil))
+    }.sorted {
+        $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+    }
+
+    private func fontFamilyDisplayName(_ family: String?) -> String {
+        guard let family else { return AppLanguageSettings.string("システム") }
+        return NSFontManager.shared.localizedName(forFamily: family, face: nil)
     }
 
     private func fontSizeControl(value: Binding<Double>) -> some View {

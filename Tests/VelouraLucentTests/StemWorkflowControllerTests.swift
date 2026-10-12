@@ -275,11 +275,17 @@ private actor RetryAndStaleEventWorkflow: StemWorkflowExecuting {
 
 private actor FinalizationSuspendingWorkflow: StemWorkflowExecuting {
     private(set) var finalizationStarted = false
+    private(set) var stages: [String] = []
+    private(set) var receivedCorrectionSettings: StemRoleCorrectionSettings?
+    private(set) var receivedRemixSettings: StemRemixSettings?
+    private(set) var receivedMasteringSettings: MasteringSettings?
 
     func processCorrection(
         _ request: StemWorkflowRequest,
         eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
     ) async throws -> StemWorkflowCorrectionResult {
+        stages.append("correction")
+        receivedCorrectionSettings = request.correctionSettings
         let result = makeImmediateCorrectionResult(request: request)
         await eventHandler(.artifactCommitted(runID: request.runID, artifact: result.input.artifact))
         for artifact in result.separation.stems {
@@ -305,6 +311,8 @@ private actor FinalizationSuspendingWorkflow: StemWorkflowExecuting {
         settings: StemRemixSettings,
         eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
     ) async throws -> StemWorkflowRemixResult {
+        stages.append("remix")
+        receivedRemixSettings = settings
         let artifact = makeControllerArtifact(
             id: "stem-remix",
             kind: .remixed48000,
@@ -330,6 +338,8 @@ private actor FinalizationSuspendingWorkflow: StemWorkflowExecuting {
         _ request: StemWorkflowMasteringRequest,
         eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
     ) async throws -> StemWorkflowResult {
+        stages.append("mastering")
+        receivedMasteringSettings = request.masteringSettings
         finalizationStarted = true
         await eventHandler(.displayProgress(.init(
             runID: request.runID,
@@ -429,8 +439,165 @@ private actor PostCorrectionStageWorkflow: StemWorkflowExecuting {
     func discardSession(runID: UUID) async throws {}
 }
 
+private actor ContinuationStoppingWorkflow: StemWorkflowExecuting {
+    let stopDomain: StemModeProcessDomain
+    let waitsForCancellation: Bool
+    private(set) var stages: [StemModeProcessDomain] = []
+    private var stoppedOnce = false
+
+    init(stopDomain: StemModeProcessDomain, waitsForCancellation: Bool) {
+        self.stopDomain = stopDomain
+        self.waitsForCancellation = waitsForCancellation
+    }
+
+    private func enter(_ domain: StemModeProcessDomain) async throws {
+        stages.append(domain)
+        guard domain == stopDomain, !stoppedOnce else { return }
+        stoppedOnce = true
+        if waitsForCancellation {
+            while true { try await Task.sleep(for: .milliseconds(20)) }
+        }
+        switch domain {
+        case .correction: throw IntentionalStemWorkflowError.correctionFailure
+        case .remix: throw IntentionalStemWorkflowError.remixFailure
+        case .mastering: throw IntentionalStemWorkflowError.masteringFailure
+        }
+    }
+
+    func processCorrection(
+        _ request: StemWorkflowRequest,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowCorrectionResult {
+        try await enter(.correction)
+        return try await ImmediateCorrectionWorkflow().processCorrection(request, eventHandler: eventHandler)
+    }
+
+    func processRemix(
+        correction: StemWorkflowCorrectionResult,
+        settings: StemRemixSettings,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowRemixResult {
+        try await enter(.remix)
+        return try await ImmediateCorrectionWorkflow().processRemix(
+            correction: correction, settings: settings, eventHandler: eventHandler
+        )
+    }
+
+    func processMastering(
+        _ request: StemWorkflowMasteringRequest,
+        eventHandler: @escaping @Sendable (StemWorkflowEvent) async -> Void
+    ) async throws -> StemWorkflowResult {
+        try await enter(.mastering)
+        throw CancellationError()
+    }
+
+    func discardSession(runID: UUID) async throws {}
+}
+
 @MainActor
 struct StemWorkflowControllerTests {
+    @Test("連続実行は既存設定のまま3工程を順に一度だけ開始し、OFFでは補正後に止まる", arguments: [false, true])
+    func automaticContinuationUsesExistingSettingsAndStageOrder(enabled: Bool) async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "StemContinuation-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let manager = try await makeReadyManager(root: root)
+        let workflow = FinalizationSuspendingWorkflow()
+        let session = StemWorkflowSession()
+        let controller = StemWorkflowController(
+            session: session, modelManager: manager, workflow: workflow,
+            inputInspector: AutomaticStemInputInspector(), inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
+            notificationReporter: NoOpStemCompletionNotificationReporter.shared,
+            seedProvider: { 77 }, revealInFinder: { _ in }
+        )
+        defer { controller.shutdown() }
+        let workspace = StemModeWorkspaceModel(session: session, actions: controller.actions)
+        controller.attachWorkspaceModel(workspace)
+        controller.synchronizeModelReadiness()
+        await workspace.inspectInput(root.appending(path: "source.wav"))
+        try workspace.setRemixManualEditingEnabled(true)
+        try workspace.setRemixPan(0.35, for: .vocals)
+        workspace.selectedMasteringProfile = .natural
+        let correctionSettings = workspace.correctionSettings
+        let masteringSettings = workspace.masteringSettings
+        try await controller.actions.beginCorrection(StemModeStartRequest(
+            inputURL: try #require(workspace.selectedInputURL),
+            separationSettings: try #require(workspace.separationSettings),
+            correctionSettings: correctionSettings, masteringProfile: .natural,
+            masteringSettings: masteringSettings, continueToMastering: enabled
+        ))
+        if !enabled {
+            try await waitUntil { workspace.canRunRemix && !controller.isProcessingRun }
+            #expect(await workflow.stages == ["correction"])
+            await workspace.beginRemix()
+            try await waitUntil { workspace.canRunMastering && !controller.isProcessingRun }
+            #expect(await workflow.stages == ["correction", "remix"])
+            await workspace.beginMastering()
+        }
+        try await waitUntil { await workflow.finalizationStarted && workspace.finalCommitLockState == .locked }
+        #expect(await workflow.stages == ["correction", "remix", "mastering"])
+        #expect(await workflow.receivedCorrectionSettings == correctionSettings)
+        #expect(await workflow.receivedRemixSettings == workspace.effectiveRemixSettings)
+        #expect(await workflow.receivedRemixSettings?.settings(for: .vocals).pan == 0.35)
+        #expect(await workflow.receivedMasteringSettings == masteringSettings)
+        #expect(!workspace.canCancelProcessing)
+    }
+
+    @Test("連続実行は各工程の失敗・キャンセルで止まり、手動再実行へ継続予約を残さない",
+          arguments: [StemModeProcessDomain.correction, .remix, .mastering], [false, true])
+    func automaticContinuationStopsOnFailureOrCancellation(
+        domain: StemModeProcessDomain, cancels: Bool
+    ) async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "StemContinuationStop-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let manager = try await makeReadyManager(root: root)
+        let workflow = ContinuationStoppingWorkflow(stopDomain: domain, waitsForCancellation: cancels)
+        let session = StemWorkflowSession()
+        let controller = StemWorkflowController(
+            session: session, modelManager: manager, workflow: workflow,
+            inputInspector: AutomaticStemInputInspector(), inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
+            notificationReporter: NoOpStemCompletionNotificationReporter.shared,
+            seedProvider: { 77 }, revealInFinder: { _ in }
+        )
+        defer { controller.shutdown() }
+        let workspace = StemModeWorkspaceModel(session: session, actions: controller.actions)
+        controller.attachWorkspaceModel(workspace)
+        controller.synchronizeModelReadiness()
+        await workspace.inspectInput(root.appending(path: "source.wav"))
+        let request = StemModeStartRequest(
+            inputURL: try #require(workspace.selectedInputURL),
+            separationSettings: try #require(workspace.separationSettings),
+            correctionSettings: workspace.correctionSettings, masteringProfile: .streaming,
+            masteringSettings: workspace.masteringSettings, continueToMastering: true
+        )
+        try await controller.actions.beginCorrection(request)
+        try await waitUntil { await workflow.stages.contains(domain) }
+        if cancels {
+            switch domain {
+            case .correction: await workspace.cancelCorrection()
+            case .remix: await workspace.cancelRemix()
+            case .mastering: await workspace.cancelMastering()
+            }
+        }
+        try await waitUntil { !controller.isProcessingRun }
+        let expectedStages: [StemModeProcessDomain] = switch domain {
+        case .correction: [.correction]
+        case .remix: [.correction, .remix]
+        case .mastering: [.correction, .remix, .mastering]
+        }
+        #expect(await workflow.stages == expectedStages)
+        #expect(workspace.selectedInputURL == request.inputURL)
+        if domain == .remix {
+            #expect(workspace.correctedPureSumPreviewArtifact != nil)
+            await workspace.beginRemix()
+            try await waitUntil { workspace.canRunMastering && !controller.isProcessingRun }
+            #expect(await workflow.stages == [.correction, .remix, .remix])
+        } else if domain == .mastering {
+            #expect(workspace.remixedPreviewArtifact != nil)
+            #expect(workspace.finalPreviewArtifact == nil)
+        }
+    }
     @Test("モデル未取得でも入力選択と表示解析を行い補正だけを無効にする")
     func missingModelKeepsInputInspectionAvailableAndCorrectionDisabled() async throws {
         let root = FileManager.default.temporaryDirectory

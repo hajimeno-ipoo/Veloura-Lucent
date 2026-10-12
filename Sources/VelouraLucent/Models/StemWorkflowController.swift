@@ -196,6 +196,7 @@ final class StemWorkflowController {
     @ObservationIgnored private var activeRunID: UUID?
     @ObservationIgnored private var executionKind: ExecutionKind?
     @ObservationIgnored private var isExpectedCancellation = false
+    @ObservationIgnored private var continueToMastering = false
     @ObservationIgnored private var inputLease: SecurityScopedLease?
     @ObservationIgnored private var isShuttingDown = false
     @ObservationIgnored private var notifiedCompletionStages: Set<StemCompletionNotificationStage> = []
@@ -323,6 +324,7 @@ final class StemWorkflowController {
     }
 
     func shutdown() {
+        continueToMastering = false
         isShuttingDown = true
         isExpectedCancellation = true
         workflowTask?.cancel()
@@ -378,6 +380,7 @@ final class StemWorkflowController {
 
     private func resetForInputChange() async throws {
         try requireNoActiveWorkflow()
+        continueToMastering = false
         let isSameSelectedInput = workspaceModel?.selectedInputURL?.standardizedFileURL
             == inputLease?.URL.standardizedFileURL
         try await discardInactiveSessionRunIfPresent()
@@ -391,7 +394,9 @@ final class StemWorkflowController {
 
     private func beginCorrection(_ startRequest: StemModeStartRequest) async throws {
         try requireNoActiveWorkflow()
+        continueToMastering = false
         try await discardInactiveSessionRunIfPresent()
+        continueToMastering = startRequest.continueToMastering
         isProcessingRun = true
         do {
             let resources = try currentReadyResources()
@@ -426,6 +431,7 @@ final class StemWorkflowController {
                 .correction(try await workflow.processCorrection(request, eventHandler: handler))
             }
         } catch {
+            continueToMastering = false
             if activeRunID == nil {
                 isProcessingRun = false
             }
@@ -517,6 +523,7 @@ final class StemWorkflowController {
               workflowTask != nil else {
             throw StemWorkflowSessionError.noActiveRun
         }
+        continueToMastering = false
         isExpectedCancellation = true
         workflowTask?.cancel()
         await workflowTask?.value
@@ -545,6 +552,7 @@ final class StemWorkflowController {
               workflowTask != nil else {
             throw StemWorkflowSessionError.noActiveRun
         }
+        continueToMastering = false
         isExpectedCancellation = true
         workflowTask?.cancel()
         await workflowTask?.value
@@ -567,6 +575,7 @@ final class StemWorkflowController {
               workflowTask != nil else {
             throw StemWorkflowSessionError.noActiveRun
         }
+        continueToMastering = false
         isExpectedCancellation = true
         workflowTask?.cancel()
         await workflowTask?.value
@@ -893,6 +902,17 @@ final class StemWorkflowController {
         guard activeRunID == runID, !isShuttingDown else { return }
         do {
             try finalizeSuccessfulExecution(result)
+            guard continueToMastering, let workspaceModel else { return }
+            switch result {
+            case .correction:
+                await workspaceModel.beginRemix()
+                if activeRunID == nil { continueToMastering = false }
+            case .remix:
+                continueToMastering = false
+                await workspaceModel.beginMastering()
+            case .mastered:
+                continueToMastering = false
+            }
         } catch {
             await finishFailedRun(error, runID: runID)
         }
@@ -981,7 +1001,7 @@ final class StemWorkflowController {
         ))
         correctionResult = result
         updatePreviewSourcesFromValidatedArtifacts()
-        try session.completeCorrection(runID: result.runID)
+        try session.completeCorrection(runID: result.runID, continuesAutomatically: continueToMastering)
         session.recordCorrectedRemixAnalysis(result.correctedRemixEvaluation.audioMetrics)
         notifyCompletionIfNeeded(.correction, runContract: result.runContract)
         finishStoppedRun()
@@ -1070,6 +1090,7 @@ final class StemWorkflowController {
     }
 
     private func finishFailedRun(_ error: any Error, runID: UUID) async {
+        continueToMastering = false
         if executionKind == .remix {
             remixResult = nil
             do {

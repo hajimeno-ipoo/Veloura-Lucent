@@ -556,7 +556,11 @@ struct VelouraRootView: View {
             ],
             selectProcessingMode: selectProcessingMode,
             chooseInputAudio: actions.chooseInputAudio,
-            runCorrection: actions.startCorrectionProcessing,
+            runCorrection: {
+                actions.startCorrectionProcessing(
+                    continueToMastering: UserDefaults.standard.bool(forKey: VelouraAppRuntime.continueToMasteringKey)
+                )
+            },
             runMastering: actions.startMasteringProcessing,
             cancelCorrection: actions.cancelCorrectionProcessing,
             cancelMastering: actions.cancelMasteringProcessing

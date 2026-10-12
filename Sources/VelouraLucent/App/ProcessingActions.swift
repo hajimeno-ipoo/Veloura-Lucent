@@ -13,6 +13,7 @@ final class ProcessingActions {
     @ObservationIgnored private var correctionTaskID: UUID?
     @ObservationIgnored private var masteringTask: Task<Void, Never>?
     @ObservationIgnored private var masteringTaskID: UUID?
+    @ObservationIgnored private var automaticMasteringRequestID: UUID?
 
     init(notificationReporter: CompletionNotificationReporting) {
         let job = ProcessingJob(notificationReporter: notificationReporter)
@@ -40,7 +41,9 @@ final class ProcessingActions {
         if job.isProcessing {
             cancelCorrectionProcessing()
         } else {
-            startCorrectionProcessing()
+            startCorrectionProcessing(
+                continueToMastering: UserDefaults.standard.bool(forKey: VelouraAppRuntime.continueToMasteringKey)
+            )
         }
     }
 
@@ -79,24 +82,27 @@ final class ProcessingActions {
             return false
         }
 
+        stopAutomaticContinuation()
         let selectionID = displayAnalysis.beginInputSelection(for: url)
         displayAnalysis.analyzeMetrics(for: url, target: .input, selectionID: selectionID)
         return true
     }
 
     func cancelCorrectionProcessing() {
+        stopAutomaticContinuation()
         guard job.isProcessing, !job.isCancellingProcessing else { return }
         job.requestProcessingCancellation()
         correctionTask?.cancel()
     }
 
     func cancelMasteringProcessing() {
+        stopAutomaticContinuation()
         guard job.isMastering, !job.isCancellingMastering else { return }
         job.requestMasteringCancellation()
         masteringTask?.cancel()
     }
 
-    func startCorrectionProcessing() {
+    func startCorrectionProcessing(continueToMastering: Bool = false) {
         guard let inputFile = job.inputFile else { return }
         let selectionID = displayAnalysis.selectionID
         let appliedSettings = job.editableCorrectionSettings
@@ -108,6 +114,7 @@ final class ProcessingActions {
         job.beginProcessing(appliedSettings: appliedSettings)
 
         let taskID = UUID()
+        automaticMasteringRequestID = continueToMastering ? taskID : nil
         correctionTaskID = taskID
         correctionTask = Task { [weak self] in
             guard let self else { return }
@@ -153,9 +160,17 @@ final class ProcessingActions {
                         Task { @MainActor in
                             job?.appendLog(message)
                         }
+                    },
+                    onCompletion: { [weak self] in
+                        guard let self, automaticMasteringRequestID == taskID else { return }
+                        stopAutomaticContinuation()
+                        guard displayAnalysis.isCurrentMasteringSelection(selectionID, correctedFile: outputFile),
+                              canStartMastering else { return }
+                        startMasteringProcessing()
                     }
                 )
             } catch is CancellationError {
+                if automaticMasteringRequestID == taskID { stopAutomaticContinuation() }
                 guard displayAnalysis.isCurrentInputSelection(selectionID, inputFile: inputFile) else { return }
                 guard job.isCancellingProcessing else { return }
                 job.resetDisplayAnalysisStates(for: .corrected)
@@ -163,6 +178,7 @@ final class ProcessingActions {
                 job.finishProcessingCancellation()
                 AccessibilityAnnouncementService.post("補正処理をキャンセルしました")
             } catch {
+                if automaticMasteringRequestID == taskID { stopAutomaticContinuation() }
                 guard displayAnalysis.isCurrentInputSelection(selectionID, inputFile: inputFile) else { return }
                 let presentation = UserFacingErrorPresentation.make(for: error, operation: .correction)
                 job.resetDisplayAnalysisStates(for: .corrected)
@@ -178,6 +194,7 @@ final class ProcessingActions {
     func startMasteringProcessing() {
         guard let correctedFile = job.outputFile else { return }
         guard canStartMastering else { return }
+        stopAutomaticContinuation()
         let selectionID = displayAnalysis.selectionID
         let appliedSettings = job.editableMasteringSettings
         displayAnalysis.cancelTasks(for: [.mastered])
@@ -298,11 +315,16 @@ final class ProcessingActions {
     }
 
     func shutdown() {
+        stopAutomaticContinuation()
         correctionTask?.cancel()
         masteringTask?.cancel()
         displayAnalysis.cancelTasks()
         PreviewFileStore.removeOwnedPreviewFileIfPresent(job.masteredOutputFile)
         PreviewFileStore.removeOwnedPreviewFileIfPresent(job.outputFile)
+    }
+
+    func stopAutomaticContinuation() {
+        automaticMasteringRequestID = nil
     }
 
     func clearCorrectionOutputPreviews() {

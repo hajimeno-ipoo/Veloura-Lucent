@@ -5,6 +5,7 @@ import Observation
 @Observable
 final class VelouraAppRuntime {
     static let shared = VelouraAppRuntime()
+    static let continueToMasteringKey = "continueProcessingToMastering"
 
     private(set) var processingMode: ProcessingMode = .standard
 
@@ -68,6 +69,7 @@ final class VelouraAppRuntime {
     func selectMode(_ mode: ProcessingMode) -> Bool {
         guard !isModeSwitchDisabled else { return false }
         if processingMode == .standard, mode != .standard {
+            standardActions.stopAutomaticContinuation()
             standardActions.preview.stopPlayback()
         } else if processingMode == .stem, mode != .stem {
             stemWorkspaceModel.stopPreviewPlayback()

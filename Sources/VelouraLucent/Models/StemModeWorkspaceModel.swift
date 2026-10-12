@@ -507,7 +507,8 @@ final class StemModeWorkspaceModel {
             correctionSettings: correctionSettings,
             masteringProfile: selectedMasteringProfile,
             masteringSettings: masteringSettings,
-            analysisMode: StemAudioAnalysisMode(selectedAnalysisMode)
+            analysisMode: StemAudioAnalysisMode(selectedAnalysisMode),
+            continueToMastering: UserDefaults.standard.bool(forKey: VelouraAppRuntime.continueToMasteringKey)
         )
 
         do {
