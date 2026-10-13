@@ -145,7 +145,6 @@ printf 'applying Finder layout for macOS 26 compatibility...\n'
 
 FINDER_DISK_NAME="${MOUNT_POINT##*/}"
 /usr/bin/osascript \
-  -e "set backgroundFile to POSIX file \"$MOUNT_POINT/$DMG_BACKGROUND_NAME\" as alias" \
   -e 'tell application id "com.apple.finder"' \
   -e "tell disk \"$FINDER_DISK_NAME\"" \
   -e 'open' \
@@ -158,7 +157,7 @@ FINDER_DISK_NAME="${MOUNT_POINT##*/}"
   -e 'set arrangement of viewOptions to not arranged' \
   -e 'set icon size of viewOptions to 104' \
   -e 'set text size of viewOptions to 14' \
-  -e 'set background picture of viewOptions to backgroundFile' \
+  -e "set background picture of viewOptions to file \"$DMG_BACKGROUND_NAME\"" \
   -e "set position of item \"$DISPLAY_NAME.app\" of container window to {222, 200}" \
   -e 'set position of item "Applications" of container window to {569, 200}' \
   -e "set position of item \"$DMG_BACKGROUND_NAME\" of container window to {1100, 100}" \
@@ -172,7 +171,6 @@ FINDER_DISK_NAME="${MOUNT_POINT##*/}"
 /usr/bin/SetFile -a V "$MOUNT_POINT/$DMG_BACKGROUND_NAME"
 
 /usr/bin/osascript \
-  -e "set backgroundFile to POSIX file \"$MOUNT_POINT/$DMG_BACKGROUND_NAME\" as alias" \
   -e 'tell application id "com.apple.finder"' \
   -e "tell disk \"$FINDER_DISK_NAME\"" \
   -e 'open' \
@@ -185,7 +183,7 @@ FINDER_DISK_NAME="${MOUNT_POINT##*/}"
   -e 'set arrangement of viewOptions to not arranged' \
   -e 'set icon size of viewOptions to 104' \
   -e 'set text size of viewOptions to 14' \
-  -e 'set background picture of viewOptions to backgroundFile' \
+  -e "set background picture of viewOptions to file \"$DMG_BACKGROUND_NAME\"" \
   -e "set position of item \"$DISPLAY_NAME.app\" of container window to {222, 200}" \
   -e 'set position of item "Applications" of container window to {569, 200}' \
   -e "set position of item \"$DMG_BACKGROUND_NAME\" of container window to {1100, 100}" \
