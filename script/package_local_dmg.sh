@@ -168,8 +168,6 @@ FINDER_DISK_NAME="${MOUNT_POINT##*/}"
   -e 'end tell' \
   -e 'end tell'
 
-/usr/bin/SetFile -a V "$MOUNT_POINT/$DMG_BACKGROUND_NAME"
-
 /usr/bin/osascript \
   -e 'tell application id "com.apple.finder"' \
   -e "tell disk \"$FINDER_DISK_NAME\"" \
@@ -193,6 +191,8 @@ FINDER_DISK_NAME="${MOUNT_POINT##*/}"
   -e 'close container window' \
   -e 'end tell' \
   -e 'end tell'
+
+/usr/bin/SetFile -a V "$MOUNT_POINT/$DMG_BACKGROUND_NAME"
 
 FINDER_LAYOUT_STATE="$(/usr/bin/osascript \
   -e 'tell application id "com.apple.finder"' \
