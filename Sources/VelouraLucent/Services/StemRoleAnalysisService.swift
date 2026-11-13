@@ -50,6 +50,29 @@ struct StemRoleAnalysisService: Sendable {
         )
     }
 
+    func analyzeProtectionProfile(
+        role: StemRole,
+        processingSignal48000: AudioSignal
+    ) throws -> StemRoleProtectionProfile {
+        _ = try validateProcessingSignal(processingSignal48000)
+        if role == .guitar || role == .piano {
+            return try StemDedicatedInstrumentAnalysisService().analyzeProtectionProfile(
+                role: role,
+                processingSignal48000: processingSignal48000
+            )
+        }
+        let analyzed = try Self.makeAnalysisFrames(analysisSignal: processingSignal48000)
+        try Self.validateFeatureValues(
+            Self.featureValues(role: role, frames: analyzed.frames),
+            role: role
+        )
+        return try Self.makeProtectionProfile(
+            role: role,
+            analysisSignal: processingSignal48000,
+            analyzed: analyzed
+        )
+    }
+
     private func validateProcessingSignal(_ signal: AudioSignal) throws -> Int {
         guard abs(signal.sampleRate - Self.processingSampleRate) < Self.sampleRateTolerance else {
             throw StemRoleAnalysisError.unsupportedAuthoritativeSampleRate(
@@ -197,14 +220,9 @@ private extension StemRoleAnalysisService {
         frames: [FrameAnalysis]
     ) throws -> [StemRoleFeatureDistribution] {
         let values = featureValues(role: role, frames: frames)
-        return try featureDefinitions(for: role).map { definition in
-            guard let featureValues = values[definition.feature], !featureValues.isEmpty else {
-                throw StemRoleAnalysisError.unableToProduceFeature(definition.feature)
-            }
-            let finiteValues = featureValues.filter(\.isFinite)
-            guard finiteValues.count == featureValues.count else {
-                throw StemRoleAnalysisError.unableToProduceFeature(definition.feature)
-            }
+        try validateFeatureValues(values, role: role)
+        return featureDefinitions(for: role).map { definition in
+            let finiteValues = values[definition.feature]!
             let firstQuartile = percentile(finiteValues, probability: 0.25)
             let median = percentile(finiteValues, probability: 0.5)
             let thirdQuartile = percentile(finiteValues, probability: 0.75)
@@ -218,6 +236,20 @@ private extension StemRoleAnalysisService {
                 thirdQuartile: thirdQuartile,
                 interquartileRange: max(0, thirdQuartile - firstQuartile)
             )
+        }
+    }
+
+    static func validateFeatureValues(
+        _ values: [StemRoleAnalysisFeature: [Double]],
+        role: StemRole
+    ) throws {
+        for definition in featureDefinitions(for: role) {
+            guard let featureValues = values[definition.feature], !featureValues.isEmpty else {
+                throw StemRoleAnalysisError.unableToProduceFeature(definition.feature)
+            }
+            guard featureValues.allSatisfy(\.isFinite) else {
+                throw StemRoleAnalysisError.unableToProduceFeature(definition.feature)
+            }
         }
     }
 

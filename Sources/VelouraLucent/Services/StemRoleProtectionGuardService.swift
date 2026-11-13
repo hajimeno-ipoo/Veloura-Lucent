@@ -114,10 +114,10 @@ struct StemRoleProtectionGuardService: StemRoleProtectionGuarding, Sendable {
             )
         }
 
-        let outputProfile = try analyzer.analyzeWithProtection(
+        let outputProfile = try analyzer.analyzeProtectionProfile(
             role: role,
             processingSignal48000: proposedOutput
-        ).protectionProfile
+        )
         guard profilesMatch(rawProfile, outputProfile),
               profilesMatch(inputProfile, outputProfile) else {
             throw StemRoleProtectionGuardError.profileMismatch
@@ -193,10 +193,10 @@ struct StemRoleProtectionGuardService: StemRoleProtectionGuarding, Sendable {
             )
         }
 
-        let protectedProfile = try analyzer.analyzeWithProtection(
+        let protectedProfile = try analyzer.analyzeProtectionProfile(
             role: role,
             processingSignal48000: protected.signal
-        ).protectionProfile
+        )
         return StemRoleProtectionGuardResult(
             signal: protected.signal,
             profile: protectedProfile,

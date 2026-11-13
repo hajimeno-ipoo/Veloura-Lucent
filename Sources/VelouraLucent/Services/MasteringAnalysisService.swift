@@ -68,8 +68,12 @@ enum MasteringAnalysisService {
         return analyze(signal: signal)
     }
 
-    static func analyze(signal: AudioSignal) -> MasteringAnalysis {
-        analyzeWithBenchmark(signal: signal).analysis
+    // loudnessMetricsは同じsignalを解析した結果だけを受け取ります。
+    static func analyze(
+        signal: AudioSignal,
+        loudnessMetrics: AudioMetricSnapshot? = nil
+    ) -> MasteringAnalysis {
+        analyzeWithBenchmark(signal: signal, loudnessMetrics: loudnessMetrics).analysis
     }
 
     static func spectralSummary(signal: AudioSignal) -> MasteringSpectralSummary {
@@ -92,7 +96,10 @@ enum MasteringAnalysisService {
         return analyzeWithBenchmark(signal: signal)
     }
 
-    static func analyzeWithBenchmark(signal: AudioSignal) -> Benchmark {
+    static func analyzeWithBenchmark(
+        signal: AudioSignal,
+        loudnessMetrics: AudioMetricSnapshot? = nil
+    ) -> Benchmark {
         var recorder = AnalysisBenchmarkRecorder()
         let channels = signal.channels.filter { !$0.isEmpty }
         guard !channels.isEmpty else {
@@ -114,7 +121,19 @@ enum MasteringAnalysisService {
             spectralFrameSummary(for: channels, sampleRate: signal.sampleRate)
         }
         let loudnessMeasurement = recorder.measure("loudness") {
-            LoudnessMeasurementService.measure(signal: signal, includeLoudnessRange: true)
+            if let loudnessMetrics {
+                return (
+                    integratedLoudnessLUFS: loudnessMetrics.integratedLoudnessLUFS,
+                    truePeakDBFS: loudnessMetrics.truePeakDBFS,
+                    loudnessRangeLU: loudnessMetrics.loudnessRangeLU
+                )
+            }
+            let measured = LoudnessMeasurementService.measure(signal: signal, includeLoudnessRange: true)
+            return (
+                integratedLoudnessLUFS: measured.integratedLoudnessLUFS,
+                truePeakDBFS: measured.truePeakDBFS,
+                loudnessRangeLU: measured.loudnessRangeLU
+            )
         }
         let peak = recorder.measure("truePeak") {
             loudnessMeasurement.truePeakDBFS

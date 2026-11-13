@@ -5,6 +5,43 @@ import Testing
 struct StemRemixServiceTests {
     private let service = StemRemixService()
 
+    @Test(arguments: [StemSeparationModel.htdemucs, .bsRoformerSW])
+    func zeroReturnPreservesDryAudioAndStagesWithNonzeroSends(model: StemSeparationModel) throws {
+        let stems = makeStems(model: model)
+        let contract = makeStemTestRunContract(model: model)
+        var settings = StemRemixSettings(reverbReturnLevel: 0)
+        for role in contract.validationRoles {
+            settings.setSettings(StemRemixRoleSettings(gainDB: -1, pan: 0.2, reverbSend: 0.4), for: role)
+        }
+        let recorder = StemRemixStageRecorder()
+        let result = try service.render(stems: stems, settings: settings, runContract: contract) { stage, state in
+            recorder.append(stage: stage, state: state)
+        }
+
+        #expect(result.signal.channels == result.drySignal.channels)
+        #expect(result.reverbReturn.sampleRate == result.drySignal.sampleRate)
+        #expect(result.reverbReturn.channels.map(\.count) == result.drySignal.channels.map(\.count))
+        #expect(result.reverbReturn.channels.allSatisfy { $0.allSatisfy { $0 == 0 } })
+        #expect(result.appliedSettings == settings)
+        #expect(recorder.values() == StemRemixRenderStage.allCases.flatMap {
+            [StemRemixStageEvent(stage: $0, state: .running), StemRemixStageEvent(stage: $0, state: .completed)]
+        })
+    }
+
+    @Test
+    func zeroReturnStillRejectsNonFiniteDryMix() {
+        let stems = makeStems().map { stem in
+            let signal = AudioSignal(
+                channels: stem.corrected.channels.map { Array(repeating: Float.greatestFiniteMagnitude, count: $0.count) },
+                sampleRate: stem.corrected.sampleRate
+            )
+            return StemRemixSignal(role: stem.role, raw: signal, corrected: signal)
+        }
+        #expect(throws: StemRemixServiceError.nonFiniteOutput) {
+            try service.render(stems: stems, settings: StemRemixSettings(), runContract: makeStemTestRunContract())
+        }
+    }
+
     @Test
     func neutralSettingsMatchThePureSumWithoutMasteringProcessing() throws {
         let stems = makeStems()

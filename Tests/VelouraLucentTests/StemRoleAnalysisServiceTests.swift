@@ -3,6 +3,79 @@ import Testing
 @testable import VelouraLucent
 
 struct StemRoleAnalysisServiceTests {
+    @Test("有限の入力から特徴値が非有限になってもguard専用解析で拒否する")
+    func profileOnlyAnalysisKeepsDerivedFeatureValidation() {
+        let channel = Array(repeating: Float.greatestFiniteMagnitude, count: 8_192)
+        let signal = AudioSignal(channels: [channel, channel], sampleRate: 48_000)
+        let service = StemRoleAnalysisService()
+        // FloatのFFTがoverflowすると、2フレーム目以降のcomplex onsetが非有限になります。
+        // Drumsの定義順の先頭特徴なので、表示用の分布生成を省いても同じ拒否を維持します。
+        #expect(channel.allSatisfy { $0.isFinite })
+        let expected = StemRoleAnalysisError.unableToProduceFeature(.drumsOnsetStrength)
+        #expect(throws: expected) {
+            try service.analyzeWithProtection(role: .drums, processingSignal48000: signal)
+        }
+        #expect(throws: expected) {
+            try service.analyzeProtectionProfile(role: .drums, processingSignal48000: signal)
+        }
+    }
+
+    @Test("guard専用解析は従来解析と同じ時系列profileを返す", arguments: StemRole.allCases)
+    func profileOnlyAnalysisMatchesFullAnalysis(role: StemRole) throws {
+        let service = StemRoleAnalysisService()
+        let signal = makeStereoSignal(duration: 0.35)
+        let silence = AudioSignal(
+            channels: Array(repeating: Array(repeating: Float.zero, count: 4_800), count: 2),
+            sampleRate: 48_000
+        )
+        for source in [signal, silence] {
+            let expected = try service.analyzeWithProtection(
+                role: role,
+                processingSignal48000: source
+            ).protectionProfile
+            let actual = try service.analyzeProtectionProfile(
+                role: role,
+                processingSignal48000: source
+            )
+            #expect(actual == expected)
+        }
+    }
+
+    @Test("guard専用解析でも入力音声の異常を同じエラーで拒否する", arguments: StemRole.allCases)
+    func profileOnlyAnalysisKeepsInputValidation(role: StemRole) {
+        let service = StemRoleAnalysisService()
+        let valid = makeStereoSignal(duration: 0.05)
+        var nanSignal = valid
+        nanSignal.channels[1][3] = .nan
+        var infiniteSignal = valid
+        infiniteSignal.channels[0][4] = .infinity
+        let cases: [(signal: AudioSignal, error: StemRoleAnalysisError)] = [
+            (
+                AudioSignal(channels: valid.channels, sampleRate: 44_100),
+                .unsupportedAuthoritativeSampleRate(expected: 48_000, actual: 44_100)
+            ),
+            (
+                AudioSignal(channels: [valid.channels[0]], sampleRate: 48_000),
+                .stereoRequired(actualChannelCount: 1)
+            ),
+            (AudioSignal(channels: [[], []], sampleRate: 48_000), .emptySignal),
+            (
+                AudioSignal(channels: [valid.channels[0], []], sampleRate: 48_000),
+                .inconsistentFrameCount(channelIndex: 1, expected: valid.frameCount, actual: 0)
+            ),
+            (nanSignal, .nonFiniteSample(channelIndex: 1, frameIndex: 3)),
+            (infiniteSignal, .nonFiniteSample(channelIndex: 0, frameIndex: 4)),
+        ]
+        for testCase in cases {
+            #expect(throws: testCase.error) {
+                try service.analyzeWithProtection(role: role, processingSignal48000: testCase.signal)
+            }
+            #expect(throws: testCase.error) {
+                try service.analyzeProtectionProfile(role: role, processingSignal48000: testCase.signal)
+            }
+        }
+    }
+
     @Test
     func analyzesEveryRoleDirectlyFromFortyEightKilohertzProcessingSignal() throws {
         let service = StemRoleAnalysisService()

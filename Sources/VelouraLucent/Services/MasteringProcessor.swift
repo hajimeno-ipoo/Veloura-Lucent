@@ -137,17 +137,20 @@ struct MasteringProcessor {
         let lowBodyProtectedLoud = measure(label: "ラウドネス", logger: logger, progressStep: .loudness) {
             let loud = applyLoudness(
                 signal: current,
+                currentLoudness: loudnessBaseline,
                 targetLKFS: guidedLoudnessTarget,
                 peakCeilingDB: settings.peakCeilingDB
             )
             let loudnessReference = applyLoudness(
                 signal: signal,
+                currentLoudness: MasteringAnalysisService.integratedLoudness(signal: signal),
                 targetLKFS: guidedLoudnessTarget,
                 peakCeilingDB: settings.peakCeilingDB
             )
             let originalLoudnessReference = originalReferenceSignal.map {
                 applyLoudness(
                     signal: $0,
+                    currentLoudness: MasteringAnalysisService.integratedLoudness(signal: $0),
                     targetLKFS: guidedLoudnessTarget,
                     peakCeilingDB: settings.peakCeilingDB
                 )

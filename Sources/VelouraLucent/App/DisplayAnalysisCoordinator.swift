@@ -176,6 +176,7 @@ final class DisplayAnalysisCoordinator {
         }
 
         guard shouldContinueDisplayAnalysis(target: target, selectionID: selectionID, fileURL: url) else { return }
+        var loudnessMetrics: AudioMetricSnapshot?
         if missingKinds.contains(.metrics) {
             do {
                 let metrics = try await DisplayAnalysisSupport.measure("比較指標", logHandler: logHandler) {
@@ -185,6 +186,7 @@ final class DisplayAnalysisCoordinator {
                     )
                 }
                 guard isCurrentMetricSelection(target: target, selectionID: selectionID, fileURL: url) else { return }
+                loudnessMetrics = metrics
                 finishMetricsAnalysis(metrics, for: target)
                 preview.setIntegratedLoudnessLUFS(metrics.integratedLoudnessLUFS, for: previewTarget(for: target))
             } catch {
@@ -194,10 +196,11 @@ final class DisplayAnalysisCoordinator {
 
         guard shouldContinueDisplayAnalysis(target: target, selectionID: selectionID, fileURL: url) else { return }
         if includeMasteringAnalysis, missingKinds.contains(.masteringAnalysis) {
+            let measuredMetrics = loudnessMetrics
             do {
                 let masteringAnalysis = try await DisplayAnalysisSupport.measure("マスタリング解析", logHandler: logHandler) {
                     try await DisplayAnalysisSupport.runWorker {
-                        MasteringAnalysisService.analyze(signal: signal)
+                        MasteringAnalysisService.analyze(signal: signal, loudnessMetrics: measuredMetrics)
                     }
                 }
                 guard isCurrentMetricSelection(target: target, selectionID: selectionID, fileURL: url) else { return }

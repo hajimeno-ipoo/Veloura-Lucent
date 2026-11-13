@@ -71,6 +71,22 @@ struct StemDedicatedInstrumentAnalysisService: Sendable {
             protectionProfile: protectionProfile
         )
     }
+
+    func analyzeProtectionProfile(
+        role: StemRole,
+        processingSignal48000 signal: AudioSignal
+    ) throws -> StemRoleProtectionProfile {
+        precondition(role == .guitar || role == .piano)
+        let frames = try Self.makeFrames(signal: signal)
+        let activity = Self.makeActivity(frames: frames)
+        let analyzed = Self.makeRoleFrames(frames: frames, activity: activity, sampleRate: signal.sampleRate)
+        return Self.makeProtectionProfile(
+            role: role,
+            signal: signal,
+            frames: analyzed,
+            activity: activity
+        )
+    }
 }
 
 private extension StemDedicatedInstrumentAnalysisService {
@@ -392,9 +408,10 @@ private extension StemDedicatedInstrumentAnalysisService {
             )
         }
 
+        let frameRMS = frames.map(\.rms)
         for index in result.indices where activity.mask[index] {
             result[index].localDoubleDecaySlopeDelta = localDoubleDecaySlopeDelta(
-                rms: frames.map(\.rms),
+                rms: frameRMS,
                 start: index,
                 sampleRate: sampleRate
             )

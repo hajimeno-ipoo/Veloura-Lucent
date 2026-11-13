@@ -4,6 +4,28 @@ import Testing
 @testable import VelouraLucent
 
 struct MasteringAnalysisServiceTests {
+    @Test(arguments: [44_100.0, 48_000.0, 96_000.0])
+    func reusingComparisonLoudnessPreservesMasteringAnalysis(sampleRate: Double) async throws {
+        let channel = (0..<Int(sampleRate * 3.2)).map { index in
+            Float(sin(2 * Double.pi * 440 * Double(index) / sampleRate) * 0.2)
+        }
+        // 左右逆相の音声でも、チャンネル別測定とLRAの有無を維持します。
+        let signal = AudioSignal(channels: [channel, channel.map { -$0 }], sampleRate: sampleRate)
+        let metrics = try await AudioComparisonService.analyzeConcurrently(signal: signal)
+        let expected = MasteringAnalysisService.analyze(signal: signal)
+        let reused = MasteringAnalysisService.analyze(signal: signal, loudnessMetrics: metrics)
+
+        #expect(reused.integratedLoudness == expected.integratedLoudness)
+        #expect(reused.truePeakDBFS == expected.truePeakDBFS)
+        #expect(reused.lowBandLevelDB == expected.lowBandLevelDB)
+        #expect(reused.midBandLevelDB == expected.midBandLevelDB)
+        #expect(reused.highBandLevelDB == expected.highBandLevelDB)
+        #expect(reused.harshnessScore == expected.harshnessScore)
+        #expect(reused.stereoWidth == expected.stereoWidth)
+        #expect(reused.crestFactorDB == expected.crestFactorDB)
+        #expect(reused.loudnessRangeLU == expected.loudnessRangeLU)
+    }
+
     @Test
     func masteringAnalysisReturnsFiniteValues() throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)

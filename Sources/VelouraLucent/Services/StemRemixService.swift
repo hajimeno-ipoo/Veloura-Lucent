@@ -201,24 +201,38 @@ struct StemRemixService: Sendable {
         progressHandler(.pan, .completed)
 
         progressHandler(.reverbSend, .running)
-        let send = try sum(roleOrder.map { role in
-            let signal = try requiredProcessed(role, in: processed)
-            return applyLinearGain(
-                signal,
-                gain: settings.settings(for: role).reverbSend
-            )
-        })
+        let send: AudioSignal?
+        if settings.reverbReturnLevel == 0 {
+            send = nil
+        } else {
+            send = try sum(roleOrder.map { role in
+                let signal = try requiredProcessed(role, in: processed)
+                return applyLinearGain(
+                    signal,
+                    gain: settings.settings(for: role).reverbSend
+                )
+            })
+        }
         progressHandler(.reverbSend, .completed)
 
         progressHandler(.sharedReverb, .running)
-        let reverb = sharedReverb(
-            send,
-            decaySeconds: settings.reverbDecaySeconds
-        )
-        let scaledReturn = applyLinearGain(
-            reverb,
-            gain: settings.reverbReturnLevel
-        )
+        let scaledReturn: AudioSignal
+        if let send {
+            let reverb = sharedReverb(
+                send,
+                decaySeconds: settings.reverbDecaySeconds
+            )
+            scaledReturn = applyLinearGain(
+                reverb,
+                gain: settings.reverbReturnLevel
+            )
+        } else {
+            let reference = try requiredProcessed(roleOrder[0], in: processed)
+            scaledReturn = AudioSignal(
+                channels: reference.channels.map { Array(repeating: Float.zero, count: $0.count) },
+                sampleRate: reference.sampleRate
+            )
+        }
         progressHandler(.sharedReverb, .completed)
 
         progressHandler(.dryReturnMix, .running)

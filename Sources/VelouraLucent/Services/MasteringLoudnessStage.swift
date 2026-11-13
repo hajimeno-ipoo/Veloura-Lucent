@@ -28,8 +28,7 @@ extension MasteringProcessor {
         return currentLoudness + Float(appliedDeltaDB)
     }
 
-    func applyLoudness(signal: AudioSignal, targetLKFS: Float, peakCeilingDB: Float) -> AudioSignal {
-        let currentLoudness = MasteringAnalysisService.integratedLoudness(signal: signal)
+    func applyLoudness(signal: AudioSignal, currentLoudness: Float, targetLKFS: Float, peakCeilingDB: Float) -> AudioSignal {
         guard currentLoudness.isFinite, targetLKFS.isFinite, currentLoudness > -69 else {
             return MasteringSignalMath.enforcePeakCeiling(signal: signal, peakCeilingDB: peakCeilingDB)
         }
