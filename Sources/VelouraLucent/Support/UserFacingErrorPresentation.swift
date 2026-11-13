@@ -38,6 +38,13 @@ struct UserFacingErrorPresentation: Identifiable {
                     recoverySuggestion: "保存先の空き容量と書き込み権限を確認してください。",
                     technicalDetails: technicalDetails
                 )
+            case .audioExportExceedsPCMRange:
+                return Self(
+                    title: AppLanguageSettings.string("音量が書き出し形式の範囲を超えています"),
+                    message: AppLanguageSettings.string("0 dBFSを超える音声をこの形式で書き出すと、波形の頂点が切れるため書き出しを中止しました。"),
+                    recoverySuggestion: AppLanguageSettings.string("「高品質保存」（32-bit float WAV）を選んで書き出してください。"),
+                    technicalDetails: technicalDetails
+                )
             case .outputNotFound:
                 break
             }

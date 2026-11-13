@@ -23,9 +23,9 @@ enum AudioComparisonService {
         }
 
         let loudnessMeasurement = LoudnessMeasurementService.measure(signal: signal)
-        let waveformMetrics = waveformMetrics(for: mono, sampleRate: signal.sampleRate, loudness: loudnessMeasurement)
+        let waveformMetrics = waveformMetrics(for: signal, loudness: loudnessMeasurement)
         let channelMetrics = channelMetrics(for: signal, loudness: loudnessMeasurement)
-        let frequencyMetrics = try frequencyMetrics(for: mono, sampleRate: signal.sampleRate)
+        let frequencyMetrics = try frequencyMetrics(for: signal)
         let reportAnalysis = includeCompletionReportAnalysis
             ? CompletionReportAudioAnalysisService.analyze(
                 signal: signal,
@@ -62,7 +62,7 @@ enum AudioComparisonService {
             try Task.checkCancellation()
             let loudness = try await loudnessTask.value
             try Task.checkCancellation()
-            return Self.waveformMetrics(for: mono, sampleRate: signal.sampleRate, loudness: loudness)
+            return Self.waveformMetrics(for: signal, loudness: loudness)
         }
         let channelTask = Task.detached(priority: .utility) {
             try Task.checkCancellation()
@@ -72,7 +72,7 @@ enum AudioComparisonService {
         }
         let frequencyTask = Task.detached(priority: .utility) {
             try Task.checkCancellation()
-            let metrics = try Self.frequencyMetrics(for: mono, sampleRate: signal.sampleRate) {
+            let metrics = try Self.frequencyMetrics(for: signal) {
                 try Task.checkCancellation()
             }
             try Task.checkCancellation()
@@ -207,11 +207,12 @@ enum AudioComparisonService {
     }
 
     private static func frequencyMetrics(
-        for mono: [Float],
-        sampleRate: Double,
+        for signal: AudioSignal,
         cancellationCheck: () throws -> Void = {}
     ) throws -> FrequencyMetrics {
         try cancellationCheck()
+        let sampleRate = signal.sampleRate
+        let channels = signal.channels
         let frameSize = 16_384
         let hopSize = 8_192
         let window = vDSP.window(ofType: Float.self, usingSequence: .hanningDenormalized, count: frameSize, isHalfWindow: false)
@@ -249,11 +250,11 @@ enum AudioComparisonService {
         var masteringBandEnergySum = Array(repeating: 0.0, count: masteringBandTemplate.count)
         var spectrumAmplitudeSum = Array(repeating: 0.0, count: spectrumBins.count)
 
-        if mono.count < frameSize {
+        if signal.frameCount < frameSize {
             try cancellationCheck()
-            let padded = mono + Array(repeating: Float.zero, count: frameSize - mono.count)
+            let padded = channels.map { $0 + Array(repeating: Float.zero, count: frameSize - $0.count) }
             accumulateMetrics(
-                frame: padded,
+                frames: padded,
                 window: window,
                 dft: dft,
                 frequencyStep: frequencyStep,
@@ -280,13 +281,13 @@ enum AudioComparisonService {
         } else {
             var start = 0
             var frameIndex = 0
-            while start + frameSize <= mono.count {
+            while start + frameSize <= signal.frameCount {
                 if frameIndex.isMultiple(of: 8) {
                     try cancellationCheck()
                 }
-                let frame = Array(mono[start..<(start + frameSize)])
+                let frames = channels.map { Array($0[start..<(start + frameSize)]) }
                 accumulateMetrics(
-                    frame: frame,
+                    frames: frames,
                     window: window,
                     dft: dft,
                     frequencyStep: frequencyStep,
@@ -440,11 +441,10 @@ enum AudioComparisonService {
     }
 
     private static func waveformMetrics(
-        for mono: [Float],
-        sampleRate: Double,
+        for signal: AudioSignal,
         loudness: LoudnessMeasurementService.Measurement
     ) -> WaveformMetrics {
-        let summary = waveformSummary(for: mono, sampleRate: sampleRate)
+        let summary = waveformSummary(for: signal)
         let peakDBFS = 20 * log10(max(Double(summary.peak), 1e-12))
         let rmsDBFS = 20 * log10(max(Double(summary.rms), 1e-12))
 
@@ -469,14 +469,16 @@ enum AudioComparisonService {
         )
     }
 
-    private static func waveformSummary(for mono: [Float], sampleRate: Double) -> WaveformSummary {
-        guard !mono.isEmpty else {
+    private static func waveformSummary(for signal: AudioSignal) -> WaveformSummary {
+        guard signal.frameCount > 0 else {
             return WaveformSummary(peak: 0, rms: 0, dynamics: [])
         }
 
-        let duration = Double(mono.count) / sampleRate
+        let sampleRate = signal.sampleRate
+        let duration = Double(signal.frameCount) / sampleRate
         let bucketCount = min(120, max(1, Int(ceil(duration / 0.5))))
-        let bucketSize = max(1, Int(ceil(Double(mono.count) / Double(bucketCount))))
+        let bucketSize = max(1, Int(ceil(Double(signal.frameCount) / Double(bucketCount))))
+        let channelCount = Float(signal.channels.count)
         var globalPeak: Float = 0
         var globalEnergy: Float = 0
         var dynamics: [DynamicsMetric] = []
@@ -484,21 +486,22 @@ enum AudioComparisonService {
 
         for bucketIndex in 0..<bucketCount {
             let start = bucketIndex * bucketSize
-            let end = min(mono.count, start + bucketSize)
+            let end = min(signal.frameCount, start + bucketSize)
             guard start < end else { continue }
 
             var peak: Float = 0
             var energy: Float = 0
-            for index in start..<end {
-                let sample = mono[index]
-                let magnitude = abs(sample)
-                peak = max(peak, magnitude)
-                energy += sample * sample
+            for channel in signal.channels {
+                for index in start..<end {
+                    let sample = channel[index]
+                    peak = max(peak, abs(sample))
+                    energy += sample * sample
+                }
             }
             globalPeak = max(globalPeak, peak)
             globalEnergy += energy
 
-            let rms = sqrt(max(energy / Float(max(end - start, 1)), 1e-12))
+            let rms = sqrt(max(energy / (Float(end - start) * channelCount), 1e-12))
             let peakDBFS = 20 * log10(max(Double(peak), 1e-12))
             let rmsDBFS = 20 * log10(max(Double(rms), 1e-12))
             let time = (Double(start + end) * 0.5) / sampleRate
@@ -513,12 +516,12 @@ enum AudioComparisonService {
             )
         }
 
-        let rms = sqrt(max(globalEnergy / Float(mono.count), 1e-12))
+        let rms = sqrt(max(globalEnergy / (Float(signal.frameCount) * channelCount), 1e-12))
         return WaveformSummary(peak: globalPeak, rms: rms, dynamics: dynamics)
     }
 
     private static func accumulateMetrics(
-        frame: [Float],
+        frames: [[Float]],
         window: [Float],
         dft: vDSP.DiscreteFourierTransform<Float>,
         frequencyStep: Double,
@@ -542,22 +545,26 @@ enum AudioComparisonService {
         spectrumAmplitudeSum: inout [Double],
         spectrumAmplitudeScale: Double
     ) {
-        var windowed = Array(repeating: Float.zero, count: frame.count)
-        vDSP.multiply(frame, window, result: &windowed)
-
-        let inputImag = Array(repeating: Float.zero, count: frame.count)
-        var outputReal = Array(repeating: Float.zero, count: frame.count)
-        var outputImag = Array(repeating: Float.zero, count: frame.count)
-        dft.transform(inputReal: windowed, inputImaginary: inputImag, outputReal: &outputReal, outputImaginary: &outputImag)
-
-        let halfCount = frame.count / 2 + 1
+        let frameSize = window.count
+        var windowed = Array(repeating: Float.zero, count: frameSize)
+        let inputImag = Array(repeating: Float.zero, count: frameSize)
+        var outputReal = Array(repeating: Float.zero, count: frameSize)
+        var outputImag = Array(repeating: Float.zero, count: frameSize)
+        let halfCount = frameSize / 2 + 1
         var power = Array(repeating: 0.0, count: halfCount)
-        var total = 1e-18
-        for index in 0..<halfCount {
-            let value = Double(outputReal[index] * outputReal[index] + outputImag[index] * outputImag[index])
-            power[index] = value
-            total += value
+        // Average channel power after the FFT, so Side content cannot cancel.
+        for frame in frames {
+            vDSP.multiply(frame, window, result: &windowed)
+            dft.transform(inputReal: windowed, inputImaginary: inputImag, outputReal: &outputReal, outputImaginary: &outputImag)
+            for index in 0..<halfCount {
+                power[index] += Double(outputReal[index] * outputReal[index] + outputImag[index] * outputImag[index])
+            }
         }
+        let channelCount = Double(frames.count)
+        for index in 0..<halfCount {
+            power[index] /= channelCount
+        }
+        let total = power.reduce(1e-18, +)
 
         var weightedFrequencySum = 0.0
         for index in 0..<halfCount {

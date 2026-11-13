@@ -398,6 +398,53 @@ struct DenoiseMaskCoefficientTests {
     }
 
     @Test
+    func temporalNoiseDetectionDoesNotDependOnPreviouslyAppliedFloor() {
+        let sampleRate = 48_000.0
+        var noiseState: UInt64 = 0x53A1
+        let samples = (0..<24_000).map { index -> Float in
+            let time = Double(index) / sampleRate
+            let burst = time > 0.20 && time < 0.23 ? 0.06 : 0.012
+            let body = sin(2 * Double.pi * 440 * time) * 0.08
+            let shimmer = sin(2 * Double.pi * 12_500 * time) * burst
+            let high = sin(2 * Double.pi * 17_000 * time) * 0.008
+            noiseState = noiseState &* 6_364_136_223_846_793_005 &+ 1
+            let noise = (Double(noiseState >> 11) / 9_007_199_254_740_992 - 0.5) * 0.008
+            return Float(body + shimmer + high + noise)
+        }
+        let signal = AudioSignal(channels: [samples], sampleRate: sampleRate)
+        var settings = DenoiseStrength.gentle.settings
+        settings.correctionIntensity = 0.30 // Single pass, so both runs detect the same input.
+        settings.lowCleanup = 0
+        let lowerCleanupCollector = DenoiseMaskBreakdownCollector()
+        let lowerCleanup = SpectralGateDenoiser(
+            settings: settings,
+            maskBreakdownCollector: lowerCleanupCollector
+        ).process(signal: signal)
+        settings.lowCleanup = 1 // Changes the applied floor, not the temporal detector settings.
+        let higherCleanupCollector = DenoiseMaskBreakdownCollector()
+        let higherCleanup = SpectralGateDenoiser(
+            settings: settings,
+            maskBreakdownCollector: higherCleanupCollector
+        ).process(signal: signal)
+        let lowerSummaries = lowerCleanupCollector.summaries
+        let higherSummaries = higherCleanupCollector.summaries
+
+        #expect(lowerSummaries.count == 3)
+        #expect(higherSummaries.count == lowerSummaries.count)
+        #expect(zip(lowerSummaries, higherSummaries).contains { abs($0.rawMaskDB - $1.rawMaskDB) > 0.0001 })
+        for (lower, higher) in zip(lowerSummaries, higherSummaries) {
+            #expect(lower.band == higher.band)
+            #expect(lower.granularMaskDB == higher.granularMaskDB)
+            #expect(lower.shimmerMaskDB == higher.shimmerMaskDB)
+        }
+        // Actual short high-frequency events still receive a reduction mask.
+        #expect(lowerSummaries.contains { $0.shimmerMaskDB < -0.000001 })
+        #expect(lowerSummaries.contains { $0.granularMaskDB < -0.000001 })
+        #expect(lowerCleanup.channels.allSatisfy { $0.allSatisfy(\.isFinite) })
+        #expect(higherCleanup.channels.allSatisfy { $0.allSatisfy(\.isFinite) })
+    }
+
+    @Test
     func highFloorLiftTableMatchesPerBinFunctionForEachPass() {
         let sampleRate = 48_000.0
         let signal = (0..<12_000).map { index -> Float in

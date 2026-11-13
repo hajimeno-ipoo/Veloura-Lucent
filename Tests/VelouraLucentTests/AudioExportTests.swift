@@ -65,19 +65,70 @@ struct AudioExportTests {
         #expect(first.channels == second.channels)
     }
 
-    @Test
-    func integerExportLimitsSamplesToPCMRange() throws {
+    @Test(
+        arguments: [AudioExportFormat.deliveryWAV, .cdWAV, .sharingAAC],
+        [Float(1).nextUp, -Float(1).nextUp]
+    )
+    func encodedExportRejectsOverRangeSamplesAndPreservesFiles(format: AudioExportFormat, overRangeSample: Float) throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let sourceURL = directory.appending(path: "loud-source.wav")
-        let outputURL = directory.appending(path: "loud-delivery.wav")
-        let signal = AudioSignal(channels: [[-1.4, -1, 0, 1, 1.4]], sampleRate: 48_000)
+        let outputURL = directory.appending(path: "existing.\(format.fileExtension)")
+        let signal = AudioSignal(channels: [[overRangeSample, -0.5, 0, 0.5]], sampleRate: 48_000)
         try AudioFileService.saveAudio(signal, to: sourceURL)
+        let sourceData = try Data(contentsOf: sourceURL)
+        let existingData = Data("existing export".utf8)
+        try existingData.write(to: outputURL)
+
+        do {
+            try AudioFileService.exportAudio(from: sourceURL, to: outputURL, format: format)
+            Issue.record("Over-range audio must not be clipped during export")
+        } catch {
+            #expect((error as? AppError)?.errorDescription == AppError.audioExportExceedsPCMRange.errorDescription)
+            let presentation = UserFacingErrorPresentation.make(for: error, operation: .correctedExport)
+            #expect(presentation.recoverySuggestion.contains("32-bit float WAV"))
+        }
+
+        #expect(try Data(contentsOf: sourceURL) == sourceData)
+        #expect(try Data(contentsOf: outputURL) == existingData)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path()).count == 2)
+    }
+
+    @Test
+    func floatExportPreservesOverRangeWaveformAndChannelBalance() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sourceURL = directory.appending(path: "loud-source.wav")
+        let outputURL = directory.appending(path: "float.wav")
+        let signal = AudioSignal(channels: [[-1.4, -1, 0, 1, 1.4], [-0.7, -0.5, 0, 0.5, 0.7]], sampleRate: 48_000)
+        try AudioFileService.saveAudio(signal, to: sourceURL)
+
+        try AudioFileService.exportAudio(from: sourceURL, to: outputURL, format: .highQualityWAV)
+
+        #expect(try Data(contentsOf: outputURL) == Data(contentsOf: sourceURL))
+        #expect(try AudioFileService.loadAudio(from: outputURL).channels == signal.channels)
+    }
+
+    @Test
+    func integerExportAcceptsFullScaleAndPreservesInRangeWaveform() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sourceURL = directory.appending(path: "full-scale-source.wav")
+        let outputURL = directory.appending(path: "delivery.wav")
+        let samples: [Float] = [-1, -0.75, -0.25, 0, 0.25, 0.75, 1]
+        try AudioFileService.saveAudio(AudioSignal(channels: [samples], sampleRate: 48_000), to: sourceURL)
+
         try AudioFileService.exportAudio(from: sourceURL, to: outputURL, format: .deliveryWAV)
 
         let written = try AudioFileService.loadAudio(from: outputURL)
-        #expect(written.channels[0].allSatisfy { $0 >= -1 && $0 <= 1 })
+        let tolerance: Float = 1.0 / 8_388_608
+        #expect(written.channels[0].count == samples.count)
+        for (actual, expected) in zip(written.channels[0], samples) {
+            #expect(abs(actual - expected) <= tolerance)
+        }
     }
 
     @Test

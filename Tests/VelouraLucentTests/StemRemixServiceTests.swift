@@ -77,6 +77,74 @@ struct StemRemixServiceTests {
         }
     }
 
+    @Test(arguments: [Float(1), -1, 0])
+    func automaticGainMeasuresInPhaseSideAndOneSidedStems(rightScale: Float) throws {
+        let stems = makeStems(correctedScale: 0.5).map { pair in
+            let raw = AudioSignal(
+                channels: [pair.raw.channels[0], pair.raw.channels[0].map { $0 * rightScale }],
+                sampleRate: pair.raw.sampleRate
+            )
+            let corrected = AudioSignal(
+                channels: raw.channels.map { $0.map { $0 * 0.5 } },
+                sampleRate: raw.sampleRate
+            )
+            return StemRemixSignal(role: pair.role, raw: raw, corrected: corrected)
+        }
+        let plan = try service.makeAutomaticPlan(stems: stems, runContract: makeStemTestRunContract())
+
+        for role in makeStemTestRunContract().validationRoles {
+            #expect(abs(plan.gainEvidenceDB[role, default: 0] - 6.0206) < 0.01)
+            #expect(plan.settings.settings(for: role).gainDB == 6)
+        }
+    }
+
+    @Test
+    func automaticCollisionAndDecayIncludeSideEnergy() throws {
+        let inPhase = makeCollisionStems(triggerIsSilent: false)
+        let side = inPhase.map { pair in
+            let signal = AudioSignal(
+                channels: [pair.raw.channels[0], pair.raw.channels[0].map { -$0 }],
+                sampleRate: pair.raw.sampleRate
+            )
+            return StemRemixSignal(role: pair.role, raw: signal, corrected: signal)
+        }
+        let reference = try service.makeAutomaticPlan(stems: inPhase, runContract: makeStemTestRunContract())
+        let sidePlan = try service.makeAutomaticPlan(stems: side, runContract: makeStemTestRunContract())
+
+        #expect(reference.drumsBassCollision > 0)
+        #expect(abs(sidePlan.drumsBassCollision - reference.drumsBassCollision) < 1e-6)
+        #expect(sidePlan.settings.masking.drumsToBassEnabled)
+        #expect(reference.settings.reverbDecaySeconds != 1)
+        #expect(sidePlan.settings.reverbDecaySeconds == reference.settings.reverbDecaySeconds)
+    }
+
+    @Test(arguments: [Float(1), -1, 0])
+    func maskingRetainsDetectionWithInPhaseSideAndOneSidedSignals(rightScale: Float) throws {
+        let inPhase = makeCollisionStems(triggerIsSilent: false)
+        let stems = inPhase.map { pair in
+            let signal = AudioSignal(
+                channels: [pair.raw.channels[0], pair.raw.channels[0].map { $0 * rightScale }],
+                sampleRate: pair.raw.sampleRate
+            )
+            return StemRemixSignal(role: pair.role, raw: signal, corrected: signal)
+        }
+        let settings = StemRemixSettings(masking: StemRemixMaskingSettings(
+            drumsToBassEnabled: true,
+            drumsToBassAmount: 0.4
+        ))
+        let reference = try service.render(stems: inPhase, settings: settings, runContract: makeStemTestRunContract())
+        let rendered = try service.render(stems: stems, settings: settings, runContract: makeStemTestRunContract())
+        let unmasked = try pureSum(stems)
+
+        #expect(rendered.signal.channels[0] != unmasked.channels[0])
+        let leftDifference = zip(rendered.signal.channels[0], reference.signal.channels[0])
+            .map { abs($0 - $1) }.max() ?? 0
+        #expect(leftDifference < 1e-5)
+        let channelDifference = zip(rendered.signal.channels[1], rendered.signal.channels[0])
+            .map { abs($0 - $1 * rightScale) }.max() ?? 0
+        #expect(channelDifference < 1e-5)
+    }
+
     @Test
     func bsAutomaticPlanMeasuresAllSixRolesAndKeepsIndependentManualValues() throws {
         let contract = makeStemTestRunContract(model: .bsRoformerSW)
@@ -298,7 +366,7 @@ struct StemRemixServiceTests {
     }
 
     @Test
-    func maskingReadsTheGainedSignalBeforePan() throws {
+    func maskingDetectsTheSideTriggerBeforePan() throws {
         let stems = makeOrderSensitiveStems()
         var enabled = StemRemixSettings(
             masking: StemRemixMaskingSettings(
@@ -324,7 +392,10 @@ struct StemRemixServiceTests {
             runContract: makeStemTestRunContract()
         )
 
-        #expect(enabledResult.signal.channels == disabledResult.signal.channels)
+        #expect(enabledResult.signal.channels != disabledResult.signal.channels)
+        let leftDelta = zip(enabledResult.signal.channels[0], disabledResult.signal.channels[0]).map { $0 - $1 }
+        let rightDelta = zip(enabledResult.signal.channels[1], disabledResult.signal.channels[1]).map { $0 - $1 }
+        #expect(zip(leftDelta, rightDelta).map { abs($0 - $1) }.max() ?? 0 < 1e-6)
     }
 
     @Test

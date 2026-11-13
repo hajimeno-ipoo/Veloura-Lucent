@@ -1,6 +1,54 @@
 {
   "sourceLanguage": "ja",
   "strings": {
+    "音量が書き出し形式の範囲を超えています": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio exceeds the export format's range"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音量が書き出し形式の範囲を超えています"
+          }
+        }
+      }
+    },
+    "0 dBFSを超える音声をこの形式で書き出すと、波形の頂点が切れるため書き出しを中止しました。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export was stopped because this format would clip audio that exceeds 0 dBFS."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 dBFSを超える音声をこの形式で書き出すと、波形の頂点が切れるため書き出しを中止しました。"
+          }
+        }
+      }
+    },
+    "「高品質保存」（32-bit float WAV）を選んで書き出してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose High Quality (32-bit float WAV) to export this audio."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「高品質保存」（32-bit float WAV）を選んで書き出してください。"
+          }
+        }
+      }
+    },
     "補正済み%@Stemと補正後を一時保存しました。再ミックスへ自動で進みます。": {
       "localizations": {
         "en": {

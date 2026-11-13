@@ -26,12 +26,14 @@ struct StemTransientRecoveryService: Sendable {
             return correctedSignal
         }
 
-        let rawMono = rawSignal.monoMixdown()
-        let correctedMono = correctedSignal.monoMixdown()
-        let rawTransient = transientBand(rawMono, sampleRate: rawSignal.sampleRate)
-        let correctedTransient = transientBand(correctedMono, sampleRate: rawSignal.sampleRate)
-        let rawEnvelope = peakEnvelope(rawTransient, sampleRate: rawSignal.sampleRate)
-        let correctedEnvelope = peakEnvelope(correctedTransient, sampleRate: rawSignal.sampleRate)
+        let rawBands = rawSignal.channels.map {
+            transientBand($0, sampleRate: rawSignal.sampleRate)
+        }
+        let correctedBands = correctedSignal.channels.map {
+            transientBand($0, sampleRate: correctedSignal.sampleRate)
+        }
+        let rawEnvelope = peakEnvelope(rawBands, sampleRate: rawSignal.sampleRate)
+        let correctedEnvelope = peakEnvelope(correctedBands, sampleRate: rawSignal.sampleRate)
         let activeFloor = percentile(rawEnvelope, 65)
         guard activeFloor > Float.leastNormalMagnitude else {
             return correctedSignal
@@ -55,11 +57,8 @@ struct StemTransientRecoveryService: Sendable {
         let channels = rawSignal.channels.indices.map { channelIndex in
             let rawChannel = rawSignal.channels[channelIndex]
             let correctedChannel = correctedSignal.channels[channelIndex]
-            let rawBand = transientBand(rawChannel, sampleRate: rawSignal.sampleRate)
-            let correctedBand = transientBand(
-                correctedChannel,
-                sampleRate: rawSignal.sampleRate
-            )
+            let rawBand = rawBands[channelIndex]
+            let correctedBand = correctedBands[channelIndex]
             return rawChannel.indices.map { index in
                 let missingComponent = rawBand[index] - correctedBand[index]
                 guard abs(rawBand[index]) > abs(correctedBand[index]),
@@ -107,12 +106,17 @@ struct StemTransientRecoveryService: Sendable {
         )
     }
 
-    private func peakEnvelope(_ samples: [Float], sampleRate: Double) -> [Float] {
+    private func peakEnvelope(_ channels: [[Float]], sampleRate: Double) -> [Float] {
+        guard let first = channels.first else { return [] }
         let release = expf(-1 / max(Float(sampleRate) * 0.012, 1))
-        var envelope = Array(repeating: Float.zero, count: samples.count)
+        var envelope = Array(repeating: Float.zero, count: first.count)
         var current: Float = 0
-        for index in samples.indices {
-            let level = abs(samples[index])
+        for index in first.indices {
+            let power = channels.reduce(0.0) { total, channel in
+                let sample = Double(channel[index])
+                return total + sample * sample
+            } / Double(channels.count)
+            let level = Float(sqrt(power))
             current = level >= current ? level : current * release
             envelope[index] = current
         }

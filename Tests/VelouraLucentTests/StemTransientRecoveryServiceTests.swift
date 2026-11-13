@@ -37,6 +37,33 @@ struct StemTransientRecoveryServiceTests {
         #expect(transientEnergy(recovered) <= transientEnergy(raw) * 1.01)
     }
 
+    @Test(arguments: [Float(1), -1, 0])
+    func recoversInPhaseSideAndOneSidedAttackWithinTheRawEnvelope(rightScale: Float) throws {
+        let base = makeDrumSignal()
+        let raw = AudioSignal(
+            channels: [base.channels[0], base.channels[0].map { $0 * rightScale }],
+            sampleRate: base.sampleRate
+        )
+        let corrected = AudioSignal(
+            channels: raw.channels.map {
+                SpectralDSP.lowPass($0, cutoff: 900, sampleRate: raw.sampleRate)
+            },
+            sampleRate: raw.sampleRate
+        )
+        let recovered = try service.recover(role: .drums, rawSignal: raw, correctedSignal: corrected)
+
+        #expect(transientEnergy(recovered) > transientEnergy(corrected))
+        #expect(transientEnergy(recovered) <= transientEnergy(raw) * 1.01)
+        for channel in recovered.channels.indices {
+            let maximumOvershoot = recovered.channels[channel].indices.map { index in
+                abs(recovered.channels[channel][index])
+                    - max(abs(raw.channels[channel][index]), abs(corrected.channels[channel][index]))
+            }.max() ?? 0
+            #expect(maximumOvershoot <= 1e-6)
+        }
+        #expect(try service.recover(role: .drums, rawSignal: raw, correctedSignal: raw).channels == raw.channels)
+    }
+
     @Test
     func doesNotGenerateTransientWhenCorrectedAlreadyMatchesOrExceedsRaw() throws {
         let raw = makeDrumSignal()

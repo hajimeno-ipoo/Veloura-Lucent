@@ -315,16 +315,15 @@ struct SpectralGateDenoiser: Sendable {
             let transientRatio = frameEnergy[frameIndex] / max(smoothedFrameEnergy[frameIndex], 1e-6)
             let frameTransientLift = max(0, min(0.35, (transientRatio - 1) * tuning.transientProtection))
             let frameStart = frameIndex * binCount
-            let previousFrameStart = frameStart - binCount
             for binIndex in 0..<binCount {
                 let index = frameStart + binIndex
-                let magnitude = hypotf(spectrogram.real[index], spectrogram.imag[index])
+                // Detect temporal changes from the input, before any frame masks are applied.
+                let magnitude = magnitudesByBin[binIndex][frameIndex]
                 let threshold = thresholdByBin[binIndex]
                 let baseFloor = baseFloorByBin[binIndex]
                 let granularActivity: Float
                 if frameIndex > 0 {
-                    let previousIndex = previousFrameStart + binIndex
-                    let previous = hypotf(spectrogram.real[previousIndex], spectrogram.imag[previousIndex])
+                    let previous = magnitudesByBin[binIndex][frameIndex - 1]
                     granularActivity = abs(magnitude - previous)
                 } else {
                     granularActivity = 0
@@ -376,7 +375,7 @@ struct SpectralGateDenoiser: Sendable {
                     shimmerMask = 1
                 } else {
                     shimmerMask = shimmerStabilizationMask(
-                        spectrogram: spectrogram,
+                        magnitudes: magnitudesByBin[binIndex],
                         frameIndex: frameIndex,
                         binIndex: binIndex,
                         magnitude: magnitude,
@@ -462,7 +461,7 @@ struct SpectralGateDenoiser: Sendable {
     }
 
     private func shimmerStabilizationMask(
-        spectrogram: Spectrogram,
+        magnitudes: [Float],
         frameIndex: Int,
         binIndex: Int,
         magnitude: Float,
@@ -473,12 +472,10 @@ struct SpectralGateDenoiser: Sendable {
     ) -> Float {
         guard tuning.shimmerStabilization > 0 else { return 1 }
         guard binIndex >= shimmerStartBin, binIndex <= shimmerEndBin else { return 1 }
-        guard frameIndex > 0, frameIndex + 1 < spectrogram.frameCount else { return 1 }
+        guard frameIndex > 0, frameIndex + 1 < magnitudes.count else { return 1 }
 
-        let previousIndex = spectrogram.storageIndex(frameIndex: frameIndex - 1, binIndex: binIndex)
-        let nextIndex = spectrogram.storageIndex(frameIndex: frameIndex + 1, binIndex: binIndex)
-        let previous = hypotf(spectrogram.real[previousIndex], spectrogram.imag[previousIndex])
-        let next = hypotf(spectrogram.real[nextIndex], spectrogram.imag[nextIndex])
+        let previous = magnitudes[frameIndex - 1]
+        let next = magnitudes[frameIndex + 1]
         let temporalAverage = (previous + next) * 0.5
         let temporalExcessRatio = max(0, (magnitude - temporalAverage) / max(magnitude + temporalAverage, 1e-6))
         guard temporalExcessRatio > 0 else { return 1 }

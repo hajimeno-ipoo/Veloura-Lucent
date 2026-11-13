@@ -243,6 +243,9 @@ enum AudioFileService {
         guard signal.channels.allSatisfy({ channel in channel.allSatisfy(\.isFinite) }) else {
             throw AppError.audioWriteFailed
         }
+        guard signal.channels.allSatisfy({ channel in channel.allSatisfy({ $0 >= -1 && $0 <= 1 }) }) else {
+            throw AppError.audioExportExceedsPCMRange
+        }
         let maximumSample = Float(1).nextDown
         let channels = signal.channels.map { channel in
             channel.map { min(max($0, -1), maximumSample) }

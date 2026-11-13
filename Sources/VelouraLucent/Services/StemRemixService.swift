@@ -362,15 +362,9 @@ struct StemRemixService: Sendable {
     }
 
     private func activeProgramRMSDB(_ signal: AudioSignal) -> Float {
-        let mono = signal.monoMixdown()
         let window = max(64, Int(signal.sampleRate * 0.02))
-        let blockRMS = stride(from: 0, to: mono.count, by: window).map { start in
-            let end = min(start + window, mono.count)
-            guard end > start else { return 0.0 }
-            let power = mono[start..<end].reduce(0.0) {
-                $0 + Double($1) * Double($1)
-            } / Double(end - start)
-            return sqrt(max(power, 0))
+        let blockRMS = stride(from: 0, to: signal.frameCount, by: window).map { start in
+            stereoBlockRMS(signal, range: start..<min(start + window, signal.frameCount))
         }
         guard let maximum = blockRMS.max(), maximum > 1e-9 else { return -120 }
         let distributionFloor = percentile(blockRMS, 40)
@@ -489,13 +483,9 @@ struct StemRemixService: Sendable {
     }
 
     private func decayContinuity(_ signal: AudioSignal) -> Double {
-        let mono = signal.monoMixdown()
         let window = max(64, Int(signal.sampleRate * 0.02))
-        let energies = stride(from: 0, to: mono.count, by: window).map { start in
-            let end = min(start + window, mono.count)
-            guard end > start else { return 0.0 }
-            let sum = mono[start..<end].reduce(0.0) { $0 + Double($1 * $1) }
-            return sqrt(sum / Double(end - start))
+        let energies = stride(from: 0, to: signal.frameCount, by: window).map { start in
+            stereoBlockRMS(signal, range: start..<min(start + window, signal.frameCount))
         }
         guard energies.count > 2 else { return 0 }
         let activityFloor = percentile(energies, 30)
@@ -515,12 +505,9 @@ struct StemRemixService: Sendable {
     private func estimatedDecaySeconds(signals: [AudioSignal]) -> Float {
         guard let reference = signals.first else { return 1 }
         let sumSignal = (try? sum(signals)) ?? reference
-        let mono = sumSignal.monoMixdown()
         let window = max(64, Int(sumSignal.sampleRate * 0.02))
-        let energies = stride(from: 0, to: mono.count, by: window).map { start in
-            let end = min(start + window, mono.count)
-            let sum = mono[start..<end].reduce(0.0) { $0 + Double($1 * $1) }
-            return sqrt(sum / Double(max(end - start, 1)))
+        let energies = stride(from: 0, to: sumSignal.frameCount, by: window).map { start in
+            stereoBlockRMS(sumSignal, range: start..<min(start + window, sumSignal.frameCount))
         }
         guard energies.count > 4 else { return 1 }
         let peak = percentile(energies, 90)
@@ -550,10 +537,8 @@ struct StemRemixService: Sendable {
         guard structuresMatch(trigger, target) else {
             throw StemRemixServiceError.structuralMismatch(mismatchRole)
         }
-        let triggerBand = bandPass(trigger.monoMixdown(), lower: lower, upper: upper, sampleRate: trigger.sampleRate)
-        let targetBand = bandPass(target.monoMixdown(), lower: lower, upper: upper, sampleRate: target.sampleRate)
-        let triggerEnvelope = rmsEnvelope(triggerBand, sampleRate: trigger.sampleRate)
-        let targetEnvelope = rmsEnvelope(targetBand, sampleRate: target.sampleRate)
+        let triggerEnvelope = bandEnvelope(trigger, lower: lower, upper: upper)
+        let targetEnvelope = bandEnvelope(target, lower: lower, upper: upper)
         let triggerFloor = percentile(triggerEnvelope.map(Double.init), 60)
         let targetFloor = percentile(targetEnvelope.map(Double.init), 60)
         var overlap = 0.0
@@ -633,20 +618,8 @@ struct StemRemixService: Sendable {
         guard structuresMatch(trigger, target) else {
             throw StemRemixServiceError.structuralMismatch(mismatchRole)
         }
-        let triggerBand = bandPass(
-            trigger.monoMixdown(),
-            lower: lower,
-            upper: upper,
-            sampleRate: trigger.sampleRate
-        )
-        let targetBandMono = bandPass(
-            target.monoMixdown(),
-            lower: lower,
-            upper: upper,
-            sampleRate: target.sampleRate
-        )
-        let triggerEnvelope = rmsEnvelope(triggerBand, sampleRate: trigger.sampleRate)
-        let targetEnvelope = rmsEnvelope(targetBandMono, sampleRate: target.sampleRate)
+        let triggerEnvelope = bandEnvelope(trigger, lower: lower, upper: upper)
+        let targetEnvelope = bandEnvelope(target, lower: lower, upper: upper)
         let triggerFloor = Float(percentile(triggerEnvelope.map(Double.init), 55))
         let targetFloor = Float(percentile(targetEnvelope.map(Double.init), 45))
         let maximumTrigger = max(Float(percentile(triggerEnvelope.map(Double.init), 95)), triggerFloor + 1e-9)
@@ -691,12 +664,22 @@ struct StemRemixService: Sendable {
         return AudioSignal(channels: channels, sampleRate: target.sampleRate)
     }
 
-    private func rmsEnvelope(_ samples: [Float], sampleRate: Double) -> [Float] {
+    private func bandEnvelope(_ signal: AudioSignal, lower: Double, upper: Double) -> [Float] {
+        let bands = signal.channels.map {
+            bandPass($0, lower: lower, upper: upper, sampleRate: signal.sampleRate)
+        }
+        return rmsEnvelope(bands, sampleRate: signal.sampleRate)
+    }
+
+    private func rmsEnvelope(_ channels: [[Float]], sampleRate: Double) -> [Float] {
+        guard let first = channels.first else { return [] }
         let attack = expf(-1 / max(Float(sampleRate) * 0.004, 1))
         let release = expf(-1 / max(Float(sampleRate) * 0.090, 1))
         var current: Float = 0
-        return samples.map { sample in
-            let power = sample * sample
+        return first.indices.map { index in
+            // 左右の波形を加算せず、帯域のエネルギーを平均します。
+            let power = channels.reduce(Float.zero) { $0 + $1[index] * $1[index] }
+                / Float(channels.count)
             let coefficient = power > current ? attack : release
             current = coefficient * current + (1 - coefficient) * power
             return sqrtf(max(current, 0))

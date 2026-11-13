@@ -51,9 +51,10 @@ struct AudioComparisonServiceTests {
 
         let metrics = try AudioComparisonService.analyze(fileURL: fileURL)
 
-        expectClose(metrics.peakDBFS, -17.60, tolerance: 0.20)
-        expectClose(metrics.rmsDBFS, -22.05, tolerance: 0.20)
-        expectClose(metrics.crestFactorDB, 4.45, tolerance: 0.20)
+        // Peak uses the loudest channel; RMS averages channel power, not L+R samples.
+        expectClose(metrics.peakDBFS, -16.78, tolerance: 0.20)
+        expectClose(metrics.rmsDBFS, -21.97, tolerance: 0.20)
+        expectClose(metrics.crestFactorDB, 5.19, tolerance: 0.20)
         expectClose(try #require(metrics.loudnessRangeLU), 0.97, tolerance: 0.05)
         expectClose(metrics.integratedLoudnessLUFS, -19.40, tolerance: 0.30)
         expectClose(metrics.truePeakDBFS, -16.77, tolerance: 0.30)
@@ -90,6 +91,57 @@ struct AudioComparisonServiceTests {
         let quietPeak = try #require(quiet.averageSpectrum.max { $0.levelDB < $1.levelDB })
 
         expectClose(loudPeak.levelDB - quietPeak.levelDB, 20.0, tolerance: 0.6)
+    }
+
+    @Test(arguments: [0.1, 0.6])
+    func comparisonRetainsSideSpectrumAndDynamics(duration: Double) async throws {
+        let sampleRate = 48_000.0
+        let channel = (0..<Int(sampleRate * duration)).map { index in
+            let time = Double(index) / sampleRate
+            return Float(sin(2 * Double.pi * 1_000 * time) * 0.1
+                + sin(2 * Double.pi * 12_000 * time) * 0.02)
+        }
+        let inPhase = AudioSignal(channels: [channel, channel], sampleRate: sampleRate)
+        let side = AudioSignal(channels: [channel, channel.map { -$0 }], sampleRate: sampleRate)
+        let reference = try AudioComparisonService.analyze(signal: inPhase)
+        let synchronous = try AudioComparisonService.analyze(signal: side)
+        let concurrent = try await AudioComparisonService.analyzeConcurrently(signal: side)
+
+        for actual in [synchronous, concurrent] {
+            expectClose(actual.peakDBFS, reference.peakDBFS, tolerance: 0.0001)
+            expectClose(actual.rmsDBFS, reference.rmsDBFS, tolerance: 0.0001)
+            expectClose(actual.crestFactorDB, reference.crestFactorDB, tolerance: 0.0001)
+            expectClose(actual.centroidHz, reference.centroidHz, tolerance: 0.0001)
+            expectClose(actual.hf12Ratio, reference.hf12Ratio, tolerance: 0.0001)
+            for (band, referenceBand) in zip(actual.bandEnergies, reference.bandEnergies) {
+                expectClose(band.levelDB, referenceBand.levelDB, tolerance: 0.0001)
+            }
+            for (point, referencePoint) in zip(actual.averageSpectrum, reference.averageSpectrum) {
+                expectClose(point.levelDB, referencePoint.levelDB, tolerance: 0.0001)
+            }
+            for (bucket, referenceBucket) in zip(actual.dynamics, reference.dynamics) {
+                expectClose(bucket.peakDBFS, referenceBucket.peakDBFS, tolerance: 0.0001)
+                expectClose(bucket.rmsDBFS, referenceBucket.rmsDBFS, tolerance: 0.0001)
+            }
+        }
+    }
+
+    @Test
+    func comparisonAveragesSingleSidedPowerWithoutReducingPeak() throws {
+        let mono = makeSignal(frequency: 1_000, amplitude: 0.1)
+        let channel = try #require(mono.channels.first)
+        let singleSided = AudioSignal(
+            channels: [channel, Array(repeating: 0, count: channel.count)],
+            sampleRate: mono.sampleRate
+        )
+        let reference = try AudioComparisonService.analyze(signal: mono)
+        let actual = try AudioComparisonService.analyze(signal: singleSided)
+
+        expectClose(actual.peakDBFS, reference.peakDBFS, tolerance: 0.0001)
+        expectClose(actual.rmsDBFS - reference.rmsDBFS, -3.0103, tolerance: 0.001)
+        let referencePeak = try #require(reference.averageSpectrum.max { $0.levelDB < $1.levelDB })
+        let actualPeak = try #require(actual.averageSpectrum.max { $0.levelDB < $1.levelDB })
+        expectClose(actualPeak.levelDB - referencePeak.levelDB, -3.0103, tolerance: 0.001)
     }
 
     @Test
