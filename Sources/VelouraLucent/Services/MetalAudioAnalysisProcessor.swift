@@ -117,7 +117,7 @@ extension MetalAudioAnalysisProcessor {
             return AudioSeparatedMeanSpectra(harmonic: [], percussive: [])
         }
 
-        guard let temporalMedian = makeTemporalMedian17(magnitudes: magnitudes, frameCount: frameCount, binCount: binCount) else {
+        guard let medians = makeMedianFilters(magnitudes: magnitudes, frameCount: frameCount, binCount: binCount) else {
             return nil
         }
 
@@ -128,10 +128,9 @@ extension MetalAudioAnalysisProcessor {
         for frameIndex in 0..<frameCount {
             let frameStart = frameIndex * binCount
             frameMagnitudes[0..<binCount] = magnitudes[frameStart..<(frameStart + binCount)]
-            let spectralMedian = SpectralDSP.medianFilter(frameMagnitudes, windowSize: 9)
             for binIndex in 0..<binCount {
-                let harmonicWeight = temporalMedian[frameStart + binIndex]
-                let percussiveWeight = spectralMedian[binIndex]
+                let harmonicWeight = medians.temporal[frameStart + binIndex]
+                let percussiveWeight = medians.frequency[frameStart + binIndex]
                 let total = max(harmonicWeight + percussiveWeight, 1e-6)
                 let magnitude = frameMagnitudes[binIndex]
                 harmonicSpectrum[binIndex] += magnitude * harmonicWeight / total
@@ -148,18 +147,28 @@ extension MetalAudioAnalysisProcessor {
     }
 
     func makeTemporalMedian17(magnitudes: [Float], frameCount: Int, binCount: Int) -> [Float]? {
+        makeMedianFilters(magnitudes: magnitudes, frameCount: frameCount, binCount: binCount, includeFrequency: false)?.temporal
+    }
+
+    // Share the input buffer and command submission; retain CPU accumulation order.
+    func makeMedianFilters(
+        magnitudes: [Float], frameCount: Int, binCount: Int, includeFrequency: Bool = true
+    ) -> (temporal: [Float], frequency: [Float])? {
         #if canImport(Metal)
-        guard frameCount > 0, binCount > 0 else { return [] }
+        guard frameCount > 0, binCount > 0 else { return ([], []) }
         let valueCount = frameCount * binCount
         guard magnitudes.count == valueCount,
               let context = Self.cache.context(),
               let magnitudeBuffer = context.device.makeBuffer(bytes: magnitudes, length: valueCount * MemoryLayout<Float>.stride),
-              let outputBuffer = context.device.makeBuffer(length: valueCount * MemoryLayout<Float>.stride),
-              let commandBuffer = context.commandQueue.makeCommandBuffer(),
-              let encoder = commandBuffer.makeComputeCommandEncoder() else {
+              let outputBuffer = context.device.makeBuffer(length: valueCount * MemoryLayout<Float>.stride) else {
             return nil
         }
 
+        let frequencyBuffer = includeFrequency
+            ? context.device.makeBuffer(length: valueCount * MemoryLayout<Float>.stride) : nil
+        guard !includeFrequency || frequencyBuffer != nil,
+              let commandBuffer = context.commandQueue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
         var frameCountValue = UInt32(frameCount)
         var binCountValue = UInt32(binCount)
         encoder.setComputePipelineState(context.temporalMedianPipeline)
@@ -172,6 +181,12 @@ extension MetalAudioAnalysisProcessor {
         let threadsPerGroup = MTLSize(width: threadCount, height: 1, depth: 1)
         let grid = MTLSize(width: valueCount, height: 1, depth: 1)
         encoder.dispatchThreads(grid, threadsPerThreadgroup: threadsPerGroup)
+        if let frequencyBuffer {
+            encoder.setComputePipelineState(context.frequencyMedianPipeline)
+            encoder.setBuffer(frequencyBuffer, offset: 0, index: 1)
+            let width = max(context.frequencyMedianPipeline.threadExecutionWidth, 1)
+            encoder.dispatchThreads(grid, threadsPerThreadgroup: MTLSize(width: width, height: 1, depth: 1))
+        }
         encoder.endEncoding()
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
@@ -181,7 +196,15 @@ extension MetalAudioAnalysisProcessor {
         }
 
         let outputPointer = outputBuffer.contents().bindMemory(to: Float.self, capacity: valueCount)
-        return Array(UnsafeBufferPointer(start: outputPointer, count: valueCount))
+        let temporal = Array(UnsafeBufferPointer(start: outputPointer, count: valueCount))
+        let frequency: [Float]
+        if let frequencyBuffer {
+            let pointer = frequencyBuffer.contents().bindMemory(to: Float.self, capacity: valueCount)
+            frequency = Array(UnsafeBufferPointer(start: pointer, count: valueCount))
+        } else {
+            frequency = []
+        }
+        return (temporal, frequency)
         #else
         return nil
         #endif
@@ -347,6 +370,34 @@ extension MetalAudioAnalysisProcessor {
             }
             float ratio = smaller / larger;
             magnitudes[index] = larger * precise::sqrt(1.0 + ratio * ratio);
+        }
+
+        kernel void computeFrequencyMedian9(
+            device const float *magnitudes [[buffer(0)]],
+            device float *frequencyMedian [[buffer(1)]],
+            constant uint &frameCount [[buffer(2)]],
+            constant uint &binCount [[buffer(3)]],
+            uint index [[thread_position_in_grid]]
+        ) {
+            if (index >= frameCount * binCount) return;
+            uint bin = index % binCount;
+            uint start = index - bin;
+            uint lower = bin > 4 ? bin - 4 : 0;
+            uint upper = min(binCount - 1, bin + 4);
+            uint count = upper - lower + 1;
+            float window[9];
+            for (uint i = 0; i < count; ++i) window[i] = magnitudes[start + lower + i];
+            for (uint i = 1; i < count; ++i) {
+                float value = window[i];
+                int j = int(i) - 1;
+                while (j >= 0 && window[j] > value) {
+                    window[j + 1] = window[j];
+                    --j;
+                }
+                window[j + 1] = value;
+            }
+            // Truncated even windows use the lower median, as SpectralDSP does.
+            frequencyMedian[index] = window[(count - 1) / 2];
         }
 
         kernel void computeTemporalMedian17(
@@ -515,9 +566,11 @@ private final class MetalAudioAnalysisCache: @unchecked Sendable {
               let library = try? device.makeLibrary(source: MetalAudioAnalysisProcessor.metalSource, options: nil),
               let magnitudeFunction = library.makeFunction(name: "computeMagnitudes"),
               let temporalMedianFunction = library.makeFunction(name: "computeTemporalMedian17"),
+              let frequencyMedianFunction = library.makeFunction(name: "computeFrequencyMedian9"),
               let masteringSpectralSummaryFunction = library.makeFunction(name: "computeMasteringSpectralSummary"),
               let magnitudePipeline = try? device.makeComputePipelineState(function: magnitudeFunction),
               let temporalMedianPipeline = try? device.makeComputePipelineState(function: temporalMedianFunction),
+              let frequencyMedianPipeline = try? device.makeComputePipelineState(function: frequencyMedianFunction),
               let masteringSpectralSummaryPipeline = try? device.makeComputePipelineState(function: masteringSpectralSummaryFunction) else {
             return nil
         }
@@ -527,6 +580,7 @@ private final class MetalAudioAnalysisCache: @unchecked Sendable {
             commandQueue: commandQueue,
             magnitudePipeline: magnitudePipeline,
             temporalMedianPipeline: temporalMedianPipeline,
+            frequencyMedianPipeline: frequencyMedianPipeline,
             masteringSpectralSummaryPipeline: masteringSpectralSummaryPipeline
         )
         cachedContext = context
@@ -539,6 +593,7 @@ private final class MetalAudioAnalysisContext {
     let commandQueue: any MTLCommandQueue
     let magnitudePipeline: any MTLComputePipelineState
     let temporalMedianPipeline: any MTLComputePipelineState
+    let frequencyMedianPipeline: any MTLComputePipelineState
     let masteringSpectralSummaryPipeline: any MTLComputePipelineState
 
     init(
@@ -546,12 +601,14 @@ private final class MetalAudioAnalysisContext {
         commandQueue: any MTLCommandQueue,
         magnitudePipeline: any MTLComputePipelineState,
         temporalMedianPipeline: any MTLComputePipelineState,
+        frequencyMedianPipeline: any MTLComputePipelineState,
         masteringSpectralSummaryPipeline: any MTLComputePipelineState
     ) {
         self.device = device
         self.commandQueue = commandQueue
         self.magnitudePipeline = magnitudePipeline
         self.temporalMedianPipeline = temporalMedianPipeline
+        self.frequencyMedianPipeline = frequencyMedianPipeline
         self.masteringSpectralSummaryPipeline = masteringSpectralSummaryPipeline
     }
 }

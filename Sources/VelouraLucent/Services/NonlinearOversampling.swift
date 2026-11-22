@@ -31,15 +31,17 @@ enum NonlinearOversampling {
 
     static func process(
         _ samples: [Float],
+        useMetal: Bool = false,
         transform: (Float) -> Float
     ) -> [Float] {
         guard samples.count > 1 else { return samples.map(transform) }
-        let padding = radius * 2
-        let period = (samples.count - 1) * 2
-        let padded = (-padding..<(samples.count + padding)).map { index -> Float in
-            let wrapped = ((index % period) + period) % period
-            return samples[wrapped < samples.count ? wrapped : period - wrapped]
+        // Measured command overhead dominates short inputs; keep them on the CPU.
+        if useMetal, samples.count >= 4_096,
+           let output = processUsingMetal(samples, transform: transform) {
+            return output
         }
+        let padding = radius * 2
+        let padded = reflectedPadding(samples)
         let halfLength = radius * factor
         let deltaCount = (samples.count - 1) * factor + 1 + halfLength * 2
         var delta = Array(repeating: Float.zero, count: deltaCount)
@@ -65,5 +67,27 @@ enum NonlinearOversampling {
             output[index] += filteredDelta
         }
         return output
+    }
+
+    /// Returns nil unless both FIR commands complete. The nonlinear transform
+    /// remains on the CPU; other callers keep the original CPU path by default.
+    static func processUsingMetal(
+        _ samples: [Float], transform: (Float) -> Float
+    ) -> [Float]? {
+        guard samples.count > 1 else { return nil }
+        return MetalNonlinearFIRProcessor().process(
+            samples: samples, padded: reflectedPadding(samples),
+            phases: phases.flatMap { $0 }, kernel: kernel,
+            factor: factor, radius: radius, transform: transform
+        )
+    }
+
+    private static func reflectedPadding(_ samples: [Float]) -> [Float] {
+        let padding = radius * 2
+        let period = (samples.count - 1) * 2
+        return (-padding..<(samples.count + padding)).map { index -> Float in
+            let wrapped = ((index % period) + period) % period
+            return samples[wrapped < samples.count ? wrapped : period - wrapped]
+        }
     }
 }

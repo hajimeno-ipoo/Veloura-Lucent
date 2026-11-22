@@ -2,6 +2,7 @@ import Foundation
 
 struct CorrectionHarmonicRepair: Sendable {
     let settings: CorrectionSettings
+    var useMetal = true
 
     func process(signal: AudioSignal, analysis: AnalysisData, prediction: FoldoverRepairPrediction) -> AudioSignal {
         let defaults = settings.profile.settings
@@ -32,7 +33,7 @@ struct CorrectionHarmonicRepair: Sendable {
 
         let channels = mapChannelsConcurrently(signal.channels) { channel in
             let folded = foldover(channel: channel, sampleRate: signal.sampleRate, cutoff: cutoff, mix: foldoverMix)
-            let excited = NonlinearOversampling.process(channel) { tanhf($0 * 2.8) - tanhf($0 * 1.1) }
+            let excited = NonlinearOversampling.process(channel, useMetal: useMetal) { tanhf($0 * 2.8) - tanhf($0 * 1.1) }
             let presence = SpectralDSP.lowPass(SpectralDSP.highPass(excited, cutoff: cutoff, sampleRate: signal.sampleRate), cutoff: 13_500, sampleRate: signal.sampleRate)
             let air = SpectralDSP.highPass(excited, cutoff: 13_500, sampleRate: signal.sampleRate)
             let body = SpectralDSP.lowPass(channel, cutoff: 4_000, sampleRate: signal.sampleRate)
@@ -44,7 +45,7 @@ struct CorrectionHarmonicRepair: Sendable {
                     + air[$0] * airGain
                     + transient[$0] * transientBoost
             }
-            return NonlinearOversampling.process(mixed) { tanhf($0 * 0.98) }
+            return NonlinearOversampling.process(mixed, useMetal: useMetal) { tanhf($0 * 0.98) }
         }
         let repaired = AudioSignal(channels: channels, sampleRate: signal.sampleRate)
         return GeneratedHighFrequencyDeltaLimiter.preserveOriginalUltraHigh(

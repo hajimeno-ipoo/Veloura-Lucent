@@ -8,6 +8,7 @@ struct AudioAnalysisModeTests {
     func experimentalMetalAnalysisMatchesCPUOutput() throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
         let inputURL = tempDirectory.appending(path: "analysis-mode-input.wav")
         let cpuOutputURL = tempDirectory.appending(path: "analysis-mode-cpu.wav")
         let metalOutputURL = tempDirectory.appending(path: "analysis-mode-metal.wav")
@@ -112,6 +113,29 @@ struct AudioAnalysisModeTests {
 
         #expect(temporalMedian != nil)
         #expect(temporalMedian ?? [] == reference)
+    }
+
+    @Test
+    func metalMedianFiltersMatchCPUAtTruncatedEdges() throws {
+        let processor = MetalAudioAnalysisProcessor()
+        // Require actual GPU results; a CPU fallback must not make this test pass.
+        for (frames, bins) in [(1, 1), (2, 4), (5, 8), (17, 9), (31, 1025)] {
+            let magnitudes = (0..<(frames * bins)).map { index in
+                Float((index * 37 + index / 11) % 101) / 100
+            }
+            let result = try #require(processor.makeMedianFilters(
+                magnitudes: magnitudes, frameCount: frames, binCount: bins
+            ))
+            let temporal = referenceTemporalMedian17(magnitudes: magnitudes, frameCount: frames, binCount: bins)
+            var frequency: [Float] = []
+            for frame in 0..<frames {
+                frequency += SpectralDSP.medianFilter(
+                    Array(magnitudes[(frame * bins)..<((frame + 1) * bins)]), windowSize: 9
+                )
+            }
+            #expect(result.temporal.map(\.bitPattern) == temporal.map(\.bitPattern))
+            #expect(result.frequency.map(\.bitPattern) == frequency.map(\.bitPattern))
+        }
     }
 
     @Test

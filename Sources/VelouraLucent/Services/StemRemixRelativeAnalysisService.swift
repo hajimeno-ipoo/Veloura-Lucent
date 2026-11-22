@@ -37,6 +37,9 @@ struct StemRemixRelativeAnalysisService: Sendable {
             }
         }
 
+        // Reuse each mono mixdown across pairs; retain Double products and their frame order.
+        var rawMonoByRole: [StemRole: [Float]] = [:]
+        var correctedMonoByRole: [StemRole: [Float]] = [:]
         for firstIndex in roles.indices {
             for secondIndex in roles.indices where secondIndex > firstIndex {
                 let firstRole = roles[firstIndex]
@@ -45,8 +48,18 @@ struct StemRemixRelativeAnalysisService: Sendable {
                       let rawSecond = rawStemsByRole[secondRole],
                       let correctedFirst = correctedStemsByRole[firstRole],
                       let correctedSecond = correctedStemsByRole[secondRole],
-                      let rawShared = sharedComponentCorrelation(rawFirst, rawSecond),
-                      let correctedShared = sharedComponentCorrelation(correctedFirst, correctedSecond) else {
+                      structurallyMatches(rawFirst, rawSecond) else {
+                    continue
+                }
+                let rawFirstMono = mono(rawFirst, role: firstRole, cache: &rawMonoByRole)
+                let rawSecondMono = mono(rawSecond, role: secondRole, cache: &rawMonoByRole)
+                guard let rawShared = normalizedDot(rawFirstMono, rawSecondMono).map(abs),
+                      structurallyMatches(correctedFirst, correctedSecond) else {
+                    continue
+                }
+                let correctedFirstMono = mono(correctedFirst, role: firstRole, cache: &correctedMonoByRole)
+                let correctedSecondMono = mono(correctedSecond, role: secondRole, cache: &correctedMonoByRole)
+                guard let correctedShared = normalizedDot(correctedFirstMono, correctedSecondMono).map(abs) else {
                     continue
                 }
                 let prefix = "corrected-remix.shared-component.\(firstRole.rawValue)-\(secondRole.rawValue)"
@@ -70,11 +83,15 @@ struct StemRemixRelativeAnalysisService: Sendable {
         return measurements
     }
 
-    private func sharedComponentCorrelation(_ lhs: AudioSignal, _ rhs: AudioSignal) -> Double? {
-        guard structurallyMatches(lhs, rhs) else { return nil }
-        let lhsMono = lhs.monoMixdown()
-        let rhsMono = rhs.monoMixdown()
-        return normalizedDot(lhsMono, rhsMono).map(abs)
+    private func mono(
+        _ signal: AudioSignal,
+        role: StemRole,
+        cache: inout [StemRole: [Float]]
+    ) -> [Float] {
+        if let cached = cache[role] { return cached }
+        let samples = signal.monoMixdown()
+        cache[role] = samples
+        return samples
     }
 
     private func rmsDeltaDB(raw: AudioSignal, corrected: AudioSignal) -> Double {

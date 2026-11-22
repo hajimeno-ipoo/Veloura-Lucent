@@ -1,3 +1,4 @@
+import Accelerate
 import Foundation
 
 enum StemRemixServiceError: LocalizedError, Equatable, Sendable {
@@ -580,7 +581,7 @@ struct StemRemixService: Sendable {
     private func applyLinearGain(_ signal: AudioSignal, gain: Float) -> AudioSignal {
         let safeGain = gain.isFinite ? max(0, gain) : 0
         return AudioSignal(
-            channels: signal.channels.map { $0.map { $0 * safeGain } },
+            channels: signal.channels.map { vDSP.multiply(safeGain, $0) },
             sampleRate: signal.sampleRate
         )
     }
@@ -592,8 +593,8 @@ struct StemRemixService: Sendable {
         let rightGain: Float = value < 0 ? cosf(-value * .pi * 0.5) : 1
         return AudioSignal(
             channels: [
-                signal.channels[0].map { $0 * leftGain },
-                signal.channels[1].map { $0 * rightGain },
+                vDSP.multiply(leftGain, signal.channels[0]),
+                vDSP.multiply(rightGain, signal.channels[1]),
             ],
             sampleRate: signal.sampleRate
         )
@@ -812,8 +813,16 @@ struct StemRemixService: Sendable {
                 throw StemRemixServiceError.structuralMismatch(.drums)
             }
             for channelIndex in channels.indices {
-                for frameIndex in channels[channelIndex].indices {
-                    channels[channelIndex][frameIndex] += signal.channels[channelIndex][frameIndex]
+                // Vectorize frames, retaining the existing role-by-role Float addition order.
+                signal.channels[channelIndex].withUnsafeBufferPointer { source in
+                    channels[channelIndex].withUnsafeMutableBufferPointer { destination in
+                        vDSP_vadd(
+                            destination.baseAddress!, 1,
+                            source.baseAddress!, 1,
+                            destination.baseAddress!, 1,
+                            vDSP_Length(destination.count)
+                        )
+                    }
                 }
             }
         }
@@ -826,10 +835,7 @@ struct StemRemixService: Sendable {
         }
         return AudioSignal(
             channels: lhs.channels.indices.map { channelIndex in
-                lhs.channels[channelIndex].indices.map { frameIndex in
-                    lhs.channels[channelIndex][frameIndex]
-                        + rhs.channels[channelIndex][frameIndex]
-                }
+                vDSP.add(lhs.channels[channelIndex], rhs.channels[channelIndex])
             },
             sampleRate: lhs.sampleRate
         )

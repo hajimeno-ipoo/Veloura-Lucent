@@ -11,6 +11,7 @@ final class BSRoformerSpectralTransform {
     let hopLength: Int
     let center: Bool
     let window: [Float]
+    let windowSquared: [Float]
     let windowArray: MLXArray
 
     init(fftSize: Int, hopLength: Int, center: Bool = true) {
@@ -21,6 +22,7 @@ final class BSRoformerSpectralTransform {
             0.5 * (1 - cos(2 * Float.pi * Float(index) / Float(fftSize)))
         }
         self.windowArray = MLXArray(window)
+        self.windowSquared = window.map { $0 * $0 }
     }
 
     func stft(_ audio: MLXArray) -> BSRoformerComplexSpectrogram {
@@ -68,6 +70,25 @@ final class BSRoformerSpectralTransform {
         eval(timeFrames)
 
         let materialized = timeFrames.asArray(Float.self)
+        if let output = BSRoformerMetalOverlapAdd.shared?.reconstruct(
+            frames: materialized,
+            windowSquared: windowSquared,
+            fftSize: fftSize,
+            hopLength: hopLength,
+            frameCount: frameCount,
+            outer: outer,
+            length: length,
+            trimStart: center ? fftSize / 2 : 0
+        ) {
+            return MLXArray(output, [batch, stems, channels, length])
+        }
+        return MLXArray(
+            overlapAddCPU(materialized, frameCount: frameCount, outer: outer, length: length),
+            [batch, stems, channels, length]
+        )
+    }
+
+    func overlapAddCPU(_ materialized: [Float], frameCount: Int, outer: Int, length: Int) -> [Float] {
         let paddedLength = (frameCount - 1) * hopLength + fftSize
         var overlapAdded = [Float](repeating: 0, count: outer * paddedLength)
         var denominator = [Float](repeating: 0, count: paddedLength)
@@ -99,7 +120,7 @@ final class BSRoformerSpectralTransform {
                 }
             }
         }
-        return MLXArray(output, [batch, stems, channels, length])
+        return output
     }
 
     private func reflectPad(_ audio: MLXArray, amount: Int) -> MLXArray {

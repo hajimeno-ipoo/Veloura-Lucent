@@ -93,6 +93,7 @@ final class DenoiseMaskBreakdownCollector: @unchecked Sendable {
 
 struct SpectralGateDenoiser: Sendable {
     let settings: CorrectionSettings
+    var useMetal = true
     let maskBreakdownCollector: DenoiseMaskBreakdownCollector?
 
     private var tuning: DenoiseTuning {
@@ -305,6 +306,53 @@ struct SpectralGateDenoiser: Sendable {
             decayMusicLowBandFloors.lowMid,
             1 / Float(max(tuning.passes, 1))
         )
+
+        if useMetal, maskBreakdownCollector == nil {
+            var gpuBins: [Float] = []
+            gpuBins.reserveCapacity(binCount * 12)
+            for binIndex in 0..<binCount {
+                let frequency = frequencyByBin[binIndex]
+                let position = Float(binIndex - shimmerStartBin) / Float(max(shimmerEndBin - shimmerStartBin, 1))
+                // Use precisely the CPU sinf partial expression. GPU sin differs
+                // at some bins even with precise floating-point functions.
+                let shimmerWeight = 0.75 + sinf(position * .pi) * 0.25
+                let coreWeight: Float = frequency <= 1_200 ? 1 : max(0, Float((5_000 - frequency) / 3_800))
+                let decayBand: Float = frequency >= 60 && frequency < 150 ? 1
+                    : (frequency >= 150 && frequency < 250 ? 2 : 0)
+                gpuBins.append(contentsOf: [
+                    thresholdByBin[binIndex], baseFloorByBin[binIndex], granularThresholdByBin[binIndex],
+                    highBandWeightByBin[binIndex], transientLiftScaleByBin[binIndex], noiseProfile[binIndex],
+                    granularProfile[binIndex], coreWeight,
+                    frequency >= 20 && frequency < 1_000 ? 1 : 0, decayBand,
+                    shimmerWeight, frequency <= 5_000 ? 1 : 0
+                ])
+            }
+            var gpuFrames: [Float] = []
+            gpuFrames.reserveCapacity(spectrogram.frameCount * 3)
+            for frameIndex in 0..<spectrogram.frameCount {
+                let energy = frameEnergy[frameIndex]
+                let ratio = energy / max(smoothedFrameEnergy[frameIndex], 1e-6)
+                gpuFrames.append(contentsOf: [
+                    energy > quietThreshold && energy >= activeMusicThreshold ? 1 : 0,
+                    energy > quietThreshold && energy < activeMusicThreshold ? 1 : 0,
+                    max(0, min(0.35, (ratio - 1) * tuning.transientProtection))
+                ])
+            }
+            if MetalDenoiseMaskProcessor().apply(
+                real: &spectrogram.real, imag: &spectrogram.imag,
+                magnitudes: magnitudesByBin.flatMap { $0 }, bins: gpuBins, frames: gpuFrames,
+                highFloorLifts: highFloorLiftValues,
+                highFloorIndices: highFloorLiftActiveIndexByBin.map { Int32($0) },
+                activeHighBinCount: highFloorLiftActiveBinCount,
+                frameCount: spectrogram.frameCount, binCount: binCount,
+                shimmerStart: shimmerStartBin, shimmerEnd: shimmerEndBin,
+                scalars: [tuning.coreProtection, tuning.granularReduction, tuning.shimmerStabilization,
+                          shimmerExceptionRelaxation, activeMusicLowBandFloor,
+                          decayMusicLowBodyFloor, decayMusicLowMidFloor]
+            ) {
+                return SpectralDSP.istft(spectrogram)
+            }
+        }
 
         for frameIndex in 0..<spectrogram.frameCount {
             let currentFrameEnergy = frameEnergy[frameIndex]

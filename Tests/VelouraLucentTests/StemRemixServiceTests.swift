@@ -5,6 +5,58 @@ import Testing
 struct StemRemixServiceTests {
     private let service = StemRemixService()
 
+    @Test(arguments: [StemSeparationModel.htdemucs, .bsRoformerSW], [1, 3, 257, 4_097])
+    func vectorizedDryMixKeepsScalarGainPanAndRoleOrderBits(
+        model: StemSeparationModel,
+        frameCount: Int
+    ) throws {
+        let contract = makeStemTestRunContract(model: model)
+        let edgeSamples: [Float] = [
+            0, -0.0, 0.125, -0.5, 1e-23, -1e-23, 0.75, -0.03125,
+            Float.leastNonzeroMagnitude, -Float.leastNonzeroMagnitude,
+            Float.leastNormalMagnitude / 2, -Float.leastNormalMagnitude / 2,
+        ]
+        let stems = contract.pureSumOrder.enumerated().map { roleIndex, role in
+            let channels = (0..<2).map { channel in
+                (0..<frameCount).map { frame in
+                    edgeSamples[(frame + roleIndex * 3 + channel) % edgeSamples.count]
+                }
+            }
+            let signal = AudioSignal(channels: channels, sampleRate: 48_000)
+            return StemRemixSignal(role: role, raw: signal, corrected: signal)
+        }
+        var settings = StemRemixSettings(reverbReturnLevel: 0)
+        for (index, role) in contract.pureSumOrder.enumerated() {
+            settings.setSettings(StemRemixRoleSettings(
+                gainDB: Float(index - 2) * 1.3,
+                pan: Float(index % 3 - 1) * 0.37,
+                reverbSend: 0.4
+            ), for: role)
+        }
+        var expected = Array(repeating: Array(repeating: Float.zero, count: frameCount), count: 2)
+        for role in contract.pureSumOrder {
+            let signal = try #require(stems.first { $0.role == role }).corrected
+            let roleSettings = settings.settings(for: role)
+            let gain = powf(10, roleSettings.gainDB / 20)
+            let pan = roleSettings.pan
+            let panGains: [Float] = [pan > 0 ? cosf(pan * .pi * 0.5) : 1,
+                                     pan < 0 ? cosf(-pan * .pi * 0.5) : 1]
+            for channel in 0..<2 {
+                for frame in 0..<frameCount {
+                    let gained = signal.channels[channel][frame] * gain
+                    let panned = gained * panGains[channel]
+                    expected[channel][frame] += panned
+                }
+            }
+        }
+        let actual = try service.render(stems: stems, settings: settings, runContract: contract)
+        for channel in 0..<2 {
+            #expect(actual.drySignal.channels[channel].map(\.bitPattern) == expected[channel].map(\.bitPattern))
+            let finalExpected = expected[channel].map { $0 + Float.zero }
+            #expect(actual.signal.channels[channel].map(\.bitPattern) == finalExpected.map(\.bitPattern))
+        }
+    }
+
     @Test(arguments: [StemSeparationModel.htdemucs, .bsRoformerSW])
     func zeroReturnPreservesDryAudioAndStagesWithNonzeroSends(model: StemSeparationModel) throws {
         let stems = makeStems(model: model)
