@@ -8,7 +8,12 @@ private struct ReadyStemModelInspector: StemModelLocalInspecting {
 }
 
 private struct AutomaticStemInputInspector: StemWorkflowInputInspecting {
+    var rejectedURL: URL? = nil
+
     func inspect(inputURL: URL) async throws -> StemInputInspection {
+        if inputURL == rejectedURL {
+            throw CocoaError(.fileReadNoSuchFile)
+        }
         let layout = StemInputLayoutIdentity(
             channelCount: 2,
             layoutTag: 0,
@@ -897,8 +902,8 @@ struct StemWorkflowControllerTests {
         #expect(session.runID == nil)
     }
 
-    @Test("入力変更のController境界は再ミックス手動下書きも初期化する")
-    func inputChangeResetsWorkspaceManualRemixDraft() async throws {
+    @Test("同じ曲でも別の曲でも正常に開くと補正・再ミックス・マスタリングの手動調整を取り除く", arguments: [false, true])
+    func inputSelectionRestoresSelectedProfilesAndAutomaticRemix(reopenSameInput: Bool) async throws {
         let session = StemWorkflowSession()
         let controller = StemWorkflowController(
             session: session,
@@ -912,30 +917,61 @@ struct StemWorkflowControllerTests {
         let workspace = StemModeWorkspaceModel(session: session, actions: controller.actions)
         controller.attachWorkspaceModel(workspace)
 
-        await workspace.inspectInput(URL(fileURLWithPath: "/tmp/remix-draft-first.wav"))
-        try await waitUntil { workspace.selectedInputURL != nil && !workspace.isInspectingInput }
+        let inputURL = URL(fileURLWithPath: "/tmp/remix-draft-first.wav")
+        await workspace.inspectInput(inputURL)
+        try await waitUntil { workspace.selectedInputURL == inputURL && !workspace.isInspectingInput }
+        try workspace.setProductionSeparationSettings(.bsRoformerSWProduction)
+        #expect(Set(workspace.availableStemRoles) == Set(StemRole.allCases))
+        for role in workspace.availableStemRoles {
+            workspace.selectCorrectionRole(role)
+            try workspace.applyCorrectionProfile(role == .vocals || role == .guitar ? .strong : .gentle)
+        }
+        let selectedCorrectionProfiles = workspace.correctionSettings
+        for role in workspace.availableStemRoles {
+            workspace.selectCorrectionRole(role)
+            try workspace.updateCorrectionSettings { $0.correctionIntensity = 0.99 }
+        }
+        #expect(workspace.correctionSettings.allRoleSettings.allSatisfy { $0.correctionIntensity == 0.99 })
+        workspace.selectedMasteringProfile = .natural
+        workspace.masteringSettings.targetLoudness = -15.8
+        workspace.masteringSettings.dynamicsRetention = 0.73
+        workspace.setAutomaticRemixPlan(StemRemixAutomaticPlan(
+            settings: StemRemixSettings(reverbReturnLevel: 0.35),
+            gainEvidenceDB: [:],
+            panEvidence: [:],
+            reverbLossEvidence: [:],
+            drumsBassCollision: 0,
+            vocalsAccompanimentCollision: 0
+        ))
         try workspace.setRemixManualEditingEnabled(true)
         try workspace.setRemixPan(0.45, for: .vocals)
 
-        let replacementURL = URL(fileURLWithPath: "/tmp/remix-draft-second.wav")
+        let replacementURL = reopenSameInput ? inputURL : URL(fileURLWithPath: "/tmp/remix-draft-second.wav")
         await workspace.inspectInput(replacementURL)
         try await waitUntil {
             workspace.selectedInputURL == replacementURL && !workspace.isInspectingInput
         }
 
+        #expect(workspace.presentedError == nil)
+        #expect(workspace.correctionSettings == selectedCorrectionProfiles)
+        #expect(workspace.selectedMasteringProfile == .natural)
+        #expect(workspace.masteringSettings == MasteringProfile.natural.settings)
         #expect(workspace.manualRemixOverrides == StemRemixManualOverrides())
         #expect(!workspace.isRemixManualEditingEnabled)
         #expect(workspace.automaticRemixPlan == nil)
+        #expect(workspace.effectiveRemixSettings == nil)
+        #expect(workspace.displayedRemixSettings == StemRemixSettings())
     }
 
-    @Test("同じ入力を選び直しても再ミックス手動下書きを保持する")
-    func sameInputSelectionPreservesWorkspaceManualRemixDraft() async throws {
+    @Test("別の曲を開けなかった場合は手動調整を保持する")
+    func rejectedInputPreservesManualSettings() async throws {
+        let rejectedURL = URL(fileURLWithPath: "/tmp/remix-draft-unreadable.wav")
         let session = StemWorkflowSession()
         let controller = StemWorkflowController(
             session: session,
             modelManager: StemModelManager(),
             workflow: SuspendedCorrectionWorkflow(),
-            inputInspector: AutomaticStemInputInspector(),
+            inputInspector: AutomaticStemInputInspector(rejectedURL: rejectedURL),
             inputDisplayAnalyzer: EmptyStemDisplayAnalyzer(),
             notificationReporter: NoOpStemCompletionNotificationReporter.shared,
             revealInFinder: { _ in }
@@ -948,10 +984,17 @@ struct StemWorkflowControllerTests {
         try await waitUntil { workspace.selectedInputURL == inputURL && !workspace.isInspectingInput }
         try workspace.setRemixManualEditingEnabled(true)
         try workspace.setRemixPan(0.45, for: .vocals)
+        try workspace.updateCorrectionSettings { $0.correctionIntensity = 0.99 }
+        workspace.masteringSettings.targetLoudness = -15.8
+        let correctionSettings = workspace.correctionSettings
+        let masteringSettings = workspace.masteringSettings
 
-        await workspace.inspectInput(inputURL)
+        await workspace.inspectInput(rejectedURL)
         try await waitUntil { workspace.selectedInputURL == inputURL && !workspace.isInspectingInput }
 
+        #expect(workspace.presentedError != nil)
+        #expect(workspace.correctionSettings == correctionSettings)
+        #expect(workspace.masteringSettings == masteringSettings)
         #expect(workspace.isRemixManualEditingEnabled)
         #expect(workspace.manualRemixOverrides.overrides(for: .vocals).pan == 0.45)
     }

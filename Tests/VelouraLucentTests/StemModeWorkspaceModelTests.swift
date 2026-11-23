@@ -519,7 +519,7 @@ struct StemModeWorkspaceModelTests {
         #expect(model.displayedRemixSettings.settings(for: .vocals).pan == 0.4)
     }
 
-    @Test("別の入力へ切り替える時だけ再ミックス手動下書きを初期化する")
+    @Test("入力を開き直すと再ミックス手動下書きを初期化する")
     func inputChangeResetsManualRemixDraft() async throws {
         let recorder = WorkspaceActionRecorder()
         let model = makeModel(recorder: recorder)

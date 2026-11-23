@@ -26,10 +26,7 @@ final class StemModeWorkspaceModel {
     var selectedMasteringProfile: MasteringProfile = .streaming {
         didSet {
             guard selectedMasteringProfile != oldValue else { return }
-            isApplyingMasteringProfile = true
-            masteringSettings = selectedMasteringProfile.settings
-            isApplyingMasteringProfile = false
-            isUsingCustomMasteringSettings = false
+            applySelectedMasteringProfile()
         }
     }
 
@@ -381,6 +378,10 @@ final class StemModeWorkspaceModel {
 
     }
     func resetMasteringSettingsToProfile() {
+        applySelectedMasteringProfile()
+    }
+
+    private func applySelectedMasteringProfile() {
         isApplyingMasteringProfile = true
         masteringSettings = selectedMasteringProfile.settings
         isApplyingMasteringProfile = false
@@ -994,6 +995,16 @@ final class StemModeWorkspaceModel {
 
     func resetRunPresentationForInputChange() {
         clearRunPresentation(resetManualRemixDraft: true)
+        guard selectedInputURL != nil else { return }
+        correctionSettings = StemRoleCorrectionSettings(
+            vocals: correctionSettings.vocals.profile.settings,
+            drums: correctionSettings.drums.profile.settings,
+            bass: correctionSettings.bass.profile.settings,
+            other: correctionSettings.other.profile.settings,
+            guitar: correctionSettings.guitar.profile.settings,
+            piano: correctionSettings.piano.profile.settings
+        )
+        applySelectedMasteringProfile()
     }
 
     private func replacePreviewSources(_ artifacts: [StemAudioArtifact]) {

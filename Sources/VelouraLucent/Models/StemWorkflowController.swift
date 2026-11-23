@@ -381,15 +381,9 @@ final class StemWorkflowController {
     private func resetForInputChange() async throws {
         try requireNoActiveWorkflow()
         continueToMastering = false
-        let isSameSelectedInput = workspaceModel?.selectedInputURL?.standardizedFileURL
-            == inputLease?.URL.standardizedFileURL
         try await discardInactiveSessionRunIfPresent()
         session.resetForInputChange()
-        if isSameSelectedInput {
-            workspaceModel?.resetRunPresentationAfterCorrectionCancellation()
-        } else {
-            workspaceModel?.resetRunPresentationForInputChange()
-        }
+        workspaceModel?.resetRunPresentationForInputChange()
     }
 
     private func beginCorrection(_ startRequest: StemModeStartRequest) async throws {
