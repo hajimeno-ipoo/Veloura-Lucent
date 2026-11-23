@@ -616,6 +616,53 @@ struct StemWorkflowSessionTests {
         #expect(session.recentActivityEvents.last?.title == "成果物を書き出しました")
     }
 
+    @Test("各工程を始めると書き出し欄の保存済み表示が解除される")
+    func startingAProcessingStageClearsThePreviousExportStatus() throws {
+        let session = StemWorkflowSession()
+        let sessionID = UUID()
+        let contract = makeStemTestRunContract()
+        let corrected = artifact(id: "corrected-remix", kind: .correctedPureSum48000)
+        let remix = artifact(id: "stem-remix", kind: .remixed48000)
+        let final = artifact(id: "final", kind: .finalMaster)
+
+        func recordExport(_ artifact: StemAudioArtifact) {
+            let destination = URL(fileURLWithPath: "/tmp/\(artifact.id)-export.wav")
+            session.recordExportSuccess(artifact: artifact, destinationURL: destination, fileInfo: nil)
+            #expect(session.lastExportedDestinationURL == destination)
+        }
+
+        func finishMastering() throws {
+            try session.updateArtifactState(.init(
+                id: final.id, runID: sessionID, kind: final.kind, artifact: final, status: .valid
+            ))
+            try session.completeRun(runID: sessionID)
+        }
+
+        try session.startRun(runID: sessionID, runContract: contract)
+        try completeCorrection(in: session, sessionID: sessionID)
+        try session.completeCorrection(runID: sessionID)
+        recordExport(corrected)
+        try completeRemix(in: session, sessionID: sessionID)
+        #expect(session.lastExportedDestinationURL == nil)
+
+        recordExport(remix)
+        try session.startMastering(runID: sessionID)
+        #expect(session.lastExportedDestinationURL == nil)
+        try finishMastering()
+        #expect(session.lastExportedDestinationURL == nil)
+
+        recordExport(final)
+        try session.invalidateRemix(runID: sessionID)
+        try completeRemix(in: session, sessionID: sessionID)
+        #expect(session.lastExportedDestinationURL == nil)
+
+        try session.startMastering(runID: sessionID)
+        try finishMastering()
+        recordExport(final)
+        try session.startRun(runID: UUID(), runContract: contract)
+        #expect(session.lastExportedDestinationURL == nil)
+    }
+
     private func completeCorrection(in session: StemWorkflowSession, sessionID: UUID) throws {
         let correctionSteps: [StemWorkflowStep] = [
             .validateInput, .separate, .validateSeparatedStems,

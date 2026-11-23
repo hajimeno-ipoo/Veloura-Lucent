@@ -116,7 +116,7 @@ final class ProcessingActions {
         let taskID = UUID()
         automaticMasteringRequestID = continueToMastering ? taskID : nil
         correctionTaskID = taskID
-        correctionTask = Task { [weak self] in
+        correctionTask = Task { [weak self, job] in
             guard let self else { return }
             defer { clearCorrectionTask(ifMatching: taskID) }
             let logSink = OrderedProcessingLogSink { [weak job] message in
@@ -203,7 +203,7 @@ final class ProcessingActions {
 
         let taskID = UUID()
         masteringTaskID = taskID
-        masteringTask = Task { [weak self] in
+        masteringTask = Task { [weak self, job] in
             guard let self else { return }
             defer { clearMasteringTask(ifMatching: taskID) }
             let logSink = OrderedProcessingLogSink { [weak job] message in

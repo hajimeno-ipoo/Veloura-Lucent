@@ -131,7 +131,7 @@
         }
 
         private func setupAppDeactivateObserver() {
-            Task { @MainActor in
+            Task { @MainActor [self] in
                 try? await Task.sleep(for: .milliseconds(100))
                 guard self.window != nil else { return }
 

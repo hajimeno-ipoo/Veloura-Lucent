@@ -695,6 +695,7 @@ final class StemWorkflowSession {
         remixFinishedAt = nil
         masteringStartedAt = nil
         masteringFinishedAt = nil
+        lastExportedDestinationURL = nil
         state = .ready
         appendActivity(
             timestamp: timestamp,
@@ -876,6 +877,7 @@ final class StemWorkflowSession {
         validationStates.removeAll { $0.subject == .finalMaster }
         masteringStartedAt = timestamp
         masteringFinishedAt = nil
+        lastExportedDestinationURL = nil
         state = .ready
         appendActivity(
             timestamp: timestamp,
