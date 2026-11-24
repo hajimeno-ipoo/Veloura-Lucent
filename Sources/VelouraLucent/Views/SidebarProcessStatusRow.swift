@@ -232,12 +232,13 @@ private struct SidebarProcessStepRow: View {
                     .truncationMode(.tail)
                     .layoutPriority(1)
 
-                if step.showsTransientStatus,
+                if step.state == .skipped || step.showsTransientStatus,
                    let shortLabel = step.state.shortLabel {
                     AppLocalizedText(shortLabel)
                         .font(.body)
                         .foregroundStyle(step.state.color(tint: tint))
                         .lineLimit(1)
+                        .fixedSize(horizontal: !step.showsTransientStatus, vertical: false)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(
