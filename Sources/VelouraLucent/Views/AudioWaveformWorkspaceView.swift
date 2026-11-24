@@ -166,6 +166,7 @@ struct AudioWaveformWorkspaceView: View {
 
             GlassEffectContainer(spacing: 12) {
                 VStack(spacing: 0) {
+                    waveformTimeRuler
                     ForEach(tracks.indices, id: \.self) { index in
                         waveformRow(
                             track: tracks[index],
@@ -173,7 +174,7 @@ struct AudioWaveformWorkspaceView: View {
                         )
                         Divider()
                     }
-                    waveformTimeRuler
+                    waveformZoomControls
                 }
                 .padding(8)
                 .glassCard(cornerRadius: 16)
@@ -464,7 +465,7 @@ struct AudioWaveformWorkspaceView: View {
         } ?? false
         let fileURL = track.fileURL
 
-        return HStack(spacing: 12) {
+        return waveformColumns {
             HStack(spacing: 7) {
                 Circle()
                     .fill(tint)
@@ -482,8 +483,7 @@ struct AudioWaveformWorkspaceView: View {
                         .glassEffect(.regular.tint(tint.opacity(0.16)), in: .capsule)
                 }
             }
-            .frame(width: waveformLabelColumnWidth, alignment: .leading)
-
+        } waveform: {
             SeekableWaveformView(
                 samples: snapshot?.waveform ?? [],
                 progress: state.playbackProgress,
@@ -516,35 +516,35 @@ struct AudioWaveformWorkspaceView: View {
                     }
                 }
             )
-            .frame(minWidth: 240, maxWidth: .infinity)
             .frame(height: height.wrappedValue)
+        } trailing: {
+            HStack(spacing: 12) {
+                Text(preview.playbackTimeText(for: target))
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 92, alignment: .trailing)
 
-            Text(preview.playbackTimeText(for: target))
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 92, alignment: .trailing)
+                HStack(spacing: 6) {
+                    Button("外部プレイヤーで開く", systemImage: "music.quarternote.3") {
+                        guard let fileURL else { return }
+                        openWithQuickTimePlayer(fileURL)
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .disabled(fileURL == nil)
+                    .help(AppLanguageSettings.string(fileURL == nil ? "音声ファイルがありません" : "外部プレイヤーで開く"))
 
-            HStack(spacing: 6) {
-                Button("外部プレイヤーで開く", systemImage: "music.quarternote.3") {
-                    guard let fileURL else { return }
-                    openWithQuickTimePlayer(fileURL)
+                    Button("Finderに表示", systemImage: "folder") {
+                        guard let fileURL else { return }
+                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .disabled(fileURL == nil)
+                    .help(AppLanguageSettings.string(fileURL == nil ? "音声ファイルがありません" : "Finderに表示"))
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .disabled(fileURL == nil)
-                .help(AppLanguageSettings.string(fileURL == nil ? "音声ファイルがありません" : "外部プレイヤーで開く"))
-
-                Button("Finderに表示", systemImage: "folder") {
-                    guard let fileURL else { return }
-                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .disabled(fileURL == nil)
-                .help(AppLanguageSettings.string(fileURL == nil ? "音声ファイルがありません" : "Finderに表示"))
             }
         }
-        .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .overlay(alignment: .bottom) {
             WaveformTrackResizeHandle(
@@ -557,28 +557,32 @@ struct AudioWaveformWorkspaceView: View {
     }
 
     private var waveformTimeRuler: some View {
-        HStack(spacing: 12) {
+        waveformColumns {
             Color.clear
-                .frame(width: waveformLabelColumnWidth)
+        } waveform: {
+            WaveformTimeRulerView(duration: waveformDuration, viewport: waveformViewport)
+        } trailing: {
+            Color.clear
+        }
+        .frame(height: 28)
+    }
 
+    private var waveformZoomControls: some View {
+        waveformColumns {
+            Color.clear
+        } waveform: {
             GeometryReader { proxy in
                 let maximumZoomScale = WaveformViewport.maximumZoomScale(
                     sampleCount: waveformSampleCount,
                     displayWidth: Double(proxy.size.width)
                 )
 
-                VStack(alignment: .trailing, spacing: 6) {
-                    WaveformTimeRulerView(
-                        duration: waveformDuration,
-                        viewport: waveformViewport
-                    )
-
-                    WaveformZoomControls(
-                        viewport: $waveformViewport,
-                        centerProgress: waveformZoomCenterProgress,
-                        maximumZoomScale: maximumZoomScale
-                    )
-                }
+                WaveformZoomControls(
+                    viewport: $waveformViewport,
+                    centerProgress: waveformZoomCenterProgress,
+                    maximumZoomScale: maximumZoomScale
+                )
+                .frame(maxWidth: .infinity, alignment: .trailing)
                 .onAppear {
                     maximumWaveformZoomScale = maximumZoomScale
                 }
@@ -586,14 +590,28 @@ struct AudioWaveformWorkspaceView: View {
                     maximumWaveformZoomScale = newValue
                 }
             }
-            .frame(minWidth: 240, maxWidth: .infinity)
-            .frame(height: 78)
-
+            .frame(height: 40)
+        } trailing: {
             Color.clear
-                .frame(width: waveformTrailingColumnWidth)
+        }
+        .frame(height: 40)
+        .padding(.top, 4)
+    }
+
+    private func waveformColumns(
+        @ViewBuilder leading: () -> some View,
+        @ViewBuilder waveform: () -> some View,
+        @ViewBuilder trailing: () -> some View
+    ) -> some View {
+        HStack(spacing: 12) {
+            leading()
+                .frame(width: waveformLabelColumnWidth, alignment: .leading)
+            waveform()
+                .frame(minWidth: 240, maxWidth: .infinity)
+            trailing()
+                .frame(width: waveformTrailingColumnWidth, alignment: .trailing)
         }
         .padding(.horizontal, 12)
-        .padding(.top, 4)
     }
 
     private var waveformDuration: TimeInterval {

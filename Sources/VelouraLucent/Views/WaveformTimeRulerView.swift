@@ -176,41 +176,74 @@ struct WaveformViewport: Equatable {
 }
 
 struct WaveformTimeRulerView: View {
+    private static let intervals: [TimeInterval] = [
+        0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5,
+        1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1_800, 3_600
+    ]
+
     let duration: TimeInterval
     let viewport: WaveformViewport
 
     var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
+        Canvas { context, size in
+            let start = duration * viewport.startProgress
+            let end = duration * viewport.endProgress
+            let span = end - start
+            guard span.isFinite, span > 0, size.width > 0 else { return }
 
-            ZStack(alignment: .topLeading) {
-                Rectangle()
-                    .fill(.secondary.opacity(0.18))
-                    .frame(height: 1)
+            let interval = Self.intervals.first { interval in
+                let label = context.resolve(timeLabel(end, interval: interval))
+                let labelWidth = label.measure(in: size).width
+                return interval / span * size.width >= labelWidth + 12
+            } ?? 3_600
 
-                ForEach(0..<5, id: \.self) { index in
-                    let localProgress = Double(index) / 4
-                    let globalProgress = viewport.globalProgress(
-                        forLocalProgress: localProgress
-                    )
-                    let tickX = min(width * localProgress, max(width - 1, 0))
-                    let labelX = min(max(tickX, 32), max(width - 32, 32))
+            // Anchor ticks to the start of the audio, so panning only moves their positions.
+            let first = Int(ceil(start / interval - 1e-9))
+            let last = Int(floor(end / interval + 1e-9))
+            guard first <= last else { return }
 
-                    Rectangle()
-                        .fill(.secondary.opacity(0.42))
-                        .frame(width: 1, height: 5)
-                        .offset(x: tickX)
+            let baselineY = size.height - 1
+            var marks = Path()
+            marks.move(to: CGPoint(x: 0, y: baselineY))
+            marks.addLine(to: CGPoint(x: size.width, y: baselineY))
+            var lastLabelEnd = -CGFloat.infinity
 
-                    Text(waveformTimeText(duration * globalProgress))
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 64)
-                        .position(x: labelX, y: 18)
-                }
+            for index in first...last {
+                let seconds = Double(index) * interval
+                let progress = viewport.localProgress(forGlobalProgress: seconds / duration)
+                let x = progress * size.width
+                marks.move(to: CGPoint(x: x, y: baselineY))
+                marks.addLine(to: CGPoint(x: x, y: baselineY - 8))
+
+                let label = context.resolve(timeLabel(seconds, interval: interval))
+                let labelWidth = label.measure(in: size).width
+                let left = min(max(x - labelWidth / 2, 0), size.width - labelWidth)
+                guard left >= 0, left >= lastLabelEnd + 4 else { continue }
+                context.draw(label, at: CGPoint(x: left, y: baselineY - 10), anchor: .bottomLeading)
+                lastLabelEnd = left + labelWidth
             }
+
+            context.stroke(marks, with: .color(.primary.opacity(0.65)), lineWidth: 1)
         }
-        .frame(height: 32)
+        .frame(height: 28)
         .accessibilityHidden(true)
+    }
+
+    private func timeLabel(_ seconds: TimeInterval, interval: TimeInterval) -> Text {
+        let time: String
+        if interval >= 1 {
+            time = waveformTimeText(seconds.rounded())
+        } else {
+            let digits = Int(ceil(-log10(interval)))
+            let scale = Int(pow(10, Double(digits)))
+            let units = Int((seconds * Double(scale)).rounded())
+            let whole = waveformTimeText(Double(units / scale))
+            let fraction = String(format: "%0*d", digits, units % scale)
+            time = "\(whole).\(fraction)"
+        }
+        return Text(time)
+            .font(.system(size: 12).monospacedDigit())
+            .foregroundStyle(.primary)
     }
 }
 
