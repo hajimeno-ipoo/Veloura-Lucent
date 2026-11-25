@@ -41,7 +41,8 @@ struct StemRemixComparisonView: View {
             playbackInterlocks: [
                 model.previewController,
                 model.stemPreviewController,
-            ]
+            ],
+            showsComparisonRepeat: true
         )
         .accessibilityElement(children: .contain)
     }

@@ -44,7 +44,8 @@ struct StemWaveformComparisonView: View {
             playbackInterlocks: [
                 model.previewController,
                 model.remixPreviewController,
-            ]
+            ],
+            showsComparisonRepeat: true
         )
         .accessibilityElement(children: .contain)
         .environment(\.locale, locale)

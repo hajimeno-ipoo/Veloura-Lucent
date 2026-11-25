@@ -24,7 +24,8 @@ struct StemModePreviewView: View {
                 playbackInterlocks: [
                     model.stemPreviewController,
                     model.remixPreviewController,
-                ]
+                ],
+                showsComparisonRepeat: true
             )
 
             StemWaveformComparisonView(model: model)

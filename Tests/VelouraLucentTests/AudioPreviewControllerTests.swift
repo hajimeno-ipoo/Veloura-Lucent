@@ -1224,6 +1224,153 @@ struct AudioPreviewControllerTests {
         #expect(controller.cardState(for: .corrected).liveLoudnessMeterSnapshot == retainedSnapshot)
     }
 
+    @Test
+    func repeatKeepsPreparedPlayersAndContinuesFromItsCurrentPositionWhenDisabled() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 3, correctedDuration: 2)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+        defer { controller.stopPlayback() }
+
+        controller.setComparisonRepeatEnabled(true)
+        #expect(!controller.canToggleComparisonPlayback)
+        controller.setComparisonRepeatRange(1.1137..<2.8)
+        let range = try #require(controller.comparisonRepeatRange)
+        #expect(range.upperBound == 2)
+        controller.playComparisonSide(.a)
+        #expect(controller.isPlayingComparisonRepeat)
+        let session = controller.playbackDiagnosticState().playbackSessionID
+
+        try await Task.sleep(for: .milliseconds(220))
+        controller.toggleComparisonSide()
+        #expect(controller.activeTarget == .corrected)
+        #expect(controller.playbackDiagnosticState().playbackSessionID == session)
+        #expect(range.contains(controller.cardState(for: .corrected).playbackPosition))
+        controller.seek(to: 0, target: .input)
+        #expect(controller.isPlayingComparisonRepeat)
+        #expect(controller.playbackDiagnosticState().playbackSessionID == session)
+
+        let beforeRelease = controller.cardState(for: .corrected).playbackPosition
+        controller.setComparisonRepeatEnabled(false)
+        #expect(!controller.isComparisonRepeatEnabled)
+        #expect(controller.comparisonRepeatRange == range)
+        #expect(controller.isComparisonPlaybackRunning)
+        #expect(abs(controller.cardState(for: .corrected).playbackPosition - beforeRelease) < 0.2)
+
+        controller.stopPlayback()
+        controller.setComparisonRepeatRange(0..<1)
+        #expect(controller.comparisonRepeatRange == range)
+        controller.setPreviewSnapshot(
+            previewSnapshot(duration: 3),
+            for: .input,
+            sourceURL: fixture.directory.appending(path: "replacement.wav")
+        )
+        #expect(controller.comparisonRepeatRange == nil)
+    }
+
+    @Test
+    func editingRepeatKeepsItsFixedEndpointOrLengthAcrossMixedRateBoundaries() throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 3, correctedDuration: 1.999)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+        controller.setComparisonRepeatEnabled(true)
+        controller.setComparisonRepeatRange(0.4..<0.8)
+        let original = try #require(controller.comparisonRepeatRange)
+
+        let startAdjusted = try #require(controller.adjustedComparisonRepeatRange(.start, by: -2))
+        #expect(startAdjusted == 0..<original.upperBound)
+        let endAdjusted = try #require(controller.adjustedComparisonRepeatRange(.end, by: 2))
+        #expect(endAdjusted == original.lowerBound..<(599.0 / 300.0))
+
+        let minimum = try #require(controller.adjustedComparisonRepeatRange(.start, by: 2))
+        #expect(minimum.upperBound == original.upperBound)
+        #expect(abs(minimum.upperBound - minimum.lowerBound - 1 / 300.0) < 1e-9)
+
+        let movedToStart = try #require(controller.adjustedComparisonRepeatRange(.move, by: -2))
+        #expect(movedToStart == 0..<0.4)
+        let movedToEnd = try #require(controller.adjustedComparisonRepeatRange(.move, by: 2))
+        #expect(movedToEnd == (479.0 / 300.0)..<(599.0 / 300.0))
+        controller.setComparisonRepeatRange(movedToEnd)
+        #expect(controller.comparisonRepeatRange == movedToEnd)
+    }
+
+    @Test
+    func clearingRepeatStopsLoopingWithoutStoppingPlaybackAndClearsOffSelection() async throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 3)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let controller = AudioPreviewController()
+        configureComparisonFixture(fixture, controller: controller)
+        defer { controller.stopPlayback() }
+
+        controller.setComparisonRepeatEnabled(true)
+        controller.setComparisonRepeatRange(0.5..<1.5)
+        controller.playComparisonSide(.a)
+        #expect(controller.isPlayingComparisonRepeat)
+        try await Task.sleep(for: .milliseconds(125))
+        let beforeClear = controller.cardState(for: .input).playbackPosition
+        controller.clearComparisonRepeatRange()
+        #expect(controller.isComparisonPlaybackRunning)
+        #expect(!controller.isPlayingComparisonRepeat)
+        #expect(!controller.isComparisonRepeatEnabled)
+        #expect(controller.comparisonRepeatRange == nil)
+        #expect(abs(controller.cardState(for: .input).playbackPosition - beforeClear) < 0.2)
+
+        controller.stopPlayback()
+        controller.setComparisonRepeatEnabled(true)
+        controller.setComparisonRepeatRange(0.5..<1.5)
+        controller.setComparisonRepeatEnabled(false)
+        #expect(controller.comparisonRepeatRange != nil)
+        controller.clearComparisonRepeatRange()
+        #expect(controller.comparisonRepeatRange == nil)
+        #expect(!controller.isComparisonPlaybackRunning)
+    }
+
+    @Test
+    func mixedRateRepeatRendersEqualPeriodsAfterResumingPartWayThrough() throws {
+        let fixture = try makeComparisonPreviewFixture(duration: 0.6, correctedDuration: 0.4)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let files = try [fixture.inputURL, fixture.correctedURL].map { try AVAudioFile(forReading: $0) }
+        let range = try #require(AudioPreviewController.alignedRepeatRange(0.219..<0.9, audioFiles: files))
+        #expect(range.upperBound == 0.4)
+        let resumeTime = 0.3
+
+        for file in files {
+            let rate = file.processingFormat.sampleRate
+            let engine = AVAudioEngine()
+            let node = AVAudioPlayerNode()
+            engine.attach(node)
+            engine.connect(node, to: engine.mainMixerNode, format: file.processingFormat)
+            try engine.enableManualRenderingMode(.offline, format: file.processingFormat, maximumFrameCount: 1024)
+            try engine.start()
+            defer { engine.stop() }
+            try AudioPreviewController.scheduleRepeat(on: node, file: file, range: range, startTime: resumeTime)
+            node.play()
+
+            let period = Int(((range.upperBound - range.lowerBound) * rate).rounded())
+            let remaining = Int(((range.upperBound - resumeTime) * rate).rounded())
+            let count = remaining + period * 3
+            let output = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 1024))
+            var samples: [Float] = []
+            while samples.count < count {
+                let frames = AVAudioFrameCount(min(1024, count - samples.count))
+                try #require(engine.renderOffline(frames, to: output) == .success)
+                let channel = try #require(output.floatChannelData?[0])
+                samples.append(contentsOf: UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
+            }
+            let firstLoop = samples[remaining..<remaining + period]
+            let thirdLoop = samples[(remaining + period * 2)..<count]
+            #expect(firstLoop.elementsEqual(thirdLoop))
+            #expect(firstLoop.contains { abs($0) > 0.09 })
+
+            let expected = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(period)))
+            file.framePosition = AVAudioFramePosition((range.lowerBound * rate).rounded())
+            try file.read(into: expected)
+            let expectedSamples = try #require(expected.floatChannelData?[0])
+            #expect(firstLoop.elementsEqual(UnsafeBufferPointer(start: expectedSamples, count: period)))
+        }
+    }
+
     private struct PreviewFixture {
         let directory: URL
         let url: URL

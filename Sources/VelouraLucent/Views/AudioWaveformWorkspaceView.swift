@@ -39,6 +39,7 @@ struct AudioWaveformWorkspaceView: View {
     let waveformLabelColumnWidth: CGFloat
     let topAccessory: AnyView?
     let resetToken: String
+    let showsComparisonRepeat: Bool
     @State private var hoveredWaveformProgress: Double?
     @State private var hoveredWaveformTarget: AudioPreviewTarget?
     @State private var waveformViewport = WaveformViewport()
@@ -48,6 +49,7 @@ struct AudioWaveformWorkspaceView: View {
     @State private var correctedWaveformHeight = WaveformTrackResizeHandle.defaultHeight
     @State private var masteredWaveformHeight = WaveformTrackResizeHandle.defaultHeight
     @State private var maximumWaveformZoomScale = 1.0
+    @GestureState private var comparisonRepeatDrag: Range<TimeInterval>?
     @FocusState private var isWaveformKeyboardFocused: Bool
     @Environment(\.locale) private var locale
 
@@ -65,7 +67,8 @@ struct AudioWaveformWorkspaceView: View {
         comparisonPairLabel: @escaping (AudioComparisonPair) -> String = \.title,
         comparisonPairSummary: @escaping (AudioComparisonPair) -> String = \.summary,
         comparisonPairPickerMaxWidth: CGFloat = 360,
-        playbackInterlocks: [AudioPreviewController] = []
+        playbackInterlocks: [AudioPreviewController] = [],
+        showsComparisonRepeat: Bool = false
     ) {
         self.preview = preview
         self.inputFileURL = inputFileURL
@@ -111,6 +114,7 @@ struct AudioWaveformWorkspaceView: View {
         self.waveformLabelColumnWidth = 150
         self.topAccessory = nil
         self.resetToken = inputFileURL?.path ?? ""
+        self.showsComparisonRepeat = showsComparisonRepeat
     }
 
     init(
@@ -129,7 +133,8 @@ struct AudioWaveformWorkspaceView: View {
         waveformLabelColumnWidth: CGFloat = 170,
         resetToken: String,
         topAccessory: AnyView? = nil,
-        playbackInterlocks: [AudioPreviewController] = []
+        playbackInterlocks: [AudioPreviewController] = [],
+        showsComparisonRepeat: Bool = false
     ) {
         self.preview = preview
         self.inputFileURL = tracks.first(where: { $0.target == .input })?.fileURL
@@ -153,6 +158,7 @@ struct AudioWaveformWorkspaceView: View {
         self.waveformLabelColumnWidth = waveformLabelColumnWidth
         self.topAccessory = topAccessory
         self.resetToken = resetToken
+        self.showsComparisonRepeat = showsComparisonRepeat
     }
 
     var body: some View {
@@ -220,6 +226,7 @@ struct AudioWaveformWorkspaceView: View {
         .onChange(of: playingWaveformProgress) {
             guard
                 !isWaveformPanning,
+                !preview.isPlayingComparisonRepeat,
                 let playingWaveformProgress
             else {
                 return
@@ -308,20 +315,90 @@ struct AudioWaveformWorkspaceView: View {
     private var playbackControls: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 14) {
-                transportControls
+                transportControlsWithRepeatStatus
                 Divider().frame(height: 24)
                 volumeControl
                 loudnessComparisonToggle
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                transportControls
+                transportControlsWithRepeatStatus
                 HStack(spacing: 14) {
                     volumeControl
                     loudnessComparisonToggle
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var transportControlsWithRepeatStatus: some View {
+        if showsComparisonRepeat {
+            HStack(spacing: 10) {
+                transportControls
+                comparisonRepeatStatus
+            }
+        } else {
+            transportControls
+        }
+    }
+
+    private var comparisonRepeatStatus: some View {
+        let maximumTime = comparisonRepeatTimeText(preview.comparisonRepeatMaximumTime)
+        let showsRangeHint = showsComparisonRepeatRangeHint
+        let statusFont = Font.system(size: 15)
+
+        return HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                AppLocalizedText("リピート範囲")
+                    .font(statusFont.weight(.semibold))
+
+                ZStack(alignment: .leading) {
+                    Text("\(maximumTime) – \(maximumTime)")
+                        .font(.callout.monospacedDigit())
+                        .hidden()
+                        .accessibilityHidden(true)
+                    AppLocalizedText("未指定")
+                        .hidden()
+                        .accessibilityHidden(true)
+                    AppLocalizedText("目盛りをドラッグ")
+                        .font(statusFont.weight(.semibold))
+                        .fixedSize()
+                        .opacity(showsRangeHint ? 1 : 0)
+                        .accessibilityHidden(!showsRangeHint)
+
+                    if let range = comparisonRepeatDrag ?? preview.comparisonRepeatRange {
+                        Text("\(comparisonRepeatTimeText(range.lowerBound)) – \(comparisonRepeatTimeText(range.upperBound))")
+                            .font(statusFont.monospacedDigit().width(.condensed))
+                            .minimumScaleFactor(0.75)
+                    } else if !showsRangeHint {
+                        AppLocalizedText("未指定")
+                    }
+                }
+                .lineLimit(1)
+            }
+            .font(statusFont)
+            .fixedSize(horizontal: false, vertical: true)
+            .foregroundStyle(Color.primary)
+            .accessibilityElement(children: .combine)
+
+            WaveformTransportButton(
+                title: "リピート範囲をクリア",
+                systemImage: "eraser",
+                layout: .icon,
+                iconFont: .system(size: 22, weight: .semibold),
+                isDisabled: preview.comparisonRepeatRange == nil
+            ) {
+                preview.clearComparisonRepeatRange()
+            }
+            .fixedSize()
+        }
+    }
+
+    private func comparisonRepeatTimeText(_ time: TimeInterval) -> String {
+        let milliseconds = Int((time * 1_000).rounded())
+        return waveformTimeText(Double(milliseconds / 1_000))
+            + String(format: ".%03d", milliseconds % 1_000)
     }
 
     private var transportControls: some View {
@@ -331,7 +408,7 @@ struct AudioWaveformWorkspaceView: View {
                     title: sideAButtonTitle,
                     isSelected: preview.activeComparisonSide == .a
                         && comparisonFileURL(for: .a) != nil,
-                    isDisabled: comparisonFileURL(for: .a) == nil,
+                    isDisabled: comparisonFileURL(for: .a) == nil || !preview.canStartComparisonRepeat,
                     showsSelectedAccessibilityTrait: true
                 ) {
                     prepareForPlayback()
@@ -343,7 +420,7 @@ struct AudioWaveformWorkspaceView: View {
                     systemImage: playPauseSystemImage,
                     layout: .icon,
                     isSelected: preview.isComparisonPlaybackRunning,
-                    isDisabled: activeComparisonFileURL == nil
+                    isDisabled: activeComparisonFileURL == nil || !preview.canStartComparisonRepeat
                 ) {
                     prepareForPlayback()
                     preview.toggleComparisonPlayback()
@@ -362,7 +439,7 @@ struct AudioWaveformWorkspaceView: View {
                     title: sideBButtonTitle,
                     isSelected: preview.activeComparisonSide == .b
                         && comparisonFileURL(for: .b) != nil,
-                    isDisabled: comparisonFileURL(for: .b) == nil,
+                    isDisabled: comparisonFileURL(for: .b) == nil || !preview.canStartComparisonRepeat,
                     showsSelectedAccessibilityTrait: true
                 ) {
                     prepareForPlayback()
@@ -376,6 +453,18 @@ struct AudioWaveformWorkspaceView: View {
                 ) {
                     prepareForPlayback()
                     preview.toggleComparisonSide()
+                }
+
+                if showsComparisonRepeat {
+                    WaveformTransportButton(
+                        title: "区間リピート",
+                        isSelected: preview.isComparisonRepeatEnabled,
+                        isDisabled: !preview.isComparisonRepeatEnabled
+                            && (preview.comparisonRepeatMaximumTime <= 0 || preview.isComparisonPlaybackRunning),
+                        showsSelectedAccessibilityTrait: true
+                    ) {
+                        preview.setComparisonRepeatEnabled(!preview.isComparisonRepeatEnabled)
+                    }
                 }
 
                 activeComparisonLabel
@@ -560,11 +649,125 @@ struct AudioWaveformWorkspaceView: View {
         waveformColumns {
             Color.clear
         } waveform: {
-            WaveformTimeRulerView(duration: waveformDuration, viewport: waveformViewport)
+            if showsComparisonRepeat {
+                GeometryReader { geometry in
+                    let width = geometry.size.width
+                    WaveformTimeRulerView(duration: waveformDuration, viewport: waveformViewport)
+                        .background(alignment: .leading) {
+                            if let band = comparisonRepeatBand(for: comparisonRepeatDrag ?? preview.comparisonRepeatRange, width: width) {
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(Color.accentColor.opacity(preview.isComparisonRepeatEnabled ? 0.28 : 0.12))
+                                        .frame(width: band.visibleWidth)
+                                        .offset(x: band.visibleStart)
+
+                                    if canDragComparisonRepeat {
+                                        if let startGrip = band.startGrip {
+                                            comparisonRepeatGrip(at: startGrip, width: width)
+                                        }
+                                        if let endGrip = band.endGrip {
+                                            comparisonRepeatGrip(at: endGrip, width: width)
+                                        }
+                                    }
+                                }
+                                .allowsHitTesting(false)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 4)
+                                .updating($comparisonRepeatDrag) { drag, range, _ in
+                                    range = comparisonRepeatRange(for: drag, width: width)
+                                }
+                                .onEnded { drag in
+                                    if let range = comparisonRepeatRange(for: drag, width: width) {
+                                        preview.setComparisonRepeatRange(range)
+                                    }
+                                },
+                            including: canDragComparisonRepeat ? .gesture : .none
+                        )
+                }
+            } else {
+                WaveformTimeRulerView(duration: waveformDuration, viewport: waveformViewport)
+            }
         } trailing: {
             Color.clear
         }
         .frame(height: 28)
+    }
+
+    private var canDragComparisonRepeat: Bool {
+        preview.isComparisonRepeatEnabled && !preview.isComparisonPlaybackRunning
+    }
+
+    private var showsComparisonRepeatRangeHint: Bool {
+        canDragComparisonRepeat && (comparisonRepeatDrag ?? preview.comparisonRepeatRange) == nil
+    }
+
+    private func comparisonRepeatBand(for range: Range<TimeInterval>?, width: CGFloat) -> ComparisonRepeatBand? {
+        guard let range, waveformDuration > 0, width > 0 else { return nil }
+        let start = waveformViewport.startProgress * waveformDuration
+        let secondsPerPoint = waveformViewport.visibleProgressSpan * waveformDuration / width
+        return ComparisonRepeatBand(
+            start: (range.lowerBound - start) / secondsPerPoint,
+            end: (range.upperBound - start) / secondsPerPoint,
+            width: width
+        )
+    }
+
+    private func comparisonRepeatGrip(at x: CGFloat, width: CGFloat) -> some View {
+        Capsule()
+            .fill(Color.accentColor)
+            .frame(width: 3)
+            .offset(x: min(max(x - 1.5, 0), max(width - 3, 0)))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private func comparisonRepeatRange(for drag: DragGesture.Value, width: CGFloat) -> Range<TimeInterval>? {
+        guard width > 0, abs(drag.translation.width) >= 4 else { return nil }
+        if let band = comparisonRepeatBand(for: preview.comparisonRepeatRange, width: width),
+           let adjustment = band.adjustment(at: drag.startLocation.x) {
+            let offset = drag.translation.width / width * waveformViewport.visibleProgressSpan * waveformDuration
+            return preview.adjustedComparisonRepeatRange(adjustment, by: offset)
+        }
+        let limit = preview.comparisonRepeatMaximumTime
+        let start = min(waveformViewport.globalProgress(forLocalProgress: drag.startLocation.x / width)
+                        * waveformDuration, limit)
+        let end = min(waveformViewport.globalProgress(forLocalProgress: drag.location.x / width)
+                      * waveformDuration, limit)
+        return start == end ? nil : min(start, end) ..< max(start, end)
+    }
+
+    private struct ComparisonRepeatBand {
+        let start: CGFloat
+        let end: CGFloat
+        let width: CGFloat
+
+        var visibleStart: CGFloat { min(max(start, 0), width) }
+        var visibleWidth: CGFloat { min(max(end, 0), width) - visibleStart }
+
+        var startGrip: CGFloat? { (0...width).contains(start) ? gripSpan.lowerBound : nil }
+        var endGrip: CGFloat? { (0...width).contains(end) ? gripSpan.upperBound : nil }
+
+        // Give short ranges a central drag target between their two grips.
+        // The colored band remains at the actual start and end times.
+        private var gripSpan: ClosedRange<CGFloat> {
+            let minimumWidth = min(8, width)
+            guard (0...width).contains(start), (0...width).contains(end), end - start < minimumWidth else {
+                return start...end
+            }
+            let left = min(max((start + end - minimumWidth) / 2, 0), width - minimumWidth)
+            return left...(left + minimumWidth)
+        }
+
+        func adjustment(at x: CGFloat) -> AudioPreviewController.ComparisonRepeatAdjustment? {
+            let span = gripSpan
+            let inset = min(4, (span.upperBound - span.lowerBound) / 4)
+            if let startGrip, (startGrip - 5...startGrip + inset).contains(x) { return .start }
+            if let endGrip, (endGrip - inset...endGrip + 5).contains(x) { return .end }
+            return span.contains(x) ? .move : nil
+        }
     }
 
     private var waveformZoomControls: some View {
@@ -680,7 +883,7 @@ struct AudioWaveformWorkspaceView: View {
         self.waveformPanStartProgress = nil
         isWaveformPanning = false
 
-        if let playingWaveformProgress {
+        if !preview.isPlayingComparisonRepeat, let playingWaveformProgress {
             waveformViewport.followPlayback(playingWaveformProgress)
         }
     }
@@ -777,6 +980,7 @@ private struct WaveformTransportButton: View {
     let title: String
     var systemImage: String?
     var layout: Layout = .text
+    var iconFont: Font = .headline
     var isSelected = false
     var isDisabled = false
     var showsSelectedAccessibilityTrait = false
@@ -836,7 +1040,7 @@ private struct WaveformTransportButton: View {
         case .text:
             .callout.weight(isSelected ? .semibold : .regular)
         case .icon:
-            .headline
+            iconFont
         }
     }
 

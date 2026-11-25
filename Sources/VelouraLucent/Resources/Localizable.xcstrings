@@ -19217,6 +19217,42 @@
         }
       }
     },
+    "区間リピート": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Loop Range" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "区間リピート" } }
+      }
+    },
+    "リピート範囲": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Repeat range" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "リピート範囲" } }
+      }
+    },
+    "リピート範囲をクリア": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Clear repeat range" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "リピート範囲をクリア" } }
+      }
+    },
+    "クリア": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Clear" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "クリア" } }
+      }
+    },
+    "未指定": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Not set" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "未指定" } }
+      }
+    },
+    "目盛りをドラッグ": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Drag ruler" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "目盛りをドラッグ" } }
+      }
+    },
     "区間（複数）": {
       "localizations": {
         "en": {

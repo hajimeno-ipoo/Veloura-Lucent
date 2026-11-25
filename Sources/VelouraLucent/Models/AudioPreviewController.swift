@@ -56,12 +56,19 @@ final class AudioPreviewCardState {
 @MainActor
 @Observable
 final class AudioPreviewController {
+    enum ComparisonRepeatAdjustment {
+        case start, end, move
+    }
+
     var activeTarget: AudioPreviewTarget?
     var playbackLabel = "未再生"
     var playbackVolume: Float = 1.0
     var comparisonPair: AudioComparisonPair = .inputVsCorrected
     var activeComparisonSide: AudioComparisonSide = .a
     var isLoudnessMatchedComparisonEnabled = false
+    private(set) var isComparisonRepeatEnabled = false
+    private var comparisonRepeatSelection: (range: Range<TimeInterval>, alignment: ComparisonRepeatAlignment)?
+    var comparisonRepeatRange: Range<TimeInterval>? { comparisonRepeatSelection?.range }
     let inputCardState = AudioPreviewCardState(target: .input)
     let correctedCardState = AudioPreviewCardState(target: .corrected)
     let masteredCardState = AudioPreviewCardState(target: .mastered)
@@ -90,6 +97,7 @@ final class AudioPreviewController {
     private var completedComparisonTargets: Set<AudioPreviewTarget> = []
     private var activePlaybackStartTime: TimeInterval = 0
     private var activePlaybackDuration: TimeInterval = 0
+    private var activeRepeatRange: Range<TimeInterval>?
     private var activePlaybackID = UUID()
     private var activeAnalysisID = UUID()
     private var activeAnalysisTarget: AudioPreviewTarget?
@@ -105,8 +113,9 @@ final class AudioPreviewController {
     private let meterInterval: TimeInterval = 0.05
     private let smoothingFactor = 0.25
 
-    func startPlayback(for url: URL?, target: AudioPreviewTarget) {
+    func startPlayback(for url: URL?, target: AudioPreviewTarget, resumingAt repeatExitTime: TimeInterval? = nil) {
         guard let url else { return }
+        guard canStartComparisonRepeat || !isInComparisonPair(target) else { return }
 
         if activeTarget == target, let playerNode, playerNode.isPlaying {
             return
@@ -129,15 +138,20 @@ final class AudioPreviewController {
             let audioFile = try AVAudioFile(forReading: url)
             let duration = Double(audioFile.length) / audioFile.processingFormat.sampleRate
             let targetState = cardState(for: target)
-            let resumeTime = min(targetState.playbackPosition, max(duration - 0.05, 0))
+            let repeatRange = isComparisonRepeatEnabled && isInComparisonPair(target) ? comparisonRepeatRange : nil
+            let resumeTime = repeatExitTime ?? (repeatRange == nil
+                ? min(targetState.playbackPosition, max(duration - 0.05, 0))
+                : targetState.playbackPosition)
             let playbackStartTime: TimeInterval
             if let comparisonFiles = loadComparisonAudioFiles(activeAudioFile: audioFile, activeTarget: target) {
                 playbackStartTime = try prepareComparisonEnginePlayback(
                     audioFiles: comparisonFiles,
                     target: target,
-                    startTime: resumeTime
+                    startTime: resumeTime,
+                    repeatRange: repeatRange
                 )
             } else {
+                guard repeatRange == nil else { throw CocoaError(.fileReadNoSuchFile) }
                 playbackStartTime = try prepareEnginePlayback(
                     audioFile: audioFile,
                     target: target,
@@ -176,7 +190,7 @@ final class AudioPreviewController {
 
     var canToggleComparisonPlayback: Bool {
         let target = comparisonTarget(for: activeComparisonSide)
-        return cardState(for: target).sourceURL != nil
+        return cardState(for: target).sourceURL != nil && canStartComparisonRepeat
     }
 
     var canToggleComparisonSide: Bool {
@@ -222,6 +236,7 @@ final class AudioPreviewController {
             transitionAwayFromCurrentTarget(keepingPosition: true)
         }
 
+        clearComparisonRepeat()
         comparisonPair = pair
         if
             let previousActiveTarget,
@@ -261,6 +276,89 @@ final class AudioPreviewController {
         }
     }
 
+    var comparisonRepeatMaximumTime: TimeInterval {
+        let durations = comparisonPair.targets.compactMap { target -> TimeInterval? in
+            let state = cardState(for: target)
+            guard state.sourceURL != nil else { return nil }
+            return state.snapshot?.duration
+        }
+        guard durations.count == comparisonPair.targets.count else { return 0 }
+        return durations.min() ?? 0
+    }
+
+    var canStartComparisonRepeat: Bool {
+        !isComparisonRepeatEnabled || comparisonRepeatRange != nil
+    }
+
+    var isPlayingComparisonRepeat: Bool {
+        activeRepeatRange != nil && isComparisonPlaybackRunning
+    }
+
+    func setComparisonRepeatEnabled(_ enabled: Bool) {
+        guard enabled != isComparisonRepeatEnabled else { return }
+        if enabled {
+            guard comparisonRepeatMaximumTime > 0, !isComparisonPlaybackRunning else { return }
+            isComparisonRepeatEnabled = true
+            return
+        }
+
+        isComparisonRepeatEnabled = false
+        guard activeRepeatRange != nil, let target = activeTarget else { return }
+        let wasPlaying = isComparisonPlaybackRunning
+        let state = cardState(for: target)
+        transitionAwayFromCurrentTarget(keepingPosition: true)
+        let position = state.playbackPosition
+        synchronizePlaybackPositions(to: position, updatesLiveBandLevels: false)
+        if wasPlaying {
+            startPlayback(for: state.sourceURL, target: target, resumingAt: position)
+        } else {
+            activeTarget = target
+        }
+    }
+
+    func setComparisonRepeatRange(_ proposedRange: Range<TimeInterval>) {
+        guard isComparisonRepeatEnabled, !isComparisonPlaybackRunning, comparisonRepeatMaximumTime > 0,
+              let target = comparisonPair.targets.first,
+              let url = cardState(for: target).sourceURL,
+              let file = try? AVAudioFile(forReading: url),
+              let files = loadComparisonAudioFiles(activeAudioFile: file, activeTarget: target),
+              let alignment = Self.comparisonRepeatAlignment(audioFiles: files.values),
+              let range = alignment.aligned(proposedRange)
+        else { return }
+        comparisonRepeatSelection = (range, alignment)
+    }
+
+    func adjustedComparisonRepeatRange(
+        _ adjustment: ComparisonRepeatAdjustment,
+        by offset: TimeInterval
+    ) -> Range<TimeInterval>? {
+        guard let selection = comparisonRepeatSelection, offset.isFinite else { return nil }
+        return selection.alignment.adjusting(selection.range, adjustment: adjustment, by: offset)
+    }
+
+    func clearComparisonRepeatRange() {
+        setComparisonRepeatEnabled(false)
+        clearComparisonRepeat()
+    }
+
+    private func clearComparisonRepeat() {
+        isComparisonRepeatEnabled = false
+        comparisonRepeatSelection = nil
+    }
+
+    private func resetComparisonRepeatIfSourceChanges(for target: AudioPreviewTarget, to url: URL?) {
+        guard isInComparisonPair(target), cardState(for: target).sourceURL != url,
+              isComparisonRepeatEnabled || comparisonRepeatRange != nil else { return }
+        if activeRepeatRange != nil, let activeTarget {
+            let wasPlaying = isComparisonPlaybackRunning
+            transitionAwayFromCurrentTarget(keepingPosition: true)
+            if !wasPlaying {
+                self.activeTarget = activeTarget
+            }
+        }
+        clearComparisonRepeat()
+    }
+
     func setLoudnessMatchedComparisonEnabled(_ isEnabled: Bool) {
         isLoudnessMatchedComparisonEnabled = isEnabled
         refreshPlaybackVolumeIfNeeded()
@@ -277,6 +375,9 @@ final class AudioPreviewController {
         }
 
         let requestedTime = sourceSnapshot.duration * min(max(progress, 0), 1)
+        if isPlayingComparisonRepeat, let activeRepeatRange, !activeRepeatRange.contains(requestedTime) {
+            return
+        }
 
         synchronizePlaybackPositions(to: requestedTime, updatesLiveBandLevels: true)
         if activeTarget != nil {
@@ -368,6 +469,7 @@ final class AudioPreviewController {
 
     func preparePreview(for url: URL?, target: AudioPreviewTarget, measureLoudness: Bool = true) {
         previewTasks[target]?.cancel()
+        resetComparisonRepeatIfSourceChanges(for: target, to: url)
 
         guard let url else {
             clearPreviewState(for: target)
@@ -413,6 +515,7 @@ final class AudioPreviewController {
 
     func preparePreviewPlaceholder(for url: URL?, target: AudioPreviewTarget) {
         previewTasks[target]?.cancel()
+        resetComparisonRepeatIfSourceChanges(for: target, to: url)
         guard let url else {
             clearPreviewState(for: target)
             return
@@ -479,6 +582,7 @@ final class AudioPreviewController {
     }
 
     func setPreviewSnapshot(_ snapshot: AudioPreviewSnapshot, for target: AudioPreviewTarget, sourceURL: URL, integratedLoudnessLUFS: Double? = nil) {
+        resetComparisonRepeatIfSourceChanges(for: target, to: sourceURL)
         let targetState = cardState(for: target)
         targetState.sourceURL = sourceURL
         targetState.snapshot = snapshot
@@ -840,7 +944,8 @@ final class AudioPreviewController {
         let currentTime = currentPlaybackPosition()
         synchronizePlaybackPositions(to: currentTime, updatesLiveBandLevels: false)
         let endTolerance = 1 / max(nextAudioFile.processingFormat.sampleRate, 1)
-        if completedComparisonTargets.contains(target) || currentTime >= nextDuration - endTolerance {
+        if completedComparisonTargets.contains(target)
+            || (activeRepeatRange == nil && currentTime >= nextDuration - endTolerance) {
             return .targetEnded
         }
         guard
@@ -919,7 +1024,8 @@ final class AudioPreviewController {
     private func prepareComparisonEnginePlayback(
         audioFiles: [AudioPreviewTarget: AVAudioFile],
         target: AudioPreviewTarget,
-        startTime: TimeInterval
+        startTime: TimeInterval,
+        repeatRange: Range<TimeInterval>?
     ) throws -> TimeInterval {
         let engine = AVAudioEngine()
         let playbackID = UUID()
@@ -927,7 +1033,14 @@ final class AudioPreviewController {
             (target, Double(audioFile.length) / audioFile.processingFormat.sampleRate)
         })
         let activeDuration = durations[target] ?? 0
-        let safeStartTime = min(max(startTime, 0), max(activeDuration - 0.05, 0))
+        let safeStartTime: TimeInterval
+        if let repeatRange {
+            let scale = Self.sharedRepeatTimeScale(audioFiles.values)
+            let alignedStart = (startTime * scale).rounded() / scale
+            safeStartTime = repeatRange.contains(alignedStart) ? alignedStart : repeatRange.lowerBound
+        } else {
+            safeStartTime = min(max(startTime, 0), activeDuration)
+        }
         var playerNodes: [AudioPreviewTarget: AVAudioPlayerNode] = [:]
         var analysisMixers: [AudioPreviewTarget: AVAudioMixerNode] = [:]
         var initiallyCompletedTargets: Set<AudioPreviewTarget> = []
@@ -958,17 +1071,15 @@ final class AudioPreviewController {
         guard let activeAnalysisMixer = analysisMixers[target] else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        installRealtimeAnalysisTap(
-            on: activeAnalysisMixer,
-            target: target,
-            sourceFormat: audioFiles[target]?.processingFormat
-        )
-
         for comparisonTarget in comparisonPair.targets {
             guard
                 let audioFile = audioFiles[comparisonTarget],
                 let node = playerNodes[comparisonTarget]
             else {
+                continue
+            }
+            if let repeatRange {
+                try Self.scheduleRepeat(on: node, file: audioFile, range: repeatRange, startTime: safeStartTime)
                 continue
             }
             let sampleRate = audioFile.processingFormat.sampleRate
@@ -992,6 +1103,11 @@ final class AudioPreviewController {
             }
         }
 
+        installRealtimeAnalysisTap(
+            on: activeAnalysisMixer,
+            target: target,
+            sourceFormat: audioFiles[target]?.processingFormat
+        )
         try engine.start()
 
         self.engine = engine
@@ -1006,9 +1122,102 @@ final class AudioPreviewController {
         activeAudioFile = audioFiles[target]
         activePlaybackStartTime = safeStartTime
         activePlaybackDuration = durations[target] ?? 0
+        activeRepeatRange = repeatRange
         activePlaybackID = playbackID
         refreshPlaybackVolumeIfNeeded()
         return safeStartTime
+    }
+
+    private static func sharedRepeatTimeScale(_ files: some Collection<AVAudioFile>) -> Double {
+        // A common boundary must be an integer frame in both source formats.
+        // Preserve fractional sample rates when the file header supplies them.
+        let precision = 1_000.0
+        let divisor = files.reduce(0) { divisor, file in
+            var a = divisor
+            var b = Int((file.processingFormat.sampleRate * precision).rounded())
+            while b > 0 {
+                (a, b) = (b, a % b)
+            }
+            return a
+        }
+        return Double(divisor) / precision
+    }
+
+    static func alignedRepeatRange(
+        _ proposed: Range<TimeInterval>,
+        audioFiles: some Collection<AVAudioFile>
+    ) -> Range<TimeInterval>? {
+        comparisonRepeatAlignment(audioFiles: audioFiles)?.aligned(proposed)
+    }
+
+    private static func comparisonRepeatAlignment(
+        audioFiles: some Collection<AVAudioFile>
+    ) -> ComparisonRepeatAlignment? {
+        let scale = sharedRepeatTimeScale(audioFiles)
+        guard scale > 0,
+              let shortest = audioFiles.map({ Double($0.length) / $0.processingFormat.sampleRate }).min()
+        else { return nil }
+        let maximum = (shortest * scale + 1e-9).rounded(.down)
+        return ComparisonRepeatAlignment(scale: scale, maximum: maximum)
+    }
+
+    private struct ComparisonRepeatAlignment {
+        let scale: Double
+        let maximum: Double
+
+        func aligned(_ range: Range<TimeInterval>) -> Range<TimeInterval>? {
+            guard range.lowerBound.isFinite, range.upperBound.isFinite else { return nil }
+            let start = min(max((range.lowerBound * scale).rounded(), 0), maximum)
+            let end = min(max((range.upperBound * scale).rounded(), 0), maximum)
+            guard start < end else { return nil }
+            return start / scale ..< end / scale
+        }
+
+        func adjusting(
+            _ range: Range<TimeInterval>,
+            adjustment: ComparisonRepeatAdjustment,
+            by offset: TimeInterval
+        ) -> Range<TimeInterval> {
+            let start = (range.lowerBound * scale).rounded()
+            let end = (range.upperBound * scale).rounded()
+            let offset = (offset * scale).rounded()
+
+            switch adjustment {
+            case .start:
+                let newStart = min(max(start + offset, 0), end - 1)
+                return newStart / scale ..< range.upperBound
+            case .end:
+                let newEnd = min(max(end + offset, start + 1), maximum)
+                return range.lowerBound ..< newEnd / scale
+            case .move:
+                let shift = min(max(offset, -start), maximum - end)
+                return (start + shift) / scale ..< (end + shift) / scale
+            }
+        }
+    }
+
+    static func scheduleRepeat(
+        on node: AVAudioPlayerNode,
+        file: AVAudioFile,
+        range: Range<TimeInterval>,
+        startTime: TimeInterval
+    ) throws {
+        let rate = file.processingFormat.sampleRate
+        let first = AVAudioFramePosition((range.lowerBound * rate).rounded())
+        let end = AVAudioFramePosition((range.upperBound * rate).rounded())
+        let resume = AVAudioFramePosition((startTime * rate).rounded())
+        guard first >= 0, end > first, end <= file.length, (first..<end).contains(resume),
+              let count = AVAudioFrameCount(exactly: end - first), count > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: count)
+        else { throw CocoaError(.fileReadCorruptFile) }
+        file.framePosition = first
+        try file.read(into: buffer, frameCount: count)
+        guard buffer.frameLength == count else { throw CocoaError(.fileReadCorruptFile) }
+        if resume > first {
+            node.scheduleSegment(file, startingFrame: resume, frameCount: AVAudioFrameCount(end - resume),
+                                 at: nil, completionHandler: nil)
+        }
+        node.scheduleBuffer(buffer, at: nil, options: .loops, completionHandler: nil)
     }
 
     private func prepareEnginePlayback(
@@ -1190,6 +1399,11 @@ final class AudioPreviewController {
             return activeTarget.map { cardState(for: $0).playbackPosition } ?? 0
         }
         let elapsed = Double(playerTime.sampleTime) / playerTime.sampleRate
+        if let activeRepeatRange {
+            let length = activeRepeatRange.upperBound - activeRepeatRange.lowerBound
+            let offset = max(0, elapsed) + activePlaybackStartTime - activeRepeatRange.lowerBound
+            return activeRepeatRange.lowerBound + offset.truncatingRemainder(dividingBy: length)
+        }
         return min(max(activePlaybackStartTime + elapsed, 0), activePlaybackDuration)
     }
 
@@ -1218,6 +1432,7 @@ final class AudioPreviewController {
         completedComparisonTargets.removeAll()
         activePlaybackStartTime = 0
         activePlaybackDuration = 0
+        activeRepeatRange = nil
     }
 
     private func clearVectorScopeSnapshots(except preservedTarget: AudioPreviewTarget? = nil) {

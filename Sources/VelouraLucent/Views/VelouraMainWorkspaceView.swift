@@ -116,7 +116,8 @@ private struct VelouraBasicWorkspaceView: View {
             preview: preview,
             inputFileURL: inputFileURL,
             correctedFileURL: correctedFileURL,
-            masteredFileURL: masteredFileURL
+            masteredFileURL: masteredFileURL,
+            showsComparisonRepeat: true
         )
 
         WorkspaceLazySection {
