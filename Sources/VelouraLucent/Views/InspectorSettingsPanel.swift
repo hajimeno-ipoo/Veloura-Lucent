@@ -32,6 +32,7 @@ struct InspectorSettingsSectionLayout<Selection: Hashable, Content: View>: View 
                     options: options,
                     selection: $selection,
                     label: label,
+                    maxWidth: .infinity,
                     isDisabled: isDisabled
                 )
             }
