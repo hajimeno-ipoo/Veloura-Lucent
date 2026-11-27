@@ -7,6 +7,11 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
     case safeAIStreaming
     case youtubeSpotify
     case releaseLoud
+    case brightAndClear
+    case softHighs
+    case strongBass
+    case widerStereo
+    case preserveDynamics
 
     var id: String { rawValue }
 
@@ -24,6 +29,16 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
             return "YouTube / Spotify向け"
         case .releaseLoud:
             return "リリース音圧重視"
+        case .brightAndClear:
+            return "明るく澄んだ音"
+        case .softHighs:
+            return "高音をやわらかく"
+        case .strongBass:
+            return "低音をしっかり"
+        case .widerStereo:
+            return "音を左右に広げる"
+        case .preserveDynamics:
+            return "曲の強弱を残す"
         }
     }
 
@@ -45,6 +60,16 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
             return "YouTubeやSpotifyで公開する時"
         case .releaseLoud:
             return "音圧を強くして前に出したい時"
+        case .brightAndClear:
+            return "歌や楽器の輪郭をはっきりさせたい時"
+        case .softHighs:
+            return "高い音のきらつきを控えめにしたい時"
+        case .strongBass:
+            return "キックやベースの低い響きを足したい時"
+        case .widerStereo:
+            return "伴奏や残響の左右の広がりを強めたい時"
+        case .preserveDynamics:
+            return "静かなところと盛り上がるところの差を残したい時"
         }
     }
 
@@ -62,6 +87,16 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
             return "YouTubeやSpotify向けに音量を明確に狙います"
         case .releaseLoud:
             return "音圧を重視して、強く前に出る仕上げにします"
+        case .brightAndClear:
+            return "歌や楽器の輪郭がはっきりするように整えます"
+        case .softHighs:
+            return "高い音のきらつきを控えめに整えます"
+        case .strongBass:
+            return "キックやベースの低い響きを強めます"
+        case .widerStereo:
+            return "音源にある左右の広がりを強めます"
+        case .preserveDynamics:
+            return "曲の強弱が残るよう控えめに整えます"
         }
     }
 
@@ -88,6 +123,16 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
             return "YouTubeやSpotify向けに、扱いやすい音量を狙います。"
         case .releaseLoud:
             return "音圧を重視します。強弱が少なくなる場合があります。"
+        case .brightAndClear:
+            return "音の輪郭を強め、明るい音を目指します。"
+        case .softHighs:
+            return "高い音のきらつきを抑え、やわらかい音を目指します。"
+        case .strongBass:
+            return "キックやベースに重みが出るように低音を整えます。"
+        case .widerStereo:
+            return "伴奏や残響が左右に広がって聞こえるように整えます。"
+        case .preserveDynamics:
+            return "静かなところと盛り上がるところの音量差を残して仕上げます。"
         }
     }
 
@@ -173,6 +218,106 @@ enum MasteringProfile: String, CaseIterable, Identifiable, Sendable {
                 targetLoudness: -12.0,
                 peakCeilingDB: -1.0,
                 finishingIntensity: 0.95
+            )
+        case .brightAndClear:
+            return MasteringSettings(
+                targetLoudness: -20.0,
+                peakCeilingDB: -1.5,
+                lowShelfGain: 0.35,
+                lowMidGain: -0.75,
+                presenceGain: 1.20,
+                highShelfGain: 2.50,
+                multibandCompression: MultibandCompressionSettings(
+                    low: BandCompressorSettings(thresholdDB: -20, ratio: 1.45, attackMs: 34, releaseMs: 200, makeupGainDB: 0),
+                    mid: BandCompressorSettings(thresholdDB: -20, ratio: 1.35, attackMs: 25, releaseMs: 165, makeupGainDB: 0),
+                    high: BandCompressorSettings(thresholdDB: -24, ratio: 1.45, attackMs: 12, releaseMs: 130, makeupGainDB: 0)
+                ),
+                deEsserAmount: 0.23,
+                deEsserThresholdDB: -24.5,
+                stereoWidth: 1.04,
+                saturationAmount: 0.04,
+                dynamicsRetention: 0.78,
+                finishingIntensity: 0.45
+            )
+        case .softHighs:
+            return MasteringSettings(
+                targetLoudness: -17.5,
+                peakCeilingDB: -1.5,
+                lowShelfGain: 1.00,
+                lowMidGain: 1.20,
+                presenceGain: 0.00,
+                highShelfGain: 0.00,
+                multibandCompression: MultibandCompressionSettings(
+                    low: BandCompressorSettings(thresholdDB: -22, ratio: 1.45, attackMs: 32, releaseMs: 205, makeupGainDB: 0.10),
+                    mid: BandCompressorSettings(thresholdDB: -21, ratio: 1.35, attackMs: 25, releaseMs: 175, makeupGainDB: 0.30),
+                    high: BandCompressorSettings(thresholdDB: -25, ratio: 1.70, attackMs: 8, releaseMs: 135, makeupGainDB: 0)
+                ),
+                deEsserAmount: 0.35,
+                deEsserThresholdDB: -26.0,
+                stereoWidth: 1.00,
+                saturationAmount: 0.06,
+                dynamicsRetention: 0.84,
+                finishingIntensity: 0.43
+            )
+        case .strongBass:
+            return MasteringSettings(
+                targetLoudness: -15.5,
+                peakCeilingDB: -1.5,
+                lowShelfGain: 2.50,
+                lowMidGain: -0.90,
+                presenceGain: 0.00,
+                highShelfGain: 0.00,
+                multibandCompression: MultibandCompressionSettings(
+                    low: BandCompressorSettings(thresholdDB: -18, ratio: 1.20, attackMs: 42, releaseMs: 210, makeupGainDB: 0.65),
+                    mid: BandCompressorSettings(thresholdDB: -20, ratio: 1.45, attackMs: 25, releaseMs: 175, makeupGainDB: 0),
+                    high: BandCompressorSettings(thresholdDB: -24, ratio: 1.55, attackMs: 12, releaseMs: 135, makeupGainDB: 0)
+                ),
+                deEsserAmount: 0.21,
+                deEsserThresholdDB: -24.0,
+                stereoWidth: 1.00,
+                saturationAmount: 0.04,
+                dynamicsRetention: 0.76,
+                finishingIntensity: 0.64
+            )
+        case .widerStereo:
+            return MasteringSettings(
+                targetLoudness: -18.0,
+                peakCeilingDB: -1.5,
+                lowShelfGain: 0.40,
+                lowMidGain: -0.20,
+                presenceGain: 0.30,
+                highShelfGain: 0.40,
+                multibandCompression: MultibandCompressionSettings(
+                    low: BandCompressorSettings(thresholdDB: -20, ratio: 1.35, attackMs: 35, releaseMs: 205, makeupGainDB: 0),
+                    mid: BandCompressorSettings(thresholdDB: -20, ratio: 1.35, attackMs: 25, releaseMs: 175, makeupGainDB: 0),
+                    high: BandCompressorSettings(thresholdDB: -23, ratio: 1.40, attackMs: 12, releaseMs: 125, makeupGainDB: 0)
+                ),
+                deEsserAmount: 0.20,
+                deEsserThresholdDB: -24.0,
+                stereoWidth: 1.30,
+                saturationAmount: 0.04,
+                dynamicsRetention: 0.78,
+                finishingIntensity: 0.45
+            )
+        case .preserveDynamics:
+            return MasteringSettings(
+                targetLoudness: -18.0,
+                peakCeilingDB: -1.5,
+                lowShelfGain: 0.25,
+                lowMidGain: 0.00,
+                presenceGain: 0.18,
+                highShelfGain: 0.20,
+                multibandCompression: MultibandCompressionSettings(
+                    low: BandCompressorSettings(thresholdDB: -18, ratio: 1.20, attackMs: 42, releaseMs: 200, makeupGainDB: 0),
+                    mid: BandCompressorSettings(thresholdDB: -17, ratio: 1.15, attackMs: 32, releaseMs: 175, makeupGainDB: 0),
+                    high: BandCompressorSettings(thresholdDB: -21, ratio: 1.25, attackMs: 18, releaseMs: 130, makeupGainDB: 0)
+                ),
+                deEsserAmount: 0.15,
+                deEsserThresholdDB: -23.0,
+                stereoWidth: 1.00,
+                saturationAmount: 0.03,
+                dynamicsRetention: 0.95,
+                finishingIntensity: 0.36
             )
         }
     }

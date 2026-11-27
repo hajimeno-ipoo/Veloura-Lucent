@@ -189,7 +189,7 @@ private struct StemModeMasteringBasicControls: View {
             unitText: "LUFS",
             labels: ["余裕", "標準", "大きい"],
             value: $settings.targetLoudness,
-            range: -18 ... -9,
+            range: DAWKnobMetrics.targetLoudnessRange,
             step: 0.1,
             dragValueScale: DAWKnobMetrics.targetLoudnessDragValueScale
         )

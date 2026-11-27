@@ -1,6 +1,326 @@
 {
   "sourceLanguage": "ja",
   "strings": {
+    "明るく澄んだ音": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bright and Clear"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "明るく澄んだ音"
+          }
+        }
+      }
+    },
+    "明るく澄んだ音 — 歌や楽器の輪郭をはっきりさせたい時": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bright and Clear — When you want clearer vocals and instruments"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "明るく澄んだ音 — 歌や楽器の輪郭をはっきりさせたい時"
+          }
+        }
+      }
+    },
+    "歌や楽器の輪郭がはっきりするように整えます": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brings out the definition of vocals and instruments"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "歌や楽器の輪郭がはっきりするように整えます"
+          }
+        }
+      }
+    },
+    "音の輪郭を強め、明るい音を目指します。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brings out definition for a brighter sound."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音の輪郭を強め、明るい音を目指します。"
+          }
+        }
+      }
+    },
+    "高音をやわらかく": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Softer Highs"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高音をやわらかく"
+          }
+        }
+      }
+    },
+    "高音をやわらかく — 高い音のきらつきを控えめにしたい時": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Softer Highs — When you want less sparkle in the highest sounds"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高音をやわらかく — 高い音のきらつきを控えめにしたい時"
+          }
+        }
+      }
+    },
+    "高い音のきらつきを控えめに整えます": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Softens the sparkle of the highest sounds"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高い音のきらつきを控えめに整えます"
+          }
+        }
+      }
+    },
+    "高い音のきらつきを抑え、やわらかい音を目指します。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tames top-end sparkle for a softer sound."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高い音のきらつきを抑え、やわらかい音を目指します。"
+          }
+        }
+      }
+    },
+    "低音をしっかり": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stronger Bass"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低音をしっかり"
+          }
+        }
+      }
+    },
+    "低音をしっかり — キックやベースの低い響きを足したい時": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stronger Bass — When you want more weight from the kick and bass"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低音をしっかり — キックやベースの低い響きを足したい時"
+          }
+        }
+      }
+    },
+    "キックやベースの低い響きを強めます": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strengthens the low end of the kick and bass"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キックやベースの低い響きを強めます"
+          }
+        }
+      }
+    },
+    "キックやベースに重みが出るように低音を整えます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adds low-end weight to the kick and bass."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キックやベースに重みが出るように低音を整えます。"
+          }
+        }
+      }
+    },
+    "音を左右に広げる": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wider Stereo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音を左右に広げる"
+          }
+        }
+      }
+    },
+    "音を左右に広げる — 伴奏や残響の左右の広がりを強めたい時": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wider Stereo — When you want more width in the backing and ambience"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音を左右に広げる — 伴奏や残響の左右の広がりを強めたい時"
+          }
+        }
+      }
+    },
+    "音源にある左右の広がりを強めます": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enhances the existing stereo spread"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音源にある左右の広がりを強めます"
+          }
+        }
+      }
+    },
+    "伴奏や残響が左右に広がって聞こえるように整えます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Widens the stereo spread of the backing and ambience."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伴奏や残響が左右に広がって聞こえるように整えます。"
+          }
+        }
+      }
+    },
+    "曲の強弱を残す": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preserve Dynamics"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "曲の強弱を残す"
+          }
+        }
+      }
+    },
+    "曲の強弱を残す — 静かなところと盛り上がるところの差を残したい時": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preserve Dynamics — When you want to keep the contrast between quiet and loud parts"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "曲の強弱を残す — 静かなところと盛り上がるところの差を残したい時"
+          }
+        }
+      }
+    },
+    "曲の強弱が残るよう控えめに整えます": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies gentle processing to preserve the track's dynamics"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "曲の強弱が残るよう控えめに整えます"
+          }
+        }
+      }
+    },
+    "静かなところと盛り上がるところの音量差を残して仕上げます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preserves the contrast in level between quiet and loud parts."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "静かなところと盛り上がるところの音量差を残して仕上げます。"
+          }
+        }
+      }
+    },
     "音量が書き出し形式の範囲を超えています": {
       "localizations": {
         "en": {

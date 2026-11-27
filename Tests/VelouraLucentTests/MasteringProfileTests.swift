@@ -1,6 +1,122 @@
 import Testing
 @testable import VelouraLucent
 
+enum MeasuredMasteringProfileExpectations {
+    // Expected settings verified with the rendered audio for these profiles.
+    static let all: [(profile: MasteringProfile, settings: MasteringSettings)] = [
+        (
+            .brightAndClear,
+            MasteringSettings(
+                targetLoudness: -20.0,
+                peakCeilingDB: -1.5,
+                lowShelfGain: 0.35,
+                lowMidGain: -0.75,
+                presenceGain: 1.20,
+                highShelfGain: 2.50,
+                multibandCompression: .init(
+                    low: .init(thresholdDB: -20, ratio: 1.45, attackMs: 34, releaseMs: 200, makeupGainDB: 0),
+                    mid: .init(thresholdDB: -20, ratio: 1.35, attackMs: 25, releaseMs: 165, makeupGainDB: 0),
+                    high: .init(thresholdDB: -24, ratio: 1.45, attackMs: 12, releaseMs: 130, makeupGainDB: 0)
+                ),
+                deEsserAmount: 0.23,
+                deEsserThresholdDB: -24.5,
+                stereoWidth: 1.04,
+                saturationAmount: 0.04,
+                dynamicsRetention: 0.78,
+                finishingIntensity: 0.45
+            )
+        ),
+        (
+            .softHighs,
+            MasteringSettings(
+                targetLoudness: -17.5,
+                peakCeilingDB: -1.5,
+                lowShelfGain: 1.00,
+                lowMidGain: 1.20,
+                presenceGain: 0.00,
+                highShelfGain: 0.00,
+                multibandCompression: .init(
+                    low: .init(thresholdDB: -22, ratio: 1.45, attackMs: 32, releaseMs: 205, makeupGainDB: 0.10),
+                    mid: .init(thresholdDB: -21, ratio: 1.35, attackMs: 25, releaseMs: 175, makeupGainDB: 0.30),
+                    high: .init(thresholdDB: -25, ratio: 1.70, attackMs: 8, releaseMs: 135, makeupGainDB: 0)
+                ),
+                deEsserAmount: 0.35,
+                deEsserThresholdDB: -26.0,
+                stereoWidth: 1.00,
+                saturationAmount: 0.06,
+                dynamicsRetention: 0.84,
+                finishingIntensity: 0.43
+            )
+        ),
+        (
+            .strongBass,
+            MasteringSettings(
+                targetLoudness: -15.5,
+                peakCeilingDB: -1.5,
+                lowShelfGain: 2.50,
+                lowMidGain: -0.90,
+                presenceGain: 0.00,
+                highShelfGain: 0.00,
+                multibandCompression: .init(
+                    low: .init(thresholdDB: -18, ratio: 1.20, attackMs: 42, releaseMs: 210, makeupGainDB: 0.65),
+                    mid: .init(thresholdDB: -20, ratio: 1.45, attackMs: 25, releaseMs: 175, makeupGainDB: 0),
+                    high: .init(thresholdDB: -24, ratio: 1.55, attackMs: 12, releaseMs: 135, makeupGainDB: 0)
+                ),
+                deEsserAmount: 0.21,
+                deEsserThresholdDB: -24.0,
+                stereoWidth: 1.00,
+                saturationAmount: 0.04,
+                dynamicsRetention: 0.76,
+                finishingIntensity: 0.64
+            )
+        ),
+        (
+            .widerStereo,
+            MasteringSettings(
+                targetLoudness: -18.0,
+                peakCeilingDB: -1.5,
+                lowShelfGain: 0.40,
+                lowMidGain: -0.20,
+                presenceGain: 0.30,
+                highShelfGain: 0.40,
+                multibandCompression: .init(
+                    low: .init(thresholdDB: -20, ratio: 1.35, attackMs: 35, releaseMs: 205, makeupGainDB: 0),
+                    mid: .init(thresholdDB: -20, ratio: 1.35, attackMs: 25, releaseMs: 175, makeupGainDB: 0),
+                    high: .init(thresholdDB: -23, ratio: 1.40, attackMs: 12, releaseMs: 125, makeupGainDB: 0)
+                ),
+                deEsserAmount: 0.20,
+                deEsserThresholdDB: -24.0,
+                stereoWidth: 1.30,
+                saturationAmount: 0.04,
+                dynamicsRetention: 0.78,
+                finishingIntensity: 0.45
+            )
+        ),
+        (
+            .preserveDynamics,
+            MasteringSettings(
+                targetLoudness: -18.0,
+                peakCeilingDB: -1.5,
+                lowShelfGain: 0.25,
+                lowMidGain: 0.00,
+                presenceGain: 0.18,
+                highShelfGain: 0.20,
+                multibandCompression: .init(
+                    low: .init(thresholdDB: -18, ratio: 1.20, attackMs: 42, releaseMs: 200, makeupGainDB: 0),
+                    mid: .init(thresholdDB: -17, ratio: 1.15, attackMs: 32, releaseMs: 175, makeupGainDB: 0),
+                    high: .init(thresholdDB: -21, ratio: 1.25, attackMs: 18, releaseMs: 130, makeupGainDB: 0)
+                ),
+                deEsserAmount: 0.15,
+                deEsserThresholdDB: -23.0,
+                stereoWidth: 1.00,
+                saturationAmount: 0.03,
+                dynamicsRetention: 0.95,
+                finishingIntensity: 0.36
+            )
+        )
+    ]
+}
+
 struct MasteringProfileTests {
     @Test
     func profilesExposeDifferentSettings() {
@@ -63,7 +179,19 @@ struct MasteringProfileTests {
             .forward,
             .safeAIStreaming,
             .youtubeSpotify,
-            .releaseLoud
+            .releaseLoud,
+            .brightAndClear,
+            .softHighs,
+            .strongBass,
+            .widerStereo,
+            .preserveDynamics
+        ])
+        #expect(MasteringProfile.allCases.suffix(5).map(\.title) == [
+            "明るく澄んだ音",
+            "高音をやわらかく",
+            "低音をしっかり",
+            "音を左右に広げる",
+            "曲の強弱を残す"
         ])
     }
 

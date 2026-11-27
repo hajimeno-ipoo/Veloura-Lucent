@@ -13,6 +13,7 @@ enum DAWKnobMetrics {
     static let stepAnimationDuration: Double = 0.12
     static let valueTextWidth: CGFloat = 108
     static let valueUnitSpacing: CGFloat = 4
+    static let targetLoudnessRange: ClosedRange<Float> = -20 ... -9
     static let targetLoudnessDragValueScale: Float = 9
     static let deEsserThresholdDragValueScale: Float = 18
     static let compressorThresholdDragValueScale: Float = 24

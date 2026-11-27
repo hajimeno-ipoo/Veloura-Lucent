@@ -924,6 +924,25 @@ struct ProcessingJobTests {
         #expect(job.editableMasteringSettings.loudnessAdjustmentPolicy.label == "リリース音圧重視")
     }
 
+    @Test("スタンダードのマスタリングは選択した実測プロファイルの設定を使う")
+    func standardMasteringUsesMeasuredProfileSettings() {
+        for (profile, expectedSettings) in MeasuredMasteringProfileExpectations.all {
+            let job = ProcessingJob()
+            job.outputFile = URL(fileURLWithPath: "/tmp/corrected.wav")
+            job.updateMasteringSettings { $0.targetLoudness = -12 }
+
+            job.applyMasteringProfile(profile)
+            let appliedSettings = job.editableMasteringSettings
+            job.beginMastering(appliedSettings: appliedSettings)
+            job.finishMasteringSuccess(
+                URL(fileURLWithPath: "/tmp/mastered.wav"),
+                appliedSettings: appliedSettings
+            )
+
+            #expect(job.appliedMasteringSettings == expectedSettings, "Profile: \(profile.title)")
+        }
+    }
+
     @Test
     func applyingCorrectionProfileResetsEditableSettings() {
         let job = ProcessingJob()

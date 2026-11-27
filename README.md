@@ -6,7 +6,7 @@ Veloura Lucentは、音源の解析、ノイズ除去、適応型補正・マス
 
 アプリ本体はSwiftとSwiftUIで動作し、実行時にPythonやGradioを必要としません。
 
-現在の公開版は`1.2.0`です。設定の`言語`から、日本語、English、システム設定に従う、を選択できます。更新内容は[CHANGELOG.md](CHANGELOG.md)に記載しています。
+現在の公開版は`1.3.0`です。設定の`言語`から、日本語、English、システム設定に従う、を選択できます。更新内容は[CHANGELOG.md](CHANGELOG.md)に記載しています。
 
 ## 適応型補正・マスタリング
 

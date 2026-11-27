@@ -310,6 +310,17 @@ struct StemModeWorkspaceModelTests {
 
         #expect(recorder.masteringRequests.count == 1)
         #expect(recorder.masteringRequests.first?.masteringSettings == expectedSettings)
+
+        for (index, entry) in MeasuredMasteringProfileExpectations.all.enumerated() {
+            model.selectedMasteringProfile = entry.profile
+            await model.beginMastering()
+
+            #expect(recorder.masteringRequests.count == index + 2)
+            #expect(
+                recorder.masteringRequests.last?.masteringSettings == entry.settings,
+                "Profile: \(entry.profile.title)"
+            )
+        }
     }
 
     @Test("再ミックスは自動値を保ち、変更した項目だけ手動値で上書きする")

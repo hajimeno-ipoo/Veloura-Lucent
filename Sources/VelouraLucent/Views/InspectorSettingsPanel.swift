@@ -622,8 +622,8 @@ struct InspectorSettingsPanel: View {
             displayValueText: String(format: "%.1f", job.editableMasteringSettings.targetLoudness),
             unitText: "LUFS",
             labels: ["余裕", "標準", "大きい"],
-            value: masteringBinding(\.targetLoudness, range: -18 ... -9),
-            range: -18 ... -9,
+            value: masteringBinding(\.targetLoudness, range: DAWKnobMetrics.targetLoudnessRange),
+            range: DAWKnobMetrics.targetLoudnessRange,
             step: 0.1,
             dragValueScale: DAWKnobMetrics.targetLoudnessDragValueScale
         )
